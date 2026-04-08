@@ -163,6 +163,17 @@ export function middleware(request: NextRequest) {
     }
   }
 
+  // NFT features are disabled. Return 503 for all NFT API routes.
+  if (
+    pathname.startsWith('/api/nft') ||
+    pathname.startsWith('/api/wallet/nfts')
+  ) {
+    return NextResponse.json(
+      { error: 'NFT features are currently disabled.' },
+      { status: 503 }
+    );
+  }
+
   // Skip CORS handling for agent routes - handled in vercel.json with wildcard
   // Agent routes use Bearer token auth (not cookies), so they can use wildcard CORS
   if (isAgentApiRequest(pathname)) {

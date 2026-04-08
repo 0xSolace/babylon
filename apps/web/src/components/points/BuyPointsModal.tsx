@@ -1,57 +1,25 @@
 'use client';
 
-import { cn, logger, WALLET_ERROR_MESSAGES } from '@babylon/shared';
+import { cn, logger } from '@babylon/shared';
 import { usePrivy } from '@privy-io/react-auth';
 import {
   AlertCircle,
   CheckCircle2,
   CreditCard,
   DollarSign,
-  Wallet,
   X,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import type { Address } from 'viem';
 import { Skeleton } from '@/components/shared/Skeleton';
 import { useAuth } from '@/hooks/useAuth';
-import { useBuyPointsTx } from '@/hooks/useBuyPointsTx';
-import { useWalletFunding } from '@/hooks/useWalletFunding';
-import { getExplorerTxUrl } from '@/lib/chain';
 import { isStripeEnabled } from '@/lib/stripe';
 
 /**
- * Trading balance purchase modal for funding virtual balance with ETH or card.
+ * Trading balance purchase modal — Stripe card payment only.
  *
- * Provides a multi-step payment flow for funding trading balance using either:
- * - ETH from smart wallet (crypto)
- * - Credit card via Stripe Checkout
- *
- * Features:
- * - Payment method selection (crypto vs card)
- * - USD amount input
- * - ETH conversion (for crypto)
- * - Smart wallet funding (if needed)
- * - Stripe Checkout redirect (for card)
- * - Payment processing
- * - Trading balance funding verification
- * - Multi-step flow (input → payment → verifying → success/error)
- * - Loading states
- * - Error handling
- * - Body scroll lock and escape key handling
- * - Cancellable async operations with AbortController
- *
- * @param props - BuyPointsModal component props
- * @returns Trading balance funding modal element or null if not open
- *
- * @example
- * ```tsx
- * <BuyPointsModal
- *   isOpen={showModal}
- *   onClose={() => setShowModal(false)}
- *   onSuccess={() => refreshBalance()}
- * />
- * ```
+ * Users enter a USD amount and are redirected to Stripe Checkout.
+ * The trading balance is credited via webhook after successful payment.
  */
 interface BuyPointsModalProps {
   isOpen: boolean;
@@ -59,42 +27,12 @@ interface BuyPointsModalProps {
   onSuccess?: () => void;
 }
 
-/**
- * Payment step type for trading balance purchase flow.
- */
-type PaymentStep = 'input' | 'payment' | 'verifying' | 'success' | 'error';
+type PaymentStep = 'input' | 'redirecting' | 'error';
 
-/**
- * Payment method type.
- */
-type PaymentMethod = 'crypto' | 'stripe';
-
-/**
- * Payment request structure for trading balance purchase.
- */
-interface PaymentRequest {
-  requestId: string;
-  to: string;
-  from: string;
-  amount: string;
-}
-
-/** Avoid hung requests when RPC/auth/Stripe are slow; still respects user cancel when `userSignal` is passed. */
+/** Abort requests that take longer than this. */
 const API_FETCH_TIMEOUT_MS = 45_000;
 const API_FETCH_TIMEOUT_MESSAGE =
   'Request timed out. Check your connection and try again in a moment.';
-
-/** First verify runs immediately; later attempts wait for receipt / RPC (replaces a fixed 3s pre-delay). */
-const VERIFY_RETRY_MAX_ATTEMPTS = 8;
-
-function isRetryableVerifyError(message: string): boolean {
-  const m = message.toLowerCase();
-  return (
-    m.includes('not yet confirmed') ||
-    m.includes('not found on blockchain') ||
-    m.includes('rpc timed out')
-  );
-}
 
 function isAbortLikeError(error: unknown): error is Error {
   return (
@@ -103,124 +41,22 @@ function isAbortLikeError(error: unknown): error is Error {
   );
 }
 
-function sleepAbortable(ms: number, signal: AbortSignal): Promise<void> {
-  if (ms <= 0) {
-    return Promise.resolve();
-  }
-  return new Promise((resolve) => {
-    const onAbort = () => {
-      clearTimeout(timeoutId);
-      resolve();
-    };
-    const timeoutId = setTimeout(() => {
-      signal.removeEventListener('abort', onAbort);
-      resolve();
-    }, ms);
-    signal.addEventListener('abort', onAbort, { once: true });
-  });
-}
-
-function combineAbortSignals(signals: AbortSignal[]): AbortSignal {
-  if ('any' in AbortSignal && typeof AbortSignal.any === 'function') {
-    return AbortSignal.any(signals);
-  }
-
-  const controller = new AbortController();
-
-  for (const signal of signals) {
-    if (signal.aborted) {
-      controller.abort(signal.reason);
-      return controller.signal;
-    }
-
-    signal.addEventListener('abort', () => controller.abort(signal.reason), {
-      once: true,
-    });
-  }
-
-  return controller.signal;
-}
-
-function fetchSignalWithTimeout(
-  userSignal: AbortSignal | undefined,
-  timeoutMs: number
-): AbortSignal {
-  const timeoutSignal = AbortSignal.timeout(timeoutMs);
-  return userSignal
-    ? combineAbortSignals([userSignal, timeoutSignal])
-    : timeoutSignal;
-}
-
 export function BuyPointsModal({
   isOpen,
   onClose,
-  onSuccess,
+  onSuccess: _onSuccess,
 }: BuyPointsModalProps) {
-  const { user, embeddedWalletAddress, embeddedWalletReady } = useAuth();
+  const { user } = useAuth();
   const { getAccessToken } = usePrivy();
-  const { sendPointsPayment } = useBuyPointsTx();
-  const { ensureFunds } = useWalletFunding();
 
   const [amountUSD, setAmountUSD] = useState('10');
   const [step, setStep] = useState<PaymentStep>('input');
   const [loading, setLoading] = useState(false);
-  const [txHash, setTxHash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [fundedAmount, setFundedAmount] = useState(0);
-  const [walletInitializing, setWalletInitializing] = useState(false);
 
-  // Check if Stripe is available
   const stripeAvailable = isStripeEnabled();
-
-  // Determine available payment methods
-  const canUseCrypto = !!embeddedWalletAddress;
-  const canUseStripe = stripeAvailable;
-  const hasAnyPaymentMethod = canUseCrypto || canUseStripe;
-
-  // Track if user has manually selected a payment method
-  const [userSelectedMethod, setUserSelectedMethod] = useState(false);
-
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(() => {
-    // Default to Stripe if available and user has no wallet, otherwise crypto
-    if (stripeAvailable && !embeddedWalletAddress) {
-      return 'stripe';
-    }
-    return 'crypto';
-  });
-
-  // Handle user selecting a payment method
-  const handlePaymentMethodChange = (method: PaymentMethod) => {
-    setUserSelectedMethod(true);
-    setPaymentMethod(method);
-  };
-
-  // Only auto-switch if user hasn't manually selected AND no payment methods available
-  // Don't auto-switch away from user's choice - let them see the "no wallet" message
-  useEffect(() => {
-    // Only auto-switch on initial mount if user hasn't made a selection
-    if (!userSelectedMethod) {
-      // If currently on crypto but no wallet, switch to stripe if available
-      if (paymentMethod === 'crypto' && !canUseCrypto && canUseStripe) {
-        setPaymentMethod('stripe');
-      }
-    }
-  }, [canUseCrypto, canUseStripe, paymentMethod, userSelectedMethod]);
-
-  // AbortController for canceling async operations
-  const abortControllerRef = useRef<AbortController | null>(null);
-
-  // Ref to track embeddedWalletReady state for use in async callbacks (avoids stale closure)
-  const embeddedWalletReadyRef = useRef(embeddedWalletReady);
-
-  // Ref to track if component is mounted
   const isMountedRef = useRef(true);
 
-  // Keep ref updated when embeddedWalletReady changes
-  useEffect(() => {
-    embeddedWalletReadyRef.current = embeddedWalletReady;
-  }, [embeddedWalletReady]);
-
-  // Track mounted state
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
@@ -231,33 +67,18 @@ export function BuyPointsModal({
   // Reset state when modal closes
   useEffect(() => {
     if (!isOpen) {
-      // Cancel any in-flight operations
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-        abortControllerRef.current = null;
-      }
-
-      // Reset state after animation completes
       const timeoutId = setTimeout(() => {
         if (isMountedRef.current) {
           setAmountUSD('10');
           setStep('input');
           setLoading(false);
-          setTxHash(null);
           setError(null);
-          setFundedAmount(0);
-          setWalletInitializing(false);
-          // Reset payment method selection - stripe preferred if available
-          setPaymentMethod(stripeAvailable ? 'stripe' : 'crypto');
-          setUserSelectedMethod(false);
         }
       }, 300);
-
-      // Cleanup timeout if component unmounts or modal reopens
       return () => clearTimeout(timeoutId);
     }
     return undefined;
-  }, [isOpen, stripeAvailable]);
+  }, [isOpen]);
 
   // Handle escape key and body scroll lock
   useEffect(() => {
@@ -281,15 +102,9 @@ export function BuyPointsModal({
     };
   }, [isOpen, onClose, loading, step]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       document.body.style.overflow = '';
-      // Cancel any in-flight operations on unmount
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-        abortControllerRef.current = null;
-      }
     };
   }, []);
 
@@ -298,66 +113,11 @@ export function BuyPointsModal({
   const amountNum = Number.parseFloat(amountUSD) || 0;
   const balanceUnits = Math.floor(amountNum * 100);
 
-  /**
-   * Waits for the embedded wallet to be ready with proper interval-based polling.
-   * Uses refs to avoid stale closure issues and supports cancellation.
-   */
-  const waitForWalletReady = (signal: AbortSignal): Promise<boolean> => {
-    return new Promise((resolve) => {
-      // If already aborted, resolve immediately
-      if (signal.aborted) {
-        resolve(false);
-        return;
-      }
-
-      // If already ready, resolve immediately
-      if (embeddedWalletReadyRef.current) {
-        resolve(true);
-        return;
-      }
-
-      const maxWaitTime = 5000;
-      const checkInterval = 100;
-      const startTime = Date.now();
-
-      const intervalId = setInterval(() => {
-        // Check if cancelled
-        if (signal.aborted) {
-          clearInterval(intervalId);
-          resolve(false);
-          return;
-        }
-
-        // Check if wallet is ready
-        if (embeddedWalletReadyRef.current) {
-          clearInterval(intervalId);
-          resolve(true);
-          return;
-        }
-
-        // Check if timeout exceeded
-        if (Date.now() - startTime >= maxWaitTime) {
-          clearInterval(intervalId);
-          resolve(false);
-          return;
-        }
-      }, checkInterval);
-
-      // Handle abort during wait
-      signal.addEventListener(
-        'abort',
-        () => {
-          clearInterval(intervalId);
-          resolve(false);
-        },
-        { once: true }
-      );
-    });
+  const handleClose = () => {
+    if (loading || step === 'redirecting') return;
+    onClose();
   };
 
-  /**
-   * Handle Stripe Checkout - redirects to Stripe hosted checkout
-   */
   const handleStripeCheckout = async () => {
     if (!user) {
       toast.error('Please sign in to continue');
@@ -395,7 +155,7 @@ export function BuyPointsModal({
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ amountUSD: amountNum }),
-        signal: fetchSignalWithTimeout(undefined, API_FETCH_TIMEOUT_MS),
+        signal: AbortSignal.timeout(API_FETCH_TIMEOUT_MS),
       });
 
       const data = await response.json();
@@ -413,8 +173,7 @@ export function BuyPointsModal({
         return;
       }
 
-      // Redirect to Stripe Checkout
-      // Trading balance will be funded via webhook after successful payment
+      setStep('redirecting');
       window.location.href = data.url;
     } catch (err) {
       if (isAbortLikeError(err)) {
@@ -434,360 +193,9 @@ export function BuyPointsModal({
       setStep('error');
       toast.error('Failed to connect to payment server');
     } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCreatePayment = async () => {
-    if (!user || !embeddedWalletAddress) {
-      toast.error(WALLET_ERROR_MESSAGES.NO_EMBEDDED_WALLET);
-      return;
-    }
-
-    if (amountNum < 1) {
-      toast.error('Minimum purchase is $1');
-      return;
-    }
-
-    if (amountNum > 1000) {
-      toast.error('Maximum purchase is $1000');
-      return;
-    }
-
-    // Create abort controller FIRST - before any async operations
-    abortControllerRef.current = new AbortController();
-    const signal = abortControllerRef.current.signal;
-
-    // Check if embedded wallet is ready, if not wait for initialization
-    if (!embeddedWalletReady) {
-      setWalletInitializing(true);
-      toast.info('Initializing wallet...');
-
-      const isReady = await waitForWalletReady(signal);
-
-      // Check if cancelled during wait
-      if (signal.aborted || !isMountedRef.current) {
-        setWalletInitializing(false);
-        return;
-      }
-
-      setWalletInitializing(false);
-
-      if (!isReady) {
-        toast.error(
-          'Wallet is still initializing. Please try again in a moment.'
-        );
-        abortControllerRef.current = null;
-        return;
-      }
-
-      toast.success('Wallet ready!');
-    }
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const token = await getAccessToken();
-
-      // Check if cancelled after getting token
-      if (signal.aborted || !isMountedRef.current) {
-        setLoading(false);
-        return;
-      }
-
-      if (!token) {
-        logger.error('Authentication required', undefined, 'BuyPointsModal');
-        setError('Authentication required');
-        setStep('error');
-        toast.error('Failed to create payment request');
-        setLoading(false);
-        abortControllerRef.current = null;
-        return;
-      }
-
-      // Create payment request with abort signal
-      const response = await fetch('/api/points/purchase/create-payment', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          amountUSD: amountNum,
-          fromAddress: embeddedWalletAddress,
-        }),
-        signal: fetchSignalWithTimeout(signal, API_FETCH_TIMEOUT_MS),
-      });
-
-      // Check if cancelled after fetch
-      if (signal.aborted || !isMountedRef.current) {
-        setLoading(false);
-        return;
-      }
-
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        const errorMessage = data.error || 'Failed to create payment request';
-        logger.error(
-          'Failed to create payment',
-          { error: errorMessage },
-          'BuyPointsModal'
-        );
-        setError(errorMessage);
-        setStep('error');
-        toast.error('Failed to create payment request');
-        setLoading(false);
-        abortControllerRef.current = null;
-        return;
-      }
-
-      setStep('payment');
-
-      // Initiate blockchain transaction
-      await handleSendPayment(data.paymentRequest, signal);
-    } catch (err) {
-      if (isAbortLikeError(err)) {
-        if (signal.aborted) {
-          setLoading(false);
-          return;
-        }
-        logger.error(
-          'Create payment request timed out',
-          undefined,
-          'BuyPointsModal'
-        );
-        setError(API_FETCH_TIMEOUT_MESSAGE);
-        setStep('error');
-        toast.error(API_FETCH_TIMEOUT_MESSAGE);
-        setLoading(false);
-        return;
-      }
-
-      // Only propagate non-cancellation errors
-      if (err instanceof Error && !err.message.includes('cancelled')) {
-        const errorMessage = err.message || 'Payment failed';
-        logger.error(
-          'Payment failed',
-          { error: errorMessage },
-          'BuyPointsModal'
-        );
-        if (isMountedRef.current) {
-          setError(errorMessage);
-          setStep('error');
-          toast.error('Payment transaction failed');
-        }
-      }
-    } finally {
       if (isMountedRef.current) {
         setLoading(false);
       }
-      // Clean up abort controller after operation completes
-      abortControllerRef.current = null;
-    }
-  };
-
-  const handleSendPayment = async (
-    paymentRequest: PaymentRequest,
-    signal: AbortSignal
-  ) => {
-    setLoading(true);
-    setStep('payment');
-
-    // Use ref for consistent check (avoids stale closure)
-    if (!embeddedWalletReadyRef.current || !embeddedWalletAddress) {
-      const errorMessage = WALLET_ERROR_MESSAGES.NO_EMBEDDED_WALLET;
-      logger.error('Payment failed', { error: errorMessage }, 'BuyPointsModal');
-      setError(errorMessage);
-      setStep('error');
-      toast.error('Payment transaction failed');
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const requiredAmountWei = BigInt(paymentRequest.amount);
-
-      // Use shared hook with abort signal
-      await ensureFunds(embeddedWalletAddress, requiredAmountWei, { signal });
-
-      // Check if operation was cancelled after funding
-      if (signal.aborted || !isMountedRef.current) {
-        setLoading(false);
-        return;
-      }
-
-      const hash = await sendPointsPayment({
-        to: paymentRequest.to as Address,
-        amountWei: requiredAmountWei,
-      });
-
-      // Check if cancelled after payment
-      if (signal.aborted || !isMountedRef.current) {
-        setLoading(false);
-        return;
-      }
-
-      setTxHash(hash);
-      setStep('verifying');
-
-      // Verify payment and fund trading balance
-      await handleVerifyPayment(
-        paymentRequest.requestId,
-        hash,
-        paymentRequest,
-        signal
-      );
-    } catch (err) {
-      // Don't show error if operation was cancelled
-      if (err instanceof Error && err.message === 'Operation cancelled') {
-        setLoading(false);
-        return;
-      }
-      throw err;
-    }
-  };
-
-  const handleVerifyPayment = async (
-    requestId: string,
-    transactionHash: string,
-    paymentRequest: PaymentRequest,
-    signal: AbortSignal
-  ) => {
-    // Check if cancelled before starting
-    if (signal.aborted || !isMountedRef.current) {
-      setLoading(false);
-      return;
-    }
-
-    const token = await getAccessToken();
-    if (!token) {
-      logger.error('Authentication required', undefined, 'BuyPointsModal');
-      setError('Authentication required');
-      setStep('error');
-      toast.error('Failed to verify payment');
-      setLoading(false);
-      return;
-    }
-
-    try {
-      for (let attempt = 0; attempt < VERIFY_RETRY_MAX_ATTEMPTS; attempt++) {
-        if (signal.aborted || !isMountedRef.current) {
-          setLoading(false);
-          return;
-        }
-
-        if (attempt > 0) {
-          const backoffMs = Math.min(500 * 2 ** (attempt - 1), 4000);
-          await sleepAbortable(backoffMs, signal);
-          if (signal.aborted || !isMountedRef.current) {
-            setLoading(false);
-            return;
-          }
-        }
-
-        let response;
-        try {
-          response = await fetch('/api/points/purchase/verify-payment', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              requestId,
-              txHash: transactionHash,
-              fromAddress: paymentRequest.from,
-              toAddress: paymentRequest.to,
-              amount: paymentRequest.amount,
-            }),
-            signal: fetchSignalWithTimeout(signal, API_FETCH_TIMEOUT_MS),
-          });
-        } catch (err) {
-          if (isAbortLikeError(err)) {
-            if (signal.aborted) {
-              setLoading(false);
-              return;
-            }
-            if (attempt < VERIFY_RETRY_MAX_ATTEMPTS - 1) {
-              continue;
-            }
-            logger.error(
-              'Payment verification timed out',
-              undefined,
-              'BuyPointsModal'
-            );
-            setError(API_FETCH_TIMEOUT_MESSAGE);
-            setStep('error');
-            toast.error(API_FETCH_TIMEOUT_MESSAGE);
-            setLoading(false);
-            return;
-          }
-          throw err;
-        }
-
-        if (signal.aborted || !isMountedRef.current) {
-          setLoading(false);
-          return;
-        }
-
-        const data = await response.json();
-
-        if (response.ok && data.success) {
-          setFundedAmount(data.balanceDelta);
-          setStep('success');
-          toast.success(
-            `Successfully funded ${data.balanceDelta} balance units!`
-          );
-          if (onSuccess) {
-            onSuccess();
-          }
-          setLoading(false);
-          return;
-        }
-
-        const errorMessage = data.error || 'Failed to verify payment';
-        const shouldRetry =
-          isRetryableVerifyError(errorMessage) &&
-          attempt < VERIFY_RETRY_MAX_ATTEMPTS - 1;
-
-        if (shouldRetry) {
-          continue;
-        }
-
-        logger.error(
-          'Payment verification failed',
-          { error: errorMessage },
-          'BuyPointsModal'
-        );
-        setError(errorMessage);
-        setStep('error');
-        toast.error('Failed to verify payment');
-        setLoading(false);
-        return;
-      }
-    } catch (err) {
-      if (isAbortLikeError(err) && signal.aborted) {
-        setLoading(false);
-        return;
-      }
-      throw err;
-    }
-  };
-
-  const handleClose = () => {
-    if (loading || step === 'payment' || step === 'verifying') {
-      return; // Prevent closing during payment
-    }
-    onClose();
-  };
-
-  const handleSubmit = () => {
-    if (paymentMethod === 'stripe') {
-      handleStripeCheckout();
-    } else {
-      handleCreatePayment();
     }
   };
 
@@ -797,75 +205,6 @@ export function BuyPointsModal({
         return (
           <div className="flex h-full flex-col">
             <div className="flex-1 space-y-5">
-              {/* Payment Method Selector */}
-              {stripeAvailable && (
-                <div>
-                  <label className="mb-2 block font-medium text-foreground text-sm">
-                    Payment Method
-                  </label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      onClick={() => handlePaymentMethodChange('crypto')}
-                      className={cn(
-                        'flex items-center justify-center gap-2 rounded-lg border-2 px-4 py-3 transition-all',
-                        paymentMethod === 'crypto'
-                          ? 'border-primary bg-primary/5'
-                          : 'border-border hover:border-muted-foreground/50'
-                      )}
-                      disabled={loading}
-                    >
-                      <Wallet
-                        className={cn(
-                          'h-5 w-5',
-                          paymentMethod === 'crypto'
-                            ? 'text-primary'
-                            : 'text-muted-foreground'
-                        )}
-                      />
-                      <span
-                        className={cn(
-                          'font-medium',
-                          paymentMethod === 'crypto'
-                            ? 'text-foreground'
-                            : 'text-muted-foreground'
-                        )}
-                      >
-                        Crypto
-                      </span>
-                    </button>
-                    <button
-                      onClick={() => handlePaymentMethodChange('stripe')}
-                      className={cn(
-                        'flex items-center justify-center gap-2 rounded-lg border-2 px-4 py-3 transition-all',
-                        paymentMethod === 'stripe'
-                          ? 'border-primary bg-primary/5'
-                          : 'border-border hover:border-muted-foreground/50'
-                      )}
-                      disabled={loading}
-                    >
-                      <CreditCard
-                        className={cn(
-                          'h-5 w-5',
-                          paymentMethod === 'stripe'
-                            ? 'text-primary'
-                            : 'text-muted-foreground'
-                        )}
-                      />
-                      <span
-                        className={cn(
-                          'font-medium',
-                          paymentMethod === 'stripe'
-                            ? 'text-foreground'
-                            : 'text-muted-foreground'
-                        )}
-                      >
-                        Card
-                      </span>
-                    </button>
-                  </div>
-                </div>
-              )}
-
               {/* Amount Input + Quick Buttons */}
               <div>
                 <div className="mb-2 flex items-center justify-between">
@@ -942,34 +281,16 @@ export function BuyPointsModal({
                 </p>
               </div>
 
-              {/* Crypto selected but no wallet */}
-              {paymentMethod === 'crypto' && !canUseCrypto && (
-                <div className="flex items-start gap-3 rounded-lg bg-amber-500/10 p-3">
-                  <Wallet className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-                  <div className="text-xs">
-                    <p className="font-medium text-amber-600 dark:text-amber-400">
-                      Wallet not connected
-                    </p>
-                    <p className="mt-0.5 text-amber-600/80 dark:text-amber-400/80">
-                      {embeddedWalletReady
-                        ? 'No wallet found. Please connect a wallet to pay with crypto.'
-                        : 'Your wallet is still initializing. Please wait a moment or switch to card payment.'}
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* No Payment Methods Warning */}
-              {!hasAnyPaymentMethod && (
+              {/* No Stripe warning */}
+              {!stripeAvailable && (
                 <div className="flex items-start gap-3 rounded-lg bg-red-500/10 p-3">
                   <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
                   <div className="text-xs">
                     <p className="font-medium text-red-600 dark:text-red-400">
-                      No payment methods available
+                      Card payments unavailable
                     </p>
                     <p className="mt-0.5 text-red-600/80 dark:text-red-400/80">
-                      Your wallet is still initializing. Please wait a moment
-                      and try again.
+                      Card payments are not configured. Please contact support.
                     </p>
                   </div>
                 </div>
@@ -981,18 +302,16 @@ export function BuyPointsModal({
                   <p>Trading balance is non-transferable.</p>
                   <p>Balance units can be used for trading on Babylon.</p>
                 </div>
-                {paymentMethod === 'stripe' && (
-                  <p className="flex items-start gap-2">
-                    <CreditCard className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                    <span>
-                      You'll be redirected to Stripe for secure checkout.
-                    </span>
-                  </p>
-                )}
+                <p className="flex items-start gap-2">
+                  <CreditCard className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    You'll be redirected to Stripe for secure checkout.
+                  </span>
+                </p>
               </div>
             </div>
 
-            {/* Action Buttons - Fixed at bottom on mobile */}
+            {/* Action Buttons */}
             <div className="mt-6 flex gap-3 border-border pt-4 md:border-t">
               <button
                 onClick={handleClose}
@@ -1003,16 +322,13 @@ export function BuyPointsModal({
               </button>
               <button
                 data-testid="buy-points-submit-button"
-                onClick={handleSubmit}
+                onClick={handleStripeCheckout}
                 disabled={
                   loading ||
-                  walletInitializing ||
                   amountNum < 1 ||
                   amountNum > 1000 ||
                   !user ||
-                  !hasAnyPaymentMethod ||
-                  (paymentMethod === 'crypto' && !canUseCrypto) ||
-                  (paymentMethod === 'stripe' && !canUseStripe)
+                  !stripeAvailable
                 }
                 className={cn(
                   'flex flex-1 items-center justify-center gap-2 rounded-lg py-3 font-medium transition-all',
@@ -1020,86 +336,25 @@ export function BuyPointsModal({
                   'disabled:cursor-not-allowed disabled:opacity-50'
                 )}
               >
-                {walletInitializing
-                  ? 'Initializing...'
-                  : loading
-                    ? 'Processing...'
-                    : 'Fund Balance'}
+                {loading ? 'Processing...' : 'Fund Balance'}
               </button>
             </div>
           </div>
         );
 
-      case 'payment':
-      case 'verifying':
+      case 'redirecting':
         return (
           <div className="flex flex-col items-center justify-center py-12">
             <div className="mb-6">
               <Skeleton className="h-16 w-16 rounded-full" />
             </div>
             <h3 className="mb-2 font-semibold text-foreground text-lg">
-              {step === 'payment'
-                ? 'Processing Payment...'
-                : 'Verifying Transaction...'}
+              Redirecting to Stripe...
             </h3>
             <p className="mb-6 text-center text-muted-foreground text-sm">
-              {step === 'payment'
-                ? 'Preparing your payment transaction...'
-                : 'Confirming your payment on the blockchain'}
+              You will be redirected to Stripe to complete your payment
+              securely.
             </p>
-            {txHash && getExplorerTxUrl(txHash) && (
-              <a
-                data-testid="transaction-hash-link"
-                href={getExplorerTxUrl(txHash)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary text-sm hover:underline"
-              >
-                View transaction →
-              </a>
-            )}
-          </div>
-        );
-
-      case 'success':
-        return (
-          <div
-            data-testid="payment-success"
-            className="flex flex-col items-center justify-center py-12"
-          >
-            <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-green-500/10">
-              <CheckCircle2 className="h-10 w-10 text-green-500" />
-            </div>
-            <h3 className="mb-2 font-semibold text-foreground text-lg">
-              Trading Balance Funded!
-            </h3>
-            <div className="mb-6 flex items-center gap-2">
-              <span
-                data-testid="funded-amount"
-                className="font-bold text-2xl text-foreground"
-              >
-                {fundedAmount.toLocaleString()}
-              </span>
-              <span className="text-muted-foreground">
-                balance units funded
-              </span>
-            </div>
-            {txHash && getExplorerTxUrl(txHash) && (
-              <a
-                href={getExplorerTxUrl(txHash)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mb-6 text-primary text-sm hover:underline"
-              >
-                View transaction →
-              </a>
-            )}
-            <button
-              onClick={handleClose}
-              className="w-full rounded-lg bg-primary py-3 font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-            >
-              Done
-            </button>
           </div>
         );
 
@@ -1143,6 +398,9 @@ export function BuyPointsModal({
     }
   };
 
+  // Keep CheckCircle2 import used — for future success state if Stripe return URL flow is added
+  void CheckCircle2;
+
   return (
     <div
       data-testid="buy-points-modal-overlay"
@@ -1158,7 +416,7 @@ export function BuyPointsModal({
         className="relative flex h-full w-full flex-col bg-background md:h-auto md:max-h-[90vh] md:w-auto md:min-w-[480px] md:max-w-lg md:rounded-lg md:border md:border-border"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header - fixed */}
+        {/* Header */}
         <div className="shrink-0 border-border border-b px-4 py-3 sm:px-6 sm:py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -1167,7 +425,7 @@ export function BuyPointsModal({
             <button
               onClick={handleClose}
               className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              disabled={loading || step === 'payment' || step === 'verifying'}
+              disabled={loading || step === 'redirecting'}
               aria-label="Close"
             >
               <X className="h-5 w-5" />
@@ -1175,7 +433,7 @@ export function BuyPointsModal({
           </div>
         </div>
 
-        {/* Content - scrollable */}
+        {/* Content */}
         <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 sm:py-6">
           {renderContent()}
         </div>

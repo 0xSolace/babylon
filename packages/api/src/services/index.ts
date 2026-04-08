@@ -38,8 +38,6 @@ export * from './nft-mint-service';
 export * from './nft-verification-service';
 export * from './notification-email-service';
 export * from './notification-service';
-// Onchain Service
-export * from './onchain-service';
 // Org Coordination Service (Cross-NPC messaging coordination)
 export * from './org-coordination-service';
 export * from './participation-service';

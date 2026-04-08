@@ -29,7 +29,6 @@ import { OnboardingProvider } from './OnboardingProvider';
 import { OutcomeNotificationProvider } from './OutcomeNotificationProvider';
 import { PostHogProvider } from './PostHogProvider';
 import { ReferralCaptureProvider } from './ReferralCaptureProvider';
-import { SolanaMobileProvider } from './SolanaMobileProvider';
 import { TelegramMiniAppProvider } from './TelegramMiniAppProvider';
 
 /**
@@ -323,7 +322,6 @@ export function Providers({
                       <FarcasterMiniAppProvider>
                         <TelegramMiniAppProvider>
                           <DiscordActivityProvider>
-                            <SolanaMobileProvider />
                             <PostHogIdentifier />
                             <Suspense fallback={null}>
                               <ReferralCaptureProvider />
@@ -430,8 +428,6 @@ export function Providers({
                       <FarcasterMiniAppProvider>
                         <TelegramMiniAppProvider>
                           <DiscordActivityProvider>
-                            {/* Solana MWA registration (side-effect only, no UI) */}
-                            <SolanaMobileProvider />
                             {/* PostHog user identification */}
                             <PostHogIdentifier />
                             {/* Capture referral code from URL if present */}

@@ -91,7 +91,6 @@ import {
   authenticate,
   ConflictError,
   cachedDb,
-  ensureOfflineWalletReady,
   getHashedClientIp,
   getPrivyClient,
   InternalServerError,
@@ -174,9 +173,6 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   const referralCode = rawReferralCode?.trim() || null;
 
   const canonicalUserId = authUser.dbUserId ?? authUser.userId;
-  // Embedded-wallet-only: persist the embedded wallet (EOA) as the user's onchain identity.
-  let walletAddress = authUser.walletAddress?.toLowerCase() ?? null;
-  let privyWalletId: string | null = null;
 
   // Capture and hash IP address for self-referral detection
   const registrationIpHash = getHashedClientIp(request.headers);
@@ -212,12 +208,6 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   const importedTwitter = parsedProfile.importedFrom === 'twitter';
   const importedFarcaster = parsedProfile.importedFrom === 'farcaster';
 
-  const offlineWallet = await ensureOfflineWalletReady({
-    privyId,
-  });
-  privyWalletId = offlineWallet.privyWalletId;
-  walletAddress = offlineWallet.walletAddress;
-
   // Wrap transaction with retry logic for connection errors
   const result = await withRetry(
     async () => {
@@ -233,22 +223,6 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
         if (existingUsername && existingUsername.id !== canonicalUserId) {
           throw new ConflictError('Username is already taken', 'User.username');
-        }
-
-        // Check if wallet address is already linked to another user
-        if (walletAddress) {
-          const [existingWallet] = await tx
-            .select({ id: users.id })
-            .from(users)
-            .where(eq(users.walletAddress, walletAddress))
-            .limit(1);
-
-          if (existingWallet && existingWallet.id !== canonicalUserId) {
-            throw new ConflictError(
-              'Wallet address is already linked to another account',
-              'User.walletAddress'
-            );
-          }
         }
 
         // Resolve referral (if provided AND not already set)
@@ -319,10 +293,6 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
           bio: parsedProfile.bio ?? '',
           profileImageUrl: parsedProfile.profileImageUrl ?? null,
           coverImageUrl: parsedProfile.coverImageUrl ?? null,
-          privyWalletId,
-          walletAddress,
-          offlineWalletReady: offlineWallet.offlineWalletReady,
-          offlineWalletReadyAt: new Date(),
           profileComplete: true,
           profileSetupCompletedAt: new Date(), // Track when profile was completed
           hasUsername: true,
@@ -692,23 +662,6 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       );
     }
   }
-  if (walletAddress) {
-    const pointsResult = await ReputationService.awardWalletConnect(
-      result.user.id,
-      walletAddress
-    );
-    reputationBreakdown.wallet = pointsResult.reputationAwarded;
-    logger.info(
-      'Awarded wallet connection reputation',
-      {
-        userId: result.user.id,
-        address: walletAddress,
-        reputation: pointsResult.reputationAwarded,
-      },
-      'POST /api/users/signup'
-    );
-  }
-
   if (!result.user.pointsAwardedForProfile) {
     const pointsResult = await ReputationService.awardProfileCompletion(
       result.user.id

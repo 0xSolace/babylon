@@ -96,7 +96,6 @@ import {
   BusinessLogicError,
   cachedDb,
   checkProfileUpdateRateLimit,
-  confirmOnchainProfileUpdate,
   isReferralCodeAvailableForUser,
   logProfileUpdate,
   notifyProfileComplete,
@@ -229,32 +228,8 @@ export const POST = withErrorHandling(
     // and the chain sync job will update on-chain state later.
     //
     // If user provides an onchainTxHash, we still confirm it for backwards compatibility.
-    let onchainMetadata: StringRecord<JsonValue> | null = null;
-
-    if (
-      onchainTxHash &&
-      currentUser!.onChainRegistered &&
-      currentUser!.nftTokenId
-    ) {
-      // User provided a transaction hash - confirm it (backwards compatibility)
-      const onchainResult = await confirmOnchainProfileUpdate({
-        userId: canonicalUserId,
-        walletAddress: currentUser!.walletAddress!,
-        txHash: onchainTxHash as `0x${string}`,
-      });
-
-      onchainMetadata = onchainResult.metadata as StringRecord<JsonValue>;
-
-      logger.info(
-        'Confirmed user-signed on-chain profile update',
-        {
-          userId: canonicalUserId,
-          txHash: onchainTxHash,
-          tokenId: onchainResult.tokenId,
-        },
-        'POST /api/users/[userId]/update-profile'
-      );
-    }
+    const onchainMetadata: StringRecord<JsonValue> | null = null;
+    void onchainTxHash; // On-chain profile update (NFT/ERC-8004) removed in Phase 1.
 
     // Update referral code if username is changing and username is available
     const referralCodeUpdate: { referralCode?: string } = {};

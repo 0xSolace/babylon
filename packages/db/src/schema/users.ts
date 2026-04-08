@@ -93,12 +93,11 @@ export const users = pgTable(
   'User',
   {
     id: text('id').primaryKey(),
-    // Privy embedded wallet id (used for server-side wallet actions).
-    // This is not the Privy user id (did:privy:...), it's the wallet resource id.
+    // TODO: Remove these columns in a future migration once all references are cleaned up.
+    // They were part of the Privy embedded wallet / Solana / EVM chain integration
+    // which has been removed. Columns are kept nullable to avoid data loss during Phase 1.
     privyWalletId: text('privyWalletId'),
-    // Privy embedded Solana wallet id for agent-side Solana operations.
     privySolanaWalletId: text('privySolanaWalletId'),
-    // Offline delegated wallet readiness (signer + policy attached in Privy).
     offlineWalletReady: boolean('offlineWalletReady').notNull().default(false),
     offlineWalletReadyAt: timestamp('offlineWalletReadyAt', { mode: 'date' }),
     solanaOfflineWalletReady: boolean('solanaOfflineWalletReady')
@@ -143,7 +142,9 @@ export const users = pgTable(
     hasTwitter: boolean('hasTwitter').notNull().default(false),
     hasDiscord: boolean('hasDiscord').notNull().default(false),
     hasTelegram: boolean('hasTelegram').notNull().default(false),
+    // TODO: Remove nftTokenId in a future migration (NFT minting is disabled; see Phase 1 cleanup).
     nftTokenId: integer('nftTokenId').unique(),
+    // TODO: Remove onChainRegistered in a future migration (ERC-8004 removed in Phase 1).
     onChainRegistered: boolean('onChainRegistered').notNull().default(false),
     pointsAwardedForFarcaster: boolean('pointsAwardedForFarcaster')
       .notNull()
@@ -205,6 +206,7 @@ export const users = pgTable(
     showTwitterPublic: boolean('showTwitterPublic').notNull().default(true),
     showWalletPublic: boolean('showWalletPublic').notNull().default(true),
     usernameChangedAt: timestamp('usernameChangedAt', { mode: 'date' }),
+    // TODO: Remove all agent0* and solana* columns in a future migration (Agent0/Solana removed in Phase 1).
     agent0FeedbackCount: integer('agent0FeedbackCount'),
     agent0MetadataCID: text('agent0MetadataCID'),
     agent0RegisteredAt: timestamp('agent0RegisteredAt', { mode: 'date' }),

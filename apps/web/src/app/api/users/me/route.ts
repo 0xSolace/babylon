@@ -139,11 +139,8 @@ import {
   authenticateWithDbUser,
   ConflictError,
   cachedDb,
-  ensureOfflineWalletReady,
   getPrivyClient,
   InternalServerError,
-  type PrivyUserWalletsLite,
-  pickEmbeddedEvmWallet,
   ReputationService,
   successResponse,
   withErrorHandling,
@@ -167,9 +164,7 @@ import {
 import { getOptionalProfileStats } from '@/lib/users/profile-stats';
 import { POST as updateProfilePOST } from '../[userId]/update-profile/route';
 
-type PrivyUserWithWallets = PrivyUser &
-  PrivyUserWithEmails &
-  PrivyUserWalletsLite;
+type PrivyUserWithWallets = PrivyUser & PrivyUserWithEmails;
 
 const userSelectFields = {
   id: users.id,
@@ -617,14 +612,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const authUser = await authenticate(request);
   const privyId = authUser.privyId ?? authUser.userId;
   const canonicalUserId = authUser.dbUserId ?? authUser.userId;
-  const clientEmbeddedWalletAddressRaw = request.headers.get(
-    'x-embedded-wallet-address'
-  );
-  const clientEmbeddedWalletAddress =
-    typeof clientEmbeddedWalletAddressRaw === 'string' &&
-    /^0x[a-fA-F0-9]{40}$/.test(clientEmbeddedWalletAddressRaw.trim())
-      ? clientEmbeddedWalletAddressRaw.trim().toLowerCase()
-      : null;
   const shouldForcePrivyIdentitySync =
     request.headers.get('x-sync-privy-identities') === '1';
 
@@ -654,8 +641,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     let twitterId: string | null = null;
     let telegramUserId: string | null = null;
     let telegramUsername: string | null = null;
-    let embeddedWalletAddress: string | null = null;
-    let embeddedWalletId: string | null = null;
 
     const privyClient = getPrivyClient();
     const privyUser = (await privyClient.getUser(
@@ -684,13 +669,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       telegramUsername = privyUser.telegram.username ?? null;
     }
 
-    const embedded = pickEmbeddedEvmWallet(privyUser);
-    if (embedded) {
-      embeddedWalletId = embedded.walletId;
-      embeddedWalletAddress = embedded.address.toLowerCase();
-      authUser.walletAddress = embeddedWalletAddress;
-    }
-
     logger.info(
       'Fetched Privy user data for new user',
       {
@@ -699,7 +677,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         hasFarcaster: !!farcasterUsername,
         hasTwitter: !!twitterUsername,
         hasTelegram: !!telegramUserId,
-        hasEmbeddedWallet: !!embeddedWalletAddress,
       },
       'GET /api/users/me'
     );
@@ -966,8 +943,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       'GET /api/users/me'
     );
 
-    const dbWalletAddress = embeddedWalletAddress?.toLowerCase() ?? null;
-
     // Check if user should be auto-promoted to admin based on email domain
     // SECURITY: Requires email verification (Privy emails are verified by design)
     // Check ALL linked emails, not just the primary one (handles users who linked admin email later)
@@ -991,8 +966,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       .values({
         id: canonicalUserId,
         privyId,
-        privyWalletId: embeddedWalletId,
-        walletAddress: dbWalletAddress,
         referredBy: resolvedReferrerId,
         email,
         farcasterUsername,
@@ -1064,90 +1037,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   // At this point dbUser should always be defined (either fetched or created)
   if (!dbUser) {
     throw new InternalServerError('Failed to create or find user record');
-  }
-
-  // =====================================================================================
-  // EMBEDDED WALLET BACKFILL
-  // =====================================================================================
-  //
-  // This section handles backfilling/syncing embedded wallet information (privyWalletId
-  // and walletAddress) from Privy. This is necessary because:
-  //
-  // 1. Users created before the embedded wallet refactor may not have privyWalletId stored.
-  // 2. The wallet address may need to be synced if the user's embedded wallet changed
-  //    (e.g., after account deletion/recreation or session relink).
-  //
-  // BEHAVIOR:
-  // - On each request where wallet data is missing or mismatched, we call Privy's getUser API.
-  // - This is intentional for the backfill phase and ensures eventual consistency.
-  //
-  // PERFORMANCE NOTE:
-  // - The Privy API call adds ~100-200ms latency per request when backfill is needed.
-  // - Once wallet data is persisted, subsequent requests skip the backfill.
-  // - If this becomes a bottleneck in production, consider:
-  //   1. Adding a Redis-based cooldown (skip backfill for N minutes after failure)
-  //   2. Rate limiting backfill attempts per user session
-  //   3. Moving backfill to a background job
-  //
-  // =====================================================================================
-  const dbWalletLower = dbUser.walletAddress?.toLowerCase() ?? null;
-  const shouldResyncWallet =
-    !!clientEmbeddedWalletAddress &&
-    clientEmbeddedWalletAddress !== dbWalletLower;
-  const shouldEnsureOfflineWallet =
-    !dbWalletLower ||
-    !dbUser.privyWalletId ||
-    !dbUser.offlineWalletReady ||
-    shouldResyncWallet;
-
-  if (shouldEnsureOfflineWallet) {
-    try {
-      const offlineWallet = await ensureOfflineWalletReady({ privyId });
-      const resolvedAddress = offlineWallet.walletAddress.toLowerCase();
-
-      if (
-        shouldResyncWallet &&
-        resolvedAddress &&
-        resolvedAddress !== clientEmbeddedWalletAddress
-      ) {
-        logger.warn(
-          'Client embedded wallet address mismatch; using Privy embedded wallet address',
-          {
-            userId: dbUser.id,
-            dbWalletAddress: dbUser.walletAddress,
-            clientEmbeddedWalletAddress,
-            privyEmbeddedWalletAddress: resolvedAddress,
-          },
-          'GET /api/users/me'
-        );
-      }
-
-      const [updated] = await db
-        .update(users)
-        .set({
-          privyWalletId: offlineWallet.privyWalletId,
-          walletAddress: resolvedAddress,
-          offlineWalletReady: true,
-          offlineWalletReadyAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(eq(users.id, dbUser.id))
-        .returning(userSelectFields);
-      if (updated) dbUser = updated;
-    } catch (error) {
-      logger.warn(
-        'Offline wallet provisioning failed during profile fetch; returning profile without blocking',
-        {
-          userId: dbUser.id,
-          privyId,
-          hasPrivyWalletId: !!dbUser.privyWalletId,
-          hasWalletAddress: !!dbUser.walletAddress,
-          shouldResyncWallet,
-          error: error instanceof Error ? error.message : String(error),
-        },
-        'GET /api/users/me'
-      );
-    }
   }
 
   const needsPrivyIdentitySync =

@@ -1,13 +1,23 @@
 import { db, eq, users } from '@babylon/db';
 import { getPrivyClient } from '../../auth-middleware';
 import { AuthenticationError } from '../../errors';
-import { safeDecodeJwtPayload } from './evm-send-transaction';
+
+function safeDecodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length < 2) return null;
+    const payload = parts[1];
+    if (!payload) return null;
+    const padded = payload + '='.repeat((4 - (payload.length % 4)) % 4);
+    return JSON.parse(atob(padded)) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
 
 export type AuthedPrivyUserContext = {
   privyId: string;
   dbUserId: string;
-  privyWalletId: string;
-  walletAddress: string | null;
   isAdmin: boolean;
 };
 
@@ -41,8 +51,6 @@ export async function getAuthedUserContextFromPrivyToken(
   const [dbUser] = await db
     .select({
       id: users.id,
-      privyWalletId: users.privyWalletId,
-      walletAddress: users.walletAddress,
       isAdmin: users.isAdmin,
     })
     .from(users)
@@ -52,15 +60,10 @@ export async function getAuthedUserContextFromPrivyToken(
   if (!dbUser) {
     throw new AuthenticationError('User not found');
   }
-  if (!dbUser.privyWalletId) {
-    throw new AuthenticationError('Embedded wallet not ready');
-  }
 
   return {
     privyId: claims.userId,
     dbUserId: dbUser.id,
-    privyWalletId: dbUser.privyWalletId,
-    walletAddress: dbUser.walletAddress,
     isAdmin: dbUser.isAdmin ?? false,
   };
 }

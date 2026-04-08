@@ -4,7 +4,6 @@ import { cn, formatDate } from '@babylon/shared';
 import {
   Ban,
   CheckCircle,
-  DollarSign,
   RefreshCw,
   Search,
   Shield,
@@ -14,7 +13,6 @@ import {
 import { useCallback, useEffect, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { z } from 'zod';
-import { AdminSendMoneyModal } from '@/components/admin/AdminSendMoneyModal';
 import { BlockUserModal } from '@/components/moderation/BlockUserModal';
 import { MuteUserModal } from '@/components/moderation/MuteUserModal';
 import { Avatar } from '@/components/shared/Avatar';
@@ -29,7 +27,6 @@ const UserSchema = z.object({
   id: z.string(),
   username: z.string().nullable(),
   displayName: z.string().nullable(),
-  walletAddress: z.string().nullable(),
   profileImageUrl: z.string().nullable(),
   isActor: z.boolean(),
   isAdmin: z.boolean(),
@@ -128,7 +125,6 @@ export function UserManagementTab() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showBanModal, setShowBanModal] = useState(false);
-  const [showSendMoneyModal, setShowSendMoneyModal] = useState(false);
   const [showMuteModal, setShowMuteModal] = useState(false);
   const [showBlockModal, setShowBlockModal] = useState(false);
   const [banReason, setBanReason] = useState('');
@@ -385,13 +381,6 @@ export function UserManagementTab() {
                 </div>
               )}
 
-            {/* Wallet Address */}
-            {user.walletAddress && (
-              <div className="font-mono text-muted-foreground text-xs">
-                {user.walletAddress}
-              </div>
-            )}
-
             {/* Ban Info */}
             {user.isBanned && user.bannedReason && (
               <div className="rounded border border-red-500/20 bg-red-500/10 p-2 text-sm">
@@ -411,17 +400,6 @@ export function UserManagementTab() {
           {/* Actions */}
           {!user.isActor && (
             <div className="flex flex-col gap-2">
-              <button
-                onClick={() => {
-                  setSelectedUser(user);
-                  setShowSendMoneyModal(true);
-                }}
-                className="flex items-center gap-1 rounded bg-green-500/20 px-3 py-1.5 font-medium text-green-500 text-sm transition-colors hover:bg-green-500/30"
-                title="Send money via escrow"
-              >
-                <DollarSign className="h-4 w-4" />
-                Cash
-              </button>
               <button
                 onClick={() => {
                   setSelectedUser(user);
@@ -584,26 +562,6 @@ export function UserManagementTab() {
             <UserRow key={user.id} user={user} />
           ))}
         </div>
-      )}
-
-      {/* Send Money Modal */}
-      {showSendMoneyModal && selectedUser && (
-        <AdminSendMoneyModal
-          isOpen={showSendMoneyModal}
-          onClose={() => {
-            setShowSendMoneyModal(false);
-            setSelectedUser(null);
-          }}
-          recipientId={selectedUser.id}
-          recipientName={
-            selectedUser.displayName || selectedUser.username || 'User'
-          }
-          recipientUsername={selectedUser.username}
-          recipientWalletAddress={selectedUser.walletAddress}
-          onSuccess={() => {
-            fetchUsers(true);
-          }}
-        />
       )}
 
       {/* Block Modal */}

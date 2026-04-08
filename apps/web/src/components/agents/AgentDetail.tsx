@@ -13,7 +13,6 @@ import {
   Bot,
   ExternalLink,
   FileText,
-  Fingerprint,
   Settings,
   TrendingUp,
 } from 'lucide-react';
@@ -46,14 +45,6 @@ const AgentPerformance = dynamic(
   () =>
     import('@/components/agents/AgentPerformance').then((m) => ({
       default: m.AgentPerformance,
-    })),
-  { ssr: false, loading: () => <TabLoadingSkeleton /> }
-);
-
-const AgentRegistry = dynamic(
-  () =>
-    import('@/components/agents/AgentRegistry').then((m) => ({
-      default: m.AgentRegistry,
     })),
   { ssr: false, loading: () => <TabLoadingSkeleton /> }
 );
@@ -112,9 +103,6 @@ export interface AgentDetailData {
   winRate: number;
   lastTickAt?: string;
   lastChatAt?: string;
-  walletAddress?: string;
-  agent0TokenId?: number;
-  onChainRegistered: boolean;
   a2aEnabled?: boolean;
   createdAt: string;
   updatedAt: string;
@@ -125,7 +113,6 @@ export type AgentDetailTab =
   | 'activity'
   | 'performance'
   | 'logs'
-  | 'registry'
   | 'settings'
   | 'wallet';
 
@@ -233,14 +220,6 @@ export function AgentDetail({
               <span className="text-foreground/80 capitalize">
                 {agent.modelTier} Mode
               </span>
-              {agent.onChainRegistered && (
-                <>
-                  <span className="text-gray-600">•</span>
-                  <span className="text-blue-400">
-                    Agent0 #{agent.agent0TokenId}
-                  </span>
-                </>
-              )}
             </div>
           </div>
         </div>
@@ -291,13 +270,6 @@ export function AgentDetail({
             <span className="hidden sm:inline">Logs</span>
           </TabsTrigger>
           <TabsTrigger
-            value="registry"
-            className="data-[state=active]:bg-[#0066FF] data-[state=active]:text-primary-foreground"
-          >
-            <Fingerprint className="mr-2 h-4 w-4" />
-            <span className="hidden sm:inline">Registry</span>
-          </TabsTrigger>
-          <TabsTrigger
             value="settings"
             className="data-[state=active]:bg-[#0066FF] data-[state=active]:text-primary-foreground"
           >
@@ -331,10 +303,6 @@ export function AgentDetail({
 
           <TabsContent value="logs">
             <AgentLogs agentId={agent.id} />
-          </TabsContent>
-
-          <TabsContent value="registry">
-            <AgentRegistry agent={agent} onUpdate={onUpdate ?? (() => {})} />
           </TabsContent>
 
           <TabsContent value="settings">

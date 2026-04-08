@@ -22,7 +22,6 @@ import {
   AgentConfigurationData,
   AgentConfigurationForm,
 } from '@/components/agents/AgentConfigurationForm';
-import { AgentRegistry } from '@/components/agents/AgentRegistry';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -576,15 +575,6 @@ export function AgentEditModal({
           data={settingsData}
           onChange={setSettingsData}
           agentId={agent.id}
-        />
-      </div>
-
-      {/* Blockchain Registry */}
-      <div>
-        <h3 className="mb-4 font-semibold text-sm">Blockchain Registry</h3>
-        <AgentRegistry
-          agent={{ id: agent.id, name: agent.name }}
-          onUpdate={onUpdate}
         />
       </div>
 

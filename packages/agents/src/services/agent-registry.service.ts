@@ -973,20 +973,7 @@ export class AgentRegistryService {
             },
           }
         : null,
-      agent0Data: registry.agent0TokenId
-        ? {
-            tokenId: registry.agent0TokenId,
-            metadataCID: registry.agent0MetadataCID ?? '',
-            subgraphData: registry.agent0SubgraphOwner
-              ? {
-                  owner: registry.agent0SubgraphOwner,
-                  metadataURI: registry.agent0SubgraphMetadataURI ?? '',
-                  timestamp: registry.agent0SubgraphTimestamp ?? 0,
-                }
-              : undefined,
-            discoveryEndpoint: registry.agent0DiscoveryEndpoint ?? '',
-          }
-        : null,
+      agent0Data: null,
       runtimeInstanceId: registry.runtimeInstanceId,
       registeredAt: registry.registeredAt,
       lastActiveAt: registry.lastActiveAt,

@@ -1,11 +1,11 @@
-import { CHAIN_ID } from '../constants';
+import { getCurrentChainId } from '../config';
 
 /**
  * Returns an Etherscan/Basescan explorer URL for a given transaction hash.
  * Covers all chains supported by the platform.
  */
 export function getTxExplorerUrl(txHash: string): string {
-  switch (CHAIN_ID) {
+  switch (getCurrentChainId()) {
     case 1:
       return `https://etherscan.io/tx/${txHash}`;
     case 11155111:
