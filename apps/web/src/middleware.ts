@@ -163,15 +163,21 @@ export function middleware(request: NextRequest) {
     }
   }
 
-  // NFT features are disabled. Return 503 for all NFT API routes.
+  // NFT features are disabled — block both API routes and page routes.
   if (
     pathname.startsWith('/api/nft') ||
-    pathname.startsWith('/api/wallet/nfts')
+    pathname.startsWith('/api/wallet/nfts') ||
+    pathname === '/nft' ||
+    pathname.startsWith('/nft/')
   ) {
-    return NextResponse.json(
-      { error: 'NFT features are currently disabled.' },
-      { status: 503 }
-    );
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json(
+        { error: 'NFT features are currently disabled.' },
+        { status: 503 }
+      );
+    }
+    // Redirect page routes to home
+    return NextResponse.redirect(new URL('/', request.url));
   }
 
   // Skip CORS handling for agent routes - handled in vercel.json with wildcard

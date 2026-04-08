@@ -496,8 +496,6 @@ export default function SettingsPage() {
         coverImageUrl: payload.user.coverImageUrl ?? user.coverImageUrl,
         usernameChangedAt: payload.user.usernameChangedAt,
         referralCode: payload.user.referralCode,
-        onChainRegistered:
-          payload.user.onChainRegistered ?? user.onChainRegistered,
       });
     }
 
@@ -796,23 +794,6 @@ export default function SettingsPage() {
                             void updateSocialVisibility('farcaster', checked)
                           }
                           disabled={!user?.hasFarcaster}
-                        />
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="font-medium text-sm">Wallet</div>
-                          <div className="truncate text-muted-foreground text-xs">
-                            {user?.walletAddress
-                              ? 'Connected'
-                              : 'Not connected'}
-                          </div>
-                        </div>
-                        <Switch
-                          checked={socialVisibility.wallet}
-                          onCheckedChange={(checked) =>
-                            void updateSocialVisibility('wallet', checked)
-                          }
-                          disabled={!user?.walletAddress}
                         />
                       </div>
                     </div>

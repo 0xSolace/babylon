@@ -77,9 +77,7 @@ export default function ReputationPage() {
     return () => clearInterval(interval);
   }, [authenticated, user]);
 
-  const hasNft = Boolean(
-    user?.agent0TokenId || user?.nftTokenId || user?.onChainRegistered
-  );
+  const hasNft = false;
 
   if (!authenticated) {
     return (
@@ -199,9 +197,7 @@ export default function ReputationPage() {
               <label className="mb-1 block text-muted-foreground text-sm">
                 Token ID
               </label>
-              <p className="font-mono text-foreground">
-                #{user?.agent0TokenId ?? user?.nftTokenId ?? 'N/A'}
-              </p>
+              <p className="font-mono text-foreground">#N/A</p>
             </div>
             <div>
               <label className="mb-1 block text-muted-foreground text-sm">

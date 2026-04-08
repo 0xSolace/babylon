@@ -43,13 +43,6 @@ export const UpdateUserSchema = z.object({
   showTwitterPublic: z.boolean().optional(),
   showFarcasterPublic: z.boolean().optional(),
   showWalletPublic: z.boolean().optional(),
-  onchainTxHash: z
-    .string()
-    .regex(
-      /^0x[0-9a-fA-F]{64}$/,
-      'onchainTxHash must be a valid 32-byte hex string'
-    )
-    .optional(),
 });
 
 /**

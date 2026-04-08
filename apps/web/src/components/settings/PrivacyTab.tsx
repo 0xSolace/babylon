@@ -129,22 +129,6 @@ export function PrivacyTab() {
         </p>
       </div>
 
-      {/* Blockchain Data Notice */}
-      {user?.onChainRegistered && (
-        <div className="space-y-2 rounded-lg border border-border p-4">
-          <h3 className="font-semibold">Blockchain Data Notice</h3>
-          <p className="text-muted-foreground text-sm">
-            You have on-chain identity data (wallet address:{' '}
-            {user.walletAddress?.slice(0, 6)}...
-            {user.walletAddress?.slice(-4)}, Token ID:{' '}
-            {user.agent0TokenId ?? user.nftTokenId ?? 'N/A'}) that is
-            permanently recorded on the blockchain and{' '}
-            <strong>cannot be deleted</strong>. This data will remain publicly
-            visible even if you delete your account.
-          </p>
-        </div>
-      )}
-
       {/* Account Deletion */}
       <div className="space-y-3 rounded-lg border border-red-500/30 bg-red-500/5 p-4">
         <h3 className="font-semibold text-red-500">Delete Your Account</h3>
@@ -204,12 +188,6 @@ export function PrivacyTab() {
                 <li>All your posts, comments, and content will be removed</li>
                 <li>Your trading history and positions will be deleted</li>
                 <li>Some anonymized data may be retained for analytics</li>
-                {user?.onChainRegistered && (
-                  <li className="font-medium text-yellow-500">
-                    Blockchain data (wallet address, NFT) will remain public and
-                    cannot be deleted
-                  </li>
-                )}
               </ul>
             </div>
 

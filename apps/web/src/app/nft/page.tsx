@@ -94,12 +94,6 @@ export default function NftGalleryPage() {
   const isMyNft = (nft: NftSummary) => {
     if (!user) return false;
     if (nft.owner?.user?.id === user.id) return true;
-    if (
-      user.walletAddress &&
-      nft.owner?.walletAddress?.toLowerCase() ===
-        user.walletAddress.toLowerCase()
-    )
-      return true;
     return false;
   };
 

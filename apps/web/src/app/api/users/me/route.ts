@@ -49,8 +49,6 @@
  *                       type: string
  *                     profileImageUrl:
  *                       type: string
- *                     walletAddress:
- *                       type: string
  *                     reputationPoints:
  *                       type: number
  *                     isAdmin:
@@ -64,7 +62,6 @@
  * - **Identity:** username, display name, bio, avatar, cover image
  * - **Onboarding Status:** profile completion
  * - **Social Links:** Farcaster, Twitter connections and visibility settings
- * - **Blockchain:** wallet address, NFT token ID, on-chain status
  * - **Reputation:** reputation points, referral code, referral source
  * - **Stats:** cached profile statistics (posts, followers, following)
  * - **Permissions:** admin status, actor/agent flag
@@ -97,9 +94,6 @@
  * @property {string} user.bio - User biography
  * @property {string} user.profileImageUrl - Profile image URL
  * @property {string} user.coverImageUrl - Cover image URL
- * @property {string} user.walletAddress - Blockchain wallet address
- * @property {boolean} user.onChainRegistered - On-chain registration status
- * @property {string} user.nftTokenId - Associated NFT token ID
  * @property {string} user.referralCode - User's referral code
  * @property {string} user.referredBy - Referrer's code (if referred)
  * @property {number} user.reputationPoints - Reputation score
@@ -169,15 +163,11 @@ type PrivyUserWithWallets = PrivyUser & PrivyUserWithEmails;
 const userSelectFields = {
   id: users.id,
   privyId: users.privyId,
-  privyWalletId: users.privyWalletId,
-  offlineWalletReady: users.offlineWalletReady,
-  offlineWalletReadyAt: users.offlineWalletReadyAt,
   username: users.username,
   displayName: users.displayName,
   bio: users.bio,
   profileImageUrl: users.profileImageUrl,
   coverImageUrl: users.coverImageUrl,
-  walletAddress: users.walletAddress,
   email: users.email, // For displaying pending referrals
   emailVerified: users.emailVerified,
   emailNotificationsEnabled: users.emailNotificationsEnabled,
@@ -189,9 +179,6 @@ const userSelectFields = {
   hasUsername: users.hasUsername,
   hasBio: users.hasBio,
   hasProfileImage: users.hasProfileImage,
-  onChainRegistered: users.onChainRegistered,
-  nftTokenId: users.nftTokenId,
-  agent0TokenId: users.agent0TokenId,
   referralCode: users.referralCode,
   referredBy: users.referredBy,
   reputationPoints: users.reputationPoints,
@@ -225,15 +212,11 @@ const userSelectFields = {
 type UserSelectResult = {
   id: string;
   privyId: string | null;
-  privyWalletId: string | null;
-  offlineWalletReady: boolean;
-  offlineWalletReadyAt: Date | null;
   username: string | null;
   displayName: string | null;
   bio: string | null;
   profileImageUrl: string | null;
   coverImageUrl: string | null;
-  walletAddress: string | null;
   email: string | null;
   emailVerified: boolean;
   emailNotificationsEnabled: boolean;
@@ -245,9 +228,6 @@ type UserSelectResult = {
   hasUsername: boolean;
   hasBio: boolean;
   hasProfileImage: boolean;
-  onChainRegistered: boolean;
-  nftTokenId: number | null;
-  agent0TokenId: number | null;
   referralCode: string | null;
   referredBy: string | null;
   reputationPoints: number;
@@ -482,15 +462,11 @@ function buildUserResponse(
   return {
     id: dbUser.id,
     privyId: dbUser.privyId,
-    privyWalletId: dbUser.privyWalletId,
-    offlineWalletReady: dbUser.offlineWalletReady,
-    offlineWalletReadyAt: toISOOrNull(dbUser.offlineWalletReadyAt),
     username: dbUser.username,
     displayName: dbUser.displayName,
     bio: dbUser.bio,
     profileImageUrl: dbUser.profileImageUrl,
     coverImageUrl: dbUser.coverImageUrl,
-    walletAddress: dbUser.walletAddress,
     email: dbUser.email,
     emailVerified: dbUser.emailVerified,
     emailNotificationsEnabled: dbUser.emailNotificationsEnabled,
@@ -502,9 +478,6 @@ function buildUserResponse(
     hasUsername: dbUser.hasUsername,
     hasBio: dbUser.hasBio,
     hasProfileImage: dbUser.hasProfileImage,
-    onChainRegistered: dbUser.onChainRegistered,
-    nftTokenId: dbUser.nftTokenId,
-    agent0TokenId: dbUser.agent0TokenId,
     referralCode: dbUser.referralCode,
     referredBy: dbUser.referredBy,
     reputationPoints: dbUser.reputationPoints,
@@ -847,7 +820,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           userId: linkedUser.id,
           username: linkedUser.username,
           profileComplete: linkedUser.profileComplete,
-          onChainRegistered: linkedUser.onChainRegistered,
           needsOnboarding,
         },
         'GET /api/users/me'
@@ -933,7 +905,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       {
         privyId,
         userId: canonicalUserId,
-        walletAddress: authUser.walletAddress,
         referredBy: resolvedReferrerId,
         email,
         emailVerified: !!email,
@@ -1126,8 +1097,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       userId: dbUser.id,
       username: dbUser.username,
       profileComplete: dbUser.profileComplete,
-      onChainRegistered: dbUser.onChainRegistered,
-      nftTokenId: dbUser.nftTokenId,
       needsOnboarding,
     },
     'GET /api/users/me'

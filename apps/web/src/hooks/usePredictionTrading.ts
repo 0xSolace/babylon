@@ -67,7 +67,7 @@ async function parseJsonPayload<T>(response: Response): Promise<T> {
 }
 
 export function usePredictionTrading() {
-  const { embeddedWalletAddress, getAccessToken } = useAuth();
+  const { getAccessToken } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -184,6 +184,5 @@ export function usePredictionTrading() {
     sellPrediction,
     loading,
     error,
-    walletAddress: embeddedWalletAddress,
   };
 }

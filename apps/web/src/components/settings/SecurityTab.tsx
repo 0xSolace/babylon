@@ -4,7 +4,6 @@ import { logger } from '@babylon/shared';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { Copy, ExternalLink, Key } from 'lucide-react';
 import { toast } from 'sonner';
-import { useAuth } from '@/hooks/useAuth';
 import { isPrivyLinkFlowCancellationError } from '@/lib/privy-link-account-errors';
 
 /**
@@ -31,7 +30,6 @@ export function SecurityTab() {
     exportWallet,
   } = usePrivy();
   const { wallets } = useWallets();
-  const { user } = useAuth();
 
   const copyToClipboard = async (text: string) => {
     await navigator.clipboard.writeText(text);
@@ -210,11 +208,6 @@ export function SecurityTab() {
                     {isEmbeddedWallet(wallet.walletClientType) && (
                       <span className="rounded bg-[#0066FF]/20 px-2 py-0.5 text-[#0066FF] text-xs">
                         Embedded
-                      </span>
-                    )}
-                    {wallet.address === user?.walletAddress && (
-                      <span className="rounded bg-green-500/20 px-2 py-0.5 text-green-500 text-xs">
-                        Primary
                       </span>
                     )}
                   </div>

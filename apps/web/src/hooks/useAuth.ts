@@ -1,13 +1,9 @@
 'use client';
 
 import { getAllVerifiedEmails, logger } from '@babylon/shared';
-import {
-  type ConnectedWallet,
-  usePrivy,
-  useWallets,
-} from '@privy-io/react-auth';
+import { usePrivy } from '@privy-io/react-auth';
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
   clearBrowserDevAuthSession,
@@ -40,12 +36,6 @@ interface UseAuthReturn {
   loadingProfile: boolean;
   /** The current authenticated user, or null if not authenticated */
   user: User | null;
-  /** The connected wallet (prioritizes embedded wallet for gas sponsorship) */
-  wallet: ConnectedWallet | undefined;
-  /** The embedded wallet address (EOA) if available */
-  embeddedWalletAddress?: string;
-  /** Whether the embedded wallet is ready for transactions */
-  embeddedWalletReady: boolean;
   /** Whether the user needs to complete onboarding */
   needsOnboarding: boolean;
   /** Whether the server has been consulted for profile status this session */
@@ -60,28 +50,15 @@ interface UseAuthReturn {
   getAccessToken: () => Promise<string | null>;
 }
 
-let lastSyncedWalletAddress: string | null = null;
-
 // Global fetch management - shared across ALL useAuth instances
 let globalFetchInFlight: Promise<void> | null = null;
 let globalTokenRetryTimeout: number | null = null;
-
-// Track users for whom legacy wallet sync has run in this session
-const linkedSocialUsers = new Set<string>();
-// Track in-flight legacy wallet sync operations to prevent race conditions
-const linkingInProgress = new Set<string>();
-// Track failed wallet sync attempts (409 = account already linked to different user)
-// Key format: `${userId}:${platform}:${identifier}` (e.g., "did:privy:123:wallet:0x...")
-const failedLinkAttempts = new Set<string>();
 
 /**
  * Main authentication hook for managing user authentication state.
  *
  * This hook provides comprehensive authentication management including:
  * - User profile loading and synchronization
- * - Wallet connection and management (prioritizes embedded wallet for gas sponsorship)
- * - Smart wallet integration
- * - Legacy wallet sync fallback via API
  * - Access token management
  * - Onboarding status
  *
@@ -113,14 +90,12 @@ export function useAuth(): UseAuthReturn {
     logout,
     getAccessToken: getPrivyAccessToken,
   } = usePrivy();
-  const { wallets } = useWallets();
   const {
     user,
     isLoadingProfile,
     needsOnboarding,
     profileFetchStatus,
     setUser,
-    setWallet,
     setNeedsOnboarding,
     setProfileFetchStatus,
     setLoadedUserId,
@@ -132,29 +107,6 @@ export function useAuth(): UseAuthReturn {
     getBrowserDevAuthSession()
   );
 
-  // Prioritize embedded Privy wallets for gas sponsorship
-  // Embedded wallets enable gasless transactions via Privy's paymaster
-  // External wallets can be used, but users must pay their own gas
-  const isPrivyEmbeddedWallet = useCallback((w: ConnectedWallet) => {
-    const t = w.walletClientType ?? null;
-    // Privy has shipped multiple embedded wallet client markers over time.
-    // Treat any "privy*" marker as embedded to keep behavior robust to SDK changes.
-    return typeof t === 'string' && (t === 'privy' || t.startsWith('privy'));
-  }, []);
-
-  const wallet = useMemo(() => {
-    if (wallets.length === 0) return undefined;
-
-    // First, try to find the Privy embedded wallet for gas sponsorship
-    const embeddedWallet = wallets.find(isPrivyEmbeddedWallet);
-    if (embeddedWallet) return embeddedWallet;
-
-    // If no embedded wallet, fall back to external wallet (user pays gas)
-    return wallets[0];
-  }, [wallets, isPrivyEmbeddedWallet]);
-
-  const embeddedWalletAddress = wallet?.address ?? undefined;
-  const embeddedWalletReady = Boolean(embeddedWalletAddress);
   // Use a ref to track if we've already cleared auth to prevent re-triggering
   const hasClearedAuthRef = useRef(false);
 
@@ -250,8 +202,6 @@ export function useAuth(): UseAuthReturn {
     if (data.user) {
       setUser({
         ...data.user,
-        walletAddress:
-          data.user.walletAddress ?? devAuthSession.walletAddress ?? undefined,
         displayName:
           data.user.displayName?.trim() ||
           devAuthSession.displayName ||
@@ -410,11 +360,10 @@ export function useAuth(): UseAuthReturn {
         if (me.user) {
           const hydratedUser: User = {
             id: me.user.id,
-            walletAddress: me.user.walletAddress ?? wallet?.address,
             displayName:
               me.user.displayName && me.user.displayName.trim() !== ''
                 ? me.user.displayName
-                : (verifiedPrivyEmail ?? wallet?.address ?? 'Anonymous'),
+                : (verifiedPrivyEmail ?? 'Anonymous'),
             email: verifiedPrivyEmail ?? me.user.email ?? undefined,
             emailVerified: me.user.emailVerified ?? undefined,
             emailNotificationsEnabled:
@@ -455,10 +404,7 @@ export function useAuth(): UseAuthReturn {
             showFarcasterPublic: me.user.showFarcasterPublic ?? undefined,
             showWalletPublic: me.user.showWalletPublic ?? undefined,
             stats: me.user.stats ?? undefined,
-            nftTokenId: me.user.nftTokenId ?? undefined,
-            agent0TokenId: me.user.agent0TokenId ?? undefined,
             createdAt: me.user.createdAt,
-            onChainRegistered: me.user.onChainRegistered ?? undefined,
             isAdmin: me.user.isAdmin ?? undefined,
             isActor: me.user.isActor ?? undefined,
             isBanned: me.user.isBanned ?? undefined,
@@ -474,11 +420,9 @@ export function useAuth(): UseAuthReturn {
             currentUser.username !== hydratedUser.username ||
             currentUser.displayName !== hydratedUser.displayName ||
             currentUser.profileComplete !== hydratedUser.profileComplete ||
-            currentUser.onChainRegistered !== hydratedUser.onChainRegistered ||
             currentUser.profileImageUrl !== hydratedUser.profileImageUrl ||
             currentUser.coverImageUrl !== hydratedUser.coverImageUrl ||
             currentUser.bio !== hydratedUser.bio ||
-            currentUser.walletAddress !== hydratedUser.walletAddress ||
             currentUser.showTwitterPublic !== hydratedUser.showTwitterPublic ||
             currentUser.showFarcasterPublic !==
               hydratedUser.showFarcasterPublic ||
@@ -522,10 +466,8 @@ export function useAuth(): UseAuthReturn {
           if (!currentUser || currentUser.id !== privyUser.id) {
             setUser({
               id: privyUser.id,
-              walletAddress: wallet?.address,
-              displayName: verifiedPrivyEmail ?? wallet?.address ?? 'Anonymous',
+              displayName: verifiedPrivyEmail ?? 'Anonymous',
               email: verifiedPrivyEmail ?? undefined,
-              onChainRegistered: false,
             });
           }
         }
@@ -553,101 +495,8 @@ export function useAuth(): UseAuthReturn {
       setLoadedUserId,
       setNeedsOnboarding,
       setUser,
-      wallet?.address,
     ]
   );
-
-  const synchronizeWallet = useCallback(() => {
-    if (!wallet) return;
-    if (wallet.address === lastSyncedWalletAddress) return;
-
-    lastSyncedWalletAddress = wallet.address;
-    setWallet({
-      address: wallet.address,
-      chainId: wallet.chainId,
-    });
-  }, [wallet, setWallet]);
-
-  const synchronizeLegacyWalletLink = useCallback(async () => {
-    if (!authenticated || !privyUser) return;
-    if (isLoadingProfile) return; // Wait for profile to load
-    if (needsOnboarding) return;
-
-    // Get current user state directly from store
-    const currentUser = useAuthStore.getState().user;
-    if (!currentUser) return; // Don't link social accounts if user doesn't exist yet
-
-    // Prevent duplicate calls - check both sets synchronously
-    if (linkedSocialUsers.has(privyUser.id)) return;
-    if (linkingInProgress.has(privyUser.id)) return;
-
-    const token = await getAccessToken();
-    if (!token) return;
-
-    // Mark as in progress immediately to prevent race conditions
-    linkingInProgress.add(privyUser.id);
-
-    // Legacy fallback: only sync wallet if it's different from the stored wallet address.
-    // Social identity linking now relies on Privy identity sync server-side.
-    if (
-      wallet?.address &&
-      currentUser.walletAddress?.toLowerCase() !== wallet.address.toLowerCase()
-    ) {
-      const walletKey = `${privyUser.id}:wallet:${wallet.address.toLowerCase()}`;
-
-      // Skip if this link attempt previously failed with 409
-      if (!failedLinkAttempts.has(walletKey)) {
-        const response = await apiFetch(
-          `/api/users/${encodeURIComponent(privyUser.id)}/link-social`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              platform: 'wallet',
-              address: wallet.address.toLowerCase(),
-            }),
-          }
-        );
-
-        if (response.status === 409) {
-          // 409 = wallet already linked to another account - don't retry
-          failedLinkAttempts.add(walletKey);
-          logger.info(
-            'Wallet already linked to another account, skipping future retries',
-            { address: wallet.address },
-            'useAuth'
-          );
-        } else if (!response.ok) {
-          const errorText = await response.text().catch(() => 'Unknown error');
-          logger.warn(
-            'Failed to link wallet',
-            {
-              address: wallet.address,
-              status: response.status,
-              error: errorText,
-            },
-            'useAuth'
-          );
-        }
-        // 200 means successfully linked - great!
-      }
-    }
-
-    // Mark as completed and remove from in-progress set
-    linkingInProgress.delete(privyUser.id);
-    // Always mark as "linked" to prevent retries, even if some links failed
-    // The function checks if accounts are already linked before attempting
-    linkedSocialUsers.add(privyUser.id);
-  }, [
-    authenticated,
-    privyUser,
-    isLoadingProfile,
-    needsOnboarding,
-    getAccessToken,
-    wallet?.address,
-  ]);
 
   useEffect(() => {
     void persistAccessToken();
@@ -701,17 +550,6 @@ export function useAuth(): UseAuthReturn {
     };
   }, [getAccessToken]);
 
-  // Sync wallet separately from fetching user
-  useEffect(() => {
-    if (devAuthSession) {
-      return;
-    }
-
-    if (authenticated && privyUser) {
-      synchronizeWallet();
-    }
-  }, [authenticated, devAuthSession, privyUser, synchronizeWallet]);
-
   // Fetch user only when authentication status or user ID changes
   // IMPORTANT: Only clear auth when Privy is READY and user is not authenticated.
   // Don't clear on initial load when `ready` is false - that would wipe persisted state
@@ -734,17 +572,6 @@ export function useAuth(): UseAuthReturn {
       if (hasClearedAuthRef.current) {
         return;
       }
-
-      linkedSocialUsers.delete(privyUser?.id ?? '');
-      linkingInProgress.delete(privyUser?.id ?? '');
-      // Clear failed link attempts for this user (keys start with userId)
-      const userPrefix = `${privyUser?.id ?? ''}:`;
-      failedLinkAttempts.forEach((key) => {
-        if (key.startsWith(userPrefix)) {
-          failedLinkAttempts.delete(key);
-        }
-      });
-      lastSyncedWalletAddress = null;
 
       // Use getState() to avoid dependency on clearAuth
       useAuthStore.getState().clearAuth();
@@ -794,17 +621,6 @@ export function useAuth(): UseAuthReturn {
     privyUser?.id,
   ]);
 
-  // Sync legacy wallet fallback only once per user session
-  // Removed wallet?.address from dependencies to prevent spam
-  // The wallet linking logic checks if the address changed before making API calls
-  useEffect(() => {
-    if (devAuthSession) {
-      return;
-    }
-
-    void synchronizeLegacyWalletLink();
-  }, [devAuthSession, synchronizeLegacyWalletLink]);
-
   const refresh = async () => {
     if (devAuthSession) {
       await fetchDevCurrentUser();
@@ -852,10 +668,6 @@ export function useAuth(): UseAuthReturn {
         window.__privyAccessToken = null;
         localStorage.removeItem('babylon-auth');
       }
-      linkedSocialUsers.clear();
-      linkingInProgress.clear();
-      failedLinkAttempts.clear();
-      lastSyncedWalletAddress = null;
       globalFetchInFlight = null;
       if (globalTokenRetryTimeout !== null) {
         clearTimeout(globalTokenRetryTimeout);
@@ -897,10 +709,6 @@ export function useAuth(): UseAuthReturn {
     }
 
     // Clear module-level state
-    linkedSocialUsers.clear();
-    linkingInProgress.clear();
-    failedLinkAttempts.clear();
-    lastSyncedWalletAddress = null;
     globalFetchInFlight = null;
     if (globalTokenRetryTimeout !== null) {
       clearTimeout(globalTokenRetryTimeout);
@@ -919,11 +727,6 @@ export function useAuth(): UseAuthReturn {
     authenticated: devAuthSession ? true : authenticated,
     loadingProfile: isLoadingProfile,
     user,
-    wallet: devAuthSession ? undefined : wallet,
-    embeddedWalletAddress:
-      devAuthSession?.walletAddress ?? embeddedWalletAddress,
-    embeddedWalletReady:
-      devAuthSession?.walletAddress !== undefined ? true : embeddedWalletReady,
     needsOnboarding,
     profileFetchStatus: devAuthSession ? 'done' : profileFetchStatus,
     login: devAuthSession ? () => {} : handleLogin,

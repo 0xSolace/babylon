@@ -279,7 +279,6 @@ export function OnboardingProvider({
           };
           setUser({
             id: u.id,
-            walletAddress: u.walletAddress ?? undefined,
             displayName:
               u.displayName ?? payload.displayName ?? payload.username,
             email: user?.email,
@@ -295,9 +294,7 @@ export function OnboardingProvider({
             hasTwitter: u.hasTwitter ?? user?.hasTwitter,
             farcasterUsername: u.farcasterUsername ?? user?.farcasterUsername,
             twitterUsername: u.twitterUsername ?? user?.twitterUsername,
-            nftTokenId: u.nftTokenId ?? undefined,
             createdAt: u.createdAt ?? user?.createdAt,
-            onChainRegistered: u.onChainRegistered ?? user?.onChainRegistered,
             gameGuideCompletedAt: u.gameGuideCompletedAt ?? null,
           });
         }
