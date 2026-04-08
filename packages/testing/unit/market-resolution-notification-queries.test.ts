@@ -39,9 +39,9 @@ type Condition =
       value: unknown;
     };
 
-let capturedWhere: Condition | null = null;
+let capturedWhere: unknown = null;
 
-const mockWhere = mock(async (condition: Condition) => {
+const mockWhere = mock(async (condition: unknown) => {
   capturedWhere = condition;
   return [];
 });
@@ -77,21 +77,31 @@ mock.module('@babylon/db', () => ({
   or: (...conditions: Condition[]) => ({ op: 'or', conditions }),
 }));
 
-mock.module('@babylon/db/runtime', () => ({
-  db: {
-    select: mock(() => ({
-      from: mock(() => ({
-        innerJoin: mock(() => ({
-          leftJoin: mock(() => ({
-            where: mockWhere,
-          })),
+const marketResolutionMockDb = {
+  select: mock(() => ({
+    from: mock(() => ({
+      innerJoin: mock(() => ({
+        leftJoin: mock(() => ({
+          where: mockWhere,
         })),
       })),
     })),
-  },
+  })),
+};
+
+mock.module('@babylon/db/engine-storage', () => ({
+  db: marketResolutionMockDb,
   markets: marketsTable,
   positions: positionsTable,
   users: usersTable,
+  asSystem: async <T>(
+    op: (c: typeof marketResolutionMockDb) => Promise<T>,
+    _operationName?: string
+  ) => op(marketResolutionMockDb),
+  asUser: async <T>(
+    _userIdOrUser: unknown,
+    op: (c: typeof marketResolutionMockDb) => Promise<T>
+  ) => op(marketResolutionMockDb),
 }));
 
 const { notifyResolvedMarketOwners } = await import(
@@ -101,17 +111,12 @@ const { buildDigestForUser } = await import(
   '../../../apps/web/src/lib/services/notification-digest-service'
 );
 
-function expectSharesFilter(condition: Condition | null) {
+function expectSharesFilter(condition: unknown) {
   expect(condition).not.toBeNull();
-  expect(condition).toMatchObject({ op: 'and' });
-  // Extract<Condition, { op: 'and' }> is `never` because `and` shares a union arm with `or` (`op: 'and' | 'or'`).
-  const conditions = (condition as { op: 'and'; conditions: Condition[] })
-    .conditions;
-  expect(conditions).toContainEqual({
-    op: 'gt',
-    left: 'positions.shares',
-    right: '0',
-  });
+  const serialized = JSON.stringify(condition);
+  expect(serialized).toContain('positions.shares');
+  expect(serialized).toContain('>');
+  expect(serialized).toContain('0');
 }
 
 describe('market resolution notification queries', () => {

@@ -6,8 +6,12 @@
  * @packageDocumentation
  */
 
-import { and, desc, eq, gte } from '@babylon/db';
-import { db, groups, messages } from '@babylon/db/runtime';
+import {
+  listTeamGroupIds,
+  selectChatParticipantsWithChatsByUserIdLimit,
+  selectMessagesByChatIdSinceOrderCreatedDescLimit,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import { shuffleArray } from '@babylon/engine';
 import type { IAgentRuntime } from '@elizaos/core';
 import { callGroqDirect } from '../llm/direct-groq';
@@ -39,14 +43,9 @@ export class AutonomousGroupChatService {
     const config = await getAgentConfig(agentUserId);
 
     // Get agent's group chats
-    const groupChatsRaw = await db.query.chatParticipants.findMany({
-      where: (chatParticipants, { eq }) =>
-        eq(chatParticipants.userId, agentUserId),
-      with: {
-        chat: true,
-      },
-      limit: 20,
-    });
+    const groupChatsRaw = (
+      await selectChatParticipantsWithChatsByUserIdLimit(db, agentUserId, 20)
+    ).map((r) => ({ chat: r.chat }));
 
     let messagesCreated = 0;
 
@@ -58,11 +57,7 @@ export class AutonomousGroupChatService {
 
     let teamGroupIds = new Set<string>();
     if (groupIds.length > 0) {
-      const teamGroups = await db
-        .select({ id: groups.id })
-        .from(groups)
-        .where(eq(groups.type, 'team'));
-      teamGroupIds = new Set(teamGroups.map((g) => g.id));
+      teamGroupIds = new Set(await listTeamGroupIds());
     }
 
     // Shuffle to prevent starvation (deterministic order would always favor same chats)
@@ -79,14 +74,13 @@ export class AutonomousGroupChatService {
 
       // Get recent messages in this group
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-      const recentMessages = await db
-        .select()
-        .from(messages)
-        .where(
-          and(eq(messages.chatId, chat.id), gte(messages.createdAt, oneHourAgo))
-        )
-        .orderBy(desc(messages.createdAt))
-        .limit(10);
+      const recentMessages =
+        await selectMessagesByChatIdSinceOrderCreatedDescLimit(
+          db,
+          chat.id,
+          oneHourAgo,
+          10
+        );
 
       if (recentMessages.length === 0) continue;
 

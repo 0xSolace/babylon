@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 /**
  * Fix Missing Tier Chats
  *
@@ -13,16 +14,16 @@
  *   --dry-run    Show what would be fixed without making changes
  */
 
-import { and, eq, isNull } from '@babylon/db';
 import {
   chatParticipants,
   chats,
   db,
   groupMembers,
   groups,
-} from '@babylon/db/runtime';
+} from '@babylon/db/engine-storage';
 import { StaticDataRegistry } from '@babylon/engine';
 import { generateSnowflakeId } from '@babylon/shared';
+import { and, eq, isNull } from 'drizzle-orm';
 
 async function main() {
   const args = process.argv.slice(2);

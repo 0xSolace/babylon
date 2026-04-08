@@ -4,8 +4,8 @@
  * This ensures the agent always remembers its core mission and limitations
  */
 
-import { eq } from '@babylon/db';
-import { db, users } from '@babylon/db/runtime';
+import { selectAgentGoalsProviderUserById } from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import type {
   IAgentRuntime,
   Memory,
@@ -35,18 +35,7 @@ export const goalsProvider: Provider = {
   ): Promise<ProviderResult> => {
     const agentUserId = runtime.agentId;
 
-    // Get user info
-    const [user] = await db
-      .select({
-        id: users.id,
-        displayName: users.displayName,
-        bio: users.bio,
-        managedBy: users.managedBy,
-        virtualBalance: users.virtualBalance,
-      })
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
+    const user = await selectAgentGoalsProviderUserById(db, agentUserId);
 
     if (!user) {
       return { text: '' };

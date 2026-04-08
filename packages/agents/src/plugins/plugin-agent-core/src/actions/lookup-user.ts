@@ -4,8 +4,8 @@
  * Look up a user by username or display name to get their ID for other actions.
  */
 
-import { ilike, or } from '@babylon/db';
-import { db, users } from '@babylon/db/runtime';
+import { searchUsersForAgentLookup } from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import type {
   Action,
   ActionResult,
@@ -79,23 +79,7 @@ export const lookupUserAction: Action = {
 
     try {
       // Search by username or display name (case-insensitive)
-      const foundUsers = await db
-        .select({
-          id: users.id,
-          username: users.username,
-          displayName: users.displayName,
-          isAgent: users.isAgent,
-          profileImageUrl: users.profileImageUrl,
-          bio: users.bio,
-        })
-        .from(users)
-        .where(
-          or(
-            ilike(users.username, `%${searchTerm}%`),
-            ilike(users.displayName, `%${searchTerm}%`)
-          )
-        )
-        .limit(5);
+      const foundUsers = await searchUsersForAgentLookup(db, searchTerm, 5);
 
       if (foundUsers.length === 0) {
         return {

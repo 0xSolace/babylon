@@ -12,14 +12,15 @@
  * @packageDocumentation
  */
 
-import { and, desc, eq, gte } from '@babylon/db';
 import {
-  actorState,
-  agentLogs,
-  agentTrades,
-  db,
-  users,
-} from '@babylon/db/runtime';
+  insertAgentLogRow,
+  selectAgentLogTypeLevelCreatedAtSinceOrderCreatedDescLimit,
+  selectAgentTradesWindowSliceByAgentSinceExecutedDescLimit,
+  selectNpcActorTradingBalance,
+  selectUserRowById,
+  selectUserVirtualBalanceAndLifetimePnLById,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import {
   type ActorData,
   loadActorById,
@@ -225,54 +226,22 @@ export class AgentRuntimeManager {
     const refreshEndedAt = new Date();
     const refreshStartedAt = new Date(lifecycle.createdAtMs);
 
-    const [windowLogs, windowTrades, userSnapshot, npcSnapshot] =
-      await Promise.all([
-        db
-          .select({
-            type: agentLogs.type,
-            level: agentLogs.level,
-            createdAt: agentLogs.createdAt,
-          })
-          .from(agentLogs)
-          .where(
-            and(
-              eq(agentLogs.agentUserId, agentUserId),
-              gte(agentLogs.createdAt, refreshStartedAt)
-            )
-          )
-          .orderBy(desc(agentLogs.createdAt))
-          .limit(MAX_REFRESH_WINDOW_LOGS),
-        db
-          .select({
-            marketType: agentTrades.marketType,
-            action: agentTrades.action,
-            pnl: agentTrades.pnl,
-            executedAt: agentTrades.executedAt,
-          })
-          .from(agentTrades)
-          .where(
-            and(
-              eq(agentTrades.agentUserId, agentUserId),
-              gte(agentTrades.executedAt, refreshStartedAt)
-            )
-          )
-          .orderBy(desc(agentTrades.executedAt))
-          .limit(MAX_REFRESH_WINDOW_TRADES),
-        db
-          .select({
-            displayName: users.displayName,
-            virtualBalance: users.virtualBalance,
-            lifetimePnL: users.lifetimePnL,
-          })
-          .from(users)
-          .where(eq(users.id, agentUserId))
-          .limit(1),
-        db
-          .select({ tradingBalance: actorState.tradingBalance })
-          .from(actorState)
-          .where(eq(actorState.id, agentUserId))
-          .limit(1),
-      ]);
+    const [windowLogs, windowTrades, user, npc] = await Promise.all([
+      selectAgentLogTypeLevelCreatedAtSinceOrderCreatedDescLimit(
+        db,
+        agentUserId,
+        refreshStartedAt,
+        MAX_REFRESH_WINDOW_LOGS
+      ),
+      selectAgentTradesWindowSliceByAgentSinceExecutedDescLimit(
+        db,
+        agentUserId,
+        refreshStartedAt,
+        MAX_REFRESH_WINDOW_TRADES
+      ),
+      selectUserVirtualBalanceAndLifetimePnLById(db, agentUserId),
+      selectNpcActorTradingBalance(db, agentUserId),
+    ]);
 
     const actionCounts = {
       ticks: 0,
@@ -333,8 +302,6 @@ export class AgentRuntimeManager {
       ).toFixed(2)
     );
 
-    const user = userSnapshot[0];
-    const npc = npcSnapshot[0];
     const balanceText = user
       ? `$${Number(user.virtualBalance ?? 0).toFixed(2)} balance, lifetime PnL ${Number(user.lifetimePnL ?? 0) >= 0 ? '+' : ''}$${Number(user.lifetimePnL ?? 0).toFixed(2)}`
       : npc
@@ -383,7 +350,7 @@ export class AgentRuntimeManager {
       tradesSampled: windowTrades.length,
     };
 
-    await db.insert(agentLogs).values({
+    await insertAgentLogRow(db, {
       id: await generateSnowflakeId(),
       agentUserId,
       type: 'system',
@@ -505,11 +472,7 @@ export class AgentRuntimeManager {
 
     // Fallback: Legacy behavior for USER_CONTROLLED agents not yet in registry
     // This maintains backward compatibility with existing code
-    const [agentUser] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
+    const agentUser = await selectUserRowById(db, agentUserId);
 
     if (!agentUser) {
       throw new Error(`Agent user ${agentUserId} not found`);
@@ -737,11 +700,7 @@ export class AgentRuntimeManager {
     }
 
     // Fetch full user data
-    const [agentUser] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, registration.userId))
-      .limit(1);
+    const agentUser = await selectUserRowById(db, registration.userId);
 
     if (!agentUser) {
       throw new Error(`User ${registration.userId} not found`);

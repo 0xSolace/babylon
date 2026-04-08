@@ -5,8 +5,11 @@
  * Similar to X/Twitter trending topics
  */
 
-import { desc, inArray } from '@babylon/db';
-import { db, tags, trendingTags } from '@babylon/db/runtime';
+import {
+  fetchLatestTrendingTagsCalculatedAt,
+  fetchTagNameRowsByIds,
+  listTrendingTagPromptRows,
+} from '@babylon/db';
 import { logger } from '@babylon/shared';
 import {
   getRelatedTags,
@@ -21,17 +24,13 @@ const TRENDING_WINDOW_DAYS = 7; // Look at last 7 days
  * Check if we should recalculate trending tags
  */
 export async function shouldRecalculateTrending(): Promise<boolean> {
-  const [lastCalculation] = await db
-    .select({ calculatedAt: trendingTags.calculatedAt })
-    .from(trendingTags)
-    .orderBy(desc(trendingTags.calculatedAt))
-    .limit(1);
+  const lastCalculatedAt = await fetchLatestTrendingTagsCalculatedAt();
 
-  if (!lastCalculation) {
+  if (!lastCalculatedAt) {
     return true; // Never calculated before
   }
 
-  const timeSinceLastCalc = Date.now() - lastCalculation.calculatedAt.getTime();
+  const timeSinceLastCalc = Date.now() - lastCalculatedAt.getTime();
   return timeSinceLastCalc >= CALCULATION_INTERVAL_MS;
 }
 
@@ -200,17 +199,7 @@ export async function calculateTrendingIfNeeded(): Promise<boolean> {
  * injected into agent prompts to make posts more relevant and timely.
  */
 export async function getTrendingPromptContext(): Promise<string> {
-  const topTrending = await db
-    .select({
-      tagId: trendingTags.tagId,
-      score: trendingTags.score,
-      postCount: trendingTags.postCount,
-      rank: trendingTags.rank,
-      relatedContext: trendingTags.relatedContext,
-    })
-    .from(trendingTags)
-    .orderBy(trendingTags.rank)
-    .limit(10);
+  const topTrending = await listTrendingTagPromptRows(10);
 
   if (topTrending.length === 0) {
     return '';
@@ -248,14 +237,7 @@ async function getTagDetails(
     return new Map();
   }
 
-  const tagRows = await db
-    .select({
-      id: tags.id,
-      name: tags.name,
-      displayName: tags.displayName,
-    })
-    .from(tags)
-    .where(inArray(tags.id, tagIds));
+  const tagRows = await fetchTagNameRowsByIds(tagIds);
 
   const result = new Map<
     string,

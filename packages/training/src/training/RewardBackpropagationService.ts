@@ -5,8 +5,12 @@
  * This allows the RL model to learn from actual results, not just immediate actions.
  */
 
-import { and, eq } from '@babylon/db';
-import { db, marketOutcomes, trajectories } from '@babylon/db/runtime';
+import {
+  selectDistinctMarketOutcomeWindowIds,
+  selectTrainingTrajectoriesForRewardBackpropWindow,
+  updateTrajectoryStepsJsonAndTotalReward,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import { logger } from '../utils/logger';
 import { MarketOutcomesTracker } from './MarketOutcomesTracker';
 import type { TrajectoryStep } from './types';
@@ -32,20 +36,8 @@ export class RewardBackpropagationService {
     }
 
     // Get all trajectories for this window
-    const trajectoriesResult = await db
-      .select({
-        id: trajectories.id,
-        trajectoryId: trajectories.trajectoryId,
-        stepsJson: trajectories.stepsJson,
-        totalReward: trajectories.totalReward,
-      })
-      .from(trajectories)
-      .where(
-        and(
-          eq(trajectories.windowId, windowId),
-          eq(trajectories.isTrainingData, true)
-        )
-      );
+    const trajectoriesResult =
+      await selectTrainingTrajectoriesForRewardBackpropWindow(db, windowId);
 
     let updated = 0;
 
@@ -117,13 +109,12 @@ export class RewardBackpropagationService {
 
       // Update trajectory if rewards changed
       if (hasUpdates) {
-        await db
-          .update(trajectories)
-          .set({
-            stepsJson: JSON.stringify(steps),
-            totalReward,
-          })
-          .where(eq(trajectories.id, traj.id));
+        await updateTrajectoryStepsJsonAndTotalReward(
+          db,
+          traj.id,
+          JSON.stringify(steps),
+          totalReward
+        );
         updated++;
       }
     }
@@ -142,9 +133,7 @@ export class RewardBackpropagationService {
    */
   async processPendingWindows(): Promise<number> {
     // Get all windows with outcomes
-    const windowsWithOutcomes = await db
-      .selectDistinct({ windowId: marketOutcomes.windowId })
-      .from(marketOutcomes);
+    const windowsWithOutcomes = await selectDistinctMarketOutcomeWindowIds(db);
 
     let processed = 0;
 

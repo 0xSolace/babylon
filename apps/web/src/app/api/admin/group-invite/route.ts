@@ -73,14 +73,8 @@ import {
   requireAdmin,
   withErrorHandling,
 } from '@babylon/api';
-import { generateSnowflakeId, sql } from '@babylon/db';
-import {
-  asSystem,
-  chatParticipants,
-  chats,
-  groupMembers,
-  groups,
-} from '@babylon/db/runtime';
+import { generateSnowflakeId, runAdminNpcGroupInviteUpsert } from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import { StaticDataRegistry } from '@babylon/engine';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -227,93 +221,23 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
   // Record the invite using atomic upsert operations to prevent race conditions
   const groupId = await asSystem(async (db) => {
-    // Use transaction for atomicity
-    return await db.transaction(async (tx) => {
-      const now = new Date();
-
-      // Step 1: Upsert the Group (INSERT ... ON CONFLICT DO NOTHING)
-      // Using deterministic ID ensures same group is used even with concurrent requests
-      await tx
-        .insert(groups)
-        .values({
-          id: deterministicGrpId,
-          name: finalChatName,
-          type: 'npc',
-          ownerId: npcId,
-          createdById: npcId,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .onConflictDoNothing({ target: groups.id });
-
-      // Step 2: Upsert the Chat (INSERT ... ON CONFLICT DO UPDATE to set groupId)
-      await tx
-        .insert(chats)
-        .values({
-          id: finalChatId,
-          name: finalChatName,
-          isGroup: true,
-          gameId: 'realtime',
-          groupId: deterministicGrpId,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .onConflictDoUpdate({
-          target: chats.id,
-          set: {
-            groupId: deterministicGrpId,
-            updatedAt: now,
-          },
-        });
-
-      // Step 3: Upsert ChatParticipant
-      const participantId = await generateSnowflakeId();
-      await tx
-        .insert(chatParticipants)
-        .values({
-          id: participantId,
-          chatId: finalChatId,
-          userId,
-          joinedAt: now,
-          isActive: true,
-        })
-        .onConflictDoUpdate({
-          target: [chatParticipants.chatId, chatParticipants.userId],
-          set: {
-            isActive: true,
-            joinedAt: now,
-          },
-        });
-
-      // Step 4: Upsert GroupMember using full unique constraint
-      const memberId = await generateSnowflakeId();
-      await tx
-        .insert(groupMembers)
-        .values({
-          id: memberId,
-          groupId: deterministicGrpId,
-          userId,
-          role: 'member',
-          addedBy: npcId,
-          joinedAt: now,
-          isActive: true,
-          messageCount: 0,
-          qualityScore: 1.0,
-        })
-        .onConflictDoUpdate({
-          target: [groupMembers.groupId, groupMembers.userId],
-          set: {
-            isActive: true,
-            role: 'member',
-            addedBy: npcId,
-            joinedAt: now,
-            kickedAt: sql`NULL`,
-            kickReason: sql`NULL`,
-          },
-        });
-
-      return deterministicGrpId;
-    });
+    const now = new Date();
+    const [participantRowId, memberRowId] = await Promise.all([
+      generateSnowflakeId(),
+      generateSnowflakeId(),
+    ]);
+    return db.transaction(async (tx) =>
+      runAdminNpcGroupInviteUpsert(tx, {
+        deterministicGrpId,
+        finalChatId,
+        finalChatName,
+        npcId,
+        userId,
+        now,
+        participantRowId,
+        memberRowId,
+      })
+    );
   });
 
   // Send notification to user (admin adds are immediate, no inviteId needed)

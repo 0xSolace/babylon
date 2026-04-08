@@ -91,7 +91,7 @@
  */
 
 import { requireAdmin, successResponse, withErrorHandling } from '@babylon/api';
-import { db } from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 
 import {
   characterMappingService,
@@ -179,28 +179,27 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         .substring(0, 50);
       const label = value.split(':')[0].trim().substring(0, 60);
 
-      // Check if fact already exists
-      const existing = await db.worldFact.findFirst({
-        where: {
-          AND: [
-            { category: { equals: factCategory } },
-            { key: { equals: key } },
-          ],
-        },
-      });
-
-      let fact;
-      if (existing) {
-        fact = await db.worldFact.update({
-          where: { id: existing.id },
-          data: {
-            label,
-            value,
-            lastUpdated: new Date(),
+      const fact = await asSystem(async (tx) => {
+        const existing = await tx.worldFact.findFirst({
+          where: {
+            AND: [
+              { category: { equals: factCategory } },
+              { key: { equals: key } },
+            ],
           },
         });
-      } else {
-        fact = await db.worldFact.create({
+
+        if (existing) {
+          return tx.worldFact.update({
+            where: { id: existing.id },
+            data: {
+              label,
+              value,
+              lastUpdated: new Date(),
+            },
+          });
+        }
+        return tx.worldFact.create({
           data: {
             id: await generateSnowflakeId(),
             category: factCategory,
@@ -213,7 +212,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
             updatedAt: new Date(),
           },
         });
-      }
+      }, 'admin-world-facts-add');
 
       logger.info(`Added world fact: ${fact.id}`, { fact }, 'WorldFactsAdmin');
       return successResponse({ fact });

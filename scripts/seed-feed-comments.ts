@@ -11,9 +11,16 @@
  *   bun run scripts/seed-feed-comments.ts --clear     # Clear existing and reseed
  */
 
-import { eq, generateSnowflakeId } from '@babylon/db';
-import { comments, db, posts, reactions, users } from '@babylon/db/runtime';
+import { generateSnowflakeId } from '@babylon/db';
+import {
+  comments,
+  db,
+  posts,
+  reactions,
+  users,
+} from '@babylon/db/engine-storage';
 import { logger } from '@babylon/shared';
+import { eq } from 'drizzle-orm';
 
 // Sample post content for realistic feed
 const POST_CONTENT = [

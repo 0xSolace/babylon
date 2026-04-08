@@ -105,9 +105,13 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, eq, ne, sql } from '@babylon/db';
-import { db, users } from '@babylon/db/runtime';
-
+import {
+  selectUserIdByUsernameCaseInsensitiveExcludingUserId,
+  selectUserUpdateProfilePreludeById,
+  type UserProfileUpdatePatch,
+  updateUserProfileByIdReturningWebSlice,
+} from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import type { StringRecord } from '@babylon/shared';
 import { logger, UpdateUserSchema, UserIdParamSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
@@ -168,47 +172,37 @@ export const POST = withErrorHandling(
       onchainTxHash,
     } = parsedBody;
 
-    // Check username uniqueness only if username is being updated (case-insensitive)
-    if (username !== undefined) {
-      const normalizedUsername = username.trim();
-      const [existingUser] = await db
-        .select({ id: users.id })
-        .from(users)
-        .where(
-          and(
-            sql`lower(${users.username}) = lower(${normalizedUsername})`,
-            ne(users.id, canonicalUserId)
-          )
-        )
-        .limit(1);
+    const profilePrelude = await asUser(authUser, async (db) => {
+      if (username !== undefined) {
+        const normalizedUsername = username.trim();
+        const existingUser =
+          await selectUserIdByUsernameCaseInsensitiveExcludingUserId(
+            db,
+            normalizedUsername,
+            canonicalUserId
+          );
 
-      if (existingUser) {
-        throw new BusinessLogicError(
-          'Username is already taken',
-          'USERNAME_TAKEN'
-        );
+        if (existingUser) {
+          return { ok: false as const };
+        }
       }
+
+      const currentUser = await selectUserUpdateProfilePreludeById(
+        db,
+        canonicalUserId
+      );
+
+      return { ok: true as const, currentUser };
+    });
+
+    if (!profilePrelude.ok) {
+      throw new BusinessLogicError(
+        'Username is already taken',
+        'USERNAME_TAKEN'
+      );
     }
 
-    const [currentUser] = await db
-      .select({
-        username: users.username,
-        displayName: users.displayName,
-        bio: users.bio,
-        profileImageUrl: users.profileImageUrl,
-        coverImageUrl: users.coverImageUrl,
-        hasUsername: users.hasUsername,
-        hasBio: users.hasBio,
-        hasProfileImage: users.hasProfileImage,
-        usernameChangedAt: users.usernameChangedAt,
-        pointsAwardedForProfile: users.pointsAwardedForProfile,
-        walletAddress: users.walletAddress,
-        onChainRegistered: users.onChainRegistered,
-        nftTokenId: users.nftTokenId,
-      })
-      .from(users)
-      .where(eq(users.id, canonicalUserId))
-      .limit(1);
+    const currentUser = profilePrelude.currentUser;
 
     const normalizedUsername =
       username !== undefined ? username.trim() : undefined;
@@ -271,7 +265,7 @@ export const POST = withErrorHandling(
       }
     }
 
-    const updateData: Partial<typeof users.$inferInsert> = {
+    const updateData: UserProfileUpdatePatch = {
       ...(normalizedUsername !== undefined && {
         username: normalizedUsername || null,
       }),
@@ -330,30 +324,9 @@ export const POST = withErrorHandling(
       }),
     };
 
-    const [updatedUser] = await db
-      .update(users)
-      .set(updateData)
-      .where(eq(users.id, canonicalUserId))
-      .returning({
-        id: users.id,
-        username: users.username,
-        displayName: users.displayName,
-        bio: users.bio,
-        profileImageUrl: users.profileImageUrl,
-        coverImageUrl: users.coverImageUrl,
-        profileComplete: users.profileComplete,
-        hasUsername: users.hasUsername,
-        hasBio: users.hasBio,
-        hasProfileImage: users.hasProfileImage,
-        reputationPoints: users.reputationPoints,
-        referralCount: users.referralCount,
-        referralCode: users.referralCode,
-        usernameChangedAt: users.usernameChangedAt,
-        onChainRegistered: users.onChainRegistered,
-        nftTokenId: users.nftTokenId,
-        profileChainSyncNeeded: users.profileChainSyncNeeded,
-        privyId: users.privyId,
-      });
+    const updatedUser = await asUser(authUser, async (db) =>
+      updateUserProfileByIdReturningWebSlice(db, canonicalUserId, updateData)
+    );
 
     // Refresh identifier caches after any profile update because these caches now
     // store full user rows, not just identifiers.

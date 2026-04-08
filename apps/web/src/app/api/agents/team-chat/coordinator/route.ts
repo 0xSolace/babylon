@@ -32,9 +32,11 @@ import {
   RATE_LIMIT_CONFIGS,
   withErrorHandling,
 } from '@babylon/api';
-import { eq } from '@babylon/db';
-import { db, messages, users } from '@babylon/db/runtime';
-
+import {
+  insertMessageRow,
+  selectUserDisplayForNotification,
+} from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import {
   COORDINATOR_SENDER_ID,
   checkUserInput,
@@ -284,11 +286,9 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
   const runtime = await agentRuntimeManager.getCoordinatorRuntime();
 
   // Fetch user info for context
-  const [userProfile] = await db
-    .select({ displayName: users.displayName, username: users.username })
-    .from(users)
-    .where(eq(users.id, user.id))
-    .limit(1);
+  const userProfile = await asUser(user.id, (tx) =>
+    selectUserDisplayForNotification(tx, user.id)
+  );
   const ownerName = userProfile?.displayName || userProfile?.username || 'User';
   const ownerUsername = userProfile?.username || undefined;
 
@@ -321,15 +321,17 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
     const responseMessageId = await generateSnowflakeId();
     const responseTime = new Date();
 
-    await db.insert(messages).values({
-      id: responseMessageId,
-      chatId: teamChatId,
-      senderId: COORDINATOR_SENDER_ID,
-      content: greetingText,
-      type: 'coordinator',
-      createdAt: responseTime,
-      metadata: null,
-    });
+    await asUser(user.id, (tx) =>
+      insertMessageRow(tx, {
+        id: responseMessageId,
+        chatId: teamChatId,
+        senderId: COORDINATOR_SENDER_ID,
+        content: greetingText,
+        type: 'coordinator',
+        createdAt: responseTime,
+        metadata: null,
+      })
+    );
 
     broadcastChatMessage(teamChatId, {
       id: responseMessageId,
@@ -1006,15 +1008,17 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
   const responseMessageId = await generateSnowflakeId();
   const responseTime = new Date();
 
-  await db.insert(messages).values({
-    id: responseMessageId,
-    chatId: teamChatId,
-    senderId: COORDINATOR_SENDER_ID,
-    content: responseText,
-    type: 'coordinator',
-    createdAt: responseTime,
-    metadata,
-  });
+  await asUser(user.id, (tx) =>
+    insertMessageRow(tx, {
+      id: responseMessageId,
+      chatId: teamChatId,
+      senderId: COORDINATOR_SENDER_ID,
+      content: responseText,
+      type: 'coordinator',
+      createdAt: responseTime,
+      metadata,
+    })
+  );
 
   // Broadcast coordinator response
   broadcastChatMessage(teamChatId, {

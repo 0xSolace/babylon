@@ -97,7 +97,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import type { JsonValue } from '@babylon/db';
-import { db } from '@babylon/db/runtime';
+import { asPublic, asSystem } from '@babylon/db/engine-storage';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -132,21 +132,25 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   const toUser = await requireUserByIdentifier(body.toUserId);
 
   const now = new Date();
-  const feedback = await db.feedback.create({
-    data: {
-      id: await generateSnowflakeId(),
-      fromUserId: fromAgent.id,
-      toUserId: toUser.id,
-      score: body.score,
-      rating: body.rating,
-      comment: body.comment,
-      category: body.category,
-      interactionType: body.interactionType ?? 'agent_to_user',
-      metadata: body.metadata as JsonValue | undefined,
-      createdAt: now,
-      updatedAt: now,
-    },
-  });
+  const feedback = await asSystem(
+    async (db) =>
+      db.feedback.create({
+        data: {
+          id: await generateSnowflakeId(),
+          fromUserId: fromAgent.id,
+          toUserId: toUser.id,
+          score: body.score,
+          rating: body.rating,
+          comment: body.comment,
+          category: body.category,
+          interactionType: body.interactionType ?? 'agent_to_user',
+          metadata: body.metadata as JsonValue | undefined,
+          createdAt: now,
+          updatedAt: now,
+        },
+      }),
+    'feedback-agent-to-user-create'
+  );
 
   logger.info('Agent-to-user feedback created', {
     feedbackId: feedback.id,
@@ -192,38 +196,42 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   const user = await requireUserByIdentifier(userId);
 
-  const feedback = await db.feedback.findMany({
-    where: {
-      toUserId: user.id,
-      interactionType: {
-        in: ['agent_to_user', 'game', 'trade', 'chat'],
-      },
-    },
-    include: {
-      User_Feedback_fromUserIdToUser: {
-        select: {
-          id: true,
-          username: true,
-          displayName: true,
-          profileImageUrl: true,
-          isActor: true,
+  const { feedback, total } = await asPublic(async (db) => {
+    const [rows, count] = await Promise.all([
+      db.feedback.findMany({
+        where: {
+          toUserId: user.id,
+          interactionType: {
+            in: ['agent_to_user', 'game', 'trade', 'chat'],
+          },
         },
-      },
-    },
-    orderBy: {
-      createdAt: 'desc',
-    },
-    take: limit,
-    skip: offset,
-  });
-
-  const total = await db.feedback.count({
-    where: {
-      toUserId: user.id,
-      interactionType: {
-        in: ['agent_to_user', 'game', 'trade', 'chat'],
-      },
-    },
+        include: {
+          User_Feedback_fromUserIdToUser: {
+            select: {
+              id: true,
+              username: true,
+              displayName: true,
+              profileImageUrl: true,
+              isActor: true,
+            },
+          },
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+        take: limit,
+        skip: offset,
+      }),
+      db.feedback.count({
+        where: {
+          toUserId: user.id,
+          interactionType: {
+            in: ['agent_to_user', 'game', 'trade', 'chat'],
+          },
+        },
+      }),
+    ]);
+    return { feedback: rows, total: count };
   });
 
   return NextResponse.json({

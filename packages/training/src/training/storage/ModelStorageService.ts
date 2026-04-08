@@ -5,8 +5,12 @@
  * Stores trained models with metadata for easy deployment.
  */
 
-import { eq } from '@babylon/db';
-import { db, trainedModels } from '@babylon/db/runtime';
+import {
+  insertTrainedModelRow,
+  selectTrainedModelStoragePathByVersion,
+  updateTrainedModelArchivedByVersion,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import type { JsonValue } from '@babylon/shared';
 import { del, list, put } from '@vercel/blob';
 import fs from 'fs/promises';
@@ -75,8 +79,7 @@ export class ModelStorageService {
       size: (blob as { size?: number }).size || 0,
     });
 
-    // Save to database using native Drizzle
-    await db.insert(trainedModels).values({
+    await insertTrainedModelRow(db, {
       id: `model-${Date.now()}`,
       modelId: `babylon-agent-${options.version}`,
       version: options.version,
@@ -108,13 +111,7 @@ export class ModelStorageService {
     modelData: Buffer;
     metadata: ModelVersion['metadata'];
   }> {
-    const modelResult = await db
-      .select({ storagePath: trainedModels.storagePath })
-      .from(trainedModels)
-      .where(eq(trainedModels.version, version))
-      .limit(1);
-
-    const model = modelResult[0];
+    const model = await selectTrainedModelStoragePathByVersion(db, version);
 
     if (!model) {
       throw new Error(`Model version ${version} not found`);
@@ -236,14 +233,7 @@ export class ModelStorageService {
       await del(blob.url);
     }
 
-    // Update database using native Drizzle
-    await db
-      .update(trainedModels)
-      .set({
-        status: 'archived',
-        archivedAt: new Date(),
-      })
-      .where(eq(trainedModels.version, version));
+    await updateTrainedModelArchivedByVersion(db, version);
 
     logger.info('Model deleted from Vercel Blob', { version });
   }

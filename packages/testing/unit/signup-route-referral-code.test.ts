@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import * as babylonDb from '@babylon/db';
 import * as actualShared from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
@@ -110,6 +111,7 @@ mock.module('@babylon/api', () => ({
 }));
 
 mock.module('@babylon/db', () => ({
+  ...babylonDb,
   and: (...conditions: unknown[]) => conditions,
   eq: (left: unknown, right: unknown) => ({ left, right }),
   isRetryableError: mock(() => false),
@@ -122,29 +124,44 @@ mock.module('@babylon/db', () => ({
   withRetry: mockWithRetry,
 }));
 
-mock.module('@babylon/db/runtime', () => ({
-  balanceTransactions: { id: 'balanceTransactions.id' },
-  db: {
-    select: mock(() => []),
-    update: mock(() => ({
-      set: mock(() => ({
-        where: mock(() => Promise.resolve([])),
-        returning: mock(() => Promise.resolve([])),
+const signupMockDb = {
+  select: mock(() => ({
+    from: mock(() => ({
+      where: mock(() => ({
+        limit: mock(async () => [] as { id?: string }[]),
       })),
-      where: mock(() => Promise.resolve([])),
     })),
-    insert: mock(() => ({
-      values: mock(() => Promise.resolve([])),
+  })),
+  update: mock(() => ({
+    set: mock(() => ({
+      where: mock(() => ({
+        returning: mock(async () => [{ virtualBalance: '1000' }]),
+      })),
     })),
+  })),
+  insert: mock(() => ({
+    values: mock(async () => undefined),
+  })),
+};
+
+mock.module('@babylon/db/engine-storage', () => ({
+  balanceTransactions: {
+    id: 'balanceTransactions.id',
+    userId: 'balanceTransactions.userId',
+    description: 'balanceTransactions.description',
   },
+  db: signupMockDb,
   follows: { id: 'follows.id' },
   referrals: { id: 'referrals.id' },
   users: {
     id: 'users.id',
     walletAddress: 'users.walletAddress',
     username: 'users.username',
+    virtualBalance: 'users.virtualBalance',
+    totalDeposited: 'users.totalDeposited',
   },
-  withTransaction: mockWithTransaction,
+  asSystem: async <T>(op: (tx: typeof signupMockDb) => Promise<T>) =>
+    op(signupMockDb),
 }));
 
 mock.module('@babylon/engine', () => ({

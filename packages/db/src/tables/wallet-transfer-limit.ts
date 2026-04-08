@@ -17,6 +17,8 @@ export const walletTransferLimit = pgTable('WalletTransferLimit', {
   elevatedLimitUsd: decimal('elevatedLimitUsd', { precision: 18, scale: 2 }),
 });
 
+export type WalletTransferLimitRow = typeof walletTransferLimit.$inferSelect;
+
 export const walletTransferLimitRelations = relations(
   walletTransferLimit,
   ({ one }) => ({

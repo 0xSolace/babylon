@@ -9,8 +9,8 @@
  * @module cli/commands/admin
  */
 
-import { asc, eq, or, sql } from '@babylon/db';
 import { closeDatabase, db, users } from '@babylon/db/runtime';
+import { asc, eq, or, sql } from 'drizzle-orm';
 import { parseArgs, wantsHelp } from '../lib/args.js';
 import { logger } from '../lib/logger.js';
 

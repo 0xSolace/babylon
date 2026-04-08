@@ -15,10 +15,9 @@
 
 import { afterAll, describe, expect, it } from 'bun:test';
 import { PointsService } from '@babylon/api';
-import { and, eq } from '@babylon/db';
-import { balanceTransactions, db, users } from '@babylon/db/runtime';
-
+import { balanceTransactions, db, users } from '@babylon/db/engine-storage';
 import { generateSnowflakeId } from '@babylon/shared';
+import { and, eq } from 'drizzle-orm';
 import { TestScenarios } from '../unit/stripe/test-fixtures';
 
 // Test user ID prefix for cleanup

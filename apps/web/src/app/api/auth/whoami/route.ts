@@ -53,9 +53,8 @@
  */
 
 import { validateUserApiKey, withErrorHandling } from '@babylon/api';
-import { eq } from '@babylon/db';
-import { db, users } from '@babylon/db/runtime';
-
+import { selectUserIdAndUsernameById } from '@babylon/db';
+import * as engineStorage from '@babylon/db/engine-storage';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -85,15 +84,9 @@ export const GET = withErrorHandling(async function GET(request: NextRequest) {
     );
   }
 
-  // Fetch user details (minimal: only id and username for debugging)
-  const [user] = await db
-    .select({
-      id: users.id,
-      username: users.username,
-    })
-    .from(users)
-    .where(eq(users.id, result.userId))
-    .limit(1);
+  const user = await engineStorage.asUser(result.userId, async (db) =>
+    selectUserIdAndUsernameById(db, result.userId)
+  );
 
   if (!user) {
     logger.warn(

@@ -52,22 +52,16 @@ import {
   PredictionMarketService,
 } from '@babylon/core/markets/prediction';
 import {
-  and,
-  eq,
+  corePerpSelectAllMarketSnapshots,
+  corePredictionSelectMarketById,
   getBlockedByUserIds,
   getBlockedUserIds,
   getMutedUserIds,
   hasBlocked,
+  selectActiveNpcGroupIdsForUser,
+  selectMcpUserBalanceSlice,
 } from '@babylon/db';
-import {
-  db,
-  groupMembers,
-  groups,
-  markets,
-  perpMarketSnapshots,
-  users,
-} from '@babylon/db/runtime';
-
+import { db } from '@babylon/db/engine-storage';
 import {
   createPerpPriceImpactPort,
   FEE_CONFIG,
@@ -953,14 +947,7 @@ export async function executePlaceBet(
 export async function executeGetBalance(
   agent: AuthenticatedAgent
 ): Promise<GetBalanceResult> {
-  const [user] = await db
-    .select({
-      virtualBalance: users.virtualBalance,
-      lifetimePnL: users.lifetimePnL,
-    })
-    .from(users)
-    .where(eq(users.id, agent.userId))
-    .limit(1);
+  const user = await selectMcpUserBalanceSlice(db, agent.userId);
 
   if (!user) {
     throw new Error('User not found');
@@ -1321,7 +1308,7 @@ export async function executeGetPerpetuals(
   _agent: AuthenticatedAgent,
   _args: GetPerpetualsArgs
 ): Promise<GetPerpetualsResult> {
-  const snapshots = await db.select().from(perpMarketSnapshots);
+  const snapshots = await corePerpSelectAllMarketSnapshots(db);
 
   return {
     markets: snapshots.map((snapshot) => ({
@@ -2543,17 +2530,10 @@ export async function executeAcceptGroupInvite(
   }
 
   // Check if agent is at the NPC group limit - use join to avoid N+1
-  const activeNpcGroups = await db
-    .select({ groupId: groupMembers.groupId })
-    .from(groupMembers)
-    .innerJoin(groups, eq(groupMembers.groupId, groups.id))
-    .where(
-      and(
-        eq(groupMembers.userId, agent.userId),
-        eq(groupMembers.isActive, true),
-        eq(groups.type, 'npc')
-      )
-    );
+  const activeNpcGroups = await selectActiveNpcGroupIdsForUser(
+    db,
+    agent.userId
+  );
 
   const npcGroupCount = activeNpcGroups.length;
 
@@ -2740,11 +2720,7 @@ export async function executeResolveMarket(
     throw new Error('Unauthorized: Admin privileges are required');
   }
 
-  const [market] = await db
-    .select()
-    .from(markets)
-    .where(eq(markets.id, args.marketId))
-    .limit(1);
+  const market = await corePredictionSelectMarketById(db, args.marketId);
 
   if (!market) {
     throw new Error('Market not found');

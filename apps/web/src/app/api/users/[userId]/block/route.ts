@@ -115,9 +115,15 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, eq, or } from '@babylon/db';
-import { db, follows, userBlocks, users } from '@babylon/db/runtime';
-
+import {
+  deleteFollowsBetweenUsers,
+  deleteUserBlockByBlockerAndBlockedReturning,
+  insertUserBlockReturning,
+  selectUserBlockIdByBlockerAndBlocked,
+  selectUserBlockStatusSliceByBlockerAndBlocked,
+  selectUserModerationTargetSliceById,
+} from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import { BlockUserSchema, generateSnowflakeId, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
@@ -152,119 +158,84 @@ export const POST = withErrorHandling(
       );
     }
 
-    // Check if target user exists
-    const [targetUser] = await db
-      .select({
-        id: users.id,
-        username: users.username,
-        displayName: users.displayName,
-        isActor: users.isActor,
-      })
-      .from(users)
-      .where(eq(users.id, targetUserId))
-      .limit(1);
+    return asUser(authUser, async (db) => {
+      const targetUser = await selectUserModerationTargetSliceById(
+        db,
+        targetUserId
+      );
 
-    if (!targetUser) {
-      throw new NotFoundError('User', targetUserId);
-    }
-
-    // Note: Blocking NPCs is allowed - it means they won't add you to group chats
-
-    if (action === 'block') {
-      // Check if already blocked
-      const [existingBlock] = await db
-        .select({ id: userBlocks.id })
-        .from(userBlocks)
-        .where(
-          and(
-            eq(userBlocks.blockerId, authUser.userId),
-            eq(userBlocks.blockedId, targetUserId)
-          )
-        )
-        .limit(1);
-
-      if (existingBlock) {
-        throw new BusinessLogicError(
-          'User is already blocked',
-          'ALREADY_BLOCKED'
-        );
+      if (!targetUser) {
+        throw new NotFoundError('User', targetUserId);
       }
 
-      // Create block
-      const blockId = await generateSnowflakeId();
-      const [block] = await db
-        .insert(userBlocks)
-        .values({
+      if (action === 'block') {
+        const existingBlock = await selectUserBlockIdByBlockerAndBlocked(
+          db,
+          authUser.userId,
+          targetUserId
+        );
+
+        if (existingBlock) {
+          throw new BusinessLogicError(
+            'User is already blocked',
+            'ALREADY_BLOCKED'
+          );
+        }
+
+        const blockId = await generateSnowflakeId();
+        const block = await insertUserBlockReturning(db, {
           id: blockId,
           blockerId: authUser.userId,
           blockedId: targetUserId,
           reason: reason || null,
-        })
-        .returning();
+        });
 
-      if (!block) {
-        throw new InternalServerError('Failed to create block record');
-      }
+        if (!block) {
+          throw new InternalServerError('Failed to create block record');
+        }
 
-      // Also unfollow if following
-      await db
-        .delete(follows)
-        .where(
-          or(
-            and(
-              eq(follows.followerId, authUser.userId),
-              eq(follows.followingId, targetUserId)
-            ),
-            and(
-              eq(follows.followerId, targetUserId),
-              eq(follows.followingId, authUser.userId)
-            )
-          )
+        await deleteFollowsBetweenUsers(db, authUser.userId, targetUserId);
+
+        logger.info(
+          'User blocked successfully',
+          {
+            userId: authUser.userId,
+            targetUserId,
+            blockId: block?.id,
+          },
+          'POST /api/users/[userId]/block'
         );
 
+        return successResponse({
+          success: true,
+          message: 'User blocked successfully',
+          block,
+        });
+      }
+
+      const deleted = await deleteUserBlockByBlockerAndBlockedReturning(
+        db,
+        authUser.userId,
+        targetUserId
+      );
+
+      if (deleted.length === 0) {
+        throw new BusinessLogicError('User is not blocked', 'NOT_BLOCKED');
+      }
+
       logger.info(
-        'User blocked successfully',
+        'User unblocked successfully',
         {
           userId: authUser.userId,
           targetUserId,
-          blockId: block?.id,
         },
         'POST /api/users/[userId]/block'
       );
 
       return successResponse({
         success: true,
-        message: 'User blocked successfully',
-        block,
+        message: 'User unblocked successfully',
       });
-    }
-    // Unblock
-    const deleted = await db
-      .delete(userBlocks)
-      .where(
-        and(
-          eq(userBlocks.blockerId, authUser.userId),
-          eq(userBlocks.blockedId, targetUserId)
-        )
-      )
-      .returning();
-
-    if (deleted.length === 0) {
-      throw new BusinessLogicError('User is not blocked', 'NOT_BLOCKED');
-    }
-
-    logger.info(
-      'User unblocked successfully',
-      {
-        userId: authUser.userId,
-        targetUserId,
-      },
-      'POST /api/users/[userId]/block'
-    );
-
-    return successResponse({
-      success: true,
-      message: 'User unblocked successfully',
     });
   }
 );
@@ -281,24 +252,17 @@ export const GET = withErrorHandling(
     const authUser = await authenticate(request);
     const { userId: targetUserId } = await context.params;
 
-    const [block] = await db
-      .select({
-        id: userBlocks.id,
-        createdAt: userBlocks.createdAt,
-        reason: userBlocks.reason,
-      })
-      .from(userBlocks)
-      .where(
-        and(
-          eq(userBlocks.blockerId, authUser.userId),
-          eq(userBlocks.blockedId, targetUserId)
-        )
-      )
-      .limit(1);
+    return asUser(authUser, async (db) => {
+      const block = await selectUserBlockStatusSliceByBlockerAndBlocked(
+        db,
+        authUser.userId,
+        targetUserId
+      );
 
-    return successResponse({
-      isBlocked: !!block,
-      block: block ?? null,
+      return successResponse({
+        isBlocked: !!block,
+        block: block ?? null,
+      });
     });
   }
 );

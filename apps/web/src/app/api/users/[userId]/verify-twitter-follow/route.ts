@@ -53,8 +53,8 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { eq } from '@babylon/db';
-import { db, users } from '@babylon/db/runtime';
+import { selectUserTwitterFollowRewardSliceById } from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import { logger, UserIdParamSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
@@ -92,16 +92,9 @@ export const POST = withErrorHandling(
       );
     }
 
-    // Get user's Twitter info
-    const [user] = await db
-      .select({
-        twitterUsername: users.twitterUsername,
-        twitterId: users.twitterId,
-        pointsAwardedForTwitterFollow: users.pointsAwardedForTwitterFollow,
-      })
-      .from(users)
-      .where(eq(users.id, canonicalUserId))
-      .limit(1);
+    const user = await asUser(authUser, async (db) =>
+      selectUserTwitterFollowRewardSliceById(db, canonicalUserId)
+    );
 
     // VALIDATION: Check if user has linked Twitter account
     if (!user?.twitterUsername && !user?.twitterId) {

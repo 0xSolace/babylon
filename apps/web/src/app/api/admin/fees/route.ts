@@ -81,9 +81,15 @@ import {
   validateDateRange,
   withErrorHandling,
 } from '@babylon/api';
-import { and, count, desc, eq, gte, isNotNull, lte, sum } from '@babylon/db';
-import { db, pools, tradingFees, users } from '@babylon/db/runtime';
-
+import {
+  selectAdminFeeTrendFeeRows,
+  selectAdminPoolsTotalFeesCollectedSum,
+  selectAdminRecentFeesWithUserJoin,
+  selectAdminTopFeePayers,
+  selectAdminTopReferralEarners,
+  selectAdminTradingFeesGroupedByType,
+} from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import { FeeService, StaticDataRegistry } from '@babylon/engine';
 import { toISO, toISOOrNull } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
@@ -151,184 +157,154 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   const limit = Math.min(parsedLimit, 100);
 
-  const dateFilter: {
-    createdAt?: { gte?: Date; lte?: Date };
-  } =
-    startDate || endDate
-      ? {
-          createdAt: {
-            ...(startDate ? { gte: startDate } : {}),
-            ...(endDate ? { lte: endDate } : {}),
-          },
-        }
-      : {};
-
   // Get platform-wide fee statistics (user fees from TradingFee table)
   const platformStats = await FeeService.getPlatformFeeStats(
     startDate,
     endDate
   );
 
-  // Get NPC fees from Pool.totalFeesCollected
-  const poolFeesResult = await db
-    .select({
-      _sum: sum(pools.totalFeesCollected),
-    })
-    .from(pools);
-  const totalNPCFees = Number(poolFeesResult[0]?._sum || 0);
+  const totalNPCFees = await asSystem(
+    (tx) => selectAdminPoolsTotalFeesCollectedSum(tx),
+    'admin-fees-pools'
+  );
 
   // Combine user and NPC fees for total
   const totalFeesCollected = platformStats.totalFeesCollected + totalNPCFees;
 
-  // Get fee breakdown by type
-  const whereConditions = [];
-  if (startDate) whereConditions.push(gte(tradingFees.createdAt, startDate));
-  if (endDate) whereConditions.push(lte(tradingFees.createdAt, endDate));
-  const whereClause =
-    whereConditions.length > 0 ? and(...whereConditions) : undefined;
-
-  const feesByType = await db
-    .select({
-      tradeType: tradingFees.tradeType,
-      feeAmountSum: sum(tradingFees.feeAmount),
-      platformFeeSum: sum(tradingFees.platformFee),
-      referrerFeeSum: sum(tradingFees.referrerFee),
-      _count: count(),
-    })
-    .from(tradingFees)
-    .where(whereClause)
-    .groupBy(tradingFees.tradeType)
-    .orderBy(desc(sum(tradingFees.feeAmount)));
-
-  // Get top fee payers (users who paid the most fees)
-  const topFeePayers = await db
-    .select({
-      userId: tradingFees.userId,
-      feeAmountSum: sum(tradingFees.feeAmount),
-      _count: count(),
-    })
-    .from(tradingFees)
-    .where(whereClause)
-    .groupBy(tradingFees.userId)
-    .orderBy(desc(sum(tradingFees.feeAmount)))
-    .limit(limit);
-
-  // Enrich with user/actor data
-  const enrichedTopFeePayers = await Promise.all(
-    topFeePayers.map(async (item) => {
-      // Try to find as User first
-      const user = await db.user.findUnique({
-        where: { id: item.userId },
-        select: {
-          id: true,
-          username: true,
-          displayName: true,
-          profileImageUrl: true,
-          isActor: true,
-        },
-      });
-
-      if (user) {
-        return {
-          userId: item.userId,
-          username: user.username || 'Unknown',
-          displayName: user.displayName || 'Unknown User',
-          profileImageUrl: user.profileImageUrl || null,
-          isNPC: user.isActor,
-          totalFees: Number(item.feeAmountSum || 0),
-          tradeCount: Number(item._count),
-        };
-      }
-
-      const actor = StaticDataRegistry.getActor(item.userId);
-
-      return {
-        userId: item.userId,
-        username: actor?.name || 'Unknown NPC',
-        displayName: actor?.name || 'Unknown NPC',
-        profileImageUrl: actor?.profileImageUrl || null,
-        isNPC: true,
-        totalFees: Number(item.feeAmountSum || 0),
-        tradeCount: item._count,
-      };
-    })
+  const feesByType = await asSystem(
+    (tx) =>
+      selectAdminTradingFeesGroupedByType(tx, {
+        startDate,
+        endDate,
+      }),
+    'admin-fees-by-type'
   );
 
-  // Get top referral fee earners
-  const referralWhereConditions = [];
-  if (startDate)
-    referralWhereConditions.push(gte(tradingFees.createdAt, startDate));
-  if (endDate)
-    referralWhereConditions.push(lte(tradingFees.createdAt, endDate));
-  referralWhereConditions.push(isNotNull(tradingFees.referrerId));
-  const referralWhereClause = and(...referralWhereConditions);
+  const topFeePayers = await asSystem(
+    (tx) =>
+      selectAdminTopFeePayers(tx, {
+        startDate,
+        endDate,
+        limit,
+      }),
+    'admin-fees-top-payers'
+  );
 
-  const topReferralEarners = await db
-    .select({
-      referrerId: tradingFees.referrerId,
-      referrerFeeSum: sum(tradingFees.referrerFee),
-      _count: count(),
-    })
-    .from(tradingFees)
-    .where(referralWhereClause)
-    .groupBy(tradingFees.referrerId)
-    .orderBy(desc(sum(tradingFees.referrerFee)))
-    .limit(limit);
+  const payerUserIds = [...new Set(topFeePayers.map((item) => item.userId))];
+  const payerUsers =
+    payerUserIds.length === 0
+      ? []
+      : await asSystem(
+          (tx) =>
+            tx.user.findMany({
+              where: { id: { in: payerUserIds } },
+              select: {
+                id: true,
+                username: true,
+                displayName: true,
+                profileImageUrl: true,
+                isActor: true,
+              },
+            }),
+          'admin-fees-payer-users'
+        );
+  const payerUserMap = new Map(payerUsers.map((u) => [u.id, u]));
 
-  // Enrich with user data
-  const enrichedTopReferralEarners = await Promise.all(
-    topReferralEarners.map(async (item) => {
-      const user = await db.user.findUnique({
-        where: { id: item.referrerId! },
-        select: {
-          id: true,
-          username: true,
-          displayName: true,
-          profileImageUrl: true,
-        },
-      });
+  const enrichedTopFeePayers = topFeePayers.map((item) => {
+    const user = payerUserMap.get(item.userId);
 
+    if (user) {
       return {
-        userId: item.referrerId!,
-        username: user?.username || 'Unknown',
-        displayName: user?.displayName || 'Unknown User',
-        profileImageUrl: user?.profileImageUrl || null,
+        userId: item.userId,
+        username: user.username || 'Unknown',
+        displayName: user.displayName || 'Unknown User',
+        profileImageUrl: user.profileImageUrl || null,
+        isNPC: user.isActor,
+        totalFees: Number(item.feeAmountSum || 0),
+        tradeCount: Number(item._count),
+      };
+    }
+
+    const actor = StaticDataRegistry.getActor(item.userId);
+
+    return {
+      userId: item.userId,
+      username: actor?.name || 'Unknown NPC',
+      displayName: actor?.name || 'Unknown NPC',
+      profileImageUrl: actor?.profileImageUrl || null,
+      isNPC: true,
+      totalFees: Number(item.feeAmountSum || 0),
+      tradeCount: item._count,
+    };
+  });
+
+  const topReferralEarners = await asSystem(
+    (tx) =>
+      selectAdminTopReferralEarners(tx, {
+        startDate,
+        endDate,
+        limit,
+      }),
+    'admin-fees-top-referrers'
+  );
+
+  const referrerUserIds = [
+    ...new Set(
+      topReferralEarners
+        .map((item) => item.referrerId)
+        .filter((id): id is string => id != null)
+    ),
+  ];
+  const referrerUsers =
+    referrerUserIds.length === 0
+      ? []
+      : await asSystem(
+          (tx) =>
+            tx.user.findMany({
+              where: { id: { in: referrerUserIds } },
+              select: {
+                id: true,
+                username: true,
+                displayName: true,
+                profileImageUrl: true,
+              },
+            }),
+          'admin-fees-referrer-users'
+        );
+  const referrerUserMap = new Map(referrerUsers.map((u) => [u.id, u]));
+
+  const enrichedTopReferralEarners = topReferralEarners.map((item) => {
+    const refId = item.referrerId;
+    if (!refId) {
+      return {
+        userId: '',
+        username: 'Unknown',
+        displayName: 'Unknown User',
+        profileImageUrl: null,
         totalEarned: Number(item.referrerFeeSum || 0),
         referralCount: Number(item._count),
       };
-    })
-  );
+    }
+    const user = referrerUserMap.get(refId);
+    return {
+      userId: refId,
+      username: user?.username || 'Unknown',
+      displayName: user?.displayName || 'Unknown User',
+      profileImageUrl: user?.profileImageUrl || null,
+      totalEarned: Number(item.referrerFeeSum || 0),
+      referralCount: Number(item._count),
+    };
+  });
 
-  // Get recent fee transactions with user data via JOIN (no include to avoid relation issues)
-  const recentFeesQuery = await db
-    .select({
-      id: tradingFees.id,
-      userId: tradingFees.userId,
-      tradeType: tradingFees.tradeType,
-      tradeId: tradingFees.tradeId,
-      marketId: tradingFees.marketId,
-      feeAmount: tradingFees.feeAmount,
-      platformFee: tradingFees.platformFee,
-      referrerFee: tradingFees.referrerFee,
-      referrerId: tradingFees.referrerId,
-      createdAt: tradingFees.createdAt,
-      username: users.username,
-      displayName: users.displayName,
-      profileImageUrl: users.profileImageUrl,
-      isActor: users.isActor,
-    })
-    .from(tradingFees)
-    .leftJoin(users, eq(tradingFees.userId, users.id))
-    .where(
-      startDate || endDate
-        ? and(
-            startDate ? gte(tradingFees.createdAt, startDate) : undefined,
-            endDate ? lte(tradingFees.createdAt, endDate) : undefined
-          )
-        : undefined
-    )
-    .orderBy(desc(tradingFees.createdAt))
-    .limit(limit);
+  const recentFeesQuery = await asSystem(
+    (tx) =>
+      selectAdminRecentFeesWithUserJoin(tx, {
+        startDate,
+        endDate,
+        limit,
+      }),
+    'admin-fees-recent'
+  );
 
   // Enrich recent fees with actor data for NPCs (user data already joined)
   const enrichedRecentFees = recentFeesQuery.map((fee) => {
@@ -373,22 +349,14 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const trendStartDate =
     startDate && startDate > thirtyDaysAgo ? startDate : thirtyDaysAgo;
 
-  const dailyFeeRecords = await db.tradingFee.findMany({
-    where: {
-      ...dateFilter,
-      createdAt: {
-        gte: trendStartDate,
-        ...(endDate ? { lte: endDate } : {}),
-      },
-    },
-    select: {
-      createdAt: true,
-      feeAmount: true,
-    },
-    orderBy: {
-      createdAt: 'asc',
-    },
-  });
+  const dailyFeeRecords = await asSystem(
+    (tx) =>
+      selectAdminFeeTrendFeeRows(tx, {
+        trendStartDate,
+        endDate,
+      }),
+    'admin-fees-trend'
+  );
 
   const trendMap = new Map<string, { totalFees: number; tradeCount: number }>();
 

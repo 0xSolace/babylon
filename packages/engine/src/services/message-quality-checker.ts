@@ -6,8 +6,11 @@
  * chat invite chances, and risk of being booted from group chats.
  */
 
-import { desc, eq } from '@babylon/db';
-import { comments, db, messages, userInteractions } from '@babylon/db/runtime';
+import {
+  listRecentCommentContentsByAuthor,
+  listRecentMessageContentsBySender,
+  listUserInteractionQualityScores,
+} from '@babylon/db';
 
 /**
  * Message quality check result
@@ -151,23 +154,9 @@ export class MessageQualityChecker {
     let recentMessages: string[] = [];
 
     if (contextType === 'reply') {
-      // Check comments from this user on any post
-      const recentComments = await db
-        .select({ content: comments.content })
-        .from(comments)
-        .where(eq(comments.authorId, userId))
-        .orderBy(desc(comments.createdAt))
-        .limit(20);
-      recentMessages = recentComments.map((c) => c.content);
+      recentMessages = await listRecentCommentContentsByAuthor(userId, 20);
     } else if (contextType === 'dm' || contextType === 'groupchat') {
-      // Check messages from this user in this chat
-      const recentChatMessages = await db
-        .select({ content: messages.content })
-        .from(messages)
-        .where(eq(messages.senderId, userId))
-        .orderBy(desc(messages.createdAt))
-        .limit(20);
-      recentMessages = recentChatMessages.map((m) => m.content);
+      recentMessages = await listRecentMessageContentsBySender(userId, 20);
     }
 
     // Check similarity with recent messages
@@ -274,12 +263,9 @@ export class MessageQualityChecker {
    * Get user's quality statistics
    */
   static async getUserQualityStats(userId: string) {
-    const interactions = await db
-      .select({ qualityScore: userInteractions.qualityScore })
-      .from(userInteractions)
-      .where(eq(userInteractions.userId, userId));
+    const scores = await listUserInteractionQualityScores(userId);
 
-    if (interactions.length === 0) {
+    if (scores.length === 0) {
       return {
         averageScore: 0,
         totalMessages: 0,
@@ -288,19 +274,13 @@ export class MessageQualityChecker {
       };
     }
 
-    const averageScore =
-      interactions.reduce((sum, i) => sum + i.qualityScore, 0) /
-      interactions.length;
-    const highQualityCount = interactions.filter(
-      (i) => i.qualityScore >= 0.8
-    ).length;
-    const lowQualityCount = interactions.filter(
-      (i) => i.qualityScore < 0.5
-    ).length;
+    const averageScore = scores.reduce((sum, s) => sum + s, 0) / scores.length;
+    const highQualityCount = scores.filter((s) => s >= 0.8).length;
+    const lowQualityCount = scores.filter((s) => s < 0.5).length;
 
     return {
       averageScore,
-      totalMessages: interactions.length,
+      totalMessages: scores.length,
       highQualityCount,
       lowQualityCount,
     };

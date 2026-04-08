@@ -4,8 +4,8 @@
  * Check when the last agent tick ran
  */
 
-import { desc, eq, sql } from '@babylon/db';
-import { agentLogs, db, games, users } from '@babylon/db/runtime';
+import { agentLogs, db, games, users } from '@babylon/db/engine-storage';
+import { desc, eq, sql } from 'drizzle-orm';
 
 async function checkLastTick() {
   console.log('🕐 Checking last agent tick times...\n');

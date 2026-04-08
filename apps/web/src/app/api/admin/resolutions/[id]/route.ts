@@ -13,9 +13,8 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-
-import { eq } from '@babylon/db';
-import { db, questions } from '@babylon/db/runtime';
+import { runAdminResolutionReview } from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
@@ -52,40 +51,35 @@ export const POST = withErrorHandling(
     const { id } = ParamsSchema.parse(await context.params);
     const { action } = BodySchema.parse(await request.json());
 
-    const [existing] = await db
-      .select({
-        id: questions.id,
-        questionNumber: questions.questionNumber,
-        status: questions.status,
-        requiresManualReview: questions.requiresManualReview,
-        resolutionReviewStatus: questions.resolutionReviewStatus,
-      })
-      .from(questions)
-      .where(eq(questions.id, id))
-      .limit(1);
+    const outcome = await asSystem(
+      (tx) =>
+        runAdminResolutionReview(tx, {
+          questionId: id,
+          adminUserId: admin.userId,
+          action,
+          postponeMs: POSTPONE_HOURS * 60 * 60 * 1000,
+        }),
+      'admin-resolution-review'
+    );
 
-    if (!existing) {
+    if (outcome.kind === 'not_found') {
       return errorResponse('Question not found', 'NOT_FOUND', 404);
     }
-
-    // Validate the question is in a valid state for review
-    if (existing.status !== 'active') {
+    if (outcome.kind === 'invalid_state') {
       return errorResponse(
         'Question is not active and cannot be reviewed',
         'INVALID_STATE',
         400
       );
     }
-
-    if (!existing.requiresManualReview) {
+    if (outcome.kind === 'not_reviewable') {
       return errorResponse(
         'Question does not require manual review',
         'NOT_REVIEWABLE',
         400
       );
     }
-
-    if (existing.resolutionReviewStatus === 'approved') {
+    if (outcome.kind === 'already_approved') {
       return errorResponse(
         'Question already approved',
         'ALREADY_APPROVED',
@@ -93,64 +87,33 @@ export const POST = withErrorHandling(
       );
     }
 
-    const now = new Date();
-
-    if (action === 'approve') {
-      await db
-        .update(questions)
-        .set({
-          resolutionReviewStatus: 'approved',
-          resolutionReviewedAt: now,
-          resolutionReviewedBy: admin.userId,
-          updatedAt: now,
-        })
-        .where(eq(questions.id, id));
-
+    if (outcome.kind === 'approved') {
       logger.info(
         'Resolution approved',
         {
           questionId: id,
-          questionNumber: existing.questionNumber,
+          questionNumber: outcome.questionNumber,
           reviewedBy: admin.userId,
         },
         'AdminResolutions'
       );
-
       return successResponse({ success: true });
     }
-
-    // Reject: clear the review flag and postpone resolution to avoid immediate retry loops.
-    const postponed = new Date(now.getTime() + POSTPONE_HOURS * 60 * 60 * 1000);
-
-    await db
-      .update(questions)
-      .set({
-        requiresManualReview: false,
-        resolutionReviewStatus: 'rejected',
-        resolutionReviewedAt: now,
-        resolutionReviewedBy: admin.userId,
-        resolutionConfidence: null,
-        resolutionProofUrl: null,
-        resolutionDescription: null,
-        resolutionDate: postponed,
-        updatedAt: now,
-      })
-      .where(eq(questions.id, id));
 
     logger.info(
       'Resolution rejected',
       {
         questionId: id,
-        questionNumber: existing.questionNumber,
+        questionNumber: outcome.questionNumber,
         reviewedBy: admin.userId,
-        postponedUntil: toISO(postponed),
+        postponedUntil: toISO(outcome.postponed),
       },
       'AdminResolutions'
     );
 
     return successResponse({
       success: true,
-      postponedUntil: toISO(postponed),
+      postponedUntil: toISO(outcome.postponed),
     });
   }
 );

@@ -54,9 +54,7 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, count, eq, isNotNull } from '@babylon/db';
-import { db, users } from '@babylon/db/runtime';
-
+import { selectProfileChainSyncCronMetrics } from '@babylon/db';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
@@ -76,36 +74,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
   await relayCronToStaging(request, 'profile-chain-sync');
 
-  // Get counts for monitoring
-  const [totalOnChainResult] = await db
-    .select({ count: count() })
-    .from(users)
-    .where(eq(users.onChainRegistered, true));
-
-  const [pendingSyncResult] = await db
-    .select({ count: count() })
-    .from(users)
-    .where(
-      and(
-        eq(users.onChainRegistered, true),
-        eq(users.profileChainSyncNeeded, true)
-      )
-    );
-
-  const [syncErrorResult] = await db
-    .select({ count: count() })
-    .from(users)
-    .where(
-      and(
-        eq(users.onChainRegistered, true),
-        eq(users.profileChainSyncNeeded, true),
-        isNotNull(users.profileChainSyncError)
-      )
-    );
-
-  const totalOnChainUsers = totalOnChainResult?.count ?? 0;
-  const pendingSyncCount = pendingSyncResult?.count ?? 0;
-  const syncErrorCount = syncErrorResult?.count ?? 0;
+  const { totalOnChainUsers, pendingSyncCount, syncErrorCount } =
+    await selectProfileChainSyncCronMetrics();
   const syncedCount = totalOnChainUsers - pendingSyncCount;
 
   const duration = Date.now() - startTime;

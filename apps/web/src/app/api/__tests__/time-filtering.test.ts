@@ -7,8 +7,14 @@
 
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { cachedDb } from '@babylon/api';
-import { generateSnowflakeId } from '@babylon/db';
-import { db, getDbInstance } from '@babylon/db/runtime';
+import {
+  fetchPostsByActorForGameService,
+  fetchRecentPostsForGameService,
+  generateSnowflakeId,
+} from '@babylon/db';
+// Global `db` proxy (Prisma-style API) for fixtures — no per-request RLS context;
+// assertions use DatabaseService / cachedDb paths that apply normal app filtering.
+import { db } from '@babylon/db/engine-storage';
 import { MarketContextService, StaticDataRegistry } from '@babylon/engine';
 
 describe('Time Filtering - API Endpoints', () => {
@@ -124,7 +130,7 @@ describe('Time Filtering - API Endpoints', () => {
       );
 
       // Now test the filtering
-      const posts = await getDbInstance().getRecentPosts(100);
+      const posts = await fetchRecentPostsForGameService(100);
       const postIds = posts.map((p) => p.id);
 
       // Past and current posts should appear (if they're not filtered out by test user check)
@@ -143,7 +149,7 @@ describe('Time Filtering - API Endpoints', () => {
       const actor = StaticDataRegistry.getActor(testActorId);
       expect(actor).toBeTruthy();
 
-      const posts = await getDbInstance().getPostsByActor(testActorId, 100);
+      const posts = await fetchPostsByActorForGameService(testActorId, 100);
       const postIds = posts.map((p) => p.id);
 
       // Verify the time filtering is working - future post should NOT appear
@@ -467,7 +473,7 @@ describe('Time Filtering - API Endpoints', () => {
     it('should handle posts exactly at current time', async () => {
       // Re-query with fresh timestamp to ensure we're checking against current time
       const freshNow = new Date();
-      const posts = await getDbInstance().getRecentPosts(100);
+      const posts = await fetchRecentPostsForGameService(100);
       const postIds = posts.map((p) => p.id);
 
       // Current post (timestamp = now) should appear if it's <= current time
@@ -497,7 +503,7 @@ describe('Time Filtering - API Endpoints', () => {
         },
       });
 
-      const posts = await getDbInstance().getRecentPosts(100);
+      const posts = await fetchRecentPostsForGameService(100);
       const postIds = posts.map((p) => p.id);
 
       // Even 1ms in the future should be filtered out
@@ -522,7 +528,7 @@ describe('Time Filtering - API Endpoints', () => {
         },
       });
 
-      const posts = await getDbInstance().getRecentPosts(100);
+      const posts = await fetchRecentPostsForGameService(100);
       const postIds = posts.map((p) => p.id);
 
       expect(postIds).not.toContain(farFuturePost.id);

@@ -20,6 +20,7 @@
  */
 
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import * as babylonDb from '@babylon/db';
 import type { IAgentRuntime, Memory, State } from '@elizaos/core';
 
 // ─── DB mock ──────────────────────────────────────────────────────────────────
@@ -38,11 +39,12 @@ const mockDbChain = {
 const mockDbSelect = mock(() => mockDbChain);
 
 mock.module('@babylon/db', () => ({
+  ...babylonDb,
   eq: (_a: unknown, _b: unknown) => ({ type: 'eq' }),
   and: (..._args: unknown[]) => ({ type: 'and' }),
 }));
 
-mock.module('@babylon/db/runtime', () => ({
+mock.module('@babylon/db/engine-storage', () => ({
   db: { select: mockDbSelect },
   chatParticipants: {
     chatId: 'cp.chatId',

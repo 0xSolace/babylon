@@ -7,24 +7,18 @@
  * @module services/rss-feed-service
  */
 
-import type { RSSHeadline } from '@babylon/db';
-import { and, desc, eq, gte, lt, sql } from '@babylon/db';
 import {
-  db,
-  parodyHeadlines,
-  rssFeedSources,
-  rssHeadlines,
-} from '@babylon/db/runtime';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+  deleteRssHeadlinesPublishedBefore,
+  findRssHeadlineIdByLink,
+  insertRssHeadlineRow,
+  type JsonValue,
+  listActiveRssFeedSources,
+  listRssHeadlinesWithoutParody,
+  type RSSHeadline,
+  touchRssFeedSourceFetched,
+} from '@babylon/db';
+import { logger } from '@babylon/shared';
 import { parseStringPromise } from 'xml2js';
-
-type JsonValue =
-  | string
-  | number
-  | boolean
-  | null
-  | JsonValue[]
-  | { [key: string]: JsonValue };
 
 type Xml2JsFeed = {
   rss?: {
@@ -228,10 +222,7 @@ export class RSSFeedService {
     stored: number;
     errors: number;
   }> {
-    const sources = await db
-      .select()
-      .from(rssFeedSources)
-      .where(eq(rssFeedSources.isActive, true));
+    const sources = await listActiveRssFeedSources();
 
     logger.info(
       `Fetching ${sources.length} RSS feeds`,
@@ -251,46 +242,30 @@ export class RSSFeedService {
       for (const item of feed.items) {
         if (!item.title) continue;
 
-        // Check if we already have this headline
-        const existingResult = item.link
-          ? await db
-              .select({ id: rssHeadlines.id })
-              .from(rssHeadlines)
-              .where(eq(rssHeadlines.link, item.link))
-              .limit(1)
-          : [];
+        const itemLink = item.link;
+        const existingId = itemLink
+          ? await findRssHeadlineIdByLink(itemLink)
+          : null;
 
-        const existing = existingResult[0];
-
-        if (existing) continue;
+        if (existingId) continue;
 
         const publishedAt = item.pubDate ? new Date(item.pubDate) : new Date();
 
-        await db.insert(rssHeadlines).values({
-          id: await generateSnowflakeId(),
+        await insertRssHeadlineRow({
           sourceId: source.id,
           title: item.title,
           link: item.link || null,
           publishedAt,
           summary: item.description || null,
           content: item.content || null,
-          // RSSFeedItem is a plain object with JsonValue-compatible fields (all string/undefined)
-          // Convert through unknown first for type safety
           rawData: JSON.parse(JSON.stringify(item)) as JsonValue,
-          fetchedAt: new Date(),
         });
 
         stored++;
       }
 
       // Update last fetched timestamp
-      await db
-        .update(rssFeedSources)
-        .set({
-          lastFetched: new Date(),
-          fetchErrors: 0,
-        })
-        .where(eq(rssFeedSources.id, source.id));
+      await touchRssFeedSourceFetched(source.id);
     }
 
     logger.info(
@@ -311,22 +286,10 @@ export class RSSFeedService {
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
     // Get headlines without parody by checking if no parodyHeadline exists with matching originalHeadlineId
-    const results = await db
-      .select()
-      .from(rssHeadlines)
-      .where(
-        and(
-          gte(rssHeadlines.publishedAt, sevenDaysAgo),
-          sql`NOT EXISTS (
-            SELECT 1 FROM ${parodyHeadlines} 
-            WHERE ${parodyHeadlines.originalHeadlineId} = ${rssHeadlines.id}
-          )`
-        )
-      )
-      .orderBy(desc(rssHeadlines.publishedAt))
-      .limit(limit);
-
-    return results;
+    return listRssHeadlinesWithoutParody({
+      publishedSince: sevenDaysAgo,
+      limit,
+    });
   }
 
   /**
@@ -336,12 +299,7 @@ export class RSSFeedService {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    const result = await db
-      .delete(rssHeadlines)
-      .where(lt(rssHeadlines.publishedAt, sevenDaysAgo))
-      .returning({ id: rssHeadlines.id });
-
-    const count = result.length;
+    const count = await deleteRssHeadlinesPublishedBefore(sevenDaysAgo);
 
     logger.info(
       `Cleaned up ${count} old RSS headlines`,

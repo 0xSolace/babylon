@@ -6,8 +6,21 @@
  * and leaderboard rankings for waitlist participants.
  */
 
-import { and, asc, count, desc, eq, gt, lt, ne, or } from '@babylon/db';
-import { db, pointsTransactions, referrals, users } from '@babylon/db/runtime';
+import {
+  countActiveWaitlistUsers,
+  fetchWaitlistPositionAggregate,
+  finalizeWaitlistUser,
+  graduateWaitlistUser,
+  listTopWaitlistUsers,
+  persistWaitlistReferralCompletion,
+  selectMaxWaitlistPosition,
+  selectReferrerByCodeForWaitlist,
+  selectUserIdByReferralCode,
+  selectWaitlistUserForMark,
+  tryInsertWaitlistEmailBonus,
+  tryInsertWaitlistWalletBonus,
+} from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import { generateSnowflakeId, logger, POINTS } from '@babylon/shared';
 import { nanoid } from 'nanoid';
 import { NotFoundError } from '../errors';
@@ -60,24 +73,10 @@ export class WaitlistService {
     userId: string,
     referralCode?: string
   ): Promise<WaitlistMarkResult> {
-    // Get user - they should already exist from onboarding
-    const userResult = await db
-      .select({
-        id: users.id,
-        waitlistPosition: users.waitlistPosition,
-        referralCode: users.referralCode,
-        referredBy: users.referredBy,
-        reputationPoints: users.reputationPoints,
-        invitePoints: users.invitePoints,
-        earnedPoints: users.earnedPoints,
-        bonusPoints: users.bonusPoints,
-        isWaitlistActive: users.isWaitlistActive,
-      })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    const user = userResult[0];
+    const user = await asSystem(
+      (c) => selectWaitlistUserForMark(c, userId),
+      'waitlist-mark-user'
+    );
 
     if (!user) {
       throw new NotFoundError('User', undefined, {
@@ -93,13 +92,10 @@ export class WaitlistService {
       let referrerRewarded = false;
 
       if (referralCode) {
-        const referrerResult = await db
-          .select({ id: users.id })
-          .from(users)
-          .where(eq(users.referralCode, referralCode))
-          .limit(1);
-
-        const referrer = referrerResult[0];
+        const referrer = await asSystem(
+          (c) => selectUserIdByReferralCode(c, referralCode),
+          'waitlist-mark-referrer-already'
+        );
 
         if (referrer) {
           // PREVENT SELF-REFERRAL: Can't refer yourself!
@@ -151,16 +147,12 @@ export class WaitlistService {
       };
     }
 
-    // Get the highest waitlist position
-    const lastPositionResult = await db
-      .select({ waitlistPosition: users.waitlistPosition })
-      .from(users)
-      .where(ne(users.waitlistPosition, 0))
-      .orderBy(desc(users.waitlistPosition))
-      .limit(1);
+    const lastPosition = await asSystem(
+      (c) => selectMaxWaitlistPosition(c),
+      'waitlist-mark-last-position'
+    );
 
-    const lastPosition = lastPositionResult[0];
-    const newPosition = (lastPosition?.waitlistPosition || 0) + 1;
+    const newPosition = (lastPosition || 0) + 1;
 
     // Generate invite code if user doesn't have one
     const inviteCode =
@@ -170,18 +162,10 @@ export class WaitlistService {
     let referrerRewarded = false;
 
     if (referralCode) {
-      const referrerResult = await db
-        .select({
-          id: users.id,
-          reputationPoints: users.reputationPoints,
-          invitePoints: users.invitePoints,
-          referralCount: users.referralCount,
-        })
-        .from(users)
-        .where(eq(users.referralCode, referralCode))
-        .limit(1);
-
-      const referrer = referrerResult[0];
+      const referrer = await asSystem(
+        (c) => selectReferrerByCodeForWaitlist(c, referralCode),
+        'waitlist-mark-referrer'
+      );
 
       if (referrer) {
         // PREVENT SELF-REFERRAL: Can't refer yourself!
@@ -219,48 +203,14 @@ export class WaitlistService {
           );
 
           if (referralResult.success) {
-            // Create or update Referral record if it doesn't exist
-            // Check if referral exists
-            const existingReferral = await db
-              .select({ id: referrals.id })
-              .from(referrals)
-              .where(
-                and(
-                  eq(referrals.referralCode, referralCode),
-                  eq(referrals.referredUserId, userId)
-                )
-              )
-              .limit(1);
-
-            if (existingReferral.length > 0) {
-              await db
-                .update(referrals)
-                .set({
-                  status: 'completed',
-                  completedAt: new Date(),
-                })
-                .where(
-                  and(
-                    eq(referrals.referralCode, referralCode),
-                    eq(referrals.referredUserId, userId)
-                  )
-                );
-            } else {
-              await db.insert(referrals).values({
-                id: await generateSnowflakeId(),
-                referrerId: referrer.id,
+            await asSystem(async (c) => {
+              await persistWaitlistReferralCompletion(c, {
                 referralCode,
                 referredUserId: userId,
-                status: 'completed',
-                completedAt: new Date(),
+                referrerId: referrer.id,
+                newReferralRowId: await generateSnowflakeId(),
               });
-            }
-
-            // Update referredBy field on user
-            await db
-              .update(users)
-              .set({ referredBy: referrer.id })
-              .where(eq(users.id, userId));
+            }, 'waitlist-mark-referral-persist');
 
             referrerRewarded = true;
 
@@ -304,18 +254,14 @@ export class WaitlistService {
       await getOrCreateReferralCode(userId);
     }
 
-    // Update user as waitlisted
-    // IMPORTANT: Don't change reputationPoints here - they should already have correct amount from onboarding
-    // referredBy is already set above if referral was processed
-    await db
-      .update(users)
-      .set({
-        waitlistPosition: newPosition,
-        waitlistJoinedAt: new Date(),
-        isWaitlistActive: true,
-        referralCode: inviteCode,
-      })
-      .where(eq(users.id, userId));
+    await asSystem(
+      (c) =>
+        finalizeWaitlistUser(c, userId, {
+          waitlistPosition: newPosition,
+          inviteCode,
+        }),
+      'waitlist-mark-finalize'
+    );
 
     logger.info(
       'User marked as waitlisted',
@@ -340,13 +286,7 @@ export class WaitlistService {
    * Graduate a user from waitlist to full access
    */
   static async graduateFromWaitlist(userId: string): Promise<boolean> {
-    await db
-      .update(users)
-      .set({
-        isWaitlistActive: false,
-        waitlistGraduatedAt: new Date(),
-      })
-      .where(eq(users.id, userId));
+    await asSystem((c) => graduateWaitlistUser(c, userId), 'waitlist-graduate');
 
     logger.info('User graduated from waitlist', { userId }, 'WaitlistService');
     return true;
@@ -360,57 +300,18 @@ export class WaitlistService {
   static async getWaitlistPosition(
     userId: string
   ): Promise<WaitlistPosition | null> {
-    const userResult = await db
-      .select({
-        waitlistPosition: users.waitlistPosition,
-        waitlistJoinedAt: users.waitlistJoinedAt,
-        isWaitlistActive: users.isWaitlistActive,
-        referralCode: users.referralCode,
-        reputationPoints: users.reputationPoints,
-        invitePoints: users.invitePoints,
-        earnedPoints: users.earnedPoints,
-        bonusPoints: users.bonusPoints,
-        referralCount: users.referralCount,
-      })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
+    const positionData = await asSystem(
+      (c) => fetchWaitlistPositionAggregate(c, userId),
+      'waitlist-position'
+    );
 
-    const user = userResult[0];
-
-    if (!user || !user.isWaitlistActive) {
+    if (!positionData) {
       return null;
     }
 
-    // Count users ahead in line based on INVITE POINTS (viral loop!)
-    // Users with more invites are closer to the front
-    const userJoinedAt = user.waitlistJoinedAt || new Date();
+    const { user, usersAhead, totalCount } = positionData;
 
-    const [usersAheadResult] = await db
-      .select({ count: count() })
-      .from(users)
-      .where(
-        and(
-          eq(users.isWaitlistActive, true),
-          or(
-            // Primary sort: More invite points = better position
-            gt(users.invitePoints, user.invitePoints),
-            // Tie-breaker: If same invite points, earlier signup wins
-            and(
-              eq(users.invitePoints, user.invitePoints),
-              lt(users.waitlistJoinedAt, userJoinedAt)
-            )
-          )
-        )
-      );
-
-    const usersAhead = usersAheadResult?.count ?? 0;
-
-    // Calculate leaderboard rank (actual position in line)
     const leaderboardRank = usersAhead + 1;
-
-    // Get total waitlist count
-    const totalCount = await WaitlistService.getTotalWaitlistCount();
 
     // Calculate percentile (Top X% - what percentile you're in from the top)
     const percentile =
@@ -438,51 +339,19 @@ export class WaitlistService {
     userId: string,
     walletAddress: string
   ): Promise<boolean> {
-    const userResult = await db
-      .select({
-        pointsAwardedForWallet: users.pointsAwardedForWallet,
-        reputationPoints: users.reputationPoints,
-        bonusPoints: users.bonusPoints,
-      })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    const user = userResult[0];
-
-    if (!user) {
-      return false;
-    }
-
-    // Don't award if already awarded
-    if (user.pointsAwardedForWallet) {
-      return false;
-    }
-
     const bonusAmount = 300;
-    const newBonusPoints = user.bonusPoints + bonusAmount;
-    const newReputationPoints = user.reputationPoints + bonusAmount;
-
-    await db
-      .update(users)
-      .set({
+    const awarded = await asSystem(async (c) => {
+      return tryInsertWaitlistWalletBonus(c, {
+        userId,
         walletAddress,
-        pointsAwardedForWallet: true,
-        bonusPoints: newBonusPoints,
-        reputationPoints: newReputationPoints,
-      })
-      .where(eq(users.id, userId));
+        pointsTransactionId: await generateSnowflakeId(),
+        bonusAmount,
+      });
+    }, 'waitlist-wallet-bonus');
 
-    // Create points transaction
-    await db.insert(pointsTransactions).values({
-      id: await generateSnowflakeId(),
-      userId,
-      amount: bonusAmount,
-      pointsBefore: user.reputationPoints,
-      pointsAfter: newReputationPoints,
-      reason: 'wallet_connect',
-      metadata: JSON.stringify({ walletAddress }),
-    });
+    if (!awarded) {
+      return false;
+    }
 
     logger.info(
       `Awarded wallet bonus to user ${userId}`,
@@ -504,50 +373,21 @@ export class WaitlistService {
     userId: string,
     email: string
   ): Promise<boolean> {
-    const userResult = await db
-      .select({
-        isWaitlistActive: users.isWaitlistActive,
-        pointsAwardedForEmail: users.pointsAwardedForEmail,
-        reputationPoints: users.reputationPoints,
-        bonusPoints: users.bonusPoints,
-      })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    const user = userResult[0];
-
-    if (!user || !user.isWaitlistActive) {
-      return false;
-    }
-
-    if (user.pointsAwardedForEmail) {
-      return false;
-    }
-
     const normalizedEmail = email.trim().toLowerCase();
     const bonusAmount = POINTS.EMAIL_SUBMIT;
-    const newBonusPoints = user.bonusPoints + bonusAmount;
-    const newReputationPoints = user.reputationPoints + bonusAmount;
 
-    await db
-      .update(users)
-      .set({
-        email: normalizedEmail,
-        pointsAwardedForEmail: true,
-        bonusPoints: newBonusPoints,
-        reputationPoints: newReputationPoints,
-      })
-      .where(eq(users.id, userId));
+    const awarded = await asSystem(async (c) => {
+      return tryInsertWaitlistEmailBonus(c, {
+        userId,
+        normalizedEmail,
+        pointsTransactionId: await generateSnowflakeId(),
+        bonusAmount,
+      });
+    }, 'waitlist-email-bonus');
 
-    await db.insert(pointsTransactions).values({
-      id: await generateSnowflakeId(),
-      userId,
-      amount: bonusAmount,
-      pointsBefore: user.reputationPoints,
-      pointsAfter: newReputationPoints,
-      reason: 'email_submit',
-    });
+    if (!awarded) {
+      return false;
+    }
 
     logger.info(
       `Awarded email bonus to user ${userId}`,
@@ -562,14 +402,7 @@ export class WaitlistService {
    * Get total waitlist count
    */
   static async getTotalWaitlistCount(): Promise<number> {
-    const [result] = await db
-      .select({ count: count() })
-      .from(users)
-      .where(
-        and(ne(users.waitlistPosition, 0), eq(users.isWaitlistActive, true))
-      );
-
-    return result?.count ?? 0;
+    return asSystem((c) => countActiveWaitlistUsers(c), 'waitlist-total-count');
   }
 
   /**
@@ -586,42 +419,15 @@ export class WaitlistService {
     const safeLimit = Math.min(Math.max(1, limit), 100);
     const safeOffset = Math.max(0, offset);
 
-    // Build orderBy based on pointsType
-    const orderByColumns =
-      pointsType === 'total'
-        ? [
-            desc(users.reputationPoints),
-            desc(users.invitePoints),
-            asc(users.waitlistJoinedAt),
-          ]
-        : [
-            desc(users.invitePoints),
-            desc(users.reputationPoints),
-            asc(users.waitlistJoinedAt),
-          ];
-
-    const usersResult = await db
-      .select({
-        id: users.id,
-        username: users.username,
-        displayName: users.displayName,
-        // profileImageUrl removed - fetch on-demand to reduce bandwidth
-        invitePoints: users.invitePoints,
-        reputationPoints: users.reputationPoints,
-        referralCount: users.referralCount,
-        waitlistJoinedAt: users.waitlistJoinedAt,
-      })
-      .from(users)
-      .where(
-        and(
-          eq(users.isWaitlistActive, true),
-          // Only include users with usernames (required for referral codes)
-          ne(users.username, '')
-        )
-      )
-      .orderBy(...orderByColumns)
-      .offset(safeOffset)
-      .limit(safeLimit);
+    const usersResult = await asSystem(
+      (c) =>
+        listTopWaitlistUsers(c, {
+          limit: safeLimit,
+          offset: safeOffset,
+          pointsType,
+        }),
+      'waitlist-top-users'
+    );
 
     return usersResult.map((user, index) => ({
       id: user.id, // For frontend compatibility (TopUser interface expects 'id')

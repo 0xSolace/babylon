@@ -1,5 +1,11 @@
-import { and, eq, sql } from '@babylon/db';
-import { balanceTransactions, db, users } from '@babylon/db/runtime';
+import {
+  type AgentEvmRegistrationRow,
+  refundVirtualBalanceForAgentRegistration,
+  selectAgentEvmRegistrationRow,
+  tryDeductVirtualBalanceForAgentRegistration,
+  updateAgentEvmWalletPersisted,
+} from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import {
   BusinessLogicError,
   generateSnowflakeId,
@@ -31,44 +37,6 @@ export interface AgentEvmRegistrationResult {
   cost: number;
 }
 
-type AgentEvmRecord = {
-  id: string;
-  username: string | null;
-  displayName: string | null;
-  bio: string | null;
-  profileImageUrl: string | null;
-  coverImageUrl: string | null;
-  isAgent: boolean;
-  managedBy: string | null;
-  privyId: string | null;
-  privyWalletId: string | null;
-  walletAddress: string | null;
-  offlineWalletReady: boolean;
-  onChainRegistered: boolean;
-  agent0TokenId: number | null;
-  agent0MetadataCID: string | null;
-  registrationTxHash: string | null;
-};
-
-const AGENT_EVM_SELECT = {
-  id: users.id,
-  username: users.username,
-  displayName: users.displayName,
-  bio: users.bio,
-  profileImageUrl: users.profileImageUrl,
-  coverImageUrl: users.coverImageUrl,
-  isAgent: users.isAgent,
-  managedBy: users.managedBy,
-  privyId: users.privyId,
-  privyWalletId: users.privyWalletId,
-  walletAddress: users.walletAddress,
-  offlineWalletReady: users.offlineWalletReady,
-  onChainRegistered: users.onChainRegistered,
-  agent0TokenId: users.agent0TokenId,
-  agent0MetadataCID: users.agent0MetadataCID,
-  registrationTxHash: users.registrationTxHash,
-} as const;
-
 function isAgent0RegistrationConfigured(): boolean {
   return Boolean(
     process.env.AGENT0_RPC_URL &&
@@ -78,7 +46,7 @@ function isAgent0RegistrationConfigured(): boolean {
   );
 }
 
-function isPersistedEvmWalletReady(agent: AgentEvmRecord): boolean {
+function isPersistedEvmWalletReady(agent: AgentEvmRegistrationRow): boolean {
   return (
     agent.offlineWalletReady &&
     agent.privyId !== null &&
@@ -90,12 +58,11 @@ function isPersistedEvmWalletReady(agent: AgentEvmRecord): boolean {
 async function getAgentForOwner(
   ownerUserId: string,
   agentUserId: string
-): Promise<AgentEvmRecord> {
-  const [agent] = await db
-    .select(AGENT_EVM_SELECT)
-    .from(users)
-    .where(eq(users.id, agentUserId))
-    .limit(1);
+): Promise<AgentEvmRegistrationRow> {
+  const agent = await asSystem(
+    (c) => selectAgentEvmRegistrationRow(c, agentUserId),
+    'agent-evm-get-for-owner'
+  );
 
   if (!agent || !agent.isAgent) {
     throw new BusinessLogicError('Agent not found', 'AGENT_NOT_FOUND');
@@ -119,20 +86,13 @@ async function persistAgentEvmWalletState(
     walletAddress: string;
   }
 ): Promise<void> {
-  await db
-    .update(users)
-    .set({
-      privyId: wallet.privyId,
-      privyWalletId: wallet.privyWalletId,
-      walletAddress: wallet.walletAddress.toLowerCase(),
-      offlineWalletReady: true,
-      offlineWalletReadyAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(eq(users.id, agentUserId));
+  await asSystem(
+    (c) => updateAgentEvmWalletPersisted(c, agentUserId, wallet),
+    'agent-evm-persist-wallet'
+  );
 }
 
-async function resolveAgentEvmWallet(agent: AgentEvmRecord): Promise<{
+async function resolveAgentEvmWallet(agent: AgentEvmRegistrationRow): Promise<{
   privyId: string;
   privyWalletId: string;
   walletAddress: string;
@@ -168,48 +128,25 @@ async function deductRegistrationCost(
   agentUserId: string,
   cost: number
 ): Promise<void> {
-  const [deducted] = await db
-    .update(users)
-    .set({
-      virtualBalance: sql`(${users.virtualBalance})::numeric - ${cost}`,
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(users.id, ownerUserId),
-        sql`(${users.virtualBalance})::numeric >= ${cost}`
-      )
-    )
-    .returning({ virtualBalance: users.virtualBalance });
+  const balanceTransactionId = await generateSnowflakeId();
+  const outcome = await asSystem(
+    (c) =>
+      tryDeductVirtualBalanceForAgentRegistration(c, {
+        ownerUserId,
+        agentUserId,
+        cost,
+        balanceTransactionId,
+        withdrawalDescription: 'Agent EVM registration',
+      }),
+    'agent-evm-deduct-registration'
+  );
 
-  if (!deducted) {
-    const [owner] = await db
-      .select({ virtualBalance: users.virtualBalance })
-      .from(users)
-      .where(eq(users.id, ownerUserId))
-      .limit(1);
-
-    const currentBalance = Number(owner?.virtualBalance ?? '0');
+  if (!outcome.ok) {
     throw new BusinessLogicError(
-      `Insufficient balance. EVM agent registration costs ${cost} points. You have ${Math.floor(currentBalance)} points.`,
+      `Insufficient balance. EVM agent registration costs ${cost} points. You have ${Math.floor(outcome.currentBalance)} points.`,
       'INSUFFICIENT_BALANCE'
     );
   }
-
-  const balanceAfter = Number(deducted.virtualBalance);
-  const balanceBefore = balanceAfter + cost;
-
-  await db.insert(balanceTransactions).values({
-    id: await generateSnowflakeId(),
-    userId: ownerUserId,
-    type: 'withdrawal',
-    amount: String(cost),
-    balanceBefore: String(balanceBefore),
-    balanceAfter: String(balanceAfter),
-    relatedId: agentUserId,
-    description: 'Agent EVM registration',
-    createdAt: new Date(),
-  });
 }
 
 async function refundRegistrationCost(
@@ -217,29 +154,18 @@ async function refundRegistrationCost(
   agentUserId: string,
   cost: number
 ): Promise<void> {
-  const [refunded] = await db
-    .update(users)
-    .set({
-      virtualBalance: sql`(${users.virtualBalance})::numeric + ${cost}`,
-      updatedAt: new Date(),
-    })
-    .where(eq(users.id, ownerUserId))
-    .returning({ virtualBalance: users.virtualBalance });
-
-  const balanceAfter = Number(refunded?.virtualBalance ?? '0');
-  const balanceBefore = balanceAfter - cost;
-
-  await db.insert(balanceTransactions).values({
-    id: await generateSnowflakeId(),
-    userId: ownerUserId,
-    type: 'deposit',
-    amount: String(cost),
-    balanceBefore: String(balanceBefore),
-    balanceAfter: String(balanceAfter),
-    relatedId: agentUserId,
-    description: 'Refund - agent EVM registration failed',
-    createdAt: new Date(),
-  });
+  const balanceTransactionId = await generateSnowflakeId();
+  await asSystem(
+    (c) =>
+      refundVirtualBalanceForAgentRegistration(c, {
+        ownerUserId,
+        agentUserId,
+        cost,
+        balanceTransactionId,
+        depositDescription: 'Refund - agent EVM registration failed',
+      }),
+    'agent-evm-refund-registration'
+  );
 }
 
 async function withAgentEvmRegistrationLock<T>(

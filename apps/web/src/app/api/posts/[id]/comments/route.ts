@@ -89,9 +89,24 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, asc, count, eq, hasBlocked, inArray } from '@babylon/db';
-import { comments, db, posts, reactions, users } from '@babylon/db/runtime';
-
+import {
+  countCommentLikesGroupedByCommentId,
+  hasBlocked,
+  insertCommentReturning,
+  insertGamePostStubForCommentRoute,
+  listCommentsForPostOrderCreatedAsc,
+  selectCommentAuthorIdById,
+  selectCommentIdAndPostIdById,
+  selectLikedCommentIdsForUserOnComments,
+  selectPostAuthorIdById,
+  selectPostById,
+  selectPostIdDeletedAtById,
+  selectUserCommentAuthorSliceById,
+  selectUserIdExists,
+  selectUsersCommentAuthorSlicesByIds,
+  selectUsersIdUsernameByUsernames,
+} from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import {
   CreateCommentSchema,
   generateSnowflakeId,
@@ -99,6 +114,7 @@ import {
   PostIdParamSchema,
 } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+import { runWithOptionalUserRls } from '@/lib/db/run-with-optional-user-rls';
 
 /**
  * Build threaded comment structure recursively
@@ -198,130 +214,99 @@ export const GET = withErrorHandling(
 
     const canonicalUserId = user ? getCanonicalUserId(user) : undefined;
 
-    // Check if post exists and is not in the future
-    const now = new Date();
-    const [post] = await db
-      .select()
-      .from(posts)
-      .where(eq(posts.id, postId))
-      .limit(1);
+    return runWithOptionalUserRls(user, async (db) => {
+      // Check if post exists and is not in the future
+      const now = new Date();
+      const post = await selectPostById(db, postId);
 
-    if (!post) {
-      throw new NotFoundError('Post', postId);
-    }
+      if (!post) {
+        throw new NotFoundError('Post', postId);
+      }
 
-    if (post.deletedAt) {
-      throw new NotFoundError('Post (deleted)', postId);
-    }
+      if (post.deletedAt) {
+        throw new NotFoundError('Post (deleted)', postId);
+      }
 
-    // Don't allow access to future posts
-    if (post.timestamp > now) {
-      throw new NotFoundError('Post', postId);
-    }
+      // Don't allow access to future posts
+      if (post.timestamp > now) {
+        throw new NotFoundError('Post', postId);
+      }
 
-    // Get all comments for the post (including nested replies)
-    const commentsResult = await db
-      .select()
-      .from(comments)
-      .where(eq(comments.postId, postId))
-      .orderBy(asc(comments.createdAt));
+      // Get all comments for the post (including nested replies)
+      const commentsResult = await listCommentsForPostOrderCreatedAsc(
+        db,
+        postId
+      );
 
-    // Get author IDs
-    const authorIds = [...new Set(commentsResult.map((c) => c.authorId))];
+      // Get author IDs
+      const authorIds = [...new Set(commentsResult.map((c) => c.authorId))];
 
-    // Get user info for all authors
-    const usersResult =
-      authorIds.length > 0
-        ? await db
-            .select({
-              id: users.id,
-              displayName: users.displayName,
-              username: users.username,
-              profileImageUrl: users.profileImageUrl,
-              isActor: users.isActor,
-            })
-            .from(users)
-            .where(inArray(users.id, authorIds))
-        : [];
+      // Get user info for all authors
+      const usersResult = await selectUsersCommentAuthorSlicesByIds(
+        db,
+        authorIds
+      );
 
-    const userMap = new Map(usersResult.map((u) => [u.id, u]));
+      const userMap = new Map(usersResult.map((u) => [u.id, u]));
 
-    // Get like counts for all comments
-    const commentIds = commentsResult.map((c) => c.id);
-    const likeCounts =
-      commentIds.length > 0
-        ? await db
-            .select({
-              commentId: reactions.commentId,
-              count: count(),
-            })
-            .from(reactions)
-            .where(
-              and(
-                inArray(reactions.commentId, commentIds),
-                eq(reactions.type, 'like')
-              )
-            )
-            .groupBy(reactions.commentId)
-        : [];
+      // Get like counts for all comments
+      const commentIds = commentsResult.map((c) => c.id);
+      const likeCounts = await countCommentLikesGroupedByCommentId(
+        db,
+        commentIds
+      );
 
-    const likeCountMap = new Map(
-      likeCounts.map((l) => [l.commentId, Number(l.count)])
-    );
+      const likeCountMap = new Map<string, number>();
+      for (const l of likeCounts) {
+        if (l.commentId) likeCountMap.set(l.commentId, l.count);
+      }
 
-    // Get user's likes if authenticated
-    const userLikes = new Set<string>();
-    if (canonicalUserId && commentIds.length > 0) {
-      const userLikesResult = await db
-        .select({ commentId: reactions.commentId })
-        .from(reactions)
-        .where(
-          and(
-            inArray(reactions.commentId, commentIds),
-            eq(reactions.userId, canonicalUserId),
-            eq(reactions.type, 'like')
-          )
-        );
-      userLikesResult.forEach((l) => {
-        if (l.commentId) userLikes.add(l.commentId);
+      // Get user's likes if authenticated
+      const userLikes = new Set<string>();
+      if (canonicalUserId && commentIds.length > 0) {
+        const likedIds = await selectLikedCommentIdsForUserOnComments(db, {
+          commentIds,
+          userId: canonicalUserId,
+        });
+        likedIds.forEach((id) => userLikes.add(id));
+      }
+
+      // Map comments with user info and like counts
+      const commentsWithData: CommentWithUser[] = commentsResult.map(
+        (comment) => ({
+          id: comment.id,
+          content: comment.content,
+          authorId: comment.authorId,
+          parentCommentId: comment.parentCommentId,
+          createdAt: comment.createdAt,
+          updatedAt: comment.updatedAt,
+          user: userMap.get(comment.authorId) || null,
+          likeCount: likeCountMap.get(comment.id) ?? 0,
+          isLiked: userLikes.has(comment.id),
+        })
+      );
+
+      // Build threaded structure
+      const threadedComments = buildCommentTree(commentsWithData);
+
+      // Get total comment count (including replies)
+      const totalComments = commentsResult.length;
+
+      logger.info(
+        'Comments fetched successfully',
+        { postId, total: totalComments },
+        'GET /api/posts/[id]/comments'
+      );
+
+      const res = successResponse({
+        data: {
+          comments: threadedComments,
+          total: totalComments,
+        },
       });
-    }
-
-    // Map comments with user info and like counts
-    const commentsWithData: CommentWithUser[] = commentsResult.map(
-      (comment) => ({
-        id: comment.id,
-        content: comment.content,
-        authorId: comment.authorId,
-        parentCommentId: comment.parentCommentId,
-        createdAt: comment.createdAt,
-        updatedAt: comment.updatedAt,
-        user: userMap.get(comment.authorId) || null,
-        likeCount: likeCountMap.get(comment.id) ?? 0,
-        isLiked: userLikes.has(comment.id),
-      })
-    );
-
-    // Build threaded structure
-    const threadedComments = buildCommentTree(commentsWithData);
-
-    // Get total comment count (including replies)
-    const totalComments = commentsResult.length;
-
-    logger.info(
-      'Comments fetched successfully',
-      { postId, total: totalComments },
-      'GET /api/posts/[id]/comments'
-    );
-
-    const res = successResponse({
-      data: {
-        comments: threadedComments,
-        total: totalComments,
-      },
+      if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
+      return res;
     });
-    if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
-    return res;
   }
 );
 
@@ -368,164 +353,150 @@ export const POST = withErrorHandling(
     const { user: dbUser } = await ensureUserForAuth(user, { displayName });
     const canonicalUserId = dbUser.id;
 
-    // Check if post exists first
-    const [post] = await db
-      .select()
-      .from(posts)
-      .where(eq(posts.id, postId))
-      .limit(1);
+    return asUser(user, async (db) => {
+      // Check if post exists first
+      const post = await selectPostById(db, postId);
 
-    // If post doesn't exist, try to auto-create it based on format
-    if (!post) {
-      // Try multiple post ID formats
-      // Format 1: gameId-gameTimestamp-authorId-isoTimestamp (e.g., babylon-1761441310151-kash-patrol-2025-10-01T02:12:00Z)
-      // Format 2: post-{timestamp}-{random} (e.g., post-1762099655817-0.7781412938928327)
-      // Format 3: post-{timestamp}-{actorId}-{random} (e.g., post-1762099655817-kash-patrol-abc123)
+      // If post doesn't exist, try to auto-create it based on format
+      if (!post) {
+        // Try multiple post ID formats
+        // Format 1: gameId-gameTimestamp-authorId-isoTimestamp (e.g., babylon-1761441310151-kash-patrol-2025-10-01T02:12:00Z)
+        // Format 2: post-{timestamp}-{random} (e.g., post-1762099655817-0.7781412938928327)
+        // Format 3: post-{timestamp}-{actorId}-{random} (e.g., post-1762099655817-kash-patrol-abc123)
 
-      let gameId = 'babylon'; // default game
-      let authorId = 'system'; // default author for game-generated posts
-      let timestamp = new Date();
+        let gameId = 'babylon'; // default game
+        let authorId = 'system'; // default author for game-generated posts
+        let timestamp = new Date();
 
-      // Check Format 1: Has ISO timestamp at the end
-      const isoTimestampMatch = postId.match(
-        /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z)$/
-      );
-
-      if (isoTimestampMatch && isoTimestampMatch[1]) {
-        // Format 1: gameId-gameTimestamp-authorId-isoTimestamp
-        const timestampStr = isoTimestampMatch[1];
-        timestamp = new Date(timestampStr);
-
-        // Extract gameId (first part before first hyphen)
-        const firstHyphenIndex = postId.indexOf('-');
-        if (firstHyphenIndex !== -1) {
-          gameId = postId.substring(0, firstHyphenIndex);
-
-          // Extract authorId (everything between second hyphen and the ISO timestamp)
-          const withoutGameId = postId.substring(firstHyphenIndex + 1);
-          const secondHyphenIndex = withoutGameId.indexOf('-');
-          if (secondHyphenIndex !== -1) {
-            const afterGameTimestamp = withoutGameId.substring(
-              secondHyphenIndex + 1
-            );
-            authorId = afterGameTimestamp.substring(
-              0,
-              afterGameTimestamp.lastIndexOf('-' + timestampStr)
-            );
-          }
-        }
-      } else if (postId.startsWith('post-')) {
-        // Format 2 or 3: GameEngine format
-        const parts = postId.split('-');
-
-        if (parts.length >= 3 && parts[1]) {
-          // Try to extract timestamp from second part
-          const timestampPart = parts[1];
-          const timestampNum = Number.parseInt(timestampPart, 10);
-
-          if (!isNaN(timestampNum) && timestampNum > 1000000000000) {
-            // Valid timestamp (milliseconds since epoch)
-            timestamp = new Date(timestampNum);
-
-            // Check if third part looks like an actor ID (not a decimal)
-            if (parts.length >= 4 && parts[2] && !parts[2].includes('.')) {
-              // Format 3: post-{timestamp}-{actorId}-{random}
-              authorId = parts[2];
-            }
-            // Otherwise Format 2: post-{timestamp}-{random}
-            // Keep default authorId = 'system'
-          }
-        }
-      } else {
-        // Unknown format, reject
-        throw new BusinessLogicError(
-          'Invalid post ID format',
-          'INVALID_POST_ID_FORMAT'
+        // Check Format 1: Has ISO timestamp at the end
+        const isoTimestampMatch = postId.match(
+          /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z)$/
         );
-      }
 
-      // Ensure post exists (upsert pattern)
-      const [existingPost] = await db
-        .select({ id: posts.id, deletedAt: posts.deletedAt })
-        .from(posts)
-        .where(eq(posts.id, postId))
-        .limit(1);
+        if (isoTimestampMatch && isoTimestampMatch[1]) {
+          // Format 1: gameId-gameTimestamp-authorId-isoTimestamp
+          const timestampStr = isoTimestampMatch[1];
+          timestamp = new Date(timestampStr);
 
-      if (existingPost) {
-        // Check if the existing post is deleted
-        if (existingPost.deletedAt) {
+          // Extract gameId (first part before first hyphen)
+          const firstHyphenIndex = postId.indexOf('-');
+          if (firstHyphenIndex !== -1) {
+            gameId = postId.substring(0, firstHyphenIndex);
+
+            // Extract authorId (everything between second hyphen and the ISO timestamp)
+            const withoutGameId = postId.substring(firstHyphenIndex + 1);
+            const secondHyphenIndex = withoutGameId.indexOf('-');
+            if (secondHyphenIndex !== -1) {
+              const afterGameTimestamp = withoutGameId.substring(
+                secondHyphenIndex + 1
+              );
+              authorId = afterGameTimestamp.substring(
+                0,
+                afterGameTimestamp.lastIndexOf('-' + timestampStr)
+              );
+            }
+          }
+        } else if (postId.startsWith('post-')) {
+          // Format 2 or 3: GameEngine format
+          const parts = postId.split('-');
+
+          if (parts.length >= 3 && parts[1]) {
+            // Try to extract timestamp from second part
+            const timestampPart = parts[1];
+            const timestampNum = Number.parseInt(timestampPart, 10);
+
+            if (!isNaN(timestampNum) && timestampNum > 1000000000000) {
+              // Valid timestamp (milliseconds since epoch)
+              timestamp = new Date(timestampNum);
+
+              // Check if third part looks like an actor ID (not a decimal)
+              if (parts.length >= 4 && parts[2] && !parts[2].includes('.')) {
+                // Format 3: post-{timestamp}-{actorId}-{random}
+                authorId = parts[2];
+              }
+              // Otherwise Format 2: post-{timestamp}-{random}
+              // Keep default authorId = 'system'
+            }
+          }
+        } else {
+          // Unknown format, reject
           throw new BusinessLogicError(
-            'Cannot comment on deleted post',
-            'POST_DELETED'
+            'Invalid post ID format',
+            'INVALID_POST_ID_FORMAT'
           );
         }
-      } else {
-        // Create the post
-        await db.insert(posts).values({
-          id: postId,
-          content: '[Game-generated post]',
-          authorId,
-          gameId,
-          timestamp,
-        });
-      }
-    } else if (post.deletedAt) {
-      // Post exists but is deleted - cannot comment
-      throw new BusinessLogicError(
-        'Cannot comment on deleted post',
-        'POST_DELETED'
-      );
-    }
 
-    // If parentCommentId provided, validate it exists and belongs to this post
-    if (parentCommentId) {
-      const [parentComment] = await db
-        .select({ id: comments.id, postId: comments.postId })
-        .from(comments)
-        .where(eq(comments.id, parentCommentId))
-        .limit(1);
+        // Ensure post exists (upsert pattern)
+        const existingPost = await selectPostIdDeletedAtById(db, postId);
 
-      if (!parentComment) {
-        throw new NotFoundError('Parent comment', parentCommentId);
-      }
-
-      if (parentComment.postId !== postId) {
+        if (existingPost) {
+          // Check if the existing post is deleted
+          if (existingPost.deletedAt) {
+            throw new BusinessLogicError(
+              'Cannot comment on deleted post',
+              'POST_DELETED'
+            );
+          }
+        } else {
+          // Create the post
+          await insertGamePostStubForCommentRoute(db, {
+            id: postId,
+            content: '[Game-generated post]',
+            authorId,
+            gameId,
+            timestamp,
+          });
+        }
+      } else if (post.deletedAt) {
+        // Post exists but is deleted - cannot comment
         throw new BusinessLogicError(
-          'Parent comment does not belong to this post',
-          'PARENT_COMMENT_MISMATCH'
+          'Cannot comment on deleted post',
+          'POST_DELETED'
         );
       }
-    }
 
-    // Get the post to find the authorId for notifications
-    const [postRecord] = await db
-      .select({ id: posts.id, authorId: posts.authorId })
-      .from(posts)
-      .where(eq(posts.id, postId))
-      .limit(1);
-
-    // Check if either user has blocked the other
-    if (postRecord) {
-      const [isBlocked, hasBlockedMe] = await Promise.all([
-        hasBlocked(postRecord.authorId, canonicalUserId),
-        hasBlocked(canonicalUserId, postRecord.authorId),
-      ]);
-
-      if (isBlocked || hasBlockedMe) {
-        throw new BusinessLogicError(
-          'Cannot comment on this post',
-          'BLOCKED_USER'
+      // If parentCommentId provided, validate it exists and belongs to this post
+      if (parentCommentId) {
+        const parentComment = await selectCommentIdAndPostIdById(
+          db,
+          parentCommentId
         );
+
+        if (!parentComment) {
+          throw new NotFoundError('Parent comment', parentCommentId);
+        }
+
+        if (parentComment.postId !== postId) {
+          throw new BusinessLogicError(
+            'Parent comment does not belong to this post',
+            'PARENT_COMMENT_MISMATCH'
+          );
+        }
       }
-    }
 
-    // Create comment
-    const now = new Date();
-    const commentId = await generateSnowflakeId();
+      // Get the post to find the authorId for notifications
+      const postRecord = await selectPostAuthorIdById(db, postId);
 
-    const [newComment] = await db
-      .insert(comments)
-      .values({
+      // Check if either user has blocked the other
+      if (postRecord) {
+        const [isBlocked, hasBlockedMe] = await Promise.all([
+          hasBlocked(postRecord.authorId, canonicalUserId),
+          hasBlocked(canonicalUserId, postRecord.authorId),
+        ]);
+
+        if (isBlocked || hasBlockedMe) {
+          throw new BusinessLogicError(
+            'Cannot comment on this post',
+            'BLOCKED_USER'
+          );
+        }
+      }
+
+      // Create comment
+      const now = new Date();
+      const commentId = await generateSnowflakeId();
+
+      const newComment = await insertCommentReturning(db, {
         id: commentId,
         content: content.trim(),
         postId,
@@ -533,125 +504,118 @@ export const POST = withErrorHandling(
         parentCommentId: parentCommentId || null,
         createdAt: now,
         updatedAt: now,
-      })
-      .returning();
+      });
 
-    if (!newComment) {
-      throw new BusinessLogicError(
-        'Failed to create comment',
-        'COMMENT_CREATION_FAILED'
-      );
-    }
-
-    // Get user info for response
-    const [commentUser] = await db
-      .select({
-        id: users.id,
-        displayName: users.displayName,
-        username: users.username,
-        profileImageUrl: users.profileImageUrl,
-        isActor: users.isActor,
-      })
-      .from(users)
-      .where(eq(users.id, canonicalUserId))
-      .limit(1);
-
-    // Create notifications
-    if (parentCommentId) {
-      // Reply to comment - notify the parent comment author
-      const [parentComment] = await db
-        .select({ authorId: comments.authorId })
-        .from(comments)
-        .where(eq(comments.id, parentCommentId))
-        .limit(1);
-
-      if (parentComment && parentComment.authorId !== canonicalUserId) {
-        await notifyReplyToComment(
-          parentComment.authorId,
-          canonicalUserId,
-          postId,
-          parentCommentId,
-          newComment.id
+      if (!newComment) {
+        throw new BusinessLogicError(
+          'Failed to create comment',
+          'COMMENT_CREATION_FAILED'
         );
       }
-    } else {
-      // Comment on post - notify the post author only if they're a User (not an Actor)
-      if (
-        postRecord &&
-        postRecord.authorId &&
-        postRecord.authorId !== canonicalUserId
-      ) {
-        // Check if the authorId references a User (not an Actor)
-        const [postAuthorUser] = await db
-          .select({ id: users.id })
-          .from(users)
-          .where(eq(users.id, postRecord.authorId))
-          .limit(1);
 
-        if (postAuthorUser) {
-          await notifyCommentOnPost(
-            postRecord.authorId,
+      // Get user info for response
+      const commentUser = await selectUserCommentAuthorSliceById(
+        db,
+        canonicalUserId
+      );
+
+      // Create notifications
+      if (parentCommentId) {
+        // Reply to comment - notify the parent comment author
+        const parentComment = await selectCommentAuthorIdById(
+          db,
+          parentCommentId
+        );
+
+        if (parentComment && parentComment.authorId !== canonicalUserId) {
+          await notifyReplyToComment(
+            parentComment.authorId,
             canonicalUserId,
             postId,
+            parentCommentId,
             newComment.id
           );
         }
+      } else {
+        // Comment on post - notify the post author only if they're a User (not an Actor)
+        if (
+          postRecord &&
+          postRecord.authorId &&
+          postRecord.authorId !== canonicalUserId
+        ) {
+          // Check if the authorId references a User (not an Actor)
+          const postAuthorUser = await selectUserIdExists(
+            db,
+            postRecord.authorId
+          );
+
+          if (postAuthorUser) {
+            await notifyCommentOnPost(
+              postRecord.authorId,
+              canonicalUserId,
+              postId,
+              newComment.id
+            );
+          }
+        }
       }
-    }
 
-    const mentions = content.match(/@(\w+)/g) || [];
-    const usernames = [...new Set(mentions.map((m) => m.substring(1)))];
+      const mentions = content.match(/@(\w+)/g) || [];
+      const usernames = [...new Set(mentions.map((m) => m.substring(1)))];
 
-    const mentionedUsers =
-      usernames.length > 0
-        ? await db
-            .select({ id: users.id, username: users.username })
-            .from(users)
-            .where(inArray(users.username, usernames))
-        : [];
+      const mentionedUsers =
+        usernames.length > 0
+          ? await selectUsersIdUsernameByUsernames(db, usernames)
+          : [];
 
-    await Promise.all(
-      mentionedUsers.map((mentionedUser) =>
-        notifyMention(mentionedUser.id, canonicalUserId, postId, newComment.id)
-      )
-    );
+      await Promise.all(
+        mentionedUsers.map((mentionedUser) =>
+          notifyMention(
+            mentionedUser.id,
+            canonicalUserId,
+            postId,
+            newComment.id
+          )
+        )
+      );
 
-    logger.info(
-      'Sent mention notifications from comment',
-      {
-        postId,
-        commentId: newComment.id,
-        mentionCount: mentionedUsers.length,
-        mentionedUsernames: mentionedUsers.map((u) => u.username),
-      },
-      'POST /api/posts/[id]/comments'
-    );
+      logger.info(
+        'Sent mention notifications from comment',
+        {
+          postId,
+          commentId: newComment.id,
+          mentionCount: mentionedUsers.length,
+          mentionedUsernames: mentionedUsers.map((u) => u.username),
+        },
+        'POST /api/posts/[id]/comments'
+      );
 
-    logger.info(
-      'Comment created successfully',
-      {
-        postId,
-        userId: canonicalUserId,
-        commentId: newComment.id,
-        parentCommentId,
-      },
-      'POST /api/posts/[id]/comments'
-    );
+      logger.info(
+        'Comment created successfully',
+        {
+          postId,
+          userId: canonicalUserId,
+          commentId: newComment.id,
+          parentCommentId,
+        },
+        'POST /api/posts/[id]/comments'
+      );
 
-    return successResponse(
-      {
-        id: newComment.id,
-        content: newComment.content,
-        postId: newComment.postId,
-        authorId: newComment.authorId,
-        parentCommentId: newComment.parentCommentId,
-        createdAt: newComment.createdAt,
-        updatedAt: newComment.updatedAt,
-        author: commentUser,
-        likeCount: 0,
-        replyCount: 0,
-      },
-      201
-    );
+      return successResponse(
+        {
+          id: newComment.id,
+          content: newComment.content,
+          postId: newComment.postId,
+          authorId: newComment.authorId,
+          parentCommentId: newComment.parentCommentId,
+          createdAt: newComment.createdAt,
+          updatedAt: newComment.updatedAt,
+          author: commentUser,
+          likeCount: 0,
+          replyCount: 0,
+        },
+        201
+      );
+    });
   }
 );

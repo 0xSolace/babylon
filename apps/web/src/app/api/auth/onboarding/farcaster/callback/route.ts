@@ -68,7 +68,7 @@
  */
 
 import { withErrorHandling } from '@babylon/api';
-import { db } from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
@@ -155,12 +155,16 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   }
 
   // Check for duplicate Farcaster account
-  const existingUser = await db.user.findFirst({
-    where: {
-      farcasterFid: fid.toString(),
-      id: { not: userId },
-    },
-  });
+  const existingUser = await asSystem(
+    async (db) =>
+      db.user.findFirst({
+        where: {
+          farcasterFid: fid.toString(),
+          id: { not: userId },
+        },
+      }),
+    'onboarding-farcaster-dedupe'
+  );
 
   if (existingUser) {
     logger.warn(

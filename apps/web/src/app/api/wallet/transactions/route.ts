@@ -22,15 +22,12 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { desc, eq, or } from '@babylon/db';
 import {
-  db,
-  nftClaims,
-  nftCollection,
-  nftOwnership,
-  walletTransferLog,
-} from '@babylon/db/runtime';
-
+  selectNftMintHistoryRowsForClaimerOrderClaimedDescLimit,
+  selectNftOwnershipHistoryRowsForOwnerOrderAcquiredDescLimit,
+  selectWalletTransferLogsForAddressOrderCreatedDescLimit,
+} from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import {
   CHAIN_ID,
   getTokenListForChain,
@@ -91,22 +88,37 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     getTokenListForChain(CHAIN_ID).map((t) => [t.address.toLowerCase(), t])
   );
 
-  // Collect transactions from available sources
+  const { transferRecords, mintRecords, ownershipRecords } = await asUser(
+    user.id,
+    async (tx) => {
+      const [transferRows, mintRows, ownershipRows] = await Promise.all([
+        selectWalletTransferLogsForAddressOrderCreatedDescLimit(
+          tx,
+          walletAddress,
+          MAX_RECORDS_PER_SOURCE
+        ),
+        selectNftMintHistoryRowsForClaimerOrderClaimedDescLimit(
+          tx,
+          walletAddress,
+          MAX_RECORDS_PER_SOURCE
+        ),
+        selectNftOwnershipHistoryRowsForOwnerOrderAcquiredDescLimit(
+          tx,
+          walletAddress,
+          MAX_RECORDS_PER_SOURCE
+        ),
+      ]);
+
+      return {
+        transferRecords: transferRows,
+        mintRecords: mintRows,
+        ownershipRecords: ownershipRows,
+      };
+    }
+  );
+
   const transactions: TransactionRecord[] = [];
   const seenTxHashes = new Set<string>();
-
-  // Source 0: Internal transfer log (token/ETH/NFT transfers made through Babylon)
-  const transferRecords = await db
-    .select()
-    .from(walletTransferLog)
-    .where(
-      or(
-        eq(walletTransferLog.fromAddress, walletAddress),
-        eq(walletTransferLog.toAddress, walletAddress)
-      )
-    )
-    .orderBy(desc(walletTransferLog.createdAt))
-    .limit(MAX_RECORDS_PER_SOURCE);
 
   for (const record of transferRecords) {
     const isSend = record.fromAddress === walletAddress;
@@ -142,22 +154,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     if (record.txHash) seenTxHashes.add(record.txHash);
   }
 
-  // Source 1: NFT mints (from nftClaims where this address was the claimer)
-  const mintRecords = await db
-    .select({
-      tokenId: nftClaims.tokenId,
-      claimerAddress: nftClaims.claimerAddress,
-      claimedAt: nftClaims.claimedAt,
-      txHash: nftClaims.txHash,
-      nftName: nftCollection.name,
-      nftImageUrl: nftCollection.imageUrl,
-    })
-    .from(nftClaims)
-    .leftJoin(nftCollection, eq(nftClaims.tokenId, nftCollection.tokenId))
-    .where(eq(nftClaims.claimerAddress, walletAddress))
-    .orderBy(desc(nftClaims.claimedAt))
-    .limit(MAX_RECORDS_PER_SOURCE);
-
   for (const mint of mintRecords) {
     if (seenTxHashes.has(mint.txHash)) continue;
     seenTxHashes.add(mint.txHash);
@@ -178,22 +174,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       explorerUrl: getTxExplorerUrl(mint.txHash),
     });
   }
-
-  // Source 2: NFT ownership records (transfers received) with tx hashes
-  const ownershipRecords = await db
-    .select({
-      tokenId: nftOwnership.tokenId,
-      ownerAddress: nftOwnership.ownerAddress,
-      acquiredAt: nftOwnership.acquiredAt,
-      txHash: nftOwnership.txHash,
-      nftName: nftCollection.name,
-      nftImageUrl: nftCollection.imageUrl,
-    })
-    .from(nftOwnership)
-    .leftJoin(nftCollection, eq(nftOwnership.tokenId, nftCollection.tokenId))
-    .where(eq(nftOwnership.ownerAddress, walletAddress))
-    .orderBy(desc(nftOwnership.acquiredAt))
-    .limit(MAX_RECORDS_PER_SOURCE);
 
   for (const record of ownershipRecords) {
     if (record.txHash && !seenTxHashes.has(record.txHash)) {

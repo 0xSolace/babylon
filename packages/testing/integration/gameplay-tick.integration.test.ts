@@ -11,7 +11,7 @@
  */
 
 import { afterAll, beforeAll, describe, expect, mock, test } from 'bun:test';
-import { asSystem, db } from '@babylon/db/runtime';
+import { asSystem, db } from '@babylon/db/engine-storage';
 
 import type { MockJSONSchema } from '../types/test-types';
 

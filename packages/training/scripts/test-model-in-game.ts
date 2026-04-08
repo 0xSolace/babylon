@@ -24,9 +24,9 @@
  * By default, Ollama is auto-started if not running. Use --no-ollama to skip.
  */
 
-import { desc, eq } from '@babylon/db';
-import { db, trainedModels } from '@babylon/db/runtime';
+import { db, trainedModels } from '@babylon/db/engine-storage';
 import { type Subprocess, spawn } from 'bun';
+import { desc, eq } from 'drizzle-orm';
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { parseArgs } from 'util';

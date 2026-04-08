@@ -4,8 +4,15 @@
  * Helper functions for creating notifications when users interact
  */
 
-import { and, desc, eq, gt, hasBlocked } from '@babylon/db';
-import { db, notifications, users } from '@babylon/db/runtime';
+import {
+  hasBlocked,
+  insertNotificationRow,
+  insertNotificationRowOnDedupeKey,
+  selectNotificationRecipientEmailPrefs,
+  selectRecentDuplicateNotificationId,
+  selectUserDisplayForNotification,
+} from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import {
   generateSnowflakeId,
   logger,
@@ -59,6 +66,13 @@ interface CreateNotificationParams {
  * This prevents duplicate notifications from being created within this time window
  */
 const DEDUP_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
+
+async function fetchUserDisplayForNotification(userId: string) {
+  return asSystem(
+    (c) => selectUserDisplayForNotification(c, userId),
+    'notification-user-display'
+  );
+}
 
 function getEmailNotificationCategory(
   notificationType: NotificationType
@@ -139,32 +153,23 @@ async function isDuplicateNotification(
     return false;
   }
 
+  const actorId = params.actorId;
   const cutoffTime = new Date(Date.now() - DEDUP_WINDOW_MS);
 
-  // Build conditions for duplicate check
-  const conditions = [
-    eq(notifications.userId, params.userId),
-    eq(notifications.type, params.type),
-    eq(notifications.actorId, params.actorId),
-    gt(notifications.createdAt, cutoffTime),
-  ];
+  const existingId = await asSystem(
+    (c) =>
+      selectRecentDuplicateNotificationId(c, {
+        userId: params.userId,
+        type: params.type,
+        actorId,
+        cutoffTime,
+        postId: params.postId,
+        commentId: params.commentId,
+      }),
+    'notification-dedupe-check'
+  );
 
-  // For post/comment-related notifications, also check the specific content
-  if (params.postId) {
-    conditions.push(eq(notifications.postId, params.postId));
-  }
-  if (params.commentId) {
-    conditions.push(eq(notifications.commentId, params.commentId));
-  }
-
-  const [existingNotification] = await db
-    .select({ id: notifications.id })
-    .from(notifications)
-    .where(and(...conditions))
-    .orderBy(desc(notifications.createdAt))
-    .limit(1);
-
-  return !!existingNotification;
+  return !!existingId;
 }
 
 /**
@@ -175,22 +180,11 @@ export async function createNotification(
 ): Promise<{ created: boolean; id?: string }> {
   // Verify that the userId exists in the User table before creating notification
   // This prevents foreign key constraint errors
-  const userExists = await db
-    .select({
-      id: users.id,
-      email: users.email,
-      emailVerified: users.emailVerified,
-      emailNotificationsEnabled: users.emailNotificationsEnabled,
-      emailNotificationsRealtime: users.emailNotificationsRealtime,
-      emailNotificationsDailySummary: users.emailNotificationsDailySummary,
-      emailNotificationsWeeklySummary: users.emailNotificationsWeeklySummary,
-      emailNotificationsMonthlySummary: users.emailNotificationsMonthlySummary,
-    })
-    .from(users)
-    .where(eq(users.id, params.userId))
-    .limit(1);
+  const recipient = await asSystem(
+    (c) => selectNotificationRecipientEmailPrefs(c, params.userId),
+    'notification-recipient-lookup'
+  );
 
-  const recipient = userExists[0];
   if (!recipient) {
     logger.warn(
       `Skipping notification creation: userId ${params.userId} does not exist in User table (may be an Actor)`,
@@ -248,13 +242,12 @@ export async function createNotification(
   };
 
   if (params.dedupeKey) {
-    const inserted = await db
-      .insert(notifications)
-      .values(values)
-      .onConflictDoNothing({ target: notifications.dedupeKey })
-      .returning({ id: notifications.id });
+    const insertedId = await asSystem(
+      (c) => insertNotificationRowOnDedupeKey(c, values),
+      'notification-insert-dedupe'
+    );
 
-    if (inserted.length === 0) {
+    if (!insertedId) {
       logger.debug(
         'Skipping duplicate notification via dedupe key',
         {
@@ -267,7 +260,10 @@ export async function createNotification(
       return { created: false };
     }
   } else {
-    await db.insert(notifications).values(values);
+    await asSystem(
+      (c) => insertNotificationRow(c, values),
+      'notification-insert'
+    );
   }
 
   await invalidateCachePattern(`notifications:${params.userId}:*`, {
@@ -309,17 +305,7 @@ export async function notifyCommentOnPost(
     return;
   }
 
-  // Get comment author info for message
-  const result = await db
-    .select({
-      displayName: users.displayName,
-      username: users.username,
-    })
-    .from(users)
-    .where(eq(users.id, commentAuthorId))
-    .limit(1);
-
-  const commentAuthor = result[0];
+  const commentAuthor = await fetchUserDisplayForNotification(commentAuthorId);
   const authorName =
     commentAuthor?.displayName || commentAuthor?.username || 'Someone';
   const message = `${authorName} commented on your post`;
@@ -349,16 +335,7 @@ export async function notifyReactionOnPost(
     return;
   }
 
-  const result = await db
-    .select({
-      displayName: users.displayName,
-      username: users.username,
-    })
-    .from(users)
-    .where(eq(users.id, reactionUserId))
-    .limit(1);
-
-  const reactionUser = result[0];
+  const reactionUser = await fetchUserDisplayForNotification(reactionUserId);
   const userName =
     reactionUser?.displayName || reactionUser?.username || 'Someone';
   const action = reactionType === 'like' ? 'liked' : reactionType;
@@ -386,16 +363,7 @@ export async function notifyFollow(
     return;
   }
 
-  const result = await db
-    .select({
-      displayName: users.displayName,
-      username: users.username,
-    })
-    .from(users)
-    .where(eq(users.id, followerId))
-    .limit(1);
-
-  const follower = result[0];
+  const follower = await fetchUserDisplayForNotification(followerId);
   const userName = follower?.displayName || follower?.username || 'Someone';
   const message = `${userName} started following you`;
 
@@ -430,16 +398,7 @@ export async function notifyReplyToComment(
     postId,
   };
 
-  const result = await db
-    .select({
-      displayName: users.displayName,
-      username: users.username,
-    })
-    .from(users)
-    .where(eq(users.id, replyAuthorId))
-    .limit(1);
-
-  const replyAuthor = result[0];
+  const replyAuthor = await fetchUserDisplayForNotification(replyAuthorId);
   const userName =
     replyAuthor?.displayName || replyAuthor?.username || 'Someone';
   const message = `${userName} replied to your comment`;
@@ -469,16 +428,7 @@ export async function notifyShare(
     return;
   }
 
-  const result = await db
-    .select({
-      displayName: users.displayName,
-      username: users.username,
-    })
-    .from(users)
-    .where(eq(users.id, sharerId))
-    .limit(1);
-
-  const sharer = result[0];
+  const sharer = await fetchUserDisplayForNotification(sharerId);
   const userName = sharer?.displayName || sharer?.username || 'Someone';
   const message = `${userName} shared your post`;
 
@@ -506,16 +456,7 @@ export async function notifyMention(
     return;
   }
 
-  const result = await db
-    .select({
-      displayName: users.displayName,
-      username: users.username,
-    })
-    .from(users)
-    .where(eq(users.id, mentionerUserId))
-    .limit(1);
-
-  const mentioner = result[0];
+  const mentioner = await fetchUserDisplayForNotification(mentionerUserId);
   const mentionerName =
     mentioner?.displayName || mentioner?.username || 'Someone';
   const message = commentId
@@ -580,16 +521,7 @@ export async function notifyReactionOnComment(
     return;
   }
 
-  const result = await db
-    .select({
-      displayName: users.displayName,
-      username: users.username,
-    })
-    .from(users)
-    .where(eq(users.id, reactionUserId))
-    .limit(1);
-
-  const reactionUser = result[0];
+  const reactionUser = await fetchUserDisplayForNotification(reactionUserId);
   const userName =
     reactionUser?.displayName || reactionUser?.username || 'Someone';
   const action = reactionType === 'like' ? 'liked' : reactionType;
@@ -622,30 +554,25 @@ export async function notifyGroupChatInvite(
     return;
   }
 
-  const result = await db
-    .select({
-      displayName: users.displayName,
-      username: users.username,
-    })
-    .from(users)
-    .where(eq(users.id, inviterId))
-    .limit(1);
-
-  const inviter = result[0];
+  const inviter = await fetchUserDisplayForNotification(inviterId);
   const inviterName = inviter?.displayName || inviter?.username || 'Someone';
   const message = `${inviterName} invited you to "${chatName}"`;
 
-  // Create notification with groupId and inviteId for proper linking
-  await db.insert(notifications).values({
-    id: await generateSnowflakeId(),
-    userId,
-    type: 'group_invite',
-    actorId: inviterId,
-    title: 'Group Chat Invite',
-    message,
-    groupId: groupId ?? undefined,
-    inviteId,
-  });
+  const id = await generateSnowflakeId();
+  await asSystem(
+    (c) =>
+      insertNotificationRow(c, {
+        id,
+        userId,
+        type: 'group_invite',
+        actorId: inviterId,
+        title: 'Group Chat Invite',
+        message,
+        groupId: groupId ?? undefined,
+        inviteId,
+      }),
+    'notification-group-chat-invite-insert'
+  );
 }
 
 /**
@@ -670,16 +597,7 @@ export async function notifyUserGroupInvite(
 
   let finalInviterName = inviterName;
   if (!finalInviterName) {
-    const result = await db
-      .select({
-        displayName: users.displayName,
-        username: users.username,
-      })
-      .from(users)
-      .where(eq(users.id, inviterId))
-      .limit(1);
-
-    const inviter = result[0];
+    const inviter = await fetchUserDisplayForNotification(inviterId);
     finalInviterName = inviter?.displayName || inviter?.username || 'Someone';
   }
 
@@ -721,16 +639,7 @@ export async function notifyGroupMemberAdded(
   // Use provided adderName or fetch it (for backwards compatibility)
   let resolvedAdderName = adderName;
   if (!resolvedAdderName) {
-    const result = await db
-      .select({
-        displayName: users.displayName,
-        username: users.username,
-      })
-      .from(users)
-      .where(eq(users.id, addedById))
-      .limit(1);
-
-    const adder = result[0];
+    const adder = await fetchUserDisplayForNotification(addedById);
     resolvedAdderName = adder?.displayName || adder?.username || 'Someone';
   }
 
@@ -762,16 +671,7 @@ export async function notifyDMMessage(
     return;
   }
 
-  const result = await db
-    .select({
-      displayName: users.displayName,
-      username: users.username,
-    })
-    .from(users)
-    .where(eq(users.id, senderUserId))
-    .limit(1);
-
-  const sender = result[0];
+  const sender = await fetchUserDisplayForNotification(senderUserId);
   const senderName = sender?.displayName || sender?.username || 'Someone';
 
   // Truncate message preview to 50 characters
@@ -802,16 +702,7 @@ export async function notifyGroupChatMessage(
   chatName: string,
   messagePreview: string
 ): Promise<void> {
-  const result = await db
-    .select({
-      displayName: users.displayName,
-      username: users.username,
-    })
-    .from(users)
-    .where(eq(users.id, senderUserId))
-    .limit(1);
-
-  const sender = result[0];
+  const sender = await fetchUserDisplayForNotification(senderUserId);
   const senderName = sender?.displayName || sender?.username || 'Someone';
 
   // Truncate message preview to 50 characters

@@ -5,13 +5,13 @@
  * This is the proper way to generate training data at scale.
  */
 
-import { eq } from '@babylon/db';
 import { closeDatabase, db, users } from '@babylon/db/runtime';
 import {
   ArchetypeConfigService,
   createParallelGenerator,
   type ParallelGenerationConfig,
 } from '@babylon/training';
+import { eq } from 'drizzle-orm';
 import { getFlag, getOption, parseArgs, wantsHelp } from '../lib/args.js';
 import { logger } from '../lib/logger.js';
 

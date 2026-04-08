@@ -7,8 +7,8 @@
  * Run with: bun run tests/manual/test-worldevent-validation.ts
  */
 
-import { generateSnowflakeId } from '@babylon/db';
-import { db, getDbInstance } from '@babylon/db/runtime';
+import { createWorldEventRowAsSystem, generateSnowflakeId } from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 
 async function testWorldEventValidation() {
   console.log('🧪 Testing WorldEvent INT4 Validation\n');
@@ -16,7 +16,7 @@ async function testWorldEventValidation() {
   try {
     // Test 1: Valid values should work
     console.log('Test 1: Creating event with valid INT4 values...');
-    const validEvent = await getDbInstance().createEvent({
+    const validEvent = await createWorldEventRowAsSystem({
       id: await generateSnowflakeId(),
       eventType: 'announcement',
       description: 'Test event with valid values',
@@ -41,7 +41,7 @@ async function testWorldEventValidation() {
     console.log('  Would overflow?', bigNumber > 2147483647);
 
     try {
-      const invalidEvent = await getDbInstance().createEvent({
+      const invalidEvent = await createWorldEventRowAsSystem({
         id: await generateSnowflakeId(),
         eventType: 'announcement',
         description: 'Test event with invalid relatedQuestion',
@@ -78,7 +78,7 @@ async function testWorldEventValidation() {
       '\nTest 3: Attempting to create event with overflow dayNumber...'
     );
     try {
-      const invalidDayEvent = await getDbInstance().createEvent({
+      const invalidDayEvent = await createWorldEventRowAsSystem({
         id: await generateSnowflakeId(),
         eventType: 'announcement',
         description: 'Test event with invalid dayNumber',
@@ -109,7 +109,7 @@ async function testWorldEventValidation() {
 
     // Test 4: Edge case - exactly INT4 max
     console.log('\nTest 4: Creating event with INT4 maximum value...');
-    const maxInt4Event = await getDbInstance().createEvent({
+    const maxInt4Event = await createWorldEventRowAsSystem({
       id: await generateSnowflakeId(),
       eventType: 'announcement',
       description: 'Test event with INT4 max',

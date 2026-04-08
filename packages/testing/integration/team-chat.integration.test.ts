@@ -12,7 +12,7 @@
 
 import { afterAll, describe, expect, test } from 'bun:test';
 import { teamChatService } from '@babylon/agents';
-import { eq, generateSnowflakeId } from '@babylon/db';
+import { generateSnowflakeId } from '@babylon/db';
 import {
   chatParticipants,
   chats,
@@ -22,7 +22,8 @@ import {
   messages,
   userAgentConfigs,
   users,
-} from '@babylon/db/runtime';
+} from '@babylon/db/engine-storage';
+import { eq } from 'drizzle-orm';
 
 // Test data cleanup tracking
 const testCleanup: {

@@ -84,8 +84,8 @@ import {
 } from '@babylon/a2a';
 import { getAgentConfig, RateLimiter } from '@babylon/agents';
 import { withErrorHandling } from '@babylon/api';
-import { eq } from '@babylon/db';
-import { db, users } from '@babylon/db/runtime';
+import { selectUserRowByIdInTx } from '@babylon/db';
+import { asPublic } from '@babylon/db/engine-storage';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -187,11 +187,9 @@ async function getAgentJsonRpcHandler(
       const eventBusManager = new DefaultExecutionEventBusManager();
 
       // Get agent data for card generation
-      const [agentUser] = await db
-        .select()
-        .from(users)
-        .where(eq(users.id, agentId))
-        .limit(1);
+      const agentUser = await asPublic((tx) =>
+        selectUserRowByIdInTx(tx, agentId)
+      );
       const agentConfig = await getAgentConfig(agentId);
 
       if (!agentUser) {
@@ -232,11 +230,7 @@ export const POST = withErrorHandling(async function POST(
   const { agentId } = await params;
 
   // Verify agent exists and has A2A enabled
-  const [agent] = await db
-    .select()
-    .from(users)
-    .where(eq(users.id, agentId))
-    .limit(1);
+  const agent = await asPublic((tx) => selectUserRowByIdInTx(tx, agentId));
   const agentConfig = await getAgentConfig(agentId);
 
   if (!agent || !agent.isAgent) {
@@ -644,11 +638,7 @@ export const GET = withErrorHandling(async function GET(
   const { agentId } = await params;
 
   // Verify agent exists and has A2A enabled
-  const [agent] = await db
-    .select()
-    .from(users)
-    .where(eq(users.id, agentId))
-    .limit(1);
+  const agent = await asPublic((tx) => selectUserRowByIdInTx(tx, agentId));
   const config = await getAgentConfig(agentId);
 
   if (!agent || !agent.isAgent) {

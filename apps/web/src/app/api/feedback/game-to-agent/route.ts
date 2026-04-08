@@ -70,7 +70,7 @@ import {
 } from '@babylon/api';
 import type { JsonValue } from '@babylon/db';
 
-import { db } from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 import { updateFeedbackMetrics, updateGameMetrics } from '@babylon/engine';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
@@ -95,18 +95,53 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
   const agent = await requireUserByIdentifier(body.agentId);
 
-  // Check if feedback already exists for this game
-  const existingFeedback = await db.feedback.findFirst({
-    where: {
-      toUserId: agent.id,
-      gameId: body.gameId,
-      interactionType: 'game_to_agent',
-    },
-  });
+  const outcome = await asSystem(async (db) => {
+    const duplicate = await db.feedback.findFirst({
+      where: {
+        toUserId: agent.id,
+        gameId: body.gameId,
+        interactionType: 'game_to_agent',
+      },
+    });
 
-  if (existingFeedback) {
+    if (duplicate) {
+      return { kind: 'duplicate' as const, duplicate };
+    }
+
+    const now = new Date();
+    const created = await db.feedback.create({
+      data: {
+        id: await generateSnowflakeId(),
+        toUserId: agent.id,
+        score: body.score,
+        comment: body.comment,
+        gameId: body.gameId,
+        interactionType: 'game_to_agent',
+        metadata: body.metadata as JsonValue | undefined,
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
+
+    const metrics = await db.agentPerformanceMetrics.findUnique({
+      where: { userId: agent.id },
+      select: {
+        reputationScore: true,
+        trustLevel: true,
+        confidenceScore: true,
+        gamesPlayed: true,
+        gamesWon: true,
+        averageGameScore: true,
+        averageFeedbackScore: true,
+      },
+    });
+
+    return { kind: 'created' as const, feedback: created, metrics };
+  }, 'feedback-game-to-agent');
+
+  if (outcome.kind === 'duplicate') {
     logger.warn('Feedback already exists for this game', {
-      feedbackId: existingFeedback.id,
+      feedbackId: outcome.duplicate.id,
       agentId: agent.id,
       gameId: body.gameId,
     });
@@ -114,26 +149,13 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       {
         success: false,
         error: 'Feedback already exists for this game',
-        feedbackId: existingFeedback.id,
+        feedbackId: outcome.duplicate.id,
       },
       { status: 409 }
     );
   }
 
-  const now = new Date();
-  const feedback = await db.feedback.create({
-    data: {
-      id: await generateSnowflakeId(),
-      toUserId: agent.id,
-      score: body.score,
-      comment: body.comment,
-      gameId: body.gameId,
-      interactionType: 'game_to_agent',
-      metadata: body.metadata as JsonValue | undefined,
-      createdAt: now,
-      updatedAt: now,
-    },
-  });
+  const { feedback, metrics } = outcome;
 
   logger.info('Game feedback created', {
     feedbackId: feedback.id,
@@ -157,19 +179,6 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       gameId: body.gameId,
       error,
     });
-  });
-
-  const metrics = await db.agentPerformanceMetrics.findUnique({
-    where: { userId: agent.id },
-    select: {
-      reputationScore: true,
-      trustLevel: true,
-      confidenceScore: true,
-      gamesPlayed: true,
-      gamesWon: true,
-      averageGameScore: true,
-      averageFeedbackScore: true,
-    },
   });
 
   return NextResponse.json(

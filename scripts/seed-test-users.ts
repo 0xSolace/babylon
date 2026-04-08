@@ -11,7 +11,7 @@
  */
 
 import { generateSnowflakeId } from '@babylon/db';
-import { closeDatabase, db } from '@babylon/db/runtime';
+import { closeDatabase, db } from '@babylon/db/engine-storage';
 
 const TEST_USERS = [
   {

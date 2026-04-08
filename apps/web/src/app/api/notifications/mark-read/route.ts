@@ -53,8 +53,12 @@
  */
 
 import { authenticate, successResponse, withErrorHandling } from '@babylon/api';
-import { and, eq, inArray } from '@babylon/db';
-import { db, notifications } from '@babylon/db/runtime';
+import {
+  markAllUnreadNotificationsReadForUser,
+  markNotificationsReadByIdsForUser,
+  markUnreadNotificationsReadByTypeForUser,
+} from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
@@ -76,15 +80,9 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
   if (markAll) {
     // Mark all notifications as read
-    await db
-      .update(notifications)
-      .set({ read: true })
-      .where(
-        and(
-          eq(notifications.userId, user.userId),
-          eq(notifications.read, false)
-        )
-      );
+    await asUser(user, async (db) =>
+      markAllUnreadNotificationsReadForUser(db, user.userId)
+    );
 
     return successResponse({
       data: {
@@ -95,16 +93,9 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
   if (type) {
     // Mark all notifications of a specific type as read
-    await db
-      .update(notifications)
-      .set({ read: true })
-      .where(
-        and(
-          eq(notifications.userId, user.userId),
-          eq(notifications.type, type),
-          eq(notifications.read, false)
-        )
-      );
+    await asUser(user, async (db) =>
+      markUnreadNotificationsReadByTypeForUser(db, user.userId, type)
+    );
 
     return successResponse({
       data: {
@@ -115,15 +106,9 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
   if (notificationIds && notificationIds.length > 0) {
     // Mark specific notifications as read
-    await db
-      .update(notifications)
-      .set({ read: true })
-      .where(
-        and(
-          inArray(notifications.id, notificationIds),
-          eq(notifications.userId, user.userId) // Ensure user owns these notifications
-        )
-      );
+    await asUser(user, async (db) =>
+      markNotificationsReadByIdsForUser(db, user.userId, notificationIds)
+    );
 
     return successResponse({
       data: {

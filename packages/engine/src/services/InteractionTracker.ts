@@ -5,11 +5,10 @@
  * Simple text-based system - just records what happened.
  */
 
-import type { InputJsonValue } from '@babylon/db';
-import { db, npcInteractions } from '@babylon/db/runtime';
+import { type InputJsonValue, insertNpcInteractionRow } from '@babylon/db';
 
 import type { Actor } from '@babylon/shared';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+import { logger } from '@babylon/shared';
 
 export class InteractionTracker {
   /**
@@ -31,8 +30,7 @@ export class InteractionTracker {
     const id1 = sorted[0]!;
     const id2 = sorted[1]!;
 
-    await db.insert(npcInteractions).values({
-      id: await generateSnowflakeId(),
+    await insertNpcInteractionRow({
       actor1Id: id1,
       actor2Id: id2,
       interactionType: 'mention',
@@ -42,6 +40,7 @@ export class InteractionTracker {
         postContent: postContent.substring(0, 200),
       } as InputJsonValue,
       timestamp: new Date(),
+      traceLabel: 'interaction-tracker-post-mention',
     });
 
     logger.debug(
@@ -70,8 +69,7 @@ export class InteractionTracker {
     const id1 = sorted[0]!;
     const id2 = sorted[1]!;
 
-    await db.insert(npcInteractions).values({
-      id: await generateSnowflakeId(),
+    await insertNpcInteractionRow({
       actor1Id: id1,
       actor2Id: id2,
       interactionType: 'reply',
@@ -81,6 +79,7 @@ export class InteractionTracker {
         replyContent: replyContent.substring(0, 200),
       } as InputJsonValue,
       timestamp: new Date(),
+      traceLabel: 'interaction-tracker-reply',
     });
 
     logger.debug(
@@ -112,8 +111,7 @@ export class InteractionTracker {
         if (actor1 === actor2) continue;
         const [id1, id2] = [actor1, actor2].sort();
 
-        await db.insert(npcInteractions).values({
-          id: await generateSnowflakeId(),
+        await insertNpcInteractionRow({
           actor1Id: id1!,
           actor2Id: id2!,
           interactionType: 'article',
@@ -121,6 +119,7 @@ export class InteractionTracker {
           context: `both mentioned in article: "${articleTitle}"`,
           metadata: { articleTitle } as InputJsonValue,
           timestamp: new Date(),
+          traceLabel: 'interaction-tracker-article-mention',
         });
       }
     }
@@ -160,8 +159,7 @@ export class InteractionTracker {
         if (actor1 === actor2) continue;
         const [id1, id2] = [actor1, actor2].sort();
 
-        await db.insert(npcInteractions).values({
-          id: await generateSnowflakeId(),
+        await insertNpcInteractionRow({
           actor1Id: id1!,
           actor2Id: id2!,
           interactionType: 'event',
@@ -172,6 +170,7 @@ export class InteractionTracker {
             outcome: eventOutcome,
           } as InputJsonValue,
           timestamp: new Date(),
+          traceLabel: 'interaction-tracker-event-involvement',
         });
       }
     }

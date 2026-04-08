@@ -6,11 +6,14 @@
 ## Quality Gate (run before every commit)
 
 ```bash
-bun run check          # Biome format + lint (auto-fix)
-bun run typecheck      # TypeScript across all packages
-bun run lint           # Turbo lint (zero warnings required)
-bun run test:unit      # Unit tests
+bun run check               # Biome format + lint (auto-fix)
+bun run typecheck           # TypeScript across all packages
+bun run lint                # Turbo lint (zero warnings required)
+bun run enforce:db-boundary # Runtime only on exempt prefixes; drizzle-orm only under packages/db/src and packages/db/drizzle (else exempt prefixes)
+bun run test:unit           # Unit tests
 ```
+
+`bun run validate:all` runs typecheck, lint, and the DB boundary check together.
 
 Run integration tests when your changes touch DB/API:
 ```bash
@@ -38,6 +41,8 @@ bun run build
 |---|---|
 | Domain rules / game logic | `packages/engine`, `packages/agents` |
 | Infra adapters (db/redis/http/sse/auth) | `packages/api`, `packages/db`, `packages/shared` |
+| **Drizzle `db`, table values, and query construction** | **`packages/db` only** — consumers use named exports from `@babylon/db` and services in `@babylon/api`. For the process-wide client + tables + RLS helpers, other packages use `@babylon/db/engine-storage` (not `@babylon/db/runtime`, which is limited to exempt prefixes — e.g. `apps/cli/`, `scripts/`). `bun run enforce:db-boundary` blocks `@babylon/db/runtime` elsewhere and direct `drizzle-orm` imports outside `packages/db/src` and `packages/db/drizzle/**` (and outside exempt prefixes such as `scripts/`, `packages/testing/`). |
+| SQL builders (`eq`, `and`, `sql`, …) in app/package code | Prefer `@babylon/db` re-exports; **build predicates only inside `packages/db`** query modules alongside the query (not in routes). |
 | UI and route wiring | `apps/web` |
 | Tests | `packages/testing` |
 | Vendor docs | `docs/vendors/{vendor}` |
@@ -82,6 +87,7 @@ bun run build
 | Format + lint fix | `bun run check` |
 | Typecheck | `bun run typecheck` |
 | Lint | `bun run lint` |
+| DB boundary | `bun run enforce:db-boundary` |
 | Build | `bun run build` |
 | Unit tests | `bun run test:unit` |
 | Integration tests | `bun run test:integration` |

@@ -99,7 +99,7 @@ import {
 } from '@babylon/api';
 import { Decimal } from '@babylon/db';
 
-import { db } from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 
 import { StaticDataRegistry } from '@babylon/engine';
 import { generateSnowflakeId, logger } from '@babylon/shared';
@@ -130,37 +130,104 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     'GET /api/admin/trades'
   );
 
-  // Get recent balance transactions (deposits, withdrawals, trades)
-  const balanceTransactions = await db.balanceTransaction.findMany({
-    take: params.limit,
-    skip: params.offset,
-    orderBy: { createdAt: 'desc' },
-    where: params.type === 'balance' ? {} : undefined,
-  });
+  const {
+    balanceTransactions,
+    balanceUsers,
+    npcTrades,
+    positions,
+    positionUsers,
+    markets,
+    balanceCount,
+    npcCount,
+    positionCount,
+  } = await asSystem(async (tx) => {
+    const balanceTransactions = await tx.balanceTransaction.findMany({
+      take: params.limit,
+      skip: params.offset,
+      orderBy: { createdAt: 'desc' },
+      where: params.type === 'balance' ? {} : undefined,
+    });
 
-  // Fetch users for balance transactions
-  const balanceUserIds = [
-    ...new Set(balanceTransactions.map((tx) => tx.userId)),
-  ];
-  const balanceUsers = await db.user.findMany({
-    where: { id: { in: balanceUserIds } },
-    select: {
-      id: true,
-      username: true,
-      displayName: true,
-      profileImageUrl: true,
-      isActor: true,
-    },
-  });
+    const balanceUserIds = [
+      ...new Set(balanceTransactions.map((t) => t.userId)),
+    ];
+    const balanceUsers =
+      balanceUserIds.length === 0
+        ? []
+        : await tx.user.findMany({
+            where: { id: { in: balanceUserIds } },
+            select: {
+              id: true,
+              username: true,
+              displayName: true,
+              profileImageUrl: true,
+              isActor: true,
+            },
+          });
+
+    const npcTrades = await tx.npcTrade.findMany({
+      take: params.limit,
+      skip: params.offset,
+      orderBy: { executedAt: 'desc' },
+      where: params.type === 'npc' ? {} : undefined,
+    });
+
+    const positions = await tx.position.findMany({
+      take: params.limit,
+      skip: params.offset,
+      orderBy: { updatedAt: 'desc' },
+      where: params.type === 'position' ? {} : undefined,
+    });
+
+    const positionUserIds = [...new Set(positions.map((pos) => pos.userId))];
+    const marketIds = [...new Set(positions.map((pos) => pos.marketId))];
+
+    const [positionUsers, markets] = await Promise.all([
+      positionUserIds.length === 0
+        ? Promise.resolve([])
+        : tx.user.findMany({
+            where: { id: { in: positionUserIds } },
+            select: {
+              id: true,
+              username: true,
+              displayName: true,
+              profileImageUrl: true,
+              isActor: true,
+            },
+          }),
+      marketIds.length === 0
+        ? Promise.resolve([])
+        : tx.market.findMany({
+            where: { id: { in: marketIds } },
+            select: {
+              id: true,
+              question: true,
+              resolved: true,
+              resolution: true,
+            },
+          }),
+    ]);
+
+    const [balanceCount, npcCount, positionCount] = await Promise.all([
+      tx.balanceTransaction.count(),
+      tx.npcTrade.count(),
+      tx.position.count(),
+    ]);
+
+    return {
+      balanceTransactions,
+      balanceUsers,
+      npcTrades,
+      positions,
+      positionUsers,
+      markets,
+      balanceCount,
+      npcCount,
+      positionCount,
+    };
+  }, 'admin-trades-feed');
+
   const balanceUsersMap = new Map(balanceUsers.map((u) => [u.id, u]));
-
-  // Get recent NPC trades
-  const npcTrades = await db.npcTrade.findMany({
-    take: params.limit,
-    skip: params.offset,
-    orderBy: { executedAt: 'desc' },
-    where: params.type === 'npc' ? {} : undefined,
-  });
 
   const actorIds = [...new Set(npcTrades.map((trade) => trade.npcActorId))];
 
@@ -173,40 +240,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         { id: a.id, name: a.name, profileImageUrl: a.profileImageUrl },
       ])
   );
-
-  // Get recent position changes
-  const positions = await db.position.findMany({
-    take: params.limit,
-    skip: params.offset,
-    orderBy: { updatedAt: 'desc' },
-    where: params.type === 'position' ? {} : undefined,
-  });
-
-  // Fetch users and markets for positions
-  const positionUserIds = [...new Set(positions.map((pos) => pos.userId))];
-  const marketIds = [...new Set(positions.map((pos) => pos.marketId))];
-
-  const [positionUsers, markets] = await Promise.all([
-    db.user.findMany({
-      where: { id: { in: positionUserIds } },
-      select: {
-        id: true,
-        username: true,
-        displayName: true,
-        profileImageUrl: true,
-        isActor: true,
-      },
-    }),
-    db.market.findMany({
-      where: { id: { in: marketIds } },
-      select: {
-        id: true,
-        question: true,
-        resolved: true,
-        resolution: true,
-      },
-    }),
-  ]);
 
   const positionUsersMap = new Map(positionUsers.map((u) => [u.id, u]));
   const marketsMap = new Map(markets.map((m) => [m.id, m]));
@@ -269,13 +302,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   // Limit to requested amount
   const limitedTrades = allTrades.slice(0, params.limit);
-
-  // Get total counts for pagination
-  const [balanceCount, npcCount, positionCount] = await Promise.all([
-    db.balanceTransaction.count(),
-    db.npcTrade.count(),
-    db.position.count(),
-  ]);
 
   return successResponse({
     trades: limitedTrades,
@@ -353,25 +379,24 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   );
 
   if (tradeData.type === 'balance') {
-    // Verify user exists
-    const user = await db.user.findUnique({
-      where: { id: tradeData.userId },
-      select: { id: true, virtualBalance: true },
-    });
+    const balanceTxId = await generateSnowflakeId();
 
-    if (!user) {
-      throw new NotFoundError('User', tradeData.userId);
-    }
+    const transaction = await asSystem(async (tx) => {
+      const user = await tx.user.findUnique({
+        where: { id: tradeData.userId },
+        select: { id: true, virtualBalance: true },
+      });
 
-    const currentBalance = Number(user.virtualBalance ?? 0);
-    const amountDecimal = new Decimal(tradeData.amount);
-    const newBalance = tradeData.updateBalance
-      ? currentBalance + tradeData.amount
-      : currentBalance;
+      if (!user) {
+        throw new NotFoundError('User', tradeData.userId);
+      }
 
-    // Create balance transaction
-    const transaction = await db.$transaction(async (tx) => {
-      // Update user balance if requested
+      const currentBalance = Number(user.virtualBalance ?? 0);
+      const amountDecimal = new Decimal(tradeData.amount);
+      const newBalance = tradeData.updateBalance
+        ? currentBalance + tradeData.amount
+        : currentBalance;
+
       if (tradeData.updateBalance) {
         await tx.user.update({
           where: { id: tradeData.userId },
@@ -381,10 +406,9 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         });
       }
 
-      // Create transaction record
-      const balanceTx = await tx.balanceTransaction.create({
+      return tx.balanceTransaction.create({
         data: {
-          id: await generateSnowflakeId(),
+          id: balanceTxId,
           userId: tradeData.userId,
           type: tradeData.transactionType,
           amount: amountDecimal.toString(),
@@ -396,9 +420,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
           relatedId: tradeData.relatedId || null,
         },
       });
-
-      return balanceTx;
-    });
+    }, 'admin-trades-create-balance');
 
     logger.info(
       'Balance trade created',
@@ -446,24 +468,28 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       );
     }
 
-    // Create NPC trade
-    const npcTrade = await db.npcTrade.create({
-      data: {
-        id: await generateSnowflakeId(),
-        npcActorId: tradeData.npcActorId,
-        poolId: tradeData.poolId || null,
-        marketType: tradeData.marketType,
-        ticker: tradeData.ticker || null,
-        marketId: tradeData.marketId || null,
-        action: tradeData.action,
-        side: tradeData.side || null,
-        amount: tradeData.amount,
-        price: tradeData.price,
-        sentiment: tradeData.sentiment || null,
-        reason: tradeData.reason || null,
-        postId: tradeData.postId || null,
-      },
-    });
+    const npcTradeId = await generateSnowflakeId();
+    const npcTrade = await asSystem(
+      (tx) =>
+        tx.npcTrade.create({
+          data: {
+            id: npcTradeId,
+            npcActorId: tradeData.npcActorId,
+            poolId: tradeData.poolId || null,
+            marketType: tradeData.marketType,
+            ticker: tradeData.ticker || null,
+            marketId: tradeData.marketId || null,
+            action: tradeData.action,
+            side: tradeData.side || null,
+            amount: tradeData.amount,
+            price: tradeData.price,
+            sentiment: tradeData.sentiment || null,
+            reason: tradeData.reason || null,
+            postId: tradeData.postId || null,
+          },
+        }),
+      'admin-trades-create-npc'
+    );
 
     logger.info(
       'NPC trade created',

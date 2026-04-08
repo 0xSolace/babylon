@@ -12,7 +12,7 @@ import {
   syncAllReputationsToERC8004,
   syncUserReputationToERC8004,
 } from '@babylon/agents/agent0/reputation/erc8004-reputation-sync';
-import { db } from '@babylon/db/runtime';
+import { db } from '@babylon/db/engine-storage';
 
 import { generateSnowflakeId } from '@babylon/shared';
 

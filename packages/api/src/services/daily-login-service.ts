@@ -19,8 +19,13 @@
  * - `DistributedLockService` requires Redis (already deployed)
  */
 
-import { eq, sql } from '@babylon/db';
-import { balanceTransactions, db, users } from '@babylon/db/runtime';
+import {
+  insertDailyLoginBalanceTransaction,
+  selectDailyLoginStreakSnapshot,
+  selectUserForDailyLoginClaimForUpdate,
+  updateUserAfterDailyLoginClaim,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import { TotalPointsService } from '@babylon/engine';
 import {
   DAILY_LOGIN,
@@ -202,16 +207,7 @@ export class DailyLoginService {
     this.validateUserId(userId);
 
     try {
-      const [user] = await db
-        .select({
-          dailyLoginStreak: users.dailyLoginStreak,
-          lastDailyLogin: users.lastDailyLogin,
-          longestStreak: users.longestStreak,
-          totalDailyLogins: users.totalDailyLogins,
-        })
-        .from(users)
-        .where(eq(users.id, userId))
-        .limit(1);
+      const user = await selectDailyLoginStreakSnapshot(db, userId);
 
       if (!user) throw new UserNotFoundError(userId);
 
@@ -307,18 +303,7 @@ export class DailyLoginService {
       const result = await db.transaction(async (tx) => {
         // Read current user state INSIDE transaction with FOR UPDATE lock
         // to prevent concurrent balance mutations between read and update
-        const [user] = await tx
-          .select({
-            dailyLoginStreak: users.dailyLoginStreak,
-            lastDailyLogin: users.lastDailyLogin,
-            longestStreak: users.longestStreak,
-            totalDailyLogins: users.totalDailyLogins,
-            virtualBalance: users.virtualBalance,
-          })
-          .from(users)
-          .where(eq(users.id, userId))
-          .limit(1)
-          .for('update');
+        const user = await selectUserForDailyLoginClaimForUpdate(tx, userId);
 
         if (!user) {
           return buildClaimResult({ streak: 0, error: 'User not found' });
@@ -344,26 +329,17 @@ export class DailyLoginService {
         const balanceBefore = Number(user.virtualBalance);
         const now = new Date();
 
-        // Update user state
-        await tx
-          .update(users)
-          .set({
-            dailyLoginStreak: newStreak,
-            lastDailyLogin: now,
-            longestStreak: newLongestStreak,
-            totalDailyLogins: user.totalDailyLogins + 1,
-            virtualBalance: sql`${users.virtualBalance} + ${totalAwarded}`,
-            bonusPoints: sql`${users.bonusPoints} + ${totalAwarded}`,
-            reputationPoints: sql`${users.reputationPoints} + ${totalAwarded}`,
-            updatedAt: now,
-          })
-          .where(eq(users.id, userId));
+        await updateUserAfterDailyLoginClaim(tx, userId, {
+          newStreak,
+          now,
+          newLongestStreak,
+          nextTotalDailyLogins: user.totalDailyLogins + 1,
+          totalAwarded,
+        });
 
-        // Record transaction
-        await tx.insert(balanceTransactions).values({
+        await insertDailyLoginBalanceTransaction(tx, {
           id: await generateSnowflakeId(),
           userId,
-          type: 'deposit',
           amount: totalAwarded.toString(),
           balanceBefore: balanceBefore.toString(),
           balanceAfter: (balanceBefore + totalAwarded).toString(),

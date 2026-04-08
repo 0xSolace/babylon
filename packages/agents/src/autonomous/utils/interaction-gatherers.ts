@@ -5,17 +5,17 @@
  * for agent decision making.
  */
 
-import { and, desc, eq, gte, inArray, isNull } from '@babylon/db';
 import {
-  chatParticipants,
-  chats,
-  comments,
-  db,
-  groups,
-  messages,
-  posts,
-  users,
-} from '@babylon/db/runtime';
+  type InteractionCommentWithRelations,
+  listTeamGroupIds,
+  selectChatParticipantsWithChatsByUserId,
+  selectCommentsWithPostAndAuthorsForInteractionGathering,
+  selectDistinctPostIdsFromCommentsByAuthorSince,
+  selectMessagesByChatIdsSinceOrderCreatedDescLimit,
+  selectPostIdsByAuthorSinceCreated,
+  selectUsersDisplayUsernameByIds,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import type {
   PendingChatMessage,
   PendingCommentReply,
@@ -47,27 +47,19 @@ export async function gatherPendingCommentReplies(
   );
 
   // Get agent's recent posts
-  const agentPosts = await db
-    .select({ id: posts.id })
-    .from(posts)
-    .where(
-      and(
-        eq(posts.authorId, agentUserId),
-        isNull(posts.deletedAt),
-        gte(posts.createdAt, windowStart)
-      )
-    );
+  const agentPosts = await selectPostIdsByAuthorSinceCreated(
+    db,
+    agentUserId,
+    windowStart
+  );
   const agentPostIds = new Set(agentPosts.map((p) => p.id));
 
   // Get posts where agent recently commented
-  const agentCommentPosts = await db
-    .selectDistinct({ postId: comments.postId })
-    .from(comments)
-    .where(
-      and(
-        eq(comments.authorId, agentUserId),
-        gte(comments.createdAt, windowStart)
-      )
+  const agentCommentPosts =
+    await selectDistinctPostIdsFromCommentsByAuthorSince(
+      db,
+      agentUserId,
+      windowStart
     );
   const commentedPostIds = new Set(
     agentCommentPosts.map((c) => c.postId).filter((id) => !agentPostIds.has(id))
@@ -77,30 +69,15 @@ export async function gatherPendingCommentReplies(
   if (relevantPostIds.length === 0) return interactions;
 
   // Fetch all comments on relevant posts
-  const allCommentsRaw = await db.query.comments.findMany({
-    where: and(
-      inArray(comments.postId, relevantPostIds),
-      isNull(comments.deletedAt)
-    ),
-    with: {
-      author: {
-        columns: { id: true, username: true, displayName: true },
-      },
-      post: {
-        columns: { id: true, content: true, authorId: true, deletedAt: true },
-        with: {
-          User: {
-            columns: { id: true, username: true, displayName: true },
-          },
-        },
-      },
-    },
-    orderBy: [desc(comments.createdAt)],
-    limit: MAX_COMMENTS_PER_QUERY,
-  });
+  const allCommentsRaw =
+    await selectCommentsWithPostAndAuthorsForInteractionGathering(
+      db,
+      relevantPostIds,
+      MAX_COMMENTS_PER_QUERY
+    );
 
   // Build maps for efficient lookup
-  type CommentWithRelations = (typeof allCommentsRaw)[number];
+  type CommentWithRelations = InteractionCommentWithRelations;
   const commentMap = new Map<string, CommentWithRelations>(
     allCommentsRaw.map((c) => [c.id, c])
   );
@@ -186,25 +163,17 @@ export async function gatherPendingChatMessages(
   );
 
   // Get chats the agent is part of
-  const agentChats = await db
-    .select({
-      chatId: chatParticipants.chatId,
-      chat: chats,
-    })
-    .from(chatParticipants)
-    .leftJoin(chats, eq(chatParticipants.chatId, chats.id))
-    .where(eq(chatParticipants.userId, agentUserId));
+  const agentChats = await selectChatParticipantsWithChatsByUserId(
+    db,
+    agentUserId
+  );
 
   const validChats = agentChats.filter((c) => c.chat !== null);
   if (validChats.length === 0) return interactions;
 
   // Filter out team chats (Agents) - agents shouldn't auto-respond there
   // Team chats use group.type = 'team'
-  const teamGroups = await db
-    .select({ id: groups.id })
-    .from(groups)
-    .where(eq(groups.type, 'team'));
-  const teamGroupIds = new Set(teamGroups.map((g) => g.id));
+  const teamGroupIds = new Set(await listTeamGroupIds());
 
   const nonTeamChats = validChats.filter(
     (c) => !c.chat?.groupId || !teamGroupIds.has(c.chat.groupId)
@@ -215,17 +184,13 @@ export async function gatherPendingChatMessages(
   const chatMap = new Map(nonTeamChats.map((c) => [c.chatId, c.chat!]));
 
   // Batch fetch recent messages
-  const allRecentMessages = await db
-    .select()
-    .from(messages)
-    .where(
-      and(
-        inArray(messages.chatId, chatIds),
-        gte(messages.createdAt, windowStart)
-      )
-    )
-    .orderBy(desc(messages.createdAt))
-    .limit(100);
+  const allRecentMessages =
+    await selectMessagesByChatIdsSinceOrderCreatedDescLimit(
+      db,
+      chatIds,
+      windowStart,
+      100
+    );
 
   // Group by chat
   const messagesByChatId = new Map<
@@ -253,14 +218,9 @@ export async function gatherPendingChatMessages(
     { displayName: string | null; username: string | null }
   >();
   if (allSenderIds.size > 0) {
-    const senderUsers = await db
-      .select({
-        id: users.id,
-        displayName: users.displayName,
-        username: users.username,
-      })
-      .from(users)
-      .where(inArray(users.id, [...allSenderIds]));
+    const senderUsers = await selectUsersDisplayUsernameByIds(db, [
+      ...allSenderIds,
+    ]);
 
     for (const user of senderUsers) {
       senderUserMap.set(user.id, {

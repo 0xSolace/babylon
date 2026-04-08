@@ -13,9 +13,9 @@
  * Run: bun run packages/training/scripts/e2e-training-test.ts
  */
 
-import { count, desc, eq, isNotNull } from '@babylon/db';
-import { db, trajectories } from '@babylon/db/runtime';
+import { db, trajectories } from '@babylon/db/engine-storage';
 import { spawn } from 'child_process';
+import { count, desc, eq, isNotNull } from 'drizzle-orm';
 import {
   existsSync,
   mkdirSync,

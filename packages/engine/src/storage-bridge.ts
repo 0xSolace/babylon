@@ -2,7 +2,7 @@
  * Storage Bridge
  *
  * Provides a simple interface for switching between database modes.
- * Runtime wiring uses `@babylon/db/runtime` (`db`, mode helpers); query operators
+ * Runtime wiring uses `@babylon/db/engine-storage` (`db`, mode helpers); query operators
  * and types come from `@babylon/db`.
  *
  * ## Modes
@@ -41,23 +41,22 @@
  * - `db.table.upsert({ where: ..., create: ..., update: ... })`
  * - `db.table.count({ where: ... })`
  *
- * **Note**: Raw Drizzle query builder methods (`db.insert(table)`, `db.update(table)`,
- * `db.delete(table)`, `db.select()`) are NOT supported in JSON/memory mode.
+ * **Note**: Raw Drizzle query builder methods (`db.insert(table)`, `db.update(table)`, * `db.delete(table)`, `db.select()`) are NOT supported in JSON/memory mode.
  * These methods are only available in PostgreSQL mode.
  */
 
 import { type StorageMode } from '@babylon/db';
-import {
-  db,
-  isSimulationMode as dbIsSimulationMode,
-  exportJsonState,
-  getStorageMode,
-  initializeJsonMode,
-  initializeMemoryMode,
-  loadJsonSnapshot,
-  resetToPostgresMode,
-  saveJsonSnapshot,
-} from '@babylon/db/runtime';
+import * as engineStorage from '@babylon/db/engine-storage';
+
+const db = engineStorage.db;
+const getStorageMode = engineStorage.getStorageMode;
+const dbIsSimulationMode = engineStorage.isSimulationMode;
+const exportJsonState = engineStorage.exportJsonState;
+const initializeJsonMode = engineStorage.initializeJsonMode;
+const initializeMemoryMode = engineStorage.initializeMemoryMode;
+const loadJsonSnapshot = engineStorage.loadJsonSnapshot;
+const resetToPostgresMode = engineStorage.resetToPostgresMode;
+const saveJsonSnapshot = engineStorage.saveJsonSnapshot;
 
 // Re-export db for convenience
 export { db };

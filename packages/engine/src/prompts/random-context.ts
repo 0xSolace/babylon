@@ -10,14 +10,12 @@
  * This adds variety and prevents AI from falling into repetitive patterns.
  */
 
-import { and, desc, eq, gte, lte } from '@babylon/db';
 import {
-  db,
-  getDbInstance,
-  markets,
-  posts,
-  worldEvents,
-} from '@babylon/db/runtime';
+  listAllOrganizationStatesAsSystem,
+  listPostsBetweenTimestampsOrderedDesc,
+  listUnresolvedMarketsEndingAfter,
+  listWorldEventsNotAfterOrderedDesc,
+} from '@babylon/db';
 import { logger } from '@babylon/shared';
 import { StaticDataRegistry } from '../services/static-data-registry';
 import { sampleRandom, shuffleArray } from '../utils/randomization';
@@ -41,7 +39,7 @@ async function getMarketGainers(
     const staticOrgs = StaticDataRegistry.getAllOrganizations().filter(
       (o) => o.type === 'company'
     );
-    const orgStates = await getDbInstance().getAllOrganizationStates();
+    const orgStates = await listAllOrganizationStatesAsSystem();
     const priceMap = new Map(
       orgStates.map((s): [string, number | null] => [s.id, s.currentPrice])
     );
@@ -79,7 +77,7 @@ async function getMarketLosers(
     const staticOrgs = StaticDataRegistry.getAllOrganizations().filter(
       (o) => o.type === 'company'
     );
-    const orgStates = await getDbInstance().getAllOrganizationStates();
+    const orgStates = await listAllOrganizationStatesAsSystem();
     const priceMap = new Map(
       orgStates.map((s): [string, number | null] => [s.id, s.currentPrice])
     );
@@ -114,11 +112,7 @@ async function getActiveQuestions(
 ): Promise<Array<{ question: string; yesPrice: number }>> {
   try {
     const now = new Date();
-    const marketsResult = await db
-      .select()
-      .from(markets)
-      .where(and(eq(markets.resolved, false), gte(markets.endDate, now)))
-      .limit(20); // Get more, then sample randomly
+    const marketsResult = await listUnresolvedMarketsEndingAfter(now, 20);
 
     const formatted = marketsResult.map((m) => {
       const yesShares = Number.parseFloat(m.yesShares.toString());
@@ -152,12 +146,11 @@ async function getTrendingPosts(
     const now = new Date();
     const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-    const postsResult = await db
-      .select()
-      .from(posts)
-      .where(and(gte(posts.timestamp, oneDayAgo), lte(posts.timestamp, now)))
-      .orderBy(desc(posts.timestamp))
-      .limit(20); // Get more, then sample
+    const postsResult = await listPostsBetweenTimestampsOrderedDesc({
+      startInclusive: oneDayAgo,
+      endInclusive: now,
+      limit: 20,
+    });
 
     const formatted = postsResult.map((p) => ({
       author: 'Unknown', // Author info would need a join with User table
@@ -182,12 +175,7 @@ async function getRecentEvents(
 ): Promise<Array<{ title: string; description: string }>> {
   try {
     const now = new Date();
-    const eventsResult = await db
-      .select()
-      .from(worldEvents)
-      .where(lte(worldEvents.timestamp, now))
-      .orderBy(desc(worldEvents.timestamp))
-      .limit(10); // Get more, then sample
+    const eventsResult = await listWorldEventsNotAfterOrderedDesc(now, 10);
 
     const formatted = eventsResult.map((e) => ({
       title: e.eventType, // Use eventType as title since there's no title field

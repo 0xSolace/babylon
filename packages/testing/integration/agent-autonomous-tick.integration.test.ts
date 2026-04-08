@@ -12,10 +12,9 @@
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { createTestAgent, getAgentConfig } from '@babylon/agents';
-import { eq } from '@babylon/db';
-import { asSystem, db, users } from '@babylon/db/runtime';
-
+import { asSystem, db, users } from '@babylon/db/engine-storage';
 import { generateSnowflakeId } from '@babylon/shared';
+import { eq } from 'drizzle-orm';
 
 const BASE_URL =
   process.env.TEST_API_URL ||

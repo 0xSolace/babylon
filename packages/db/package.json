@@ -9,6 +9,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./runtime": "./src/runtime.ts",
+    "./engine-storage": "./src/engine-storage-entry.ts",
     "./types": {
       "types": "./src/types.ts",
       "import": "./src/types.ts",

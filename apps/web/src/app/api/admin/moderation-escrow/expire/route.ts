@@ -43,7 +43,7 @@
  */
 
 import { requireAdmin, withErrorHandling } from '@babylon/api';
-import { db } from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
@@ -54,18 +54,21 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
 
   const now = new Date();
 
-  // Find all pending escrows that have expired
-  const expiredEscrows = await db.moderationEscrow.updateMany({
-    where: {
-      status: 'pending',
-      expiresAt: {
-        lt: now,
-      },
-    },
-    data: {
-      status: 'expired',
-    },
-  });
+  const expiredEscrows = await asSystem(
+    (tx) =>
+      tx.moderationEscrow.updateMany({
+        where: {
+          status: 'pending',
+          expiresAt: {
+            lt: now,
+          },
+        },
+        data: {
+          status: 'expired',
+        },
+      }),
+    'admin-moderation-escrow-expire'
+  );
 
   logger.info(
     `Expired ${expiredEscrows.count} escrow payments`,

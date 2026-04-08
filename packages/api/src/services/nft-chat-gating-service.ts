@@ -7,7 +7,7 @@ import {
   fetchNftGateChatRow,
   fetchUserWalletAddressForNftGate,
 } from '@babylon/db';
-import { db } from '@babylon/db/runtime';
+import { db } from '@babylon/db/engine-storage';
 import { logger, ValidationError } from '@babylon/shared';
 import { AuthorizationError, NotFoundError } from '../errors';
 import {

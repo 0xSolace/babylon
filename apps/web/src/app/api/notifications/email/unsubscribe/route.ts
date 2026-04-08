@@ -2,9 +2,8 @@ import {
   verifyNotificationUnsubscribeToken,
   withErrorHandling,
 } from '@babylon/api';
-import { and, eq } from '@babylon/db';
-import { db, users } from '@babylon/db/runtime';
-
+import { updateUserUnsubscribeAllNotificationEmails } from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
@@ -53,24 +52,15 @@ async function processUnsubscribe(
     );
   }
 
-  const [updatedUser] = await db
-    .update(users)
-    .set({
-      emailNotificationsEnabled: false,
-      emailNotificationsRealtime: false,
-      emailNotificationsDailySummary: false,
-      emailNotificationsWeeklySummary: false,
-      emailNotificationsMonthlySummary: false,
-      emailNotificationsUnsubscribedAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(users.id, payload.userId),
-        eq(users.email, payload.email.toLowerCase())
-      )
+  const now = new Date();
+  const [updatedUser] = await asUser(payload.userId, async (db) =>
+    updateUserUnsubscribeAllNotificationEmails(
+      db,
+      payload.userId,
+      payload.email.toLowerCase(),
+      now
     )
-    .returning({ id: users.id });
+  );
 
   if (!updatedUser) {
     return htmlResponse(

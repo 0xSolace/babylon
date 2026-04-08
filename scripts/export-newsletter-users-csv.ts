@@ -2,15 +2,14 @@
 
 import { mkdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
-import { and, eq, isNotNull } from '@babylon/db';
-import { closeDatabase, db, users } from '@babylon/db/runtime';
-
+import { closeDatabase, db, users } from '@babylon/db/engine-storage';
 import { getAllVerifiedEmails, type PrivyLinkedAccount } from '@babylon/shared';
 import {
   type LinkedAccount,
   PrivyClient,
   type User as PrivyUser,
 } from '@privy-io/node';
+import { and, eq, isNotNull } from 'drizzle-orm';
 
 type CliOptions = {
   databaseUrl: string;

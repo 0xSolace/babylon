@@ -6,8 +6,8 @@
  * and coordinator's own responses.
  */
 
-import { and, desc, eq, or, sql } from '@babylon/db';
-import { db, messages } from '@babylon/db/runtime';
+import { selectTeamChatMessagesForParticipantContext } from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import { COORDINATOR_SENDER_ID } from '@babylon/shared';
 import type {
   IAgentRuntime,
@@ -78,25 +78,12 @@ export const coordinatorRecentMessagesProvider: Provider = {
     // 1. User messages that target coordinator (targetIds contains 'coordinator')
     // 2. Coordinator's own responses (senderId = 'coordinator')
     // Fail-fast: let DB errors propagate to caller
-    const recentMsgs = await db
-      .select()
-      .from(messages)
-      .where(
-        and(
-          eq(messages.chatId, teamChatId),
-          or(
-            // Coordinator's own messages
-            eq(messages.senderId, COORDINATOR_SENDER_ID),
-            // User messages targeting coordinator (use @> for GIN index efficiency)
-            and(
-              eq(messages.senderId, ownerId),
-              sql`${messages.targetIds} @> ARRAY[${COORDINATOR_SENDER_ID}]`
-            )
-          )
-        )
-      )
-      .orderBy(desc(messages.createdAt))
-      .limit(15);
+    const recentMsgs = await selectTeamChatMessagesForParticipantContext(db, {
+      teamChatId,
+      participantId: COORDINATOR_SENDER_ID,
+      ownerId,
+      limit: 15,
+    });
 
     if (recentMsgs.length === 0) {
       return {

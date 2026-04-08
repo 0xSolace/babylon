@@ -15,9 +15,23 @@
 
 import { getAgent0SDK } from '@babylon/agents';
 import { getContractAddresses, getRpcUrl } from '@babylon/contracts';
-import { and, eq, sql } from '@babylon/db';
-import { db, follows, referrals, users } from '@babylon/db/runtime';
-
+import {
+  clearStaleOnchainRegistrationFlags,
+  clearUserAgent0RegistrationState,
+  ensureFollowFromReferral,
+  findConflictingUserByAgent0TokenId,
+  insertOnchainAgentUser,
+  insertOnchainHumanUser,
+  type OnchainRegistrationUserRow,
+  persistAgent0RegistrationToUser,
+  resolveOnchainReferrerFromCode,
+  selectOnchainRegistrationUserById,
+  selectOnchainRegistrationUserByUsernameCaseInsensitive,
+  updateHumanUserProfileForOnchainRegistration,
+  upsertCompletedReferralAfterOnchain,
+  upsertRejectedReferralAfterOnchain,
+} from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import type {
   AgentCapabilities,
   AuthenticatedUser,
@@ -197,70 +211,34 @@ export async function processOnchainRegistration({
 
   let referrerId: string | null = null;
   if (referralCode) {
-    const [referrer] = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(sql`lower(${users.username}) = lower(${referralCode})`)
-      .limit(1);
+    const referrerResolution = await asSystem(
+      (c) => resolveOnchainReferrerFromCode(c, referralCode, user.userId),
+      'onchain-resolve-referrer'
+    );
 
-    if (referrer && referrer.id !== user.userId) {
-      referrerId = referrer.id;
-    } else {
-      const [referralOwner] = await db
-        .select({ id: users.id })
-        .from(users)
-        .where(eq(users.referralCode, referralCode))
-        .limit(1);
-
-      if (referralOwner && referralOwner.id !== user.userId) {
-        referrerId = referralOwner.id;
-      } else if (
-        referrer?.id === user.userId ||
-        referralOwner?.id === user.userId
-      ) {
-        logger.warn(
-          'Self-referral attempt blocked',
-          { userId: user.userId, referralCode },
-          'OnboardingOnchain'
-        );
-      }
+    if (referrerResolution.referrerId) {
+      referrerId = referrerResolution.referrerId;
+    } else if (referrerResolution.selfReferral) {
+      logger.warn(
+        'Self-referral attempt blocked',
+        { userId: user.userId, referralCode },
+        'OnboardingOnchain'
+      );
     }
   }
 
-  let dbUser: {
-    id: string;
-    username: string | null;
-    privyWalletId: string | null;
-    walletAddress: string | null;
-    onChainRegistered: boolean;
-    nftTokenId: number | null;
-    agent0TokenId: number | null;
-    referredBy: string | null;
-  } | null = null;
-
-  const userSelectFields = {
-    id: users.id,
-    username: users.username,
-    privyWalletId: users.privyWalletId,
-    walletAddress: users.walletAddress,
-    onChainRegistered: users.onChainRegistered,
-    nftTokenId: users.nftTokenId,
-    agent0TokenId: users.agent0TokenId,
-    referredBy: users.referredBy,
-  };
+  let dbUser: OnchainRegistrationUserRow | null = null;
 
   if (user.isAgent) {
-    const [existingUser] = user.dbUserId
-      ? await db
-          .select(userSelectFields)
-          .from(users)
-          .where(eq(users.id, user.dbUserId))
-          .limit(1)
-      : await db
-          .select(userSelectFields)
-          .from(users)
-          .where(sql`lower(${users.username}) = lower(${user.userId})`)
-          .limit(1);
+    const existingUser = await asSystem(async (c) => {
+      if (user.dbUserId) {
+        return selectOnchainRegistrationUserById(c, user.dbUserId);
+      }
+      return selectOnchainRegistrationUserByUsernameCaseInsensitive(
+        c,
+        user.userId
+      );
+    }, 'onchain-agent-lookup');
     dbUser = existingUser ?? null;
 
     if (!dbUser) {
@@ -269,22 +247,19 @@ export async function processOnchainRegistration({
       }
 
       const newId = await generateSnowflakeId();
-      const [createdUser] = await db
-        .insert(users)
-        .values({
-          id: newId,
-          privyId: user.userId,
-          username: user.userId,
-          displayName: displayName || username || user.userId,
-          bio: bio || `Autonomous AI agent: ${user.userId}`,
-          profileImageUrl: profileImageUrl || null,
-          coverImageUrl: coverImageUrl || null,
-          isActor: false,
-          virtualBalance: '10000',
-          totalDeposited: '10000',
-          updatedAt: new Date(),
-        })
-        .returning(userSelectFields);
+      const createdUser = await asSystem(
+        (c) =>
+          insertOnchainAgentUser(c, {
+            id: newId,
+            privyId: user.userId,
+            username: user.userId,
+            displayName: displayName || username || user.userId,
+            bio: bio || `Autonomous AI agent: ${user.userId}`,
+            profileImageUrl: profileImageUrl || null,
+            coverImageUrl: coverImageUrl || null,
+          }),
+        'onchain-agent-create'
+      );
       dbUser = createdUser ?? null;
 
       // Invalidate identifier caches for the new user (clears negative cache)
@@ -297,32 +272,28 @@ export async function processOnchainRegistration({
       }
     }
   } else {
-    const [existingUser] = await db
-      .select(userSelectFields)
-      .from(users)
-      .where(eq(users.id, user.userId))
-      .limit(1);
+    const existingUser = await asSystem(
+      (c) => selectOnchainRegistrationUserById(c, user.userId),
+      'onchain-user-lookup'
+    );
     dbUser = existingUser ?? null;
 
     if (!dbUser) {
-      const [createdUser] = await db
-        .insert(users)
-        .values({
-          id: user.userId,
-          privyId: user.privyId ?? user.userId,
-          walletAddress: walletAddress?.toLowerCase() ?? null,
-          username: finalUsername,
-          displayName: displayName || finalUsername,
-          bio: bio || '',
-          profileImageUrl: profileImageUrl || null,
-          coverImageUrl: coverImageUrl || null,
-          isActor: false,
-          virtualBalance: '0',
-          totalDeposited: '0',
-          referredBy: referrerId,
-          updatedAt: new Date(),
-        })
-        .returning(userSelectFields);
+      const createdUser = await asSystem(
+        (c) =>
+          insertOnchainHumanUser(c, {
+            id: user.userId,
+            privyId: user.privyId ?? user.userId,
+            walletAddress: walletAddress?.toLowerCase() ?? null,
+            username: finalUsername,
+            displayName: displayName || finalUsername,
+            bio: bio || '',
+            profileImageUrl: profileImageUrl || null,
+            coverImageUrl: coverImageUrl || null,
+            referredBy: referrerId,
+          }),
+        'onchain-user-create'
+      );
       dbUser = createdUser ?? null;
 
       // Invalidate identifier caches for the new user (clears negative cache)
@@ -334,25 +305,21 @@ export async function processOnchainRegistration({
         });
       }
     } else {
-      const [fullUser] = await db
-        .select()
-        .from(users)
-        .where(eq(users.id, dbUser.id))
-        .limit(1);
-      const oldUsername = dbUser.username;
-      const [updatedUser] = await db
-        .update(users)
-        .set({
-          walletAddress: walletAddress?.toLowerCase() ?? dbUser.walletAddress,
-          username: finalUsername || dbUser.username,
-          displayName: displayName || finalUsername || fullUser?.displayName,
-          bio: bio || fullUser?.bio,
-          profileImageUrl: profileImageUrl ?? fullUser?.profileImageUrl,
-          coverImageUrl: coverImageUrl ?? fullUser?.coverImageUrl,
-          referredBy: referrerId ?? dbUser.referredBy ?? undefined,
-        })
-        .where(eq(users.id, dbUser.id))
-        .returning(userSelectFields);
+      const profileSubject = dbUser;
+      const updatedUser = await asSystem(
+        (c) =>
+          updateHumanUserProfileForOnchainRegistration(c, profileSubject, {
+            walletAddress,
+            finalUsername,
+            displayName,
+            bio,
+            profileImageUrl,
+            coverImageUrl,
+            referrerId,
+          }),
+        'onchain-user-update-profile'
+      );
+      const oldUsername = profileSubject.username;
       dbUser = updatedUser ?? null;
 
       // Refresh identifier caches after any successful user update because lookups
@@ -397,15 +364,10 @@ export async function processOnchainRegistration({
 
   // Clear stale registration state if DB says registered but no agent0TokenId
   if (dbUser.onChainRegistered && dbUser.agent0TokenId === null) {
-    await db
-      .update(users)
-      .set({
-        onChainRegistered: false,
-        nftTokenId: null,
-        agent0TokenId: null,
-        updatedAt: new Date(),
-      })
-      .where(eq(users.id, dbUser.id));
+    await asSystem(
+      (c) => clearStaleOnchainRegistrationFlags(c, dbUser.id),
+      'onchain-clear-stale-registration'
+    );
 
     logger.warn(
       'Cleared stale registration state (no agent0TokenId)',
@@ -491,57 +453,39 @@ export async function processOnchainRegistration({
     'OnboardingOnchain'
   );
 
-  // Resolve conflicting agent0TokenId assignments
   if (agent0TokenId > 0) {
-    const [conflictingUser] = await db
-      .select({
-        id: users.id,
-        walletAddress: users.walletAddress,
-        onChainRegistered: users.onChainRegistered,
-      })
-      .from(users)
-      .where(
-        and(
-          eq(users.agent0TokenId, agent0TokenId),
-          sql`${users.id} <> ${dbUser.id}`
-        )
-      )
-      .limit(1);
-
-    if (conflictingUser) {
-      await db
-        .update(users)
-        .set({
-          agent0TokenId: null,
-          onChainRegistered: false,
-          updatedAt: new Date(),
-        })
-        .where(eq(users.id, conflictingUser.id));
-
-      logger.warn(
-        'Cleared conflicting agent0TokenId from another user',
-        {
-          agent0TokenId,
-          currentUserId: dbUser.id,
-          conflictingUserId: conflictingUser.id,
-        },
-        'OnboardingOnchain'
+    await asSystem(async (c) => {
+      const conflictingUser = await findConflictingUserByAgent0TokenId(
+        c,
+        agent0TokenId,
+        dbUser.id
       );
-    }
+
+      if (conflictingUser) {
+        await clearUserAgent0RegistrationState(c, conflictingUser.id);
+
+        logger.warn(
+          'Cleared conflicting agent0TokenId from another user',
+          {
+            agent0TokenId,
+            currentUserId: dbUser.id,
+            conflictingUserId: conflictingUser.id,
+          },
+          'OnboardingOnchain'
+        );
+      }
+    }, 'onchain-resolve-token-conflict');
   }
 
-  // Persist registration state to DB (registration fields only, not profile fields)
-  await db
-    .update(users)
-    .set({
-      onChainRegistered: true,
-      agent0TokenId,
-      agent0MetadataCID,
-      agent0RegisteredAt: new Date(),
-      registrationTxHash: registrationTxHash ?? null,
-      registrationTimestamp: new Date(),
-    })
-    .where(eq(users.id, dbUser.id));
+  await asSystem(
+    (c) =>
+      persistAgent0RegistrationToUser(c, dbUser.id, {
+        agent0TokenId,
+        agent0MetadataCID,
+        registrationTxHash,
+      }),
+    'onchain-persist-registration'
+  );
 
   // Sync on-chain reputation to local database
   try {
@@ -585,54 +529,27 @@ export async function processOnchainRegistration({
       );
 
       if (referralCode) {
-        const [existingReferral] = await db
-          .select({ id: referrals.id })
-          .from(referrals)
-          .where(
-            and(
-              eq(referrals.referralCode, referralCode),
-              eq(referrals.referredUserId, dbUser.id)
-            )
-          )
-          .limit(1);
-
-        if (existingReferral) {
-          await db
-            .update(referrals)
-            .set({ status: 'completed', completedAt: new Date() })
-            .where(eq(referrals.id, existingReferral.id));
-        } else {
-          await db.insert(referrals).values({
-            id: await generateSnowflakeId(),
-            referrerId,
+        const now = new Date();
+        await asSystem(async (c) => {
+          await upsertCompletedReferralAfterOnchain(c, {
             referralCode,
             referredUserId: dbUser.id,
-            status: 'completed',
-            completedAt: new Date(),
-            createdAt: new Date(),
+            referrerId,
+            newReferralId: await generateSnowflakeId(),
+            completedAt: now,
+            createdAt: now,
           });
-        }
+        }, 'onchain-referral-completed');
       }
 
-      const [existingFollow] = await db
-        .select({ id: follows.id })
-        .from(follows)
-        .where(
-          and(
-            eq(follows.followerId, dbUser.id),
-            eq(follows.followingId, referrerId)
-          )
-        )
-        .limit(1);
-
-      if (!existingFollow) {
-        await db.insert(follows).values({
-          id: await generateSnowflakeId(),
+      await asSystem(async (c) => {
+        await ensureFollowFromReferral(c, {
+          followId: await generateSnowflakeId(),
           followerId: dbUser.id,
           followingId: referrerId,
           createdAt: new Date(),
         });
-      }
+      }, 'onchain-referral-follow');
 
       logger.info(
         'Referral processed successfully',
@@ -646,32 +563,15 @@ export async function processOnchainRegistration({
       );
     } else {
       if (referralCode) {
-        const [existingRejectedReferral] = await db
-          .select({ id: referrals.id })
-          .from(referrals)
-          .where(
-            and(
-              eq(referrals.referralCode, referralCode),
-              eq(referrals.referredUserId, dbUser.id)
-            )
-          )
-          .limit(1);
-
-        if (existingRejectedReferral) {
-          await db
-            .update(referrals)
-            .set({ status: 'rejected' })
-            .where(eq(referrals.id, existingRejectedReferral.id));
-        } else {
-          await db.insert(referrals).values({
-            id: await generateSnowflakeId(),
-            referrerId,
+        await asSystem(async (c) => {
+          await upsertRejectedReferralAfterOnchain(c, {
             referralCode,
             referredUserId: dbUser.id,
-            status: 'rejected',
+            referrerId,
+            newReferralId: await generateSnowflakeId(),
             createdAt: new Date(),
           });
-        }
+        }, 'onchain-referral-rejected');
       }
 
       logger.warn(

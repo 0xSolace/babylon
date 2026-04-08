@@ -15,8 +15,7 @@
  * Weights evidence by source reliability and tracks signal strength over time.
  */
 
-import { and, eq, inArray, isNull, lte } from '@babylon/db';
-import { db, posts, questions, users } from '@babylon/db/runtime';
+import { loadSignalExtractionMarketPayload } from '@babylon/db';
 import { logger } from '@babylon/shared';
 import { StaticDataRegistry } from './static-data-registry';
 
@@ -62,59 +61,15 @@ export class SignalExtractionService {
   static async extractMarketSignal(
     questionNumber: number
   ): Promise<SignalAnalysis> {
-    // Get the question
-    const [question] = await db
-      .select({
-        id: questions.id,
-        questionNumber: questions.questionNumber,
-        text: questions.text,
-      })
-      .from(questions)
-      .where(eq(questions.questionNumber, questionNumber))
-      .limit(1);
+    const now = new Date();
 
-    if (!question) {
+    const loaded = await loadSignalExtractionMarketPayload(questionNumber, now);
+
+    if (!loaded) {
       throw new Error(`Question ${questionNumber} not found`);
     }
 
-    // Get all posts related to this question
-    // Signal metadata (pointsToward, clueStrength) is stored in-memory during game execution
-    // For now, we analyze post content and use gameId to find related posts
-    const now = new Date();
-    const postsList = await db
-      .select({
-        id: posts.id,
-        content: posts.content,
-        authorId: posts.authorId,
-        dayNumber: posts.dayNumber,
-        sentiment: posts.sentiment,
-        biasScore: posts.biasScore,
-        type: posts.type,
-        createdAt: posts.createdAt,
-      })
-      .from(posts)
-      .where(
-        and(
-          eq(posts.gameId, question.id), // Posts associated with this question's game
-          isNull(posts.deletedAt),
-          lte(posts.timestamp, now) // ✅ No future posts
-        )
-      )
-      .limit(1000); // Limit to prevent huge queries
-
-    // Get author information separately
-    const authorIds = [...new Set(postsList.map((p) => p.authorId))];
-    const usersList =
-      authorIds.length > 0
-        ? await db
-            .select({
-              id: users.id,
-              displayName: users.displayName,
-              isActor: users.isActor,
-            })
-            .from(users)
-            .where(inArray(users.id, authorIds))
-        : [];
+    const { question, postsList, usersList } = loaded;
     const userMap = new Map(usersList.map((u) => [u.id, u]));
 
     // Get actor reliability scores for NPC posts

@@ -12,6 +12,7 @@
  */
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import * as babylonDb from '@babylon/db';
 
 // ─── Mock Setup ──────────────────────────────────────────────────────────────
 
@@ -46,6 +47,7 @@ const mockGetTeamChat = mock(
 );
 
 mock.module('@babylon/db', () => ({
+  ...babylonDb,
   eq: (a: unknown, b: unknown) => ({ op: 'eq', a, b }),
   and: (...args: unknown[]) => ({ op: 'and', args }),
   count: () => 'count',
@@ -59,7 +61,7 @@ mock.module('@babylon/db', () => ({
   sql: Object.assign((...args: unknown[]) => args, { raw: (s: string) => s }),
 }));
 
-mock.module('@babylon/db/runtime', () => ({
+mock.module('@babylon/db/engine-storage', () => ({
   db: {
     get select() {
       return mockDbSelect;

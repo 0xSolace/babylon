@@ -10,14 +10,22 @@
  * - Tier 3 (Followers): 500 members, public content
  */
 
-import { and, count, eq, inArray, isNotNull, isNull, ne } from '@babylon/db';
 import {
-  chatParticipants,
-  chats,
-  db,
-  groupMembers,
-  groups,
-} from '@babylon/db/runtime';
+  countUserActiveNpcGroupMemberships,
+  fetchActiveNpcTierMembership,
+  fetchChatIdByGroupId,
+  fetchGlobalNpcTierGroupCounts,
+  fetchNpcTierGroupSlices,
+  fillNpcTierGroupsParentIdWhereNull,
+  findActiveNpcGroupMembershipId,
+  insertNpcTierBootstrapBundle,
+  listNpcTierMembershipsForDemotionScan,
+  listPromotableNpcTierMemberships,
+  runDemoteNpcTierTransaction,
+  runPromoteNpcTierTransaction,
+  runTierInviteMemberTransaction,
+  withTransaction,
+} from '@babylon/db';
 import { GROUP_CONFIG, generateSnowflakeId, logger } from '@babylon/shared';
 
 import { DistributedLockService } from './distributed-lock-service';
@@ -117,38 +125,7 @@ export class TieredGroupService {
     }
 
     // Single batch query with JOINs for all existing tier data (member counts + chat IDs)
-    const existingTiersWithData = await db
-      .select({
-        id: groups.id,
-        tier: groups.tier,
-        name: groups.name,
-        maxMembers: groups.maxMembers,
-        chatId: chats.id,
-        memberCount: count(groupMembers.id),
-      })
-      .from(groups)
-      .leftJoin(chats, eq(chats.groupId, groups.id))
-      .leftJoin(
-        groupMembers,
-        and(
-          eq(groupMembers.groupId, groups.id),
-          eq(groupMembers.isActive, true)
-        )
-      )
-      .where(
-        and(
-          eq(groups.ownerId, npcId),
-          eq(groups.type, 'npc'),
-          isNotNull(groups.tier)
-        )
-      )
-      .groupBy(
-        groups.id,
-        groups.tier,
-        groups.name,
-        groups.maxMembers,
-        chats.id
-      );
+    const existingTiersWithData = await fetchNpcTierGroupSlices(npcId);
 
     const existingTierMap = new Map(
       existingTiersWithData
@@ -188,40 +165,37 @@ export class TieredGroupService {
 
         if (tier === 1) parentGroupId = groupId;
 
-        await db.insert(groups).values({
-          id: groupId,
-          name: groupName,
-          type: 'npc',
-          ownerId: npcId,
-          createdById: npcId,
-          updatedAt: new Date(),
-          tier,
-          maxMembers: config.maxMembers,
-          parentGroupId,
-        });
-
-        // Create associated chat
-        await db.insert(chats).values({
-          id: chatId,
-          name: groupName,
-          isGroup: true,
-          groupId,
-          updatedAt: new Date(),
-        });
-
-        // Add NPC as owner
-        await db.insert(groupMembers).values({
-          id: memberId,
-          groupId,
-          userId: npcId,
-          role: 'owner',
-          tier,
-        });
-
-        await db.insert(chatParticipants).values({
-          id: participantId,
-          chatId,
-          userId: npcId,
+        await insertNpcTierBootstrapBundle({
+          group: {
+            id: groupId,
+            name: groupName,
+            type: 'npc',
+            ownerId: npcId,
+            createdById: npcId,
+            updatedAt: new Date(),
+            tier,
+            maxMembers: config.maxMembers,
+            parentGroupId,
+          },
+          chat: {
+            id: chatId,
+            name: groupName,
+            isGroup: true,
+            groupId,
+            updatedAt: new Date(),
+          },
+          ownerMember: {
+            id: memberId,
+            groupId,
+            userId: npcId,
+            role: 'owner',
+            tier,
+          },
+          ownerParticipant: {
+            id: participantId,
+            chatId,
+            userId: npcId,
+          },
         });
 
         logger.info(
@@ -244,17 +218,7 @@ export class TieredGroupService {
 
     // Update parentGroupId for all tiers if needed
     if (parentGroupId) {
-      await db
-        .update(groups)
-        .set({ parentGroupId })
-        .where(
-          and(
-            eq(groups.ownerId, npcId),
-            eq(groups.type, 'npc'),
-            isNotNull(groups.tier),
-            isNull(groups.parentGroupId)
-          )
-        );
+      await fillNpcTierGroupsParentIdWhereNull(npcId, parentGroupId);
     }
 
     return result;
@@ -267,38 +231,7 @@ export class TieredGroupService {
    */
   static async getNpcTiers(npcId: string): Promise<TierInfo[]> {
     // Single batch query with joins for member counts and chat IDs
-    const tierGroupsWithData = await db
-      .select({
-        id: groups.id,
-        tier: groups.tier,
-        name: groups.name,
-        maxMembers: groups.maxMembers,
-        chatId: chats.id,
-        memberCount: count(groupMembers.id),
-      })
-      .from(groups)
-      .leftJoin(chats, eq(chats.groupId, groups.id))
-      .leftJoin(
-        groupMembers,
-        and(
-          eq(groupMembers.groupId, groups.id),
-          eq(groupMembers.isActive, true)
-        )
-      )
-      .where(
-        and(
-          eq(groups.ownerId, npcId),
-          eq(groups.type, 'npc'),
-          isNotNull(groups.tier)
-        )
-      )
-      .groupBy(
-        groups.id,
-        groups.tier,
-        groups.name,
-        groups.maxMembers,
-        chats.id
-      );
+    const tierGroupsWithData = await fetchNpcTierGroupSlices(npcId);
 
     const result: TierInfo[] = [];
 
@@ -350,27 +283,7 @@ export class TieredGroupService {
     const focusWeights = getNpcFocusWeights(npcId);
 
     // Find active membership
-    const [membership] = await db
-      .select({
-        groupId: groupMembers.groupId,
-        tier: groupMembers.tier,
-        joinedAt: groupMembers.joinedAt,
-        lastMessageAt: groupMembers.lastMessageAt,
-        isGrandfathered: groupMembers.isGrandfathered,
-        grandfatheredAt: groupMembers.grandfatheredAt,
-      })
-      .from(groupMembers)
-      .innerJoin(groups, eq(groupMembers.groupId, groups.id))
-      .where(
-        and(
-          eq(groupMembers.userId, userId),
-          eq(groupMembers.isActive, true),
-          eq(groups.ownerId, npcId),
-          eq(groups.type, 'npc'),
-          isNotNull(groups.tier)
-        )
-      )
-      .limit(1);
+    const membership = await fetchActiveNpcTierMembership(userId, npcId);
 
     // Calculate engagement score with NPC-specific focus weights
     const interactionScore =
@@ -505,24 +418,7 @@ export class TieredGroupService {
     npcId: string
   ): Promise<UserTierStatus> {
     // Find active membership
-    const [membership] = await db
-      .select({
-        groupId: groupMembers.groupId,
-        tier: groupMembers.tier,
-        joinedAt: groupMembers.joinedAt,
-      })
-      .from(groupMembers)
-      .innerJoin(groups, eq(groupMembers.groupId, groups.id))
-      .where(
-        and(
-          eq(groupMembers.userId, userId),
-          eq(groupMembers.isActive, true),
-          eq(groups.ownerId, npcId),
-          eq(groups.type, 'npc'),
-          isNotNull(groups.tier)
-        )
-      )
-      .limit(1);
+    const membership = await fetchActiveNpcTierMembership(userId, npcId);
 
     const interactionScore =
       await NPCInteractionTracker.calculateEngagementScore(userId, npcId);
@@ -533,7 +429,7 @@ export class TieredGroupService {
     let canBePromoted = false;
     let promotionBlockedReason: string | null = null;
 
-    if (isValidTier(membership?.tier)) {
+    if (membership && isValidTier(membership.tier)) {
       const currentTier = membership.tier;
       const daysInTier = Math.floor(
         (Date.now() - membership.joinedAt.getTime()) / (1000 * 60 * 60 * 24)
@@ -608,19 +504,7 @@ export class TieredGroupService {
     }
 
     // Check if already in a tier with this NPC (fast-fail before lock)
-    const [existing] = await db
-      .select({ id: groupMembers.id })
-      .from(groupMembers)
-      .innerJoin(groups, eq(groupMembers.groupId, groups.id))
-      .where(
-        and(
-          eq(groupMembers.userId, userId),
-          eq(groupMembers.isActive, true),
-          eq(groups.ownerId, npcId),
-          eq(groups.type, 'npc')
-        )
-      )
-      .limit(1);
+    const existing = await findActiveNpcGroupMembershipId(userId, npcId);
 
     if (existing) {
       return {
@@ -631,19 +515,9 @@ export class TieredGroupService {
     }
 
     // Check group limit (fast-fail before lock)
-    const [groupCount] = await db
-      .select({ count: count() })
-      .from(groupMembers)
-      .innerJoin(groups, eq(groupMembers.groupId, groups.id))
-      .where(
-        and(
-          eq(groupMembers.userId, userId),
-          eq(groupMembers.isActive, true),
-          eq(groups.type, 'npc')
-        )
-      );
+    const npcGroupCount = await countUserActiveNpcGroupMemberships(userId);
 
-    if ((groupCount?.count ?? 0) >= GROUP_CONFIG.MAX_ACTIVE_USER_GROUPS) {
+    if (npcGroupCount >= GROUP_CONFIG.MAX_ACTIVE_USER_GROUPS) {
       return {
         success: false,
         tier: null,
@@ -711,26 +585,26 @@ export class TieredGroupService {
         : null;
 
       // Wrap multi-step operation in transaction
-      await db.$transaction(async (tx) => {
-        // Add to group
-        await tx.insert(groupMembers).values({
-          id: memberId,
-          groupId: targetTier.groupId,
-          userId,
-          role: 'member',
-          addedBy: npcId,
-          tier: targetTier.tier,
-        });
-
-        // Add to chat if exists
-        if (targetTier.chatId && participantId) {
-          await tx.insert(chatParticipants).values({
-            id: participantId,
-            chatId: targetTier.chatId,
+      await withTransaction(async (tx) => {
+        await runTierInviteMemberTransaction(tx, {
+          groupMember: {
+            id: memberId,
+            groupId: targetTier.groupId,
             userId,
-            invitedBy: npcId,
-          });
-        }
+            role: 'member',
+            addedBy: npcId,
+            tier: targetTier.tier,
+          },
+          chatParticipant:
+            targetTier.chatId && participantId
+              ? {
+                  id: participantId,
+                  chatId: targetTier.chatId,
+                  userId,
+                  invitedBy: npcId,
+                }
+              : undefined,
+        });
       });
 
       logger.info(
@@ -816,62 +690,21 @@ export class TieredGroupService {
         : null;
 
       // Pre-fetch old chat ID before transaction
-      const [oldChat] = await db
-        .select({ id: chats.id })
-        .from(chats)
-        .where(eq(chats.groupId, currentGroupId))
-        .limit(1);
+      const oldChatId = (await fetchChatIdByGroupId(currentGroupId)) ?? null;
 
-      // Wrap multi-step operation in transaction to prevent orphaned state
-      await db.$transaction(async (tx) => {
-        // Deactivate old membership
-        await tx
-          .update(groupMembers)
-          .set({
-            isActive: false,
-            kickReason: `Promoted to Tier ${higherTier}`,
-            kickedAt: new Date(),
-          })
-          .where(
-            and(
-              eq(groupMembers.groupId, currentGroupId),
-              eq(groupMembers.userId, userId)
-            )
-          );
-
-        // Deactivate old chat participant
-        if (oldChat) {
-          await tx
-            .update(chatParticipants)
-            .set({ isActive: false })
-            .where(
-              and(
-                eq(chatParticipants.chatId, oldChat.id),
-                eq(chatParticipants.userId, userId)
-              )
-            );
-        }
-
-        // Add to new tier
-        await tx.insert(groupMembers).values({
-          id: newMemberId,
-          groupId: targetTier.groupId,
+      await withTransaction(async (tx) => {
+        await runPromoteNpcTierTransaction(tx, {
+          currentGroupId,
           userId,
-          role: 'member',
-          addedBy: npcId,
-          tier: higherTier,
-          previousTier: currentTier,
-          promotedAt: new Date(),
+          higherTier,
+          oldChatId,
+          newMemberId,
+          targetGroupId: targetTier.groupId,
+          npcId,
+          currentTier,
+          targetChatId: targetTier.chatId,
+          newParticipantId,
         });
-
-        if (targetTier.chatId && newParticipantId) {
-          await tx.insert(chatParticipants).values({
-            id: newParticipantId,
-            chatId: targetTier.chatId,
-            userId,
-            invitedBy: npcId,
-          });
-        }
       });
 
       logger.info(
@@ -908,23 +741,7 @@ export class TieredGroupService {
     if (actorIds.length === 0) return 0;
 
     // Batch query: Get all promotable memberships across all NPCs in one query
-    const allMemberships = await db
-      .select({
-        userId: groupMembers.userId,
-        tier: groupMembers.tier,
-        npcId: groups.ownerId,
-      })
-      .from(groupMembers)
-      .innerJoin(groups, eq(groupMembers.groupId, groups.id))
-      .where(
-        and(
-          inArray(groups.ownerId, actorIds),
-          eq(groups.type, 'npc'),
-          eq(groupMembers.isActive, true),
-          isNotNull(groupMembers.tier),
-          ne(groupMembers.tier, 1) // Already at highest tier
-        )
-      );
+    const allMemberships = await listPromotableNpcTierMemberships(actorIds);
 
     // Process each membership (promoteUser still needs individual checks)
     for (const m of allMemberships) {
@@ -950,25 +767,8 @@ export class TieredGroupService {
     if (actorIds.length === 0) return 0;
 
     // Batch query: Get all memberships across all NPCs in one query
-    const allMemberships = await db
-      .select({
-        userId: groupMembers.userId,
-        groupId: groupMembers.groupId,
-        tier: groupMembers.tier,
-        lastMessageAt: groupMembers.lastMessageAt,
-        joinedAt: groupMembers.joinedAt,
-        npcId: groups.ownerId,
-      })
-      .from(groupMembers)
-      .innerJoin(groups, eq(groupMembers.groupId, groups.id))
-      .where(
-        and(
-          inArray(groups.ownerId, actorIds),
-          eq(groups.type, 'npc'),
-          eq(groupMembers.isActive, true),
-          isNotNull(groupMembers.tier)
-        )
-      );
+    const allMemberships =
+      await listNpcTierMembershipsForDemotionScan(actorIds);
 
     for (const m of allMemberships) {
       // Validate tier (should be valid due to isNotNull filter, but be defensive)
@@ -1017,13 +817,8 @@ export class TieredGroupService {
             : null;
 
           // Pre-fetch old chat ID before transaction
-          const [oldChat] = await db
-            .select({ id: chats.id })
-            .from(chats)
-            .where(eq(chats.groupId, m.groupId))
-            .limit(1);
+          const oldChatId = (await fetchChatIdByGroupId(m.groupId)) ?? null;
 
-          // Generate IDs before transaction to minimize transaction duration
           const newMemberId =
             lowerTier && targetTier && !targetTier.isFull
               ? await generateSnowflakeId()
@@ -1033,56 +828,25 @@ export class TieredGroupService {
               ? await generateSnowflakeId()
               : null;
 
-          // Wrap multi-step demotion in transaction to prevent orphaned state
-          await db.$transaction(async (tx) => {
-            // Deactivate current membership
-            await tx
-              .update(groupMembers)
-              .set({
-                isActive: false,
-                kickReason: reason,
-                kickedAt: new Date(),
-              })
-              .where(
-                and(
-                  eq(groupMembers.groupId, m.groupId),
-                  eq(groupMembers.userId, m.userId)
-                )
-              );
-
-            // Deactivate chat participant for the old tier's chat
-            if (oldChat) {
-              await tx
-                .update(chatParticipants)
-                .set({ isActive: false })
-                .where(
-                  and(
-                    eq(chatParticipants.chatId, oldChat.id),
-                    eq(chatParticipants.userId, m.userId)
-                  )
-                );
-            }
-
-            if (lowerTier && targetTier && !targetTier.isFull && newMemberId) {
-              // Add to lower tier
-              await tx.insert(groupMembers).values({
-                id: newMemberId,
-                groupId: targetTier.groupId,
-                userId: m.userId,
-                role: 'member',
-                tier: lowerTier,
-                previousTier: tier,
-                demotedAt: new Date(),
-              });
-
-              if (targetTier.chatId && newParticipantId) {
-                await tx.insert(chatParticipants).values({
-                  id: newParticipantId,
-                  chatId: targetTier.chatId,
-                  userId: m.userId,
-                });
-              }
-            }
+          await withTransaction(async (tx) => {
+            await runDemoteNpcTierTransaction(tx, {
+              currentGroupId: m.groupId,
+              userId: m.userId,
+              kickReason: reason,
+              oldChatId,
+              lowerTier,
+              fromTier: tier,
+              targetGroupId:
+                lowerTier && targetTier && !targetTier.isFull
+                  ? targetTier.groupId
+                  : null,
+              targetChatId:
+                lowerTier && targetTier && !targetTier.isFull
+                  ? targetTier.chatId
+                  : null,
+              newMemberId,
+              newParticipantId,
+            });
           });
 
           demotions++;
@@ -1135,24 +899,7 @@ export class TieredGroupService {
     const actors = StaticDataRegistry.getAllActors();
 
     // Batch query 1: Get all NPC tier groups with member counts in a single query
-    const tierGroupsWithCounts = await db
-      .select({
-        groupId: groups.id,
-        ownerId: groups.ownerId,
-        tier: groups.tier,
-        maxMembers: groups.maxMembers,
-        memberCount: count(groupMembers.id),
-      })
-      .from(groups)
-      .leftJoin(
-        groupMembers,
-        and(
-          eq(groupMembers.groupId, groups.id),
-          eq(groupMembers.isActive, true)
-        )
-      )
-      .where(and(eq(groups.type, 'npc'), isNotNull(groups.tier)))
-      .groupBy(groups.id, groups.ownerId, groups.tier, groups.maxMembers);
+    const tierGroupsWithCounts = await fetchGlobalNpcTierGroupCounts();
 
     // Track unique NPCs with groups
     const npcsWithGroups = new Set<string>();
@@ -1175,7 +922,7 @@ export class TieredGroupService {
 
       const config = getTierConfig(g.tier);
       const maxMembers = g.maxMembers ?? config.maxMembers;
-      const memberCount = g.memberCount ?? 0;
+      const memberCount = g.memberCount;
 
       totalMembers += memberCount;
       totalCapacity += maxMembers;

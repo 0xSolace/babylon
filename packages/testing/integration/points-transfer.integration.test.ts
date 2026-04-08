@@ -11,7 +11,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import type { User } from '@babylon/db';
-import { db } from '@babylon/db/runtime';
+import { db } from '@babylon/db/engine-storage';
 
 import { generateSnowflakeId } from '@babylon/shared';
 

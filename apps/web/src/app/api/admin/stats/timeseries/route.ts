@@ -86,8 +86,11 @@ import {
   validateEnum,
   withErrorHandling,
 } from '@babylon/api';
-import { and, eq, gte, lte, type SystemMetricsSnapshot } from '@babylon/db';
-import { db, systemMetricsSnapshots } from '@babylon/db/runtime';
+import {
+  type SystemMetricsSnapshot,
+  selectSystemMetricsSnapshotsForAdminTimeseries,
+} from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
@@ -240,18 +243,15 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     'GET /api/admin/stats/timeseries'
   );
 
-  // Query snapshots
-  const snapshots = await db
-    .select()
-    .from(systemMetricsSnapshots)
-    .where(
-      and(
-        eq(systemMetricsSnapshots.environment, environment),
-        gte(systemMetricsSnapshots.timestamp, startDate),
-        lte(systemMetricsSnapshots.timestamp, endDate)
-      )
-    )
-    .orderBy(systemMetricsSnapshots.timestamp);
+  const snapshots = await asSystem(
+    (tx) =>
+      selectSystemMetricsSnapshotsForAdminTimeseries(tx, {
+        environment,
+        startDate,
+        endDate,
+      }),
+    'admin-stats-timeseries'
+  );
 
   // Check for gaps in data
   // Calculate expected snapshots based on granularity

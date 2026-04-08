@@ -10,14 +10,16 @@ import {
   sendSponsoredEvmTransaction,
   setCache,
 } from '@babylon/api';
-import { and, eq } from '@babylon/db';
 import {
-  db,
-  nftOwnership,
-  walletTransferLimit,
-  walletTransferLog,
-} from '@babylon/db/runtime';
-
+  insertWalletTransferLimitOnConflictDoNothing,
+  insertWalletTransferLogInTx,
+  selectNftOwnershipTokenIdForOwnerInTx,
+  selectWalletTransferLimitByUserIdForUpdate,
+  updateWalletTransferLimitDailySpentInTx,
+  updateWalletTransferLogStatusByIdInTx,
+  updateWalletTransferLogTxHashByIdInTx,
+} from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import {
   CHAIN,
   CHAIN_ID,
@@ -136,18 +138,10 @@ async function checkAndReserveDailyLimit(
   userId: string,
   transferUsdValue: number
 ): Promise<{ allowed: boolean; dailySpent: number; dailyLimit: number }> {
-  return await db.transaction(async (tx) => {
-    // Upsert so the row always exists before we lock it
-    await tx
-      .insert(walletTransferLimit)
-      .values({ userId })
-      .onConflictDoNothing();
+  return asUser(userId, async (tx) => {
+    await insertWalletTransferLimitOnConflictDoNothing(tx, userId);
 
-    const [row] = await tx
-      .select()
-      .from(walletTransferLimit)
-      .where(eq(walletTransferLimit.userId, userId))
-      .for('update');
+    const row = await selectWalletTransferLimitByUserIdForUpdate(tx, userId);
 
     if (!row) throw new Error('Failed to initialize limit record');
 
@@ -170,13 +164,10 @@ async function checkAndReserveDailyLimit(
       return { allowed: false, dailySpent, dailyLimit: effectiveLimit };
     }
 
-    await tx
-      .update(walletTransferLimit)
-      .set({
-        dailySpentUsd: newSpent.toFixed(2),
-        ...(isNewDay ? { lastResetAt: now } : {}),
-      })
-      .where(eq(walletTransferLimit.userId, userId));
+    await updateWalletTransferLimitDailySpentInTx(tx, userId, {
+      dailySpentUsd: newSpent.toFixed(2),
+      ...(isNewDay ? { lastResetAt: now } : {}),
+    });
 
     return { allowed: true, dailySpent: newSpent, dailyLimit: effectiveLimit };
   });
@@ -278,18 +269,20 @@ async function sendTokenActionImpl(input: {
 
   // Create audit log entry (pending)
   const logId = await generateSnowflakeId();
-  await db.insert(walletTransferLog).values({
-    id: logId,
-    userId: ctx.dbUserId,
-    fromAddress: senderAddress,
-    toAddress: recipient,
-    tokenAddress: tokenAddressNormalized ?? null,
-    amount: amountWei.toString(),
-    chainId: CHAIN_ID,
-    status: 'pending',
-    type: tokenAddressNormalized ? 'erc20' : 'native',
-    usdValueAtTime: usdValue.toFixed(2),
-    ipAddress,
+  await asUser(ctx.dbUserId, async (tx) => {
+    await insertWalletTransferLogInTx(tx, {
+      id: logId,
+      userId: ctx.dbUserId,
+      fromAddress: senderAddress,
+      toAddress: recipient,
+      tokenAddress: tokenAddressNormalized ?? null,
+      amount: amountWei.toString(),
+      chainId: CHAIN_ID,
+      status: 'pending',
+      type: tokenAddressNormalized ? 'erc20' : 'native',
+      usdValueAtTime: usdValue.toFixed(2),
+      ipAddress,
+    });
   });
 
   let txHash: Hex;
@@ -325,19 +318,17 @@ async function sendTokenActionImpl(input: {
       txHash = result.hash;
     }
   } catch (error) {
-    await db
-      .update(walletTransferLog)
-      .set({ status: 'failed' })
-      .where(eq(walletTransferLog.id, logId));
+    await asUser(ctx.dbUserId, async (tx) => {
+      await updateWalletTransferLogStatusByIdInTx(tx, logId, 'failed');
+    });
     throw error;
   }
 
   // Update log with submitted tx hash. Status stays 'pending' until confirmed on-chain.
   // confirmedAt is set by a future webhook/polling job when the tx is mined.
-  await db
-    .update(walletTransferLog)
-    .set({ txHash })
-    .where(eq(walletTransferLog.id, logId));
+  await asUser(ctx.dbUserId, async (tx) => {
+    await updateWalletTransferLogTxHashByIdInTx(tx, logId, txHash);
+  });
 
   const explorerUrl = getTxExplorerUrl(txHash);
 
@@ -430,18 +421,11 @@ async function sendNftActionImpl(input: {
   // blockchain is the authoritative source, and the on-chain revert is the
   // safety net. The resulting 'failed' log entry is correct audit behavior.
   const tokenIdNum = Number(input.tokenId);
-  const owned = await db
-    .select({ tokenId: nftOwnership.tokenId })
-    .from(nftOwnership)
-    .where(
-      and(
-        eq(nftOwnership.tokenId, tokenIdNum),
-        eq(nftOwnership.ownerAddress, senderAddress)
-      )
-    )
-    .limit(1);
+  const owned = await asUser(ctx.dbUserId, async (tx) =>
+    selectNftOwnershipTokenIdForOwnerInTx(tx, tokenIdNum, senderAddress)
+  );
 
-  if (!owned.length) {
+  if (!owned) {
     throw new Error('You do not own this NFT');
   }
 
@@ -460,18 +444,20 @@ async function sendNftActionImpl(input: {
 
   // Create audit log entry (pending)
   const logId = await generateSnowflakeId();
-  await db.insert(walletTransferLog).values({
-    id: logId,
-    userId: ctx.dbUserId,
-    fromAddress: senderAddress,
-    toAddress: recipient,
-    tokenAddress: contractAddr,
-    tokenId: input.tokenId,
-    amount: '1',
-    chainId: CHAIN_ID,
-    status: 'pending',
-    type: 'erc721',
-    ipAddress,
+  await asUser(ctx.dbUserId, async (tx) => {
+    await insertWalletTransferLogInTx(tx, {
+      id: logId,
+      userId: ctx.dbUserId,
+      fromAddress: senderAddress,
+      toAddress: recipient,
+      tokenAddress: contractAddr,
+      tokenId: input.tokenId,
+      amount: '1',
+      chainId: CHAIN_ID,
+      status: 'pending',
+      type: 'erc721',
+      ipAddress,
+    });
   });
 
   let txHash: Hex;
@@ -487,18 +473,16 @@ async function sendNftActionImpl(input: {
 
     txHash = result.hash;
   } catch (error) {
-    await db
-      .update(walletTransferLog)
-      .set({ status: 'failed' })
-      .where(eq(walletTransferLog.id, logId));
+    await asUser(ctx.dbUserId, async (tx) => {
+      await updateWalletTransferLogStatusByIdInTx(tx, logId, 'failed');
+    });
     throw error;
   }
 
   // Update log with submitted tx hash. Status stays 'pending' until confirmed on-chain.
-  await db
-    .update(walletTransferLog)
-    .set({ txHash })
-    .where(eq(walletTransferLog.id, logId));
+  await asUser(ctx.dbUserId, async (tx) => {
+    await updateWalletTransferLogTxHashByIdInTx(tx, logId, txHash);
+  });
 
   const explorerUrl = getTxExplorerUrl(txHash);
 

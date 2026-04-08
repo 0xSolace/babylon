@@ -66,8 +66,10 @@
  * ```
  */
 
-import { and, desc, eq, gte, inArray } from '@babylon/db';
-import { db, posts, questions } from '@babylon/db/runtime';
+import {
+  listActiveQuestionsForMarketDecision,
+  listRecentActorPostsForMarketDecision,
+} from '@babylon/db';
 import { logger } from '@babylon/shared';
 import { loadActorById } from './actors-loader';
 import { getTradingProbability } from './config/npc-activity';
@@ -2227,12 +2229,7 @@ ${prompt}`
       return `Active Questions:\n${formatSimulationPredictionMarkets()}`;
     }
 
-    const questionsList = await db
-      .select()
-      .from(questions)
-      .where(eq(questions.status, 'active'))
-      .orderBy(desc(questions.createdAt))
-      .limit(10);
+    const questionsList = await listActiveQuestionsForMarketDecision(10);
 
     if (questionsList.length === 0) {
       return 'No active prediction questions currently.';
@@ -2273,18 +2270,11 @@ ${prompt}`
       return 'No actors available for narrative context.';
     }
 
-    const recentPosts = await db
-      .select({ content: posts.content, authorId: posts.authorId })
-      .from(posts)
-      .where(
-        and(
-          gte(posts.createdAt, oneDayAgo),
-          inArray(posts.authorId, actorIds),
-          eq(posts.type, 'post')
-        )
-      )
-      .orderBy(desc(posts.createdAt))
-      .limit(10);
+    const recentPosts = await listRecentActorPostsForMarketDecision({
+      since: oneDayAgo,
+      actorIds,
+      limit: 10,
+    });
 
     if (recentPosts.length === 0) {
       return 'No recent posts in last 24 hours.';

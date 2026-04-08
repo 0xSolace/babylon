@@ -5,8 +5,7 @@
  * This enables users to see what their agents are doing in real-time.
  */
 
-import { eq } from '@babylon/db';
-import { db, users } from '@babylon/db/runtime';
+import { fetchAgentUserForTradeNotification } from '@babylon/db';
 import { logger } from '@babylon/shared';
 import { getOrCreateDMChat, sendMessageToChat } from './dm-service';
 
@@ -92,16 +91,7 @@ export async function notifyOwnerOfAgentTrade(
 
   try {
     // Get the agent and their owner
-    const [agent] = await db
-      .select({
-        id: users.id,
-        displayName: users.displayName,
-        managedBy: users.managedBy,
-        isAgent: users.isAgent,
-      })
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
+    const agent = await fetchAgentUserForTradeNotification(agentUserId);
 
     if (!agent) {
       logger.warn(

@@ -17,10 +17,14 @@ import {
   it,
 } from 'bun:test';
 import { WaitlistService } from '@babylon/api';
-import { eq, inArray } from '@babylon/db';
-import { db, pointsTransactions, referrals, users } from '@babylon/db/runtime';
-
+import {
+  db,
+  pointsTransactions,
+  referrals,
+  users,
+} from '@babylon/db/engine-storage';
 import { generateSnowflakeId } from '@babylon/shared';
+import { eq, inArray } from 'drizzle-orm';
 
 // Skip tests if DATABASE_URL is not set
 const shouldSkip = !process.env.DATABASE_URL;

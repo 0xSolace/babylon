@@ -98,7 +98,7 @@ import {
   requireUserByIdentifier,
   withErrorHandling,
 } from '@babylon/api';
-import { db } from '@babylon/db/runtime';
+import { asPublic } from '@babylon/db/engine-storage';
 import { getReputationBreakdown } from '@babylon/engine';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
@@ -165,15 +165,17 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   const reputation = await getReputationBreakdown(user.id);
 
-  const metrics = await db.agentPerformanceMetrics.findUnique({
-    where: { userId: user.id },
-    select: {
-      onChainReputationSync: true,
-      lastSyncedAt: true,
-      onChainTrustScore: true,
-      onChainAccuracyScore: true,
-    },
-  });
+  const metrics = await asPublic(async (db) =>
+    db.agentPerformanceMetrics.findUnique({
+      where: { userId: user.id },
+      select: {
+        onChainReputationSync: true,
+        lastSyncedAt: true,
+        onChainTrustScore: true,
+        onChainAccuracyScore: true,
+      },
+    })
+  );
 
   return NextResponse.json({
     userId: user.id,

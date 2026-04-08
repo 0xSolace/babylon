@@ -19,10 +19,9 @@ import {
   test,
 } from 'bun:test';
 import { DailyLoginService } from '@babylon/api';
-import { eq, sql } from '@babylon/db';
-import { db, users } from '@babylon/db/runtime';
-
+import { db, users } from '@babylon/db/engine-storage';
 import { generateSnowflakeId, POINTS } from '@babylon/shared';
+import { eq, sql } from 'drizzle-orm';
 
 setDefaultTimeout(30000);
 

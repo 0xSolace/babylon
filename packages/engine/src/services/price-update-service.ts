@@ -1,14 +1,10 @@
 import { PerpDbAdapter, PerpMarketService } from '@babylon/core/markets/perps';
-import { eq } from '@babylon/db';
 import {
-  db,
-  getDbInstance,
-  organizationState,
-  organizations,
-} from '@babylon/db/runtime';
-
+  persistOrganizationPriceUpdate,
+  recordStockPriceUpdateAsSystem,
+} from '@babylon/db';
 import type { JsonValue } from '@babylon/shared';
-import { logger, PERP_MARKET_CONFIG } from '@babylon/shared';
+import { logger } from '@babylon/shared';
 import { FEE_CONFIG } from '../config/fees';
 import { broadcastToChannel } from './realtime-broadcaster';
 import { WalletService } from './wallet-service';
@@ -82,7 +78,6 @@ export class PriceUpdateService {
     });
     const appliedUpdates: AppliedPriceUpdate[] = [];
     const priceMap = new Map<string, number>();
-    const now = new Date();
 
     for (const update of updates) {
       if (!Number.isFinite(update.newPrice) || update.newPrice <= 0) {
@@ -96,89 +91,13 @@ export class PriceUpdateService {
 
       const orgId = update.organizationId;
 
-      // Prefer OrganizationState as the source of truth for dynamic pricing.
-      // The `Organization` table is not guaranteed to be seeded in all envs.
-      const [state] = await db
-        .select({
-          id: organizationState.id,
-          currentPrice: organizationState.currentPrice,
-          basePrice: organizationState.basePrice,
-        })
-        .from(organizationState)
-        .where(eq(organizationState.id, orgId))
-        .limit(1);
-
-      // Best-effort: keep `Organization.currentPrice` in sync if the row exists.
-      const [organization] = await db
-        .select({
-          id: organizations.id,
-          currentPrice: organizations.currentPrice,
-          initialPrice: organizations.initialPrice,
-        })
-        .from(organizations)
-        .where(eq(organizations.id, orgId))
-        .limit(1);
-
-      // Resolve basePrice for bounds enforcement
-      // Priority: organizationState.basePrice > organization.initialPrice
-      const resolvedBasePrice = Number(
-        state?.basePrice ?? organization?.initialPrice ?? 0
-      );
-      const hasValidBasePrice =
-        Number.isFinite(resolvedBasePrice) && resolvedBasePrice > 0;
-
-      // Central price clamp: enforce basePrice bounds on all updates
-      let clampedNewPrice = update.newPrice;
-      if (!hasValidBasePrice) {
-        logger.warn(
-          'Missing basePrice for price update, skipping bounds enforcement',
-          { orgId, resolvedBasePrice },
-          'PriceUpdateService'
-        );
-      }
-      if (hasValidBasePrice) {
-        const minPrice =
-          resolvedBasePrice * PERP_MARKET_CONFIG.PRICE_FLOOR_RATIO;
-        const maxPrice =
-          resolvedBasePrice * PERP_MARKET_CONFIG.PRICE_CEILING_RATIO;
-        clampedNewPrice = Math.max(
-          minPrice,
-          Math.min(maxPrice, clampedNewPrice)
-        );
-      }
-
-      const oldPriceCandidate =
-        organization?.currentPrice ??
-        state?.currentPrice ??
-        state?.basePrice ??
-        clampedNewPrice;
-      const oldPrice = Number(oldPriceCandidate ?? clampedNewPrice);
-      const change = clampedNewPrice - oldPrice;
-      const changePercent = oldPrice === 0 ? 0 : (change / oldPrice) * 100;
-
-      if (organization) {
-        await db
-          .update(organizations)
-          .set({ currentPrice: clampedNewPrice, updatedAt: now })
-          .where(eq(organizations.id, organization.id));
-      }
-
-      // Keep runtime price state in sync (used across engine + widgets)
-      // Ensure basePrice is always set to prevent null fallback drift
-      await db
-        .insert(organizationState)
-        .values({
-          id: orgId,
-          currentPrice: clampedNewPrice,
-          basePrice: resolvedBasePrice,
-          updatedAt: now,
-        })
-        .onConflictDoUpdate({
-          target: organizationState.id,
-          set: { currentPrice: clampedNewPrice, updatedAt: now },
+      const { clampedNewPrice, oldPrice, change, changePercent } =
+        await persistOrganizationPriceUpdate({
+          orgId,
+          requestedNewPrice: update.newPrice,
         });
 
-      await getDbInstance().recordPriceUpdate(
+      await recordStockPriceUpdateAsSystem(
         orgId,
         clampedNewPrice,
         change,

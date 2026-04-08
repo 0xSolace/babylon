@@ -5,8 +5,12 @@
  * Provides assertions and logging for model usage verification.
  */
 
-import { and, count, eq, gte, inArray } from '@babylon/db';
-import { db, llmCallLogs, trajectories, users } from '@babylon/db/runtime';
+import {
+  countLlmCallLogsForTrajectoryIdsSince,
+  countUsersWhereIsAgent,
+  selectTrajectoryIdsForAgentUser,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import type { IAgentRuntime } from '@elizaos/core';
 import { logger } from '../utils/logger';
 
@@ -66,28 +70,18 @@ export class ModelUsageVerifier {
     }
 
     // Count inferences from logs (using trajectoryId)
-    const agentTrajectories = await db
-      .select({ trajectoryId: trajectories.trajectoryId })
-      .from(trajectories)
-      .where(eq(trajectories.agentId, agentUserId));
-
-    const trajectoryIds = agentTrajectories.map((t) => t.trajectoryId);
+    const trajectoryIds = await selectTrajectoryIdsForAgentUser(
+      db,
+      agentUserId
+    );
 
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-    let inferenceCount = 0;
-    if (trajectoryIds.length > 0) {
-      const inferenceCountResult = await db
-        .select({ count: count() })
-        .from(llmCallLogs)
-        .where(
-          and(
-            gte(llmCallLogs.createdAt, twentyFourHoursAgo),
-            inArray(llmCallLogs.trajectoryId, trajectoryIds)
-          )
-        );
-      inferenceCount = inferenceCountResult[0]?.count || 0;
-    }
+    const inferenceCount = await countLlmCallLogsForTrajectoryIdsSince(
+      db,
+      trajectoryIds,
+      twentyFourHoursAgo
+    );
 
     return {
       agentId: agentUserId,
@@ -159,13 +153,10 @@ export class ModelUsageVerifier {
   static async getModelUsageSummary(): Promise<{
     totalAgents: number;
   }> {
-    const agents = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.isAgent, true));
+    const totalAgents = await countUsersWhereIsAgent(db);
 
     return {
-      totalAgents: agents.length,
+      totalAgents,
     };
   }
 }

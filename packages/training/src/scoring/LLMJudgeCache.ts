@@ -11,8 +11,8 @@
  * @packageDocumentation
  */
 
-import { eq } from '@babylon/db';
-import { db, trajectories } from '@babylon/db/runtime';
+import { selectTrainingTrajectoriesForLlmJudgeWarm } from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import { createHash } from 'crypto';
 import { getRubricHash, RUBRICS_VERSION } from '../rubrics';
 import { logger } from '../utils/logger';
@@ -281,17 +281,7 @@ export class LLMJudgeCache {
    * Loads previously scored trajectories into cache
    */
   async warmFromDatabase(limit = 1000): Promise<number> {
-    const results = await db
-      .select({
-        trajectoryId: trajectories.trajectoryId,
-        stepsJson: trajectories.stepsJson,
-        aiJudgeReward: trajectories.aiJudgeReward,
-        aiJudgeReasoning: trajectories.aiJudgeReasoning,
-        judgedAt: trajectories.judgedAt,
-      })
-      .from(trajectories)
-      .where(eq(trajectories.isTrainingData, true))
-      .limit(limit);
+    const results = await selectTrainingTrajectoriesForLlmJudgeWarm(db, limit);
 
     let loaded = 0;
 

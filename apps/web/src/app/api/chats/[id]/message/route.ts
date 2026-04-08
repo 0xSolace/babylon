@@ -108,15 +108,14 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { requireNftChatAccess } from '@babylon/api/services/nft-chat-gating-service';
-import { and, eq, hasBlocked } from '@babylon/db';
 import {
-  asUser,
-  chatParticipants,
-  db,
-  groupMembers,
-  messages,
-  users,
-} from '@babylon/db/runtime';
+  applyRemoveUserFromNftGatedChatAfterAccessLoss,
+  hasBlocked,
+  selectMessageReplyPreviewForChat,
+  selectUserSliceForDmPeer,
+  selectUserWalletAddressRowForNftJoin,
+} from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import {
   GroupChatService,
   MessageQualityChecker,
@@ -302,12 +301,9 @@ export const POST = withErrorHandling(
         );
         if (otherParticipant) {
           const [otherUser, isBlocked, hasBlockedMe] = await Promise.all([
-            db
-              .select({ isActor: users.isActor })
-              .from(users)
-              .where(eq(users.id, otherParticipant.userId))
-              .limit(1)
-              .then((rows) => rows[0] ?? null),
+            asUser(user, async (tx) =>
+              selectUserSliceForDmPeer(tx, otherParticipant.userId)
+            ),
             hasBlocked(user.userId, otherParticipant.userId),
             hasBlocked(otherParticipant.userId, user.userId),
           ]);
@@ -342,11 +338,9 @@ export const POST = withErrorHandling(
 
         // Verify NFT ownership for NFT-gated chats (cached)
         if (chat.nftGated && chat.requiredNftContractAddress) {
-          const [userData] = await db
-            .select({ walletAddress: users.walletAddress })
-            .from(users)
-            .where(eq(users.id, user.userId))
-            .limit(1);
+          const userData = await asUser(user, async (tx) =>
+            selectUserWalletAddressRowForNftJoin(tx, user.userId)
+          );
 
           const verification = await NFTVerificationService.verifyChatAccess(
             userData?.walletAddress ?? null,
@@ -356,34 +350,13 @@ export const POST = withErrorHandling(
           );
 
           if (!verification.canAccess) {
-            // Remove user from chat since they no longer have NFT access
-            // Wrap in transaction for consistency
-            await db.transaction(async (tx) => {
-              if (chat.groupId) {
-                await tx
-                  .update(groupMembers)
-                  .set({
-                    isActive: false,
-                    kickedAt: new Date(),
-                    kickReason: 'Lost NFT access',
-                  })
-                  .where(
-                    and(
-                      eq(groupMembers.groupId, chat.groupId),
-                      eq(groupMembers.userId, user.userId),
-                      eq(groupMembers.isActive, true)
-                    )
-                  );
-              }
-
-              await tx
-                .delete(chatParticipants)
-                .where(
-                  and(
-                    eq(chatParticipants.chatId, chatId),
-                    eq(chatParticipants.userId, user.userId)
-                  )
-                );
+            await asUser(user, async (tx) => {
+              await applyRemoveUserFromNftGatedChatAfterAccessLoss(tx, {
+                chatId,
+                userId: user.userId,
+                groupId: chat.groupId,
+                kickReason: 'Lost NFT access',
+              });
             });
 
             // Invalidate NFT cache for this user/contract combination
@@ -452,22 +425,12 @@ export const POST = withErrorHandling(
     } | null = null;
 
     if (effectiveReplyToMessageId) {
-      const [replyMsg] = await db
-        .select({
-          id: messages.id,
-          content: messages.content,
-          senderId: messages.senderId,
-          senderName: users.displayName,
+      const replyMsg = await asUser(user, async (tx) =>
+        selectMessageReplyPreviewForChat(tx, {
+          messageId: effectiveReplyToMessageId,
+          chatId,
         })
-        .from(messages)
-        .leftJoin(users, eq(users.id, messages.senderId))
-        .where(
-          and(
-            eq(messages.id, effectiveReplyToMessageId),
-            eq(messages.chatId, chatId)
-          )
-        )
-        .limit(1);
+      );
 
       if (!replyMsg) {
         throw new BusinessLogicError(

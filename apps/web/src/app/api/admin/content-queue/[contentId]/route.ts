@@ -17,14 +17,15 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { eq } from '@babylon/db';
 import {
-  comments,
-  db,
-  posts,
-  reports,
-  withTransaction,
-} from '@babylon/db/runtime';
+  dismissReportsForReportedCommentAdmin,
+  dismissReportsForReportedPostAdmin,
+  selectAdminContentQueueCommentLookup,
+  selectAdminContentQueuePostLookup,
+  softDeleteCommentAndResolveReportsAdmin,
+  softDeletePostAndResolveReportsAdmin,
+} from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
@@ -92,12 +93,10 @@ export const POST = withErrorHandling(
     );
 
     if (contentType === 'post') {
-      // Handle post moderation
-      const [existingPost] = await db
-        .select({ id: posts.id, deletedAt: posts.deletedAt })
-        .from(posts)
-        .where(eq(posts.id, contentId))
-        .limit(1);
+      const existingPost = await asSystem(
+        (tx) => selectAdminContentQueuePostLookup(tx, contentId),
+        'admin-content-queue-post-lookup'
+      );
 
       if (!existingPost) {
         return successResponse({ error: 'Post not found' }, 404);
@@ -107,17 +106,17 @@ export const POST = withErrorHandling(
       const userAgent = request.headers.get('user-agent') ?? undefined;
 
       if (action === 'approve') {
-        // Mark reports as dismissed
-        await db
-          .update(reports)
-          .set({
-            status: 'dismissed',
-            resolution: 'Content approved by admin',
-            resolvedBy: admin.userId,
-            resolvedAt: new Date(),
-            updatedAt: new Date(),
-          })
-          .where(eq(reports.reportedPostId, contentId));
+        const now = new Date();
+        await asSystem(
+          (tx) =>
+            dismissReportsForReportedPostAdmin(tx, {
+              contentId,
+              adminId: admin.userId,
+              resolution: 'Content approved by admin',
+              now,
+            }),
+          'admin-content-queue-post-approve'
+        );
 
         await logAdminModify({
           adminId: admin.userId,
@@ -130,26 +129,15 @@ export const POST = withErrorHandling(
           metadata: { action: 'approve' },
         });
       } else if (action === 'hide') {
-        // Use transaction to ensure atomic update of content + reports
-        await withTransaction(async (tx) => {
-          // Soft delete by setting deletedAt (content can be recovered if needed)
-          await tx
-            .update(posts)
-            .set({ deletedAt: new Date() })
-            .where(eq(posts.id, contentId));
-
-          // Mark reports as resolved
-          await tx
-            .update(reports)
-            .set({
-              status: 'resolved',
-              resolution: reason || 'Content hidden by admin',
-              resolvedBy: admin.userId,
-              resolvedAt: new Date(),
-              updatedAt: new Date(),
-            })
-            .where(eq(reports.reportedPostId, contentId));
-        });
+        await asSystem(async (tx) => {
+          const now = new Date();
+          await softDeletePostAndResolveReportsAdmin(tx, {
+            contentId,
+            adminId: admin.userId,
+            resolution: reason || 'Content hidden by admin',
+            now,
+          });
+        }, 'admin-content-queue-post-hide');
 
         await logAdminModify({
           adminId: admin.userId,
@@ -166,16 +154,10 @@ export const POST = withErrorHandling(
         });
       }
     } else if (contentType === 'comment') {
-      // Handle comment moderation
-      const [existingComment] = await db
-        .select({
-          id: comments.id,
-          deletedAt: comments.deletedAt,
-          postId: comments.postId,
-        })
-        .from(comments)
-        .where(eq(comments.id, contentId))
-        .limit(1);
+      const existingComment = await asSystem(
+        (tx) => selectAdminContentQueueCommentLookup(tx, contentId),
+        'admin-content-queue-comment-lookup'
+      );
 
       if (!existingComment) {
         return successResponse({ error: 'Comment not found' }, 404);
@@ -185,17 +167,17 @@ export const POST = withErrorHandling(
       const userAgent = request.headers.get('user-agent') ?? undefined;
 
       if (action === 'approve') {
-        // Dismiss reports for this comment
-        await db
-          .update(reports)
-          .set({
-            status: 'dismissed',
-            resolution: 'Comment approved by admin',
-            resolvedBy: admin.userId,
-            resolvedAt: new Date(),
-            updatedAt: new Date(),
-          })
-          .where(eq(reports.reportedCommentId, contentId));
+        const now = new Date();
+        await asSystem(
+          (tx) =>
+            dismissReportsForReportedCommentAdmin(tx, {
+              contentId,
+              adminId: admin.userId,
+              resolution: 'Comment approved by admin',
+              now,
+            }),
+          'admin-content-queue-comment-approve'
+        );
 
         await logAdminModify({
           adminId: admin.userId,
@@ -208,29 +190,15 @@ export const POST = withErrorHandling(
           metadata: { action: 'approve' },
         });
       } else if (action === 'hide') {
-        // Use transaction to ensure atomic update of content + reports
-        await withTransaction(async (tx) => {
-          // Soft delete by setting deletedAt (content can be recovered if needed)
-          await tx
-            .update(comments)
-            .set({
-              deletedAt: new Date(),
-              updatedAt: new Date(),
-            })
-            .where(eq(comments.id, contentId));
-
-          // Mark reports as resolved (matching post hide behavior)
-          await tx
-            .update(reports)
-            .set({
-              status: 'resolved',
-              resolution: reason || 'Comment hidden by admin',
-              resolvedBy: admin.userId,
-              resolvedAt: new Date(),
-              updatedAt: new Date(),
-            })
-            .where(eq(reports.reportedCommentId, contentId));
-        });
+        await asSystem(async (tx) => {
+          const now = new Date();
+          await softDeleteCommentAndResolveReportsAdmin(tx, {
+            contentId,
+            adminId: admin.userId,
+            resolution: reason || 'Comment hidden by admin',
+            now,
+          });
+        }, 'admin-content-queue-comment-hide');
 
         await logAdminModify({
           adminId: admin.userId,

@@ -7,8 +7,16 @@
  * Uses LLM to determine appropriate investments based on NPC characteristics.
  */
 
-import { and, eq, gte, sql } from '@babylon/db';
-import { actorState, db, getDbInstance } from '@babylon/db/runtime';
+import {
+  fetchOrganizationStateRowAsSystem,
+  insertNpcPoolRowOnConflictDoNothing,
+  insertNpcTradeRowForInitialInvestment,
+  insertPoolPositionRowForInitialInvestment,
+  listAllActorStatesAsSystem,
+  listAllOrganizationStatesAsSystem,
+  npcActorStateAtomicDebitAsSystem,
+  poolExistsById,
+} from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import { loadActorById } from '../actors-loader';
 import { BabylonLLMClient } from '../llm/openai-client';
@@ -63,7 +71,7 @@ export class InitialInvestmentService {
     );
 
     // Get all NPCs with their affiliations from static registry + dynamic state
-    const actorStates = await getDbInstance().getAllActorStates();
+    const actorStates = await listAllActorStatesAsSystem();
     const actorStateMap = new Map(actorStates.map((s) => [s.id, s]));
     const npcs = StaticDataRegistry.getAllActors()
       .map((actor) => {
@@ -82,7 +90,7 @@ export class InitialInvestmentService {
       .filter((npc) => Number.parseFloat(npc.tradingBalance) > 0);
 
     // Get all companies from static registry with dynamic prices
-    const orgStates = await getDbInstance().getAllOrganizationStates();
+    const orgStates = await listAllOrganizationStatesAsSystem();
     const priceMap = new Map(
       orgStates.map((s): [string, number | null] => [s.id, s.currentPrice])
     );
@@ -500,7 +508,7 @@ Generate investments for ALL ${npcs.length} NPCs. Each NPC must have 2-5 investm
       throw new Error(`Organization not found for ticker ${investment.ticker}`);
     }
 
-    const orgState = await getDbInstance().getOrganizationState(staticOrg.id);
+    const orgState = await fetchOrganizationStateRowAsSystem(staticOrg.id);
     const org = {
       ...staticOrg,
       currentPrice: orgState?.currentPrice ?? staticOrg.initialPrice,
@@ -509,89 +517,54 @@ Generate investments for ALL ${npcs.length} NPCs. Each NPC must have 2-5 investm
     const entryPrice = org.currentPrice || org.initialPrice || 100;
     const shares = investment.amount / entryPrice;
 
-    // Ensure Pool exists for this NPC (poolId = npcId for backward compatibility)
-    const existingPool = await db.pool.findUnique({
-      where: { id: investment.npcId },
-    });
-
-    if (!existingPool) {
-      // Create Pool for NPC
-      const now = new Date();
-      await db.pool
-        .create({
-          data: {
-            id: investment.npcId,
-            npcActorId: investment.npcId,
-            name: `${investment.npcName} Portfolio`,
-            description: `Initial investment portfolio for ${investment.npcName}`,
-            isActive: true,
-            totalValue: '0',
-            totalDeposits: '0',
-            availableBalance: '0',
-            lifetimePnL: '0',
-            performanceFeeRate: 0.05,
-            totalFeesCollected: '0',
-            openedAt: now,
-            updatedAt: now,
-            status: 'ACTIVE',
-          },
-        })
-        .catch((error) => {
-          // Pool might already exist from race condition, that's fine
-          const errorCode =
-            error && typeof error === 'object' && 'code' in error
-              ? error.code
-              : null;
-          if (errorCode !== 'P2002') {
-            // P2002 = unique constraint (already exists)
-            throw error;
-          }
-        });
+    const poolAlreadyExists = await poolExistsById(investment.npcId);
+    if (!poolAlreadyExists) {
+      const poolNow = new Date();
+      await insertNpcPoolRowOnConflictDoNothing({
+        id: investment.npcId,
+        npcActorId: investment.npcId,
+        name: `${investment.npcName} Portfolio`,
+        description: `Initial investment portfolio for ${investment.npcName}`,
+        isActive: true,
+        totalValue: '0',
+        totalDeposits: '0',
+        availableBalance: '0',
+        lifetimePnL: '0',
+        performanceFeeRate: 0.05,
+        totalFeesCollected: '0',
+        openedAt: poolNow,
+        updatedAt: poolNow,
+        status: 'ACTIVE',
+      });
     }
 
-    // Create position
     const positionId = await generateSnowflakeId();
     const now = new Date();
 
-    await db.poolPosition.create({
-      data: {
-        id: positionId,
-        poolId: investment.npcId, // Use npcId as poolId
-        marketType: 'perp',
-        ticker: org.ticker,
-        marketId: null,
-        side: 'long', // Initial positions are all long
-        entryPrice: entryPrice,
-        currentPrice: entryPrice,
-        size: Number(shares),
-        shares: Number(shares),
-        leverage: null,
-        liquidationPrice: null,
-        unrealizedPnL: 0,
-        realizedPnL: null,
-        openedAt: now,
-        closedAt: null,
-        updatedAt: now,
-      },
+    await insertPoolPositionRowForInitialInvestment({
+      id: positionId,
+      poolId: investment.npcId,
+      marketType: 'perp',
+      ticker: org.ticker,
+      marketId: null,
+      side: 'long',
+      entryPrice,
+      currentPrice: entryPrice,
+      size: Number(shares),
+      shares: Number(shares),
+      leverage: null,
+      liquidationPrice: null,
+      unrealizedPnL: 0,
+      realizedPnL: null,
+      openedAt: now,
+      closedAt: null,
+      updatedAt: now,
     });
 
-    // Deduct from NPC trading balance (atomic check to prevent negative balance)
-    const debitResult = await db
-      .update(actorState)
-      .set({
-        tradingBalance: sql`${actorState.tradingBalance} - ${investment.amount}`,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(actorState.id, investment.npcId),
-          gte(
-            sql<number>`${actorState.tradingBalance}::numeric`,
-            investment.amount
-          )
-        )
-      )
-      .returning({ id: actorState.id });
+    const debitResult = await npcActorStateAtomicDebitAsSystem(
+      investment.npcId,
+      investment.amount
+    );
 
     if (debitResult.length === 0) {
       throw new Error(
@@ -599,22 +572,20 @@ Generate investments for ALL ${npcs.length} NPCs. Each NPC must have 2-5 investm
       );
     }
 
-    // Record the trade
-    await db.npcTrade.create({
-      data: {
-        id: await generateSnowflakeId(),
-        npcActorId: investment.npcId,
-        poolId: null,
-        marketType: 'perp',
-        ticker: org.ticker,
-        action: 'open_long',
-        side: 'long',
-        amount: investment.amount,
-        price: entryPrice,
-        sentiment: null,
-        reason: `Initial investment: ${investment.reasoning}`,
-        executedAt: new Date(),
-      },
+    await insertNpcTradeRowForInitialInvestment({
+      id: await generateSnowflakeId(),
+      npcActorId: investment.npcId,
+      poolId: null,
+      marketType: 'perp',
+      ticker: org.ticker,
+      marketId: null,
+      action: 'open_long',
+      side: 'long',
+      amount: investment.amount,
+      price: entryPrice,
+      sentiment: null,
+      reason: `Initial investment: ${investment.reasoning}`,
+      executedAt: new Date(),
     });
 
     logger.debug(

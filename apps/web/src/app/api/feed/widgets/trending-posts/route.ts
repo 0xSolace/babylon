@@ -80,9 +80,9 @@
  */
 
 import { optionalAuth, successResponse, withErrorHandling } from '@babylon/api';
-import { asPublic, asUser } from '@babylon/db/runtime';
 import { logger, TrendingPostsQuerySchema, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+import { runWithOptionalUserRls } from '@/lib/db/run-with-optional-user-rls';
 
 interface TrendingPost {
   id: string;
@@ -134,132 +134,67 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const now = new Date(); // Current time for filtering out future posts
 
-  // Optional auth - trending posts are public but RLS still applies
   const authUser = await optionalAuth(request).catch(() => null);
 
-  // Get posts, interactions, and users with RLS
   const { posts, allReactions, allComments, allShares, users } =
-    authUser && authUser.userId
-      ? await asUser(authUser, async (db) => {
-          const postsList = await db.post.findMany({
-            where: {
-              timestamp: {
-                gte: oneDayAgo,
-                lte: now, // ✅ No future posts
-              },
-              deletedAt: null, // Filter out deleted posts
-            },
-            orderBy: {
-              timestamp: 'desc',
-            },
-            take: 100, // Get more posts to calculate trending from
-          });
+    await runWithOptionalUserRls(authUser, async (db) => {
+      const postsList = await db.post.findMany({
+        where: {
+          timestamp: {
+            gte: oneDayAgo,
+            lte: now,
+          },
+          deletedAt: null,
+        },
+        orderBy: {
+          timestamp: 'desc',
+        },
+        take: 100,
+      });
 
-          if (postsList.length === 0) {
-            return {
-              posts: [],
-              allReactions: [],
-              allComments: [],
-              allShares: [],
-              users: [],
-            };
-          }
+      if (postsList.length === 0) {
+        return {
+          posts: [],
+          allReactions: [],
+          allComments: [],
+          allShares: [],
+          users: [],
+        };
+      }
 
-          // Get interaction counts for all posts
-          const postIds = postsList.map((p) => p.id);
-          const [reactions, comments, shares] = await Promise.all([
-            db.reaction.groupBy({
-              by: ['postId'],
-              where: { postId: { in: postIds }, type: 'like' },
-              _count: { postId: true },
-            }),
-            db.comment.groupBy({
-              by: ['postId'],
-              where: { postId: { in: postIds } },
-              _count: { postId: true },
-            }),
-            db.share.groupBy({
-              by: ['postId'],
-              where: { postId: { in: postIds } },
-              _count: { postId: true },
-            }),
-          ]);
+      const postIds = postsList.map((p) => p.id);
+      const [reactions, comments, shares] = await Promise.all([
+        db.reaction.groupBy({
+          by: ['postId'],
+          where: { postId: { in: postIds }, type: 'like' },
+          _count: { postId: true },
+        }),
+        db.comment.groupBy({
+          by: ['postId'],
+          where: { postId: { in: postIds } },
+          _count: { postId: true },
+        }),
+        db.share.groupBy({
+          by: ['postId'],
+          where: { postId: { in: postIds } },
+          _count: { postId: true },
+        }),
+      ]);
 
-          // Get user data for posts
-          const authorIds = [...new Set(postsList.map((p) => p.authorId))];
-          const usersList = await db.user.findMany({
-            where: { id: { in: authorIds } },
-            select: { id: true, username: true, displayName: true },
-          });
+      const authorIds = [...new Set(postsList.map((p) => p.authorId))];
+      const usersList = await db.user.findMany({
+        where: { id: { in: authorIds } },
+        select: { id: true, username: true, displayName: true },
+      });
 
-          return {
-            posts: postsList,
-            allReactions: reactions,
-            allComments: comments,
-            allShares: shares,
-            users: usersList,
-          };
-        })
-      : await asPublic(async (db) => {
-          const postsList = await db.post.findMany({
-            where: {
-              timestamp: {
-                gte: oneDayAgo,
-                lte: now, // ✅ No future posts
-              },
-              deletedAt: null, // Filter out deleted posts
-            },
-            orderBy: {
-              timestamp: 'desc',
-            },
-            take: 100, // Get more posts to calculate trending from
-          });
-
-          if (postsList.length === 0) {
-            return {
-              posts: [],
-              allReactions: [],
-              allComments: [],
-              allShares: [],
-              users: [],
-            };
-          }
-
-          // Get interaction counts for all posts
-          const postIds = postsList.map((p) => p.id);
-          const [reactions, comments, shares] = await Promise.all([
-            db.reaction.groupBy({
-              by: ['postId'],
-              where: { postId: { in: postIds }, type: 'like' },
-              _count: { postId: true },
-            }),
-            db.comment.groupBy({
-              by: ['postId'],
-              where: { postId: { in: postIds } },
-              _count: { postId: true },
-            }),
-            db.share.groupBy({
-              by: ['postId'],
-              where: { postId: { in: postIds } },
-              _count: { postId: true },
-            }),
-          ]);
-
-          // Get user data for posts
-          const authorIds = [...new Set(postsList.map((p) => p.authorId))];
-          const usersList = await db.user.findMany({
-            where: { id: { in: authorIds } },
-            select: { id: true, username: true, displayName: true },
-          });
-
-          return {
-            posts: postsList,
-            allReactions: reactions,
-            allComments: comments,
-            allShares: shares,
-            users: usersList,
-          };
-        });
+      return {
+        posts: postsList,
+        allReactions: reactions,
+        allComments: comments,
+        allShares: shares,
+        users: usersList,
+      };
+    });
 
   if (posts.length === 0) {
     return successResponse({

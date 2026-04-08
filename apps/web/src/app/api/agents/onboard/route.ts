@@ -82,7 +82,7 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { asUser } from '@babylon/db/runtime';
+import { asUser } from '@babylon/db/engine-storage';
 
 import {
   AgentOnboardSchema,

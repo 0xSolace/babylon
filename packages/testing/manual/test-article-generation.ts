@@ -9,7 +9,7 @@
  * 5. Shows sample outputs
  */
 
-import { db } from '@babylon/db/runtime';
+import { db } from '@babylon/db/engine-storage';
 
 import { BabylonLLMClient } from '@babylon/engine';
 

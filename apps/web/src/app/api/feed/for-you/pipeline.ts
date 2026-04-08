@@ -1,32 +1,21 @@
 import { getCacheOrFetch } from '@babylon/api';
 import {
-  and,
-  desc,
-  eq,
-  gte,
-  inArray,
-  isNotNull,
-  isNull,
-  lt,
-  lte,
-  not,
-  sql,
+  type DrizzleClient,
+  executeNarrativeFeedEngagementCounts,
+  selectFollowedActorIdsByUserId,
+  selectFollowingIdsByFollowerId,
+  selectForYouBackfillPostSlicesByHotScore,
+  selectForYouFeedEventRows,
+  selectNarrativeFeedAuthorUsersByIds,
+  selectNarrativeFeedRecentPostSlices,
+  selectNarrativeNewMarketCardRows,
+  selectNarrativeOriginalPostsByIds,
+  selectNarrativeQuestionMarketRowsWithSharesInnerJoin,
+  selectNarrativeQuestionMetaWithArc,
+  selectNarrativeUserActivePositionQuestionIds,
+  selectNarrativeUserLikedPostIds,
+  selectNarrativeUserSharedPostIds,
 } from '@babylon/db';
-import {
-  arcStates,
-  db,
-  feedEvents,
-  follows,
-  markets,
-  positions,
-  posts,
-  questions,
-  reactions,
-  shares,
-  userActorFollows,
-  users,
-} from '@babylon/db/runtime';
-
 import {
   dailyTopicService,
   deriveTopicFromText,
@@ -44,6 +33,7 @@ import {
   calculateResolutionBoost,
   calculateStoryScore,
 } from '@/app/api/feed/narrative/scoring';
+import { runWithOptionalUserRls } from '@/lib/db/run-with-optional-user-rls';
 import {
   calculateConversationDepthScore,
   calculateForYouScore,
@@ -79,10 +69,6 @@ interface QuestionMeta {
   resolutionDate: Date;
   topicKey: string | null;
   topicLabel: string | null;
-}
-
-interface FollowRow {
-  id: string;
 }
 
 interface FeedEventRow {
@@ -353,37 +339,18 @@ function pickLeadPosts(
     .slice(0, 1);
 }
 
-async function loadBaseCandidates(): Promise<BaseForYouResult> {
+async function loadBaseCandidates(
+  baseDb: DrizzleClient
+): Promise<BaseForYouResult> {
   const now = new Date();
   const cutoff = new Date(now.getTime() - FEED_POST_WINDOW_MS);
   const newMarketCutoff = new Date(now.getTime() - NEW_MARKET_WINDOW_MS);
 
-  const recentPosts = await db
-    .select({
-      id: posts.id,
-      content: posts.content,
-      authorId: posts.authorId,
-      timestamp: posts.timestamp,
-      type: posts.type,
-      articleTitle: posts.articleTitle,
-      fullContent: posts.fullContent,
-      category: posts.category,
-      imageUrl: posts.imageUrl,
-      relatedQuestion: posts.relatedQuestion,
-      originalPostId: posts.originalPostId,
-    })
-    .from(posts)
-    .where(
-      and(
-        isNull(posts.deletedAt),
-        gte(posts.timestamp, cutoff),
-        lte(posts.timestamp, now),
-        isNull(posts.commentOnPostId),
-        isNull(posts.parentCommentId)
-      )
-    )
-    .orderBy(desc(posts.timestamp))
-    .limit(SAFETY_CANDIDATE_LIMIT);
+  const recentPosts = await selectNarrativeFeedRecentPostSlices(baseDb, {
+    cutoff,
+    now,
+    limit: SAFETY_CANDIDATE_LIMIT,
+  });
 
   // ─── Hot-post backfill (24h → 7d) ───────────────────────────────────────────
   // When fresh content is sparse, fill remaining capacity with high-engagement
@@ -394,36 +361,14 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
   const backfillCapacity = SAFETY_CANDIDATE_LIMIT - recentPosts.length;
   if (backfillCapacity > 0) {
     const backfillCutoff = new Date(now.getTime() - BACKFILL_WINDOW_MS);
-    const backfillPosts = await db
-      .select({
-        id: posts.id,
-        content: posts.content,
-        authorId: posts.authorId,
-        timestamp: posts.timestamp,
-        type: posts.type,
-        articleTitle: posts.articleTitle,
-        fullContent: posts.fullContent,
-        category: posts.category,
-        imageUrl: posts.imageUrl,
-        relatedQuestion: posts.relatedQuestion,
-        originalPostId: posts.originalPostId,
-      })
-      .from(posts)
-      .where(
-        and(
-          isNull(posts.deletedAt),
-          gte(posts.timestamp, backfillCutoff),
-          lt(posts.timestamp, cutoff),
-          isNull(posts.commentOnPostId),
-          isNull(posts.parentCommentId)
-        )
-      )
-      .orderBy(
-        sql`(SELECT COALESCE(mic.engagement_score, 0)
-             FROM mv_post_interaction_counts mic
-             WHERE mic.post_id = ${posts.id}) DESC`
-      )
-      .limit(backfillCapacity);
+    const backfillPosts = await selectForYouBackfillPostSlicesByHotScore(
+      baseDb,
+      {
+        backfillCutoff,
+        primaryCutoff: cutoff,
+        limit: backfillCapacity,
+      }
+    );
 
     const primaryPostIds = new Set(recentPosts.map((p) => p.id));
     for (const p of backfillPosts) {
@@ -443,79 +388,14 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
   }
 
   const postIds = recentPosts.map((post) => post.id);
-  const postIdsArray = sql`ARRAY[${sql.join(
-    postIds.map((id) => sql`${id}`),
-    sql`, `
-  )}]::text[]`;
 
-  const engagementRows = await db.execute(sql`
-    WITH
-    target_posts AS (
-      SELECT unnest(${postIdsArray}) AS post_id
-    ),
-    reaction_counts AS (
-      SELECT r."postId" AS post_id, COUNT(*) AS count
-      FROM "Reaction" r
-      INNER JOIN target_posts tp ON r."postId" = tp.post_id
-      WHERE r.type = 'like'
-      GROUP BY r."postId"
-    ),
-    comment_counts AS (
-      SELECT c."postId" AS post_id, COUNT(*) AS count
-      FROM "Comment" c
-      INNER JOIN target_posts tp ON c."postId" = tp.post_id
-      WHERE c."deletedAt" IS NULL
-      GROUP BY c."postId"
-    ),
-    share_counts AS (
-      SELECT s."postId" AS post_id, COUNT(*) AS count
-      FROM "Share" s
-      INNER JOIN target_posts tp ON s."postId" = tp.post_id
-      GROUP BY s."postId"
-    )
-    SELECT
-      tp.post_id,
-      COALESCE(rc.count, 0) AS like_count,
-      COALESCE(cc.count, 0) AS comment_count,
-      COALESCE(sc.count, 0) AS share_count
-    FROM target_posts tp
-    LEFT JOIN reaction_counts rc ON tp.post_id = rc.post_id
-    LEFT JOIN comment_counts cc ON tp.post_id = cc.post_id
-    LEFT JOIN share_counts sc ON tp.post_id = sc.post_id
-  `);
-
-  const reactionMap = new Map<string, number>();
-  const commentMap = new Map<string, number>();
-  const shareMap = new Map<string, number>();
-  if (!Array.isArray(engagementRows)) {
-    logger.warn(
-      'engagementRows DB result was not an array — defaulting to empty, counts will be zeroed',
-      { resultType: typeof engagementRows },
-      'ForYouPipeline'
-    );
-  }
-  for (const row of Array.isArray(engagementRows)
-    ? (engagementRows as Record<string, unknown>[])
-    : []) {
-    const postId = String(row['post_id'] ?? '');
-    if (!postId) continue;
-    reactionMap.set(postId, Number(row['like_count'] ?? 0));
-    commentMap.set(postId, Number(row['comment_count'] ?? 0));
-    shareMap.set(postId, Number(row['share_count'] ?? 0));
-  }
+  const { reactionMap, commentMap, shareMap } =
+    await executeNarrativeFeedEngagementCounts(baseDb, postIds);
 
   const authorIds = [...new Set(recentPosts.map((post) => post.authorId))];
   const authorUsers =
     authorIds.length > 0
-      ? await db
-          .select({
-            id: users.id,
-            username: users.username,
-            displayName: users.displayName,
-            profileImageUrl: users.profileImageUrl,
-          })
-          .from(users)
-          .where(inArray(users.id, authorIds))
+      ? await selectNarrativeFeedAuthorUsersByIds(baseDb, authorIds)
       : [];
   const userMap = new Map(authorUsers.map((user) => [user.id, user]));
 
@@ -541,30 +421,17 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
   >();
 
   if (repostOriginalIds.length > 0) {
-    const originalRows = await db
-      .select({
-        id: posts.id,
-        content: posts.content,
-        authorId: posts.authorId,
-        timestamp: posts.timestamp,
-      })
-      .from(posts)
-      .where(inArray(posts.id, repostOriginalIds));
+    const originalRows = await selectNarrativeOriginalPostsByIds(
+      baseDb,
+      repostOriginalIds
+    );
 
     const originalAuthorIds = [
       ...new Set(originalRows.map((row) => row.authorId)),
     ];
     const originalAuthorUsers =
       originalAuthorIds.length > 0
-        ? await db
-            .select({
-              id: users.id,
-              username: users.username,
-              displayName: users.displayName,
-              profileImageUrl: users.profileImageUrl,
-            })
-            .from(users)
-            .where(inArray(users.id, originalAuthorIds))
+        ? await selectNarrativeFeedAuthorUsersByIds(baseDb, originalAuthorIds)
         : [];
     const originalUserMap = new Map(
       originalAuthorUsers.map((user) => [user.id, user])
@@ -596,19 +463,10 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
 
   const questionMetaMap = new Map<number, QuestionMeta>();
   if (questionNumbers.length > 0) {
-    const rows = await db
-      .select({
-        questionNumber: questions.questionNumber,
-        text: questions.text,
-        status: questions.status,
-        arcState: arcStates.currentState,
-        resolutionDate: questions.resolutionDate,
-        topicKey: questions.topicKey,
-        topicLabel: questions.topicLabel,
-      })
-      .from(questions)
-      .leftJoin(arcStates, eq(arcStates.questionId, questions.id))
-      .where(inArray(questions.questionNumber, questionNumbers));
+    const rows = await selectNarrativeQuestionMetaWithArc(
+      baseDb,
+      questionNumbers
+    );
 
     for (const row of rows) {
       questionMetaMap.set(row.questionNumber, {
@@ -873,19 +731,11 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
     .map((story) => story.questionNumber as number);
 
   if (storyQuestionNumbers.length > 0) {
-    const marketRows = await db
-      .select({
-        questionNumber: questions.questionNumber,
-        marketId: markets.id,
-        yesShares: markets.yesShares,
-        noShares: markets.noShares,
-      })
-      .from(questions)
-      .innerJoin(
-        markets,
-        sql`lower(trim(${markets.question})) = lower(trim(${questions.text}))`
-      )
-      .where(inArray(questions.questionNumber, storyQuestionNumbers));
+    const marketRows =
+      await selectNarrativeQuestionMarketRowsWithSharesInnerJoin(
+        baseDb,
+        storyQuestionNumbers
+      );
 
     const questionToMarket = new Map(
       marketRows.map((row) => [
@@ -918,45 +768,13 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
       )
   );
 
-  const newMarketQuestions = await db
-    .select({
-      questionNumber: questions.questionNumber,
-      text: questions.text,
-      resolutionDate: questions.resolutionDate,
-      createdAt: questions.createdAt,
-      arcState: arcStates.currentState,
-      marketId: markets.id,
-      yesShares: markets.yesShares,
-      noShares: markets.noShares,
-      topicKey: questions.topicKey,
-      topicLabel: questions.topicLabel,
-    })
-    .from(questions)
-    .leftJoin(arcStates, eq(arcStates.questionId, questions.id))
-    .leftJoin(
-      markets,
-      sql`lower(trim(${markets.question})) = lower(trim(${questions.text}))`
-    )
-    .where(
-      and(
-        eq(questions.status, 'active'),
-        gte(questions.createdAt, newMarketCutoff),
-        lt(
-          questions.resolutionDate,
-          new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
-        ),
-        not(
-          inArray(
-            questions.questionNumber,
-            existingQuestionNumbers.size > 0
-              ? [...existingQuestionNumbers]
-              : [-1]
-          )
-        )
-      )
-    )
-    .orderBy(desc(questions.createdAt))
-    .limit(MAX_NEW_MARKET_CANDIDATES);
+  const newMarketQuestions = await selectNarrativeNewMarketCardRows(baseDb, {
+    newMarketCutoff,
+    resolutionHorizon: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
+    existingQuestionNumbers:
+      existingQuestionNumbers.size > 0 ? [...existingQuestionNumbers] : [],
+    limit: MAX_NEW_MARKET_CANDIDATES,
+  });
 
   for (const question of newMarketQuestions) {
     const hoursSinceOpen =
@@ -1003,30 +821,16 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
 }
 
 async function loadFeedEventAggregates(
-  userId: string
+  userId: string,
+  client: DrizzleClient
 ): Promise<EventAggregates> {
   const eventCutoff = new Date(Date.now() - FEED_EVENT_WINDOW_MS);
-  const rows = await db
-    .select({
-      actionType: feedEvents.actionType,
-      itemId: feedEvents.itemId,
-      clusterId: feedEvents.clusterId,
-      marketId: feedEvents.marketId,
-      topicKey: feedEvents.topicKey,
-      authorId: feedEvents.authorId,
-      dwellMs: feedEvents.dwellMs,
-      createdAt: feedEvents.createdAt,
-    })
-    .from(feedEvents)
-    .where(
-      and(
-        eq(feedEvents.userId, userId),
-        eq(feedEvents.surface, 'for_you'),
-        gte(feedEvents.createdAt, eventCutoff)
-      )
-    )
-    .orderBy(desc(feedEvents.createdAt))
-    .limit(500);
+  const rows = await selectForYouFeedEventRows(client, {
+    userId,
+    surface: 'for_you',
+    since: eventCutoff,
+    limit: 500,
+  });
 
   return aggregateFeedEvents(
     rows.map((row) => ({
@@ -1042,27 +846,30 @@ async function loadFeedEventAggregates(
   );
 }
 
-export async function buildForYouFeed(userId?: string | null) {
+export async function buildForYouFeed(
+  userId: string | null | undefined,
+  client: DrizzleClient
+) {
   const currentTopic = await dailyTopicService.getCurrentTopic();
 
   const baseResult = await getCacheOrFetch<BaseForYouResult>(
     'feed:for-you:v2:base',
-    () => loadBaseCandidates(),
+    () => runWithOptionalUserRls(null, (db) => loadBaseCandidates(db)),
     { namespace: 'feed', ttl: BASE_CACHE_TTL_S }
   );
 
   const [
-    followedUsers,
-    followedActors,
+    followingIds,
+    followedActorIdsList,
     userLikes,
     userShares,
     userPositions,
     eventAggregates,
   ]: [
-    FollowRow[],
-    FollowRow[],
+    string[],
+    string[],
     Array<{ postId: string | null }>,
-    Array<{ postId: string }>,
+    Array<{ postId: string | null }>,
     Array<{ questionId: number | null }>,
     EventAggregates,
   ] = userId
@@ -1078,36 +885,19 @@ export async function buildForYouFeed(userId?: string | null) {
                 'ForYouPipeline'
               );
               return Promise.all([
-                db
-                  .select({ id: follows.followingId })
-                  .from(follows)
-                  .where(eq(follows.followerId, userId)),
-                db
-                  .select({ id: userActorFollows.actorId })
-                  .from(userActorFollows)
-                  .where(eq(userActorFollows.userId, userId)),
+                selectFollowingIdsByFollowerId(client, userId),
+                selectFollowedActorIdsByUserId(client, userId),
                 baseResult.postIds.length > 0
-                  ? db
-                      .select({ postId: reactions.postId })
-                      .from(reactions)
-                      .where(
-                        and(
-                          inArray(reactions.postId, baseResult.postIds),
-                          eq(reactions.userId, userId),
-                          eq(reactions.type, 'like')
-                        )
-                      )
+                  ? selectNarrativeUserLikedPostIds(client, {
+                      userId,
+                      postIds: baseResult.postIds,
+                    })
                   : Promise.resolve([]),
                 baseResult.postIds.length > 0
-                  ? db
-                      .select({ postId: shares.postId })
-                      .from(shares)
-                      .where(
-                        and(
-                          inArray(shares.postId, baseResult.postIds),
-                          eq(shares.userId, userId)
-                        )
-                      )
+                  ? selectNarrativeUserSharedPostIds(client, {
+                      userId,
+                      postIds: baseResult.postIds,
+                    })
                   : Promise.resolve([]),
                 (() => {
                   const questionNumbers = baseResult.stories
@@ -1121,19 +911,12 @@ export async function buildForYouFeed(userId?: string | null) {
                     return Promise.resolve([]);
                   }
 
-                  return db
-                    .select({ questionId: positions.questionId })
-                    .from(positions)
-                    .where(
-                      and(
-                        eq(positions.userId, userId),
-                        eq(positions.status, 'active'),
-                        isNotNull(positions.questionId),
-                        inArray(positions.questionId, questionNumbers)
-                      )
-                    );
+                  return selectNarrativeUserActivePositionQuestionIds(client, {
+                    userId,
+                    questionNumbers,
+                  });
                 })(),
-                loadFeedEventAggregates(userId),
+                loadFeedEventAggregates(userId, client),
               ]);
             },
             { namespace: 'feed', ttl: USER_ENRICHMENT_TTL_S }
@@ -1151,10 +934,10 @@ export async function buildForYouFeed(userId?: string | null) {
             'ForYouPipeline'
           );
           return [[], [], [], [], [], aggregateFeedEvents([])] as [
-            FollowRow[],
-            FollowRow[],
+            string[],
+            string[],
             Array<{ postId: string | null }>,
-            Array<{ postId: string }>,
+            Array<{ postId: string | null }>,
             Array<{ questionId: number | null }>,
             EventAggregates,
           ];
@@ -1163,15 +946,19 @@ export async function buildForYouFeed(userId?: string | null) {
     : [[], [], [], [], [], aggregateFeedEvents([])];
 
   const followedAuthorIds = new Set<string>([
-    ...followedUsers.map((follow) => follow.id),
-    ...followedActors.map((follow) => follow.id),
+    ...followingIds,
+    ...followedActorIdsList,
   ]);
   const likedSet = new Set(
     userLikes
       .map((row) => row.postId)
       .filter((postId): postId is string => Boolean(postId))
   );
-  const sharedSet = new Set(userShares.map((row) => row.postId));
+  const sharedSet = new Set(
+    userShares
+      .map((row) => row.postId)
+      .filter((postId): postId is string => Boolean(postId))
+  );
 
   // Build an enriched version of anchor posts for new-market story hydration.
   // anchorPostById is stored as a plain Record in the cached payload (Maps are

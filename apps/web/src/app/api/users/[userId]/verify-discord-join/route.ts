@@ -19,8 +19,8 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { eq } from '@babylon/db';
-import { db, users } from '@babylon/db/runtime';
+import { selectUserDiscordJoinVerificationSliceById } from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import { logger, UserIdParamSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
@@ -62,17 +62,9 @@ export const POST = withErrorHandling(
       );
     }
 
-    // Get user's Discord info
-    const [user] = await db
-      .select({
-        discordUsername: users.discordUsername,
-        discordId: users.discordId,
-        discordAccessToken: users.discordAccessToken,
-        pointsAwardedForDiscordJoin: users.pointsAwardedForDiscordJoin,
-      })
-      .from(users)
-      .where(eq(users.id, canonicalUserId))
-      .limit(1);
+    const user = await asUser(authUser, async (db) =>
+      selectUserDiscordJoinVerificationSliceById(db, canonicalUserId)
+    );
 
     // VALIDATION: Check if user has linked Discord account
     if (!user?.discordUsername || !user?.discordId) {

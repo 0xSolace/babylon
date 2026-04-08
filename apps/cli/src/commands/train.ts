@@ -26,17 +26,17 @@ import { logger } from '../lib/logger.js';
 
 // Heavy imports loaded lazily to avoid initializing connections for simple commands
 async function getDbImports() {
-  const [dbMod, runtime] = await Promise.all([
-    import('@babylon/db'),
+  const [drizzle, runtime] = await Promise.all([
+    import('drizzle-orm'),
     import('@babylon/db/runtime'),
   ]);
   return {
     db: runtime.db,
-    eq: dbMod.eq,
-    and: dbMod.and,
-    isNull: dbMod.isNull,
-    not: dbMod.not,
-    count: dbMod.count,
+    eq: drizzle.eq,
+    and: drizzle.and,
+    isNull: drizzle.isNull,
+    not: drizzle.not,
+    count: drizzle.count,
     trajectories: runtime.trajectories,
     closeDatabase: runtime.closeDatabase,
     users: runtime.users,

@@ -123,6 +123,20 @@ Visit `http://localhost:3000`
 
 ---
 
+## 🗄️ Database layer (imports & RLS)
+
+Babylon splits database access on purpose:
+
+- **`@babylon/db`** — Schema types, named query helpers (`fetchChatNameById`, `upsertDailyTopicRow`, …), snowflake helpers, moderation utilities. **Not** Drizzle SQL builders.
+- **`drizzle-orm`** — `eq`, `and`, `sql`, `count`, etc. Import here (typically **inside** `packages/db/src/*-queries.ts`, not scattered across route handlers).
+- **`@babylon/db/runtime`** — Live client `db`, table symbols, and RLS wrappers **`asUser`**, **`asSystem`**, **`asPublic`**.
+
+**Why:** One place to review SQL and security, honest dependency edges, and Postgres `app.current_user_id` set **per transaction** so pooled connections never leak user vs system context.
+
+Full rationale, patterns, and roadmap: **[docs/database-layer.md](./docs/database-layer.md)** · **[docs/roadmap-database-layer.md](./docs/roadmap-database-layer.md)**
+
+---
+
 ## 🤖 AI Assistants (Ruler)
 
 This repo uses **Ruler** to centralize AI coding instructions in `.ruler/**`.

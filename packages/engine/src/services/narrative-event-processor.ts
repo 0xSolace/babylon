@@ -13,20 +13,28 @@
 import {
   type ArcState,
   type ArcStateType,
-  and,
-  eq,
+  bumpArcStateEventsGeneratedOptimisticInTx,
+  fetchArcStateCurrentStateOnly,
+  fetchArcStateRowById,
+  fetchQuestionArcPlanActorAssignments,
+  fetchQuestionArcPlanForProcessTick,
+  fetchQuestionArcPlanScheduleRow,
+  fetchQuestionTextAndNumberForNarrative,
+  fetchQuestionTextForNarrative,
+  findArcStateIdByQuestionId,
+  insertArcStateRowAsSystem,
+  insertWorldEventFromArcAsSystem,
+  insertWorldEventFromArcInTx,
   type LongTermArcState,
   type MarketImpact,
   type ScheduledEvent,
   type StructuredEventData,
+  type Transaction,
+  transitionArcStateSimpleAsSystem,
+  transitionArcStateWithOptimisticLockAsSystem,
+  updateQuestionArcPlanEventScheduleAsSystem,
+  withTransaction,
 } from '@babylon/db';
-import {
-  arcStates,
-  db,
-  questionArcPlans,
-  questions,
-  worldEvents,
-} from '@babylon/db/runtime';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import type { BabylonLLMClient } from '../llm/openai-client';
 import { toSafeDayNumber } from '../utils/date-utils';
@@ -242,19 +250,12 @@ export async function transitionArcState(
 
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       const now = new Date();
-      const result = await db
-        .update(arcStates)
-        .set({
-          currentState: newState,
-          stateEnteredAt: now,
-          updatedAt: now,
-          // Clear pending transitions that triggered
-          pendingTransitions: [],
-        })
-        .where(
-          and(eq(arcStates.id, arcId), eq(arcStates.currentState, attemptState))
-        )
-        .returning({ id: arcStates.id });
+      const result = await transitionArcStateWithOptimisticLockAsSystem(
+        arcId,
+        newState,
+        attemptState,
+        now
+      );
 
       if (result.length > 0) {
         logger.info(
@@ -274,11 +275,7 @@ export async function transitionArcState(
 
       if (attempt < MAX_RETRIES - 1) {
         // Re-read current state for next attempt
-        const [arc] = await db
-          .select({ currentState: arcStates.currentState })
-          .from(arcStates)
-          .where(eq(arcStates.id, arcId))
-          .limit(1);
+        const arc = await fetchArcStateCurrentStateOnly(arcId);
 
         if (!arc) {
           logger.warn(
@@ -306,15 +303,7 @@ export async function transitionArcState(
   } else {
     // Fallback to simple update (for backward compatibility)
     const now = new Date();
-    await db
-      .update(arcStates)
-      .set({
-        currentState: newState,
-        stateEnteredAt: now,
-        updatedAt: now,
-        pendingTransitions: [],
-      })
-      .where(eq(arcStates.id, arcId));
+    await transitionArcStateSimpleAsSystem(arcId, newState, now);
 
     logger.info(
       `Arc ${arcId} transitioned to ${newState}`,
@@ -415,14 +404,7 @@ export async function markScheduledEventFired(
   eventIndex: number
 ): Promise<boolean> {
   // Get current arc plan
-  const [arcPlan] = await db
-    .select({
-      id: questionArcPlans.id,
-      eventSchedule: questionArcPlans.eventSchedule,
-    })
-    .from(questionArcPlans)
-    .where(eq(questionArcPlans.questionId, questionId))
-    .limit(1);
+  const arcPlan = await fetchQuestionArcPlanScheduleRow(questionId);
 
   if (!arcPlan || !arcPlan.eventSchedule) {
     logger.warn(
@@ -468,10 +450,7 @@ export async function markScheduledEventFired(
     firedAt: new Date().toISOString(),
   };
 
-  await db
-    .update(questionArcPlans)
-    .set({ eventSchedule: updatedSchedule })
-    .where(eq(questionArcPlans.id, arcPlan.id));
+  await updateQuestionArcPlanEventScheduleAsSystem(arcPlan.id, updatedSchedule);
 
   logger.info(
     'Marked scheduled event as fired',
@@ -631,7 +610,7 @@ export async function createWorldEventFromArcEvent(
     questionNumber
   );
 
-  await db.insert(worldEvents).values(prepared.values);
+  await insertWorldEventFromArcAsSystem(prepared.values);
 
   logger.info(
     'Created world event from arc event',
@@ -649,10 +628,10 @@ export async function createWorldEventFromArcEvent(
 
 /**
  * Transaction-aware version of createWorldEventFromArcEvent.
- * Used within db.transaction() to ensure atomicity with arc state updates.
+ * Used within `withTransaction()` to ensure atomicity with arc state updates.
  */
 async function createWorldEventFromArcEventTx(
-  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  tx: Transaction,
   structuredEvent: StructuredEventData,
   questionText: string,
   timestamp: Date,
@@ -667,7 +646,7 @@ async function createWorldEventFromArcEventTx(
     questionNumber
   );
 
-  await tx.insert(worldEvents).values(prepared.values);
+  await insertWorldEventFromArcInTx(tx, prepared.values);
 
   logger.info(
     'Created world event from arc event (tx)',
@@ -689,13 +668,8 @@ async function createWorldEventFromArcEventTx(
 async function getQuestionDetails(
   questionId: string
 ): Promise<{ text: string; questionNumber: number | null }> {
-  const [question] = await db
-    .select({ text: questions.text, questionNumber: questions.questionNumber })
-    .from(questions)
-    .where(eq(questions.id, questionId))
-    .limit(1);
+  const question = await fetchQuestionTextAndNumberForNarrative(questionId);
 
-  // Log a warning if question is not found for visibility
   if (!question) {
     logger.warn(
       'Question not found for world event creation, using fallback values',
@@ -726,11 +700,7 @@ async function getAffectedStocksForQuestion(
     const { StaticDataRegistry } = await import('./static-data-registry');
 
     // First, get the question text
-    const [question] = await db
-      .select({ text: questions.text })
-      .from(questions)
-      .where(eq(questions.id, questionId))
-      .limit(1);
+    const question = await fetchQuestionTextForNarrative(questionId);
 
     if (!question) {
       return [];
@@ -776,16 +746,7 @@ async function getAffectedStocksForQuestion(
     // from the arc plan's associated actors
     if (tickers.length === 0) {
       // Get the arc plan for this question to find associated actors
-      const arcPlanResult = await db
-        .select({
-          insiderActorIds: questionArcPlans.insiderActorIds,
-          deceiverActorIds: questionArcPlans.deceiverActorIds,
-        })
-        .from(questionArcPlans)
-        .where(eq(questionArcPlans.questionId, questionId))
-        .limit(1);
-
-      const arcPlan = arcPlanResult[0];
+      const arcPlan = await fetchQuestionArcPlanActorAssignments(questionId);
       if (arcPlan) {
         const actorIds = [
           ...(arcPlan.insiderActorIds || []),
@@ -860,12 +821,7 @@ export async function processArcTick(
   eventGenerated: boolean;
   newState?: ArcStateType;
 }> {
-  // Get arc state
-  const [arc] = await db
-    .select()
-    .from(arcStates)
-    .where(eq(arcStates.id, arcId))
-    .limit(1);
+  const arc = await fetchArcStateRowById(arcId);
 
   if (!arc) {
     logger.warn(`Arc ${arcId} not found`, { arcId }, 'NarrativeEventProcessor');
@@ -884,11 +840,7 @@ export async function processArcTick(
   // If transitioned, re-fetch arc to get fresh updatedAt for subsequent optimistic locking
   let effectiveArc = arc;
   if (transitioned && newState) {
-    const [freshArc] = await db
-      .select()
-      .from(arcStates)
-      .where(eq(arcStates.id, arcId))
-      .limit(1);
+    const freshArc = await fetchArcStateRowById(arcId);
     if (freshArc) {
       effectiveArc = freshArc;
     } else {
@@ -902,16 +854,7 @@ export async function processArcTick(
   }
 
   // Get arc plan for actor assignments AND event schedule
-  const [arcPlan] = await db
-    .select({
-      id: questionArcPlans.id,
-      insiderActorIds: questionArcPlans.insiderActorIds,
-      deceiverActorIds: questionArcPlans.deceiverActorIds,
-      eventSchedule: questionArcPlans.eventSchedule,
-    })
-    .from(questionArcPlans)
-    .where(eq(questionArcPlans.questionId, arc.questionId))
-    .limit(1);
+  const arcPlan = await fetchQuestionArcPlanForProcessTick(arc.questionId);
 
   // Check for scheduled events first (deterministic approach)
   const currentHour = new Date().getHours();
@@ -973,22 +916,16 @@ export async function processArcTick(
     // This prevents inconsistent state if either operation fails
     let worldEventId: string;
     try {
-      worldEventId = await db.transaction(async (tx) => {
-        // Acquire the optimistic lock using fresh updatedAt from effectiveArc
-        const updateResult = await tx
-          .update(arcStates)
-          .set({
-            eventsGenerated: (effectiveArc.eventsGenerated ?? 0) + 1,
-            lastEventAt: now,
-            updatedAt: now,
-          })
-          .where(
-            and(
-              eq(arcStates.id, arcId),
-              eq(arcStates.updatedAt, effectiveArc.updatedAt)
-            )
-          )
-          .returning({ id: arcStates.id });
+      worldEventId = await withTransaction(async (tx) => {
+        const updateResult = await bumpArcStateEventsGeneratedOptimisticInTx(
+          tx,
+          {
+            arcId,
+            expectedUpdatedAt: effectiveArc.updatedAt,
+            now,
+            nextEventsGenerated: (effectiveArc.eventsGenerated ?? 0) + 1,
+          }
+        );
 
         if (updateResult.length === 0) {
           // Optimistic lock conflict - throw to rollback transaction
@@ -1138,11 +1075,7 @@ export async function processArcTick(
  */
 export async function createArcState(questionId: string): Promise<string> {
   // First check if arc already exists (idempotent)
-  const [existing] = await db
-    .select({ id: arcStates.id })
-    .from(arcStates)
-    .where(eq(arcStates.questionId, questionId))
-    .limit(1);
+  const existing = await findArcStateIdByQuestionId(questionId);
 
   if (existing) {
     logger.debug(
@@ -1157,7 +1090,7 @@ export async function createArcState(questionId: string): Promise<string> {
   const now = new Date();
 
   try {
-    await db.insert(arcStates).values({
+    await insertArcStateRowAsSystem({
       id,
       questionId,
       currentState: 'setup',
@@ -1183,11 +1116,7 @@ export async function createArcState(questionId: string): Promise<string> {
       (error instanceof Error && error.message.includes('unique constraint'));
 
     if (isUniqueViolation) {
-      const [racedExisting] = await db
-        .select({ id: arcStates.id })
-        .from(arcStates)
-        .where(eq(arcStates.questionId, questionId))
-        .limit(1);
+      const racedExisting = await findArcStateIdByQuestionId(questionId);
 
       if (racedExisting) {
         logger.debug(

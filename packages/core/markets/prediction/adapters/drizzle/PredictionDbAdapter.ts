@@ -1,20 +1,26 @@
 import {
-  and,
-  desc,
-  eq,
-  type InferInsertModel,
-  inArray,
-  sql,
+  corePredictionDeletePosition,
+  corePredictionInsertMarketOnConflictDoNothing,
+  corePredictionInsertPriceHistory,
+  corePredictionSelectActiveMarkets,
+  corePredictionSelectActiveUserPositions,
+  corePredictionSelectMarketById,
+  corePredictionSelectMarketsByIds,
+  corePredictionSelectPositionByUserMarketSide,
+  corePredictionSelectPositionsForMarket,
+  corePredictionSelectQuestionById,
+  corePredictionSelectQuestionByQuestionNumber,
+  corePredictionUpdateMarketReturning,
+  corePredictionUpsertPositionReturning,
+  type Market,
+  type NewMarket,
+  type NewPosition,
+  type NewPredictionPriceHistory,
+  type Position,
+  type Question,
   type Transaction,
 } from '@babylon/db';
-import {
-  db,
-  markets,
-  positions,
-  predictionPriceHistories,
-  questions,
-} from '@babylon/db/runtime';
-
+import { db as defaultDb } from '@babylon/db/engine-storage';
 import { generateSnowflakeId } from '@babylon/shared';
 import type {
   PredictionDbPort,
@@ -25,16 +31,12 @@ import type {
   QuestionRecord,
 } from '../../types';
 
-type NewMarket = InferInsertModel<typeof markets>;
-type NewPosition = InferInsertModel<typeof positions>;
-type NewHistory = InferInsertModel<typeof predictionPriceHistories>;
-
 const toSideBool = (side: PredictionSide) => side === 'yes';
 const fromSideBool = (side: boolean): PredictionSide => (side ? 'yes' : 'no');
 
-type DbClient = typeof db | Transaction;
+type DbClient = typeof defaultDb | Transaction;
 
-const mapMarket = (m: typeof markets.$inferSelect): PredictionMarketRecord => {
+const mapMarket = (m: Market): PredictionMarketRecord => {
   const extra = m as unknown as Partial<PredictionMarketRecord>;
   return {
     id: m.id,
@@ -57,9 +59,7 @@ const mapMarket = (m: typeof markets.$inferSelect): PredictionMarketRecord => {
   };
 };
 
-const mapPosition = (
-  p: typeof positions.$inferSelect
-): PredictionPositionRecord => ({
+const mapPosition = (p: Position): PredictionPositionRecord => ({
   id: p.id,
   userId: p.userId,
   marketId: p.marketId,
@@ -74,88 +74,58 @@ const mapPosition = (
   updatedAt: p.updatedAt,
 });
 
+const mapQuestionRow = (q: Question): QuestionRecord => ({
+  id: q.id,
+  questionNumber: q.questionNumber ?? undefined,
+  text: q.text,
+  status: (q.status as QuestionRecord['status']) ?? 'active',
+  resolutionDate: q.resolutionDate,
+  resolvedOutcome: q.resolvedOutcome,
+  createdDate: q.createdDate,
+});
+
 export class PredictionDbAdapter implements PredictionDbPort {
-  constructor(private readonly client: DbClient = db) {}
+  constructor(private readonly client: DbClient = defaultDb) {}
 
   async getMarketById(id: string): Promise<PredictionMarketRecord | null> {
-    const [m] = await this.client
-      .select()
-      .from(markets)
-      .where(eq(markets.id, id))
-      .limit(1);
+    const m = await corePredictionSelectMarketById(this.client, id);
     return m ? mapMarket(m) : null;
   }
 
   async getMarketsByIds(ids: string[]): Promise<PredictionMarketRecord[]> {
-    if (ids.length === 0) return [];
-    const ms = await this.client
-      .select()
-      .from(markets)
-      .where(inArray(markets.id, ids));
+    const ms = await corePredictionSelectMarketsByIds(this.client, ids);
     return ms.map(mapMarket);
   }
 
   async listMarkets(): Promise<PredictionMarketRecord[]> {
-    // Only return active (non-resolved) markets for trading
-    const rows = await this.client
-      .select()
-      .from(markets)
-      .where(eq(markets.resolved, false));
+    const rows = await corePredictionSelectActiveMarkets(this.client);
     return rows.map(mapMarket);
   }
 
   async listUserPositions(userId: string): Promise<PredictionPositionRecord[]> {
-    const rows = await this.client
-      .select()
-      .from(positions)
-      .where(
-        and(
-          eq(positions.userId, userId),
-          // Only return active (open) positions with sellable shares
-          eq(positions.status, 'active')
-        )
-      );
-    // Filter out positions with negligible shares (closed but not marked resolved)
+    const rows = await corePredictionSelectActiveUserPositions(
+      this.client,
+      userId
+    );
     return rows.map(mapPosition).filter((p) => p.shares >= 0.01);
   }
 
   async getQuestion(idOrNumber: string): Promise<QuestionRecord | null> {
-    const [byId] = await this.client
-      .select()
-      .from(questions)
-      .where(eq(questions.id, idOrNumber))
-      .limit(1);
+    const byId = await corePredictionSelectQuestionById(
+      this.client,
+      idOrNumber
+    );
     if (byId) {
-      return {
-        id: byId.id,
-        questionNumber: byId.questionNumber ?? undefined,
-        text: byId.text,
-        status: (byId.status as QuestionRecord['status']) ?? 'active',
-        resolutionDate: byId.resolutionDate,
-        resolvedOutcome: byId.resolvedOutcome,
-        createdDate: byId.createdDate,
-      };
+      return mapQuestionRow(byId);
     }
 
     const num = Number.parseInt(idOrNumber, 10);
     if (Number.isNaN(num)) return null;
-    const qs = await this.client
-      .select()
-      .from(questions)
-      .where(eq(questions.questionNumber, num))
-      .limit(1);
-    const q = qs[0];
-    return q
-      ? {
-          id: q.id,
-          questionNumber: q.questionNumber ?? undefined,
-          text: q.text,
-          status: (q.status as QuestionRecord['status']) ?? 'active',
-          resolutionDate: q.resolutionDate,
-          resolvedOutcome: q.resolvedOutcome,
-          createdDate: q.createdDate,
-        }
-      : null;
+    const q = await corePredictionSelectQuestionByQuestionNumber(
+      this.client,
+      num
+    );
+    return q ? mapQuestionRow(q) : null;
   }
 
   async createMarketFromQuestion(
@@ -191,13 +161,10 @@ export class PredictionDbAdapter implements PredictionDbPort {
       resolutionDescription: null,
     };
 
-    // Note: Destructuring [inserted] extracts the first element directly
-    // So `inserted` is a single market object or undefined, not an array
-    const [inserted] = await this.client
-      .insert(markets)
-      .values(data)
-      .onConflictDoNothing()
-      .returning();
+    const inserted = await corePredictionInsertMarketOnConflictDoNothing(
+      this.client,
+      data
+    );
 
     if (inserted) {
       return mapMarket(inserted);
@@ -225,9 +192,10 @@ export class PredictionDbAdapter implements PredictionDbPort {
       >
     >
   ): Promise<PredictionMarketRecord> {
-    const [updated] = await this.client
-      .update(markets)
-      .set({
+    const updated = await corePredictionUpdateMarketReturning(
+      this.client,
+      marketId,
+      {
         yesShares:
           updates.yesShares != null ? String(updates.yesShares) : undefined,
         noShares:
@@ -241,9 +209,8 @@ export class PredictionDbAdapter implements PredictionDbPort {
         resolutionProofUrl: updates.resolutionProofUrl ?? undefined,
         resolutionDescription: updates.resolutionDescription ?? undefined,
         updatedAt: new Date(),
-      })
-      .where(eq(markets.id, marketId))
-      .returning();
+      }
+    );
 
     if (!updated) throw new Error(`Market not found: ${marketId}`);
     return mapMarket(updated);
@@ -254,25 +221,12 @@ export class PredictionDbAdapter implements PredictionDbPort {
     marketId: string,
     side: PredictionSide
   ): Promise<PredictionPositionRecord | null> {
-    const [p] = await this.client
-      .select()
-      .from(positions)
-      .where(
-        and(
-          eq(positions.userId, userId),
-          eq(positions.marketId, marketId),
-          eq(positions.side, toSideBool(side))
-        )
-      )
-      // If duplicates exist, prefer the active/most-recent position.
-      .orderBy(
-        desc(
-          sql<number>`case when ${positions.status} = 'active' then 1 else 0 end`
-        ),
-        desc(positions.updatedAt),
-        desc(positions.createdAt)
-      )
-      .limit(1);
+    const p = await corePredictionSelectPositionByUserMarketSide(
+      this.client,
+      userId,
+      marketId,
+      toSideBool(side)
+    );
     return p ? mapPosition(p) : null;
   }
 
@@ -298,50 +252,32 @@ export class PredictionDbAdapter implements PredictionDbPort {
       amount: String(position.avgPrice * position.shares),
     };
 
-    const [result] = await this.client
-      .insert(positions)
-      .values(row)
-      .onConflictDoUpdate({
-        target: positions.id,
-        set: {
-          shares: row.shares,
-          avgPrice: row.avgPrice,
-          amount: row.amount,
-          pnl: row.pnl,
-          outcome: row.outcome,
-          resolvedAt: row.resolvedAt,
-          status: row.status,
-          updatedAt: now,
-        },
-      })
-      .returning();
-
-    if (!result) {
-      throw new Error(
-        `Failed to upsert position for user ${position.userId} market ${position.marketId}`
-      );
-    }
+    const result = await corePredictionUpsertPositionReturning(
+      this.client,
+      row,
+      now
+    );
     return mapPosition(result);
   }
 
   async deletePosition(positionId: string): Promise<void> {
-    await this.client.delete(positions).where(eq(positions.id, positionId));
+    await corePredictionDeletePosition(this.client, positionId);
   }
 
   async listPositionsForMarket(
     marketId: string
   ): Promise<PredictionPositionRecord[]> {
-    const rows = await this.client
-      .select()
-      .from(positions)
-      .where(eq(positions.marketId, marketId));
+    const rows = await corePredictionSelectPositionsForMarket(
+      this.client,
+      marketId
+    );
     return rows.map(mapPosition);
   }
 
   async insertPriceSnapshot(
     snapshot: PredictionPriceSnapshotRecord
   ): Promise<void> {
-    const row: NewHistory = {
+    const row: NewPredictionPriceHistory = {
       id: await generateSnowflakeId(),
       marketId: snapshot.marketId,
       yesPrice: snapshot.yesPrice,
@@ -353,6 +289,6 @@ export class PredictionDbAdapter implements PredictionDbPort {
       source: snapshot.source,
       createdAt: snapshot.createdAt ?? new Date(),
     };
-    await this.client.insert(predictionPriceHistories).values(row);
+    await corePredictionInsertPriceHistory(this.client, row);
   }
 }

@@ -53,43 +53,47 @@
  */
 
 import { requireAdmin, successResponse, withErrorHandling } from '@babylon/api';
-import { db } from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 
 import type { NextRequest } from 'next/server';
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
   await requireAdmin(request);
 
-  const appeals = await db.user.findMany({
-    where: {
-      appealStatus: 'human_review',
-      isBanned: true,
-    },
-    select: {
-      id: true,
-      username: true,
-      displayName: true,
-      profileImageUrl: true,
-      bannedAt: true,
-      bannedReason: true,
-      bannedBy: true,
-      isScammer: true,
-      isCSAM: true,
-      appealCount: true,
-      appealStaked: true,
-      appealStakeAmount: true,
-      appealStakeTxHash: true,
-      appealSubmittedAt: true,
-      falsePositiveHistory: true,
-      earnedPoints: true,
-      totalDeposited: true,
-      totalWithdrawn: true,
-      lifetimePnL: true,
-    },
-    orderBy: {
-      appealSubmittedAt: 'asc', // Oldest first
-    },
-  });
+  const appeals = await asSystem(
+    (tx) =>
+      tx.user.findMany({
+        where: {
+          appealStatus: 'human_review',
+          isBanned: true,
+        },
+        select: {
+          id: true,
+          username: true,
+          displayName: true,
+          profileImageUrl: true,
+          bannedAt: true,
+          bannedReason: true,
+          bannedBy: true,
+          isScammer: true,
+          isCSAM: true,
+          appealCount: true,
+          appealStaked: true,
+          appealStakeAmount: true,
+          appealStakeTxHash: true,
+          appealSubmittedAt: true,
+          falsePositiveHistory: true,
+          earnedPoints: true,
+          totalDeposited: true,
+          totalWithdrawn: true,
+          lifetimePnL: true,
+        },
+        orderBy: {
+          appealSubmittedAt: 'asc',
+        },
+      }),
+    'admin-human-review-list'
+  );
 
   return successResponse({ appeals });
 });

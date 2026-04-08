@@ -69,7 +69,7 @@ mock.module('@babylon/db', () => ({
   sql: (strings: TemplateStringsArray) => strings.join(''),
 }));
 
-mock.module('@babylon/db/runtime', () => ({
+mock.module('@babylon/db/engine-storage', () => ({
   balanceTransactions: 'BalanceTransaction',
   db: {
     select: () => ({

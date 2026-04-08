@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 /**
  * Training Data Assessment
  *
@@ -6,7 +7,6 @@
  * This provides a clear picture of what real data exists.
  */
 
-import { count, desc, eq, sql } from '@babylon/db';
 import {
   agentPerformanceMetrics,
   agentTrades,
@@ -18,7 +18,8 @@ import {
   trainingBatches,
   trajectories,
   users,
-} from '@babylon/db/runtime';
+} from '@babylon/db/engine-storage';
+import { count, desc, eq, sql } from 'drizzle-orm';
 import { mkdirSync, writeFileSync } from 'fs';
 import { CANONICAL_ARCHETYPES } from '../src/rubrics';
 

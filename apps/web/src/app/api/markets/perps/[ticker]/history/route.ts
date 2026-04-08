@@ -55,12 +55,14 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, desc, eq, gte } from '@babylon/db';
-import { db, perpMarketSnapshots, stockPrices } from '@babylon/db/runtime';
-
+import {
+  selectPerpMarketOrganizationIdByTicker,
+  selectStockPriceHistoryRowsForOrganizationDesc,
+} from '@babylon/db';
 import { toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
+import { runWithOptionalUserRls } from '@/lib/db/run-with-optional-user-rls';
 
 type TimeRange = '1H' | '4H' | '1D' | '1W' | 'ALL';
 
@@ -209,7 +211,7 @@ export const GET = withErrorHandling(
     request: NextRequest,
     context: { params: Promise<{ ticker: string }> }
   ) => {
-    const { error, rateLimitInfo } = await publicRateLimit(request);
+    const { error, rateLimitInfo, user } = await publicRateLimit(request);
     if (error) return error;
 
     const { ticker } = ParamsSchema.parse(await context.params);
@@ -219,92 +221,75 @@ export const GET = withErrorHandling(
       range: searchParams.get('range'),
     });
 
-    // Look up the organizationId from the perp market snapshot
-    const [marketSnapshot] = await db
-      .select({ organizationId: perpMarketSnapshots.organizationId })
-      .from(perpMarketSnapshots)
-      .where(eq(perpMarketSnapshots.ticker, ticker))
-      .limit(1);
+    return runWithOptionalUserRls(user, async (db) => {
+      const organizationId = await selectPerpMarketOrganizationIdByTicker(
+        db,
+        ticker
+      );
 
-    if (!marketSnapshot) {
-      return successResponse({
-        ticker,
-        history: [],
-        message: 'Market not found',
-      });
-    }
+      if (!organizationId) {
+        return successResponse({
+          ticker,
+          history: [],
+          message: 'Market not found',
+        });
+      }
 
-    const now = new Date();
-    const selectedRange = (range ?? 'ALL') as TimeRange;
-    const since =
-      selectedRange === 'ALL'
-        ? null
-        : new Date(now.getTime() - RANGE_MS[selectedRange]);
+      const now = new Date();
+      const selectedRange = (range ?? 'ALL') as TimeRange;
+      const since =
+        selectedRange === 'ALL'
+          ? null
+          : new Date(now.getTime() - RANGE_MS[selectedRange]);
 
-    // Get price history from stockPrices table (raw points)
-    const rawHistory = await db
-      .select({
-        id: stockPrices.id,
-        price: stockPrices.price,
-        change: stockPrices.change,
-        changePercent: stockPrices.changePercent,
-        timestamp: stockPrices.timestamp,
-        openPrice: stockPrices.openPrice,
-        highPrice: stockPrices.highPrice,
-        lowPrice: stockPrices.lowPrice,
-        volume: stockPrices.volume,
-      })
-      .from(stockPrices)
-      .where(
-        since
-          ? and(
-              eq(stockPrices.organizationId, marketSnapshot.organizationId),
-              gte(stockPrices.timestamp, since)
-            )
-          : eq(stockPrices.organizationId, marketSnapshot.organizationId)
-      )
-      .orderBy(desc(stockPrices.timestamp))
-      // When a range is selected, fetch more raw points so downsampling has enough signal.
-      .limit(range ? Math.max(limit * 10, 5000) : limit);
+      const rawHistory = await selectStockPriceHistoryRowsForOrganizationDesc(
+        db,
+        {
+          organizationId,
+          since,
+          limit: range ? Math.max(limit * 10, 5000) : limit,
+        }
+      );
 
-    const ascending = rawHistory.reverse();
-    const history = range
-      ? downsampleStockPrices(
-          ascending.map((p) => ({
-            price: Number(p.price),
+      const ascending = rawHistory.reverse();
+      const history = range
+        ? downsampleStockPrices(
+            ascending.map((p) => ({
+              price: Number(p.price),
+              timestamp: p.timestamp,
+              volume: p.volume,
+            })),
+            limit
+          ).map((p) => ({
+            id: null as string | null,
+            price: p.price,
+            change: p.change,
+            changePercent: p.changePercent,
             timestamp: p.timestamp,
+            openPrice: p.openPrice,
+            highPrice: p.highPrice,
+            lowPrice: p.lowPrice,
             volume: p.volume,
-          })),
-          limit
-        ).map((p) => ({
-          id: null as string | null,
-          price: p.price,
-          change: p.change,
-          changePercent: p.changePercent,
-          timestamp: p.timestamp,
-          openPrice: p.openPrice,
-          highPrice: p.highPrice,
-          lowPrice: p.lowPrice,
-          volume: p.volume,
-        }))
-      : ascending;
+          }))
+        : ascending;
 
-    const res = successResponse({
-      ticker,
-      organizationId: marketSnapshot.organizationId,
-      history: history.map((point) => ({
-        id: point.id ?? undefined,
-        price: point.price,
-        change: point.change,
-        changePercent: point.changePercent,
-        timestamp: toISO(point.timestamp),
-        openPrice: point.openPrice,
-        highPrice: point.highPrice,
-        lowPrice: point.lowPrice,
-        volume: point.volume,
-      })),
+      const res = successResponse({
+        ticker,
+        organizationId,
+        history: history.map((point) => ({
+          id: point.id ?? undefined,
+          price: point.price,
+          change: point.change,
+          changePercent: point.changePercent,
+          timestamp: toISO(point.timestamp),
+          openPrice: point.openPrice,
+          highPrice: point.highPrice,
+          lowPrice: point.lowPrice,
+          volume: point.volume,
+        })),
+      });
+      if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
+      return res;
     });
-    if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
-    return res;
   }
 );

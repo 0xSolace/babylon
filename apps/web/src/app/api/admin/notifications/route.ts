@@ -80,7 +80,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 
-import { db } from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
@@ -127,15 +127,19 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
   if (sendToAll) {
     // Send notification to all users
-    const users = await db.user.findMany({
-      where: {
-        isActor: false, // Don't send to NPCs/actors
-        isBanned: false, // Don't send to banned users
-      },
-      select: {
-        id: true,
-      },
-    });
+    const users = await asSystem(
+      (tx) =>
+        tx.user.findMany({
+          where: {
+            isActor: false,
+            isBanned: false,
+          },
+          select: {
+            id: true,
+          },
+        }),
+      'admin-notif-all-recipients'
+    );
 
     // Send notifications in batches to avoid overwhelming the database
     const batchSize = 50;
@@ -181,15 +185,19 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   }
   if (userId) {
     // Send notification to specific user
-    const targetUser = await db.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        username: true,
-        displayName: true,
-        isActor: true,
-      },
-    });
+    const targetUser = await asSystem(
+      (tx) =>
+        tx.user.findUnique({
+          where: { id: userId },
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            isActor: true,
+          },
+        }),
+      'admin-notif-target-user'
+    );
 
     if (!targetUser) {
       throw new NotFoundError('User', userId);

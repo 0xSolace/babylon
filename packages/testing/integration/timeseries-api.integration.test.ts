@@ -9,10 +9,9 @@
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { getDevCredentials } from '@babylon/api';
-import { inArray } from '@babylon/db';
-import { db, systemMetricsSnapshots } from '@babylon/db/runtime';
-
+import { db, systemMetricsSnapshots } from '@babylon/db/engine-storage';
 import { generateSnowflakeId } from '@babylon/shared';
+import { inArray } from 'drizzle-orm';
 
 const BASE_URL =
   process.env.TEST_API_URL ||

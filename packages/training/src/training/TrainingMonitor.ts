@@ -5,8 +5,12 @@
  * Monitors Python training process and W&B runs.
  */
 
-import { and, eq, lt } from '@babylon/db';
-import { db, trainingBatches } from '@babylon/db/runtime';
+import {
+  selectStuckTrainingBatchIds,
+  selectTrainingBatchByBatchId,
+  updateTrainingBatchByBatchId,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import { logger } from '../utils/logger';
 
 export type TrainingStatus =
@@ -36,13 +40,10 @@ export class TrainingMonitor {
    * Start monitoring a training job
    */
   async startMonitoring(batchId: string): Promise<void> {
-    await db
-      .update(trainingBatches)
-      .set({
-        status: 'training',
-        startedAt: new Date(),
-      })
-      .where(eq(trainingBatches.batchId, batchId));
+    await updateTrainingBatchByBatchId(db, batchId, {
+      status: 'training',
+      startedAt: new Date(),
+    });
 
     logger.info(
       'Started monitoring training job',
@@ -80,10 +81,7 @@ export class TrainingMonitor {
       updates.error = progress.error;
     }
 
-    await db
-      .update(trainingBatches)
-      .set(updates)
-      .where(eq(trainingBatches.batchId, batchId));
+    await updateTrainingBatchByBatchId(db, batchId, updates);
 
     logger.info(
       'Updated training progress',
@@ -100,13 +98,7 @@ export class TrainingMonitor {
    * Get current progress for a job
    */
   async getProgress(batchId: string): Promise<TrainingProgress | null> {
-    const batchResult = await db
-      .select()
-      .from(trainingBatches)
-      .where(eq(trainingBatches.batchId, batchId))
-      .limit(1);
-
-    const batch = batchResult[0];
+    const batch = await selectTrainingBatchByBatchId(db, batchId);
 
     if (!batch) {
       return null;
@@ -162,42 +154,31 @@ export class TrainingMonitor {
   async checkForStuckJobs(): Promise<string[]> {
     const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000);
 
-    const stuckJobs = await db
-      .select({ batchId: trainingBatches.batchId })
-      .from(trainingBatches)
-      .where(
-        and(
-          eq(trainingBatches.status, 'training'),
-          lt(trainingBatches.startedAt, fourHoursAgo)
-        )
-      );
+    const stuckJobs = await selectStuckTrainingBatchIds(db, fourHoursAgo);
 
     if (stuckJobs.length > 0) {
       logger.warn(
         'Found stuck training jobs',
         {
           count: stuckJobs.length,
-          jobs: stuckJobs.map((j: (typeof stuckJobs)[number]) => j.batchId),
+          jobs: stuckJobs,
         },
         'TrainingMonitor'
       );
     }
 
-    return stuckJobs.map((j: (typeof stuckJobs)[number]) => j.batchId);
+    return stuckJobs;
   }
 
   /**
    * Cancel training job
    */
   async cancelJob(batchId: string, reason: string): Promise<void> {
-    await db
-      .update(trainingBatches)
-      .set({
-        status: 'failed',
-        error: `Cancelled: ${reason}`,
-        completedAt: new Date(),
-      })
-      .where(eq(trainingBatches.batchId, batchId));
+    await updateTrainingBatchByBatchId(db, batchId, {
+      status: 'failed',
+      error: `Cancelled: ${reason}`,
+      completedAt: new Date(),
+    });
 
     logger.warn(
       'Training job cancelled',

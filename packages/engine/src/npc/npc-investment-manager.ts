@@ -8,16 +8,19 @@
  * - Performance tracking
  */
 
-import { and, desc, eq, inArray, isNull, or } from '@babylon/db';
 import {
-  actorRelationships,
-  actorState,
-  db,
-  organizationState,
-  perpPositions,
-  poolPositions,
-  pools,
-} from '@babylon/db/runtime';
+  listActiveNpcPoolsForInvestment,
+  listActorIdAndTradingBalanceForNpcInvestment,
+  listActorRelationshipSlicesForNpcInvestment,
+  listOpenPerpUserOrgForActorIds,
+  listOpenPoolPositionsByPoolIdForNpcInvestment,
+  listOpenPredictionPoolIdsForActorIds,
+  listOrganizationStatesByIdsForNpcInvestment,
+  listPerpPositionSlicesForNpcUser,
+  listPoolPositionsByPoolIdForInvestment,
+  listPoolPositionsByPoolIdLeverageDescLimit,
+  selectNpcActorTradingBalanceForInvestment,
+} from '@babylon/db';
 import { logger } from '@babylon/shared';
 import { getReputationBreakdown } from '../reputation';
 import { StaticDataRegistry } from '../services/static-data-registry';
@@ -71,43 +74,22 @@ export class NPCInvestmentManager {
   static async getPortfolioMetrics(poolId: string): Promise<PortfolioMetrics> {
     // The trading system now uses actorState.tradingBalance as the source of truth.
     // poolId = actorId for NPC pools, so we query actorState directly.
-    const actorStateResult = await db
-      .select({ tradingBalance: actorState.tradingBalance })
-      .from(actorState)
-      .where(eq(actorState.id, poolId))
-      .limit(1);
-
-    const actorBalance = actorStateResult[0];
+    const actorBalance =
+      await selectNpcActorTradingBalanceForInvestment(poolId);
     if (!actorBalance) {
       throw new Error(`Actor state not found: ${poolId} (poolId = actorId)`);
     }
 
     // Get all positions (both open and closed) for this pool
-    const positionResults = await db
-      .select()
-      .from(poolPositions)
-      .where(eq(poolPositions.poolId, poolId));
+    const positionResults =
+      await listPoolPositionsByPoolIdForInvestment(poolId);
 
     const availableBalance = Number.parseFloat(
       actorBalance.tradingBalance?.toString() ?? '0'
     );
 
     // Get perp positions once and split into open/closed in memory.
-    const perpPositionsResult = await db
-      .select({
-        id: perpPositions.id,
-        ticker: perpPositions.ticker,
-        side: perpPositions.side,
-        size: perpPositions.size,
-        entryPrice: perpPositions.entryPrice,
-        currentPrice: perpPositions.currentPrice,
-        unrealizedPnL: perpPositions.unrealizedPnL,
-        leverage: perpPositions.leverage,
-        realizedPnL: perpPositions.realizedPnL,
-        closedAt: perpPositions.closedAt,
-      })
-      .from(perpPositions)
-      .where(eq(perpPositions.userId, poolId));
+    const perpPositionsResult = await listPerpPositionSlicesForNpcUser(poolId);
 
     const openPerpPositions = perpPositionsResult.filter(
       (p) => p.closedAt === null
@@ -432,27 +414,14 @@ export class NPCInvestmentManager {
     // - Actors not in StaticDataRegistry are skipped (actorMap lookup)
     // - Actors with zero/negative balance are skipped
     // - Actors with open positions (prediction or perp) are skipped
-    const npcStates = await db
-      .select({
-        id: actorState.id,
-        tradingBalance: actorState.tradingBalance,
-      })
-      .from(actorState);
+    const npcStates = await listActorIdAndTradingBalanceForNpcInvestment();
 
     if (npcStates.length === 0) return [];
 
     const actorIds = npcStates.map((npc) => npc.id);
 
-    // Open prediction positions are stored in poolPositions with poolId = actorId.
-    const openPredictionPositions = await db
-      .select({ poolId: poolPositions.poolId })
-      .from(poolPositions)
-      .where(
-        and(
-          inArray(poolPositions.poolId, actorIds),
-          isNull(poolPositions.closedAt)
-        )
-      );
+    const openPredictionPositions =
+      await listOpenPredictionPoolIdsForActorIds(actorIds);
     const actorIdsWithOpenPredictionPositions = new Set(
       openPredictionPositions
         .map((p) => p.poolId)
@@ -461,18 +430,8 @@ export class NPCInvestmentManager {
 
     // Get existing OPEN perp positions for these actors (userId = actorId for NPCs)
     // This prevents duplicate position errors when NPCs already have positions
-    const existingPerpPositions = await db
-      .select({
-        userId: perpPositions.userId,
-        organizationId: perpPositions.organizationId,
-      })
-      .from(perpPositions)
-      .where(
-        and(
-          inArray(perpPositions.userId, actorIds),
-          isNull(perpPositions.closedAt) // Only open positions
-        )
-      );
+    const existingPerpPositions =
+      await listOpenPerpUserOrgForActorIds(actorIds);
 
     // Build set of "actorId:orgId" combinations that already have positions.
     // We use organizationId for matching since decision tickers are frequently org IDs.
@@ -488,15 +447,9 @@ export class NPCInvestmentManager {
 
     // Get organizations from static registry with dynamic prices
     const staticOrgs = StaticDataRegistry.getOrganizationsByType('company');
-    const orgStateResults = await db
-      .select()
-      .from(organizationState)
-      .where(
-        inArray(
-          organizationState.id,
-          staticOrgs.map((o) => o.id)
-        )
-      );
+    const orgStateResults = await listOrganizationStatesByIdsForNpcInvestment(
+      staticOrgs.map((o) => o.id)
+    );
     const priceMap = new Map(
       orgStateResults.map(
         (s) => [s.id, s.currentPrice] as [string, number | null]
@@ -509,20 +462,8 @@ export class NPCInvestmentManager {
       initialPrice: o.initialPrice,
     }));
 
-    const relationships = await db
-      .select({
-        actor1Id: actorRelationships.actor1Id,
-        actor2Id: actorRelationships.actor2Id,
-        sentiment: actorRelationships.sentiment,
-        strength: actorRelationships.strength,
-      })
-      .from(actorRelationships)
-      .where(
-        or(
-          inArray(actorRelationships.actor1Id, actorIds),
-          inArray(actorRelationships.actor2Id, actorIds)
-        )
-      );
+    const relationships =
+      await listActorRelationshipSlicesForNpcInvestment(actorIds);
 
     const actorIdSet = new Set(actorIds);
     relationships.forEach((rel) => {
@@ -702,12 +643,10 @@ export class NPCInvestmentManager {
     const positionsToClose = isHighRisk ? (hasLosses ? 5 : 3) : 2;
 
     // Get all leveraged positions (open positions only with leverage > 1)
-    const positionsResult = await db
-      .select()
-      .from(poolPositions)
-      .where(eq(poolPositions.poolId, poolId))
-      .orderBy(desc(poolPositions.leverage))
-      .limit(positionsToClose);
+    const positionsResult = await listPoolPositionsByPoolIdLeverageDescLimit(
+      poolId,
+      positionsToClose
+    );
 
     // Filter for open positions with leverage > 1
     const leveragedPositions = positionsResult.filter(
@@ -737,12 +676,9 @@ export class NPCInvestmentManager {
     poolId: string,
     threshold: number // e.g., 0.2 = 20% loss
   ): Promise<PortfolioPosition[]> {
-    const positionsResult = await db
-      .select()
-      .from(poolPositions)
-      .where(eq(poolPositions.poolId, poolId));
+    const positionsResult =
+      await listPoolPositionsByPoolIdForInvestment(poolId);
 
-    // Filter for open positions only
     const openPositions = positionsResult.filter((p) => p.closedAt === null);
 
     const lossyPositions: PortfolioPosition[] = [];
@@ -791,12 +727,8 @@ export class NPCInvestmentManager {
     threshold: number // e.g., 0.25 = 25% profit
   ): Promise<PortfolioPosition[]> {
     // Query only open positions (closedAt IS NULL) directly in SQL for efficiency
-    const openPositions = await db
-      .select()
-      .from(poolPositions)
-      .where(
-        and(eq(poolPositions.poolId, poolId), isNull(poolPositions.closedAt))
-      );
+    const openPositions =
+      await listOpenPoolPositionsByPoolIdForNpcInvestment(poolId);
 
     const profitablePositions: PortfolioPosition[] = [];
 
@@ -862,12 +794,8 @@ export class NPCInvestmentManager {
     };
 
     // Get open positions directly in SQL for efficiency
-    const openPositions = await db
-      .select()
-      .from(poolPositions)
-      .where(
-        and(eq(poolPositions.poolId, poolId), isNull(poolPositions.closedAt))
-      );
+    const openPositions =
+      await listOpenPoolPositionsByPoolIdForNpcInvestment(poolId);
 
     // Check for positions that have grown too large (need partial profit-taking)
     const maxAllocation = maxPositionAllocation[strategy];
@@ -1003,10 +931,7 @@ export class NPCInvestmentManager {
    */
   static async monitorAllNPCPortfolios(): Promise<void> {
     // Get active pools using Drizzle ORM
-    const activePools = await db
-      .select()
-      .from(pools)
-      .where(eq(pools.isActive, true));
+    const activePools = await listActiveNpcPoolsForInvestment();
 
     // Get actors for pools
     const actorIds = [...new Set(activePools.map((p) => p.npcActorId))];

@@ -42,8 +42,11 @@
  */
 
 import { PointsService, withErrorHandling } from '@babylon/api';
-import { and, eq } from '@babylon/db';
-import { balanceTransactions, db } from '@babylon/db/runtime';
+import {
+  selectStripePurchaseBalanceRowByPaymentIntentId,
+  selectStripeRefundBalanceRowsForUserId,
+} from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import { logger } from '@babylon/shared';
 import { NextResponse } from 'next/server';
 import type Stripe from 'stripe';
@@ -523,22 +526,11 @@ async function handleDisputeCreated(
 
   // Find the original transaction to get the userId
   // Purchases are stored in balanceTransactions with relatedId = paymentIntentId
-  const originalTxResult = await db
-    .select({
-      userId: balanceTransactions.userId,
-      amount: balanceTransactions.amount,
-      description: balanceTransactions.description,
-    })
-    .from(balanceTransactions)
-    .where(
-      and(
-        eq(balanceTransactions.relatedId, paymentIntentId),
-        eq(balanceTransactions.type, 'stripe_purchase')
-      )
-    )
-    .limit(1);
-
-  const originalTx = originalTxResult[0];
+  const originalTx = await asSystem(
+    async (db) =>
+      selectStripePurchaseBalanceRowByPaymentIntentId(db, paymentIntentId),
+    'stripe-webhook-dispute-original-tx'
+  );
 
   if (!originalTx) {
     logger.warn(
@@ -669,22 +661,11 @@ async function handleDisputeClosed(
   // Find the dispute deduction transaction to get the userId
   // Dispute deductions are stored in balanceTransactions with type = 'stripe_dispute'
   // We look for the original purchase to get the userId
-  const originalPurchaseResult = await db
-    .select({
-      userId: balanceTransactions.userId,
-      amount: balanceTransactions.amount,
-      description: balanceTransactions.description,
-    })
-    .from(balanceTransactions)
-    .where(
-      and(
-        eq(balanceTransactions.relatedId, paymentIntentId),
-        eq(balanceTransactions.type, 'stripe_purchase')
-      )
-    )
-    .limit(1);
-
-  const originalPurchase = originalPurchaseResult[0];
+  const originalPurchase = await asSystem(
+    async (db) =>
+      selectStripePurchaseBalanceRowByPaymentIntentId(db, paymentIntentId),
+    'stripe-webhook-dispute-closed-purchase'
+  );
 
   if (!originalPurchase) {
     logger.warn(
@@ -784,22 +765,11 @@ async function handleChargeRefunded(
 
   // Find the original transaction to get the userId
   // Purchases are stored in balanceTransactions with relatedId = paymentIntentId
-  const originalTxResult = await db
-    .select({
-      userId: balanceTransactions.userId,
-      amount: balanceTransactions.amount,
-      description: balanceTransactions.description,
-    })
-    .from(balanceTransactions)
-    .where(
-      and(
-        eq(balanceTransactions.relatedId, paymentIntentId),
-        eq(balanceTransactions.type, 'stripe_purchase')
-      )
-    )
-    .limit(1);
-
-  const originalTx = originalTxResult[0];
+  const originalTx = await asSystem(
+    async (db) =>
+      selectStripePurchaseBalanceRowByPaymentIntentId(db, paymentIntentId),
+    'stripe-webhook-refund-original-tx'
+  );
 
   if (!originalTx) {
     logger.warn(
@@ -814,18 +784,10 @@ async function handleChargeRefunded(
   // charge.amount_refunded is CUMULATIVE, so we need to check how much we've already deducted
   // Refunds are stored in balanceTransactions with type = 'stripe_refund'
   // Each refund stores originalPaymentIntentId in description JSON
-  const existingRefundsResult = await db
-    .select({
-      amount: balanceTransactions.amount,
-      description: balanceTransactions.description,
-    })
-    .from(balanceTransactions)
-    .where(
-      and(
-        eq(balanceTransactions.userId, originalTx.userId),
-        eq(balanceTransactions.type, 'stripe_refund')
-      )
-    );
+  const existingRefundsResult = await asSystem(
+    async (db) => selectStripeRefundBalanceRowsForUserId(db, originalTx.userId),
+    'stripe-webhook-refund-existing'
+  );
 
   // Filter refunds to only those for this specific payment intent
   // Each refund transaction stores originalPaymentIntentId in its description JSON

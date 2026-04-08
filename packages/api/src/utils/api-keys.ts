@@ -18,8 +18,8 @@
  * - See `api-key-lastused-flusher.ts` for flush service implementation
  */
 
-import { eq } from '@babylon/db';
-import { asSystem, userApiKeys } from '@babylon/db/runtime';
+import { updateUserApiKeyLastUsedAt } from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import { logger } from '@babylon/shared';
 import crypto from 'crypto';
 import { getRedisClient, isRedisAvailable } from '../redis';
@@ -220,10 +220,7 @@ function fallbackToDirectDbWrite(keyId: string): void {
   // WHY fire-and-forget: Don't block authentication flow. If DB write fails, we log warning
   // but don't fail authentication. lastUsedAt is informational, not critical for auth.
   asSystem(async (dbClient) => {
-    await dbClient
-      .update(userApiKeys)
-      .set({ lastUsedAt: new Date() })
-      .where(eq(userApiKeys.id, keyId));
+    await updateUserApiKeyLastUsedAt(dbClient, keyId, new Date());
   }).catch((err) => {
     logger.warn(
       'Failed to update lastUsedAt (fallback)',

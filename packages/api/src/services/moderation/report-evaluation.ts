@@ -7,8 +7,13 @@
  * for each evaluation.
  */
 
-import { count, desc, eq } from '@babylon/db';
-import { db, messages, posts, reports, users } from '@babylon/db/runtime';
+import {
+  loadReportEvaluationContext,
+  type ReportEvaluationContextPayload,
+  selectReportPartiesForNotification,
+  updateReportStoredEvaluation,
+} from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import { logger } from '@babylon/shared';
 import { callClaudeDirect } from '../claude-service';
 
@@ -61,49 +66,6 @@ export interface ReportEvaluationResult {
   };
 }
 
-interface ReportContext {
-  reporter: {
-    id: string;
-    username: string | null;
-    displayName: string | null;
-    recentReportsSent: number;
-    recentReportsReceived: number;
-    earnedPoints: number;
-    totalDeposited: number;
-    totalWithdrawn: number;
-    lifetimePnL: number;
-  };
-  reported: {
-    id: string;
-    username: string | null;
-    displayName: string | null;
-    recentReportsReceived: number;
-    recentReportsSent: number;
-    earnedPoints: number;
-    totalDeposited: number;
-    totalWithdrawn: number;
-    lifetimePnL: number;
-  };
-  report: {
-    id: string;
-    category: string;
-    reason: string;
-    evidence: string | null;
-    createdAt: Date;
-  };
-  chatMessages: Array<{
-    id: string;
-    senderId: string;
-    content: string;
-    createdAt: Date;
-  }>;
-  posts: Array<{
-    id: string;
-    content: string;
-    createdAt: Date;
-  }>;
-}
-
 /**
  * Evaluate a report by collecting context and using AI
  */
@@ -143,15 +105,10 @@ export async function evaluateReport(
     'ReportEvaluation'
   );
 
-  // Send notification to reporter about evaluation result
-  const [report] = await db
-    .select({
-      reporterId: reports.reporterId,
-      reportedUserId: reports.reportedUserId,
-    })
-    .from(reports)
-    .where(eq(reports.id, reportId))
-    .limit(1);
+  const report = await asSystem(
+    (c) => selectReportPartiesForNotification(c, reportId),
+    'report-evaluation-notify'
+  );
 
   if (report) {
     const notificationService = getNotificationService();
@@ -171,164 +128,18 @@ export async function evaluateReport(
  */
 async function collectReportContext(
   reportId: string
-): Promise<ReportContext | null> {
-  const [report] = await db
-    .select({
-      id: reports.id,
-      reporterId: reports.reporterId,
-      reportedUserId: reports.reportedUserId,
-      category: reports.category,
-      reason: reports.reason,
-      evidence: reports.evidence,
-      createdAt: reports.createdAt,
-    })
-    .from(reports)
-    .where(eq(reports.id, reportId))
-    .limit(1);
-
-  if (!report || !report.reportedUserId) {
-    return null;
-  }
-
-  // Get reporter info
-  const [reporter] = await db
-    .select({
-      id: users.id,
-      username: users.username,
-      displayName: users.displayName,
-      earnedPoints: users.earnedPoints,
-      totalDeposited: users.totalDeposited,
-      totalWithdrawn: users.totalWithdrawn,
-      lifetimePnL: users.lifetimePnL,
-    })
-    .from(users)
-    .where(eq(users.id, report.reporterId))
-    .limit(1);
-
-  if (!reporter) {
-    return null;
-  }
-
-  // Get reported user info
-  const [reportedUser] = await db
-    .select({
-      id: users.id,
-      username: users.username,
-      displayName: users.displayName,
-      earnedPoints: users.earnedPoints,
-      totalDeposited: users.totalDeposited,
-      totalWithdrawn: users.totalWithdrawn,
-      lifetimePnL: users.lifetimePnL,
-    })
-    .from(users)
-    .where(eq(users.id, report.reportedUserId))
-    .limit(1);
-
-  const reporterId = report.reporterId;
-  const reportedId = report.reportedUserId;
-
-  // Find DM chat between reporter and reported
-  const sortedIds = [reporterId, reportedId].sort();
-  const chatId = `dm-${sortedIds.join('-')}`;
-
-  const chatMessages = await db
-    .select({
-      id: messages.id,
-      senderId: messages.senderId,
-      content: messages.content,
-      createdAt: messages.createdAt,
-    })
-    .from(messages)
-    .where(eq(messages.chatId, chatId))
-    .orderBy(desc(messages.createdAt))
-    .limit(50);
-
-  // Get recent posts from both users (last 30 days)
-  const reporterPosts = await db
-    .select({
-      id: posts.id,
-      content: posts.content,
-      createdAt: posts.createdAt,
-    })
-    .from(posts)
-    .where(eq(posts.authorId, reporterId))
-    .orderBy(desc(posts.createdAt))
-    .limit(20);
-
-  const reportedPosts = await db
-    .select({
-      id: posts.id,
-      content: posts.content,
-      createdAt: posts.createdAt,
-    })
-    .from(posts)
-    .where(eq(posts.authorId, reportedId))
-    .orderBy(desc(posts.createdAt))
-    .limit(20);
-
-  // Get report counts
-  const [reporterReportsSentResult] = await db
-    .select({ count: count() })
-    .from(reports)
-    .where(eq(reports.reporterId, reporterId));
-
-  const [reporterReportsReceivedResult] = await db
-    .select({ count: count() })
-    .from(reports)
-    .where(eq(reports.reportedUserId, reporterId));
-
-  const [reportedReportsSentResult] = await db
-    .select({ count: count() })
-    .from(reports)
-    .where(eq(reports.reporterId, reportedId));
-
-  const [reportedReportsReceivedResult] = await db
-    .select({ count: count() })
-    .from(reports)
-    .where(eq(reports.reportedUserId, reportedId));
-
-  return {
-    reporter: {
-      id: reporterId,
-      username: reporter.username,
-      displayName: reporter.displayName,
-      recentReportsSent: reporterReportsSentResult?.count ?? 0,
-      recentReportsReceived: reporterReportsReceivedResult?.count ?? 0,
-      earnedPoints: reporter.earnedPoints,
-      totalDeposited: Number(reporter.totalDeposited),
-      totalWithdrawn: Number(reporter.totalWithdrawn),
-      lifetimePnL: Number(reporter.lifetimePnL),
-    },
-    reported: {
-      id: reportedId,
-      username: reportedUser?.username ?? null,
-      displayName: reportedUser?.displayName ?? null,
-      recentReportsReceived: reportedReportsReceivedResult?.count ?? 0,
-      recentReportsSent: reportedReportsSentResult?.count ?? 0,
-      earnedPoints: reportedUser?.earnedPoints ?? 0,
-      totalDeposited: reportedUser ? Number(reportedUser.totalDeposited) : 0,
-      totalWithdrawn: reportedUser ? Number(reportedUser.totalWithdrawn) : 0,
-      lifetimePnL: reportedUser ? Number(reportedUser.lifetimePnL) : 0,
-    },
-    report: {
-      id: report.id,
-      category: report.category,
-      reason: report.reason,
-      evidence: report.evidence,
-      createdAt: report.createdAt,
-    },
-    chatMessages,
-    posts: [...reporterPosts, ...reportedPosts].sort(
-      (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
-    ),
-  };
+): Promise<ReportEvaluationContextPayload | null> {
+  return asSystem(
+    (c) => loadReportEvaluationContext(c, reportId),
+    'report-evaluation-context'
+  );
 }
 
 /**
  * Use AI to evaluate the report context
  */
 async function evaluateWithAI(
-  context: ReportContext
+  context: ReportEvaluationContextPayload
 ): Promise<ReportEvaluationResult> {
   const prompt = `You are a moderation AI evaluating a user report. Analyze the context and determine if the report is valid.
 
@@ -461,12 +272,13 @@ export async function storeEvaluationResult(
   reportId: string,
   evaluation: ReportEvaluationResult
 ): Promise<void> {
-  await db
-    .update(reports)
-    .set({
-      resolution: JSON.stringify(evaluation),
-      status: evaluation.outcome === 'valid_report' ? 'resolved' : 'reviewing',
-      updatedAt: new Date(),
-    })
-    .where(eq(reports.id, reportId));
+  await asSystem(
+    (c) =>
+      updateReportStoredEvaluation(c, reportId, {
+        resolutionJson: JSON.stringify(evaluation),
+        status:
+          evaluation.outcome === 'valid_report' ? 'resolved' : 'reviewing',
+      }),
+    'report-evaluation-store'
+  );
 }

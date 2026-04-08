@@ -12,8 +12,8 @@
  * 5. Domain-aware limits - NPCs in different domains have separate topic pools
  */
 
-import { desc, gte } from '@babylon/db';
-import { db, posts } from '@babylon/db/runtime';
+import { selectPostsForTopicDiversitySinceOrderTimestampDescLimit } from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import { StaticDataRegistry } from '@babylon/engine';
 import { logger } from '../shared/logger';
 
@@ -659,16 +659,11 @@ export class TopicDiversityService {
   async seedFromRecentPosts(): Promise<void> {
     const cutoff = new Date(Date.now() - TOPIC_TRACKING_WINDOW_MS);
 
-    const recentPosts = await db
-      .select({
-        authorId: posts.authorId,
-        content: posts.content,
-        timestamp: posts.timestamp,
-      })
-      .from(posts)
-      .where(gte(posts.timestamp, cutoff))
-      .orderBy(desc(posts.timestamp))
-      .limit(100);
+    const recentPosts =
+      await selectPostsForTopicDiversitySinceOrderTimestampDescLimit(db, {
+        since: cutoff,
+        limit: 100,
+      });
 
     for (const post of recentPosts) {
       this.recordTopicCoverage(post.authorId, post.content);

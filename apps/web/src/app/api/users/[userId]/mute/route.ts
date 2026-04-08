@@ -110,9 +110,14 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, eq } from '@babylon/db';
-import { db, userMutes, users } from '@babylon/db/runtime';
-
+import {
+  deleteUserMuteByMuterAndMutedReturningIds,
+  insertUserMuteReturning,
+  selectUserModerationTargetSliceById,
+  selectUserMuteIdByMuterAndMuted,
+  selectUserMuteStatusSliceByMuterAndMuted,
+} from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import { generateSnowflakeId, logger, MuteUserSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
@@ -144,97 +149,78 @@ export const POST = withErrorHandling(
       throw new BusinessLogicError('Cannot mute yourself', 'CANNOT_MUTE_SELF');
     }
 
-    // Check if target user exists
-    const [targetUser] = await db
-      .select({
-        id: users.id,
-        username: users.username,
-        displayName: users.displayName,
-        isActor: users.isActor,
-      })
-      .from(users)
-      .where(eq(users.id, targetUserId))
-      .limit(1);
+    return asUser(authUser, async (db) => {
+      const targetUser = await selectUserModerationTargetSliceById(
+        db,
+        targetUserId
+      );
 
-    if (!targetUser) {
-      throw new NotFoundError('User', targetUserId);
-    }
-
-    // Note: Muting NPCs is allowed - it hides their posts from your feed
-
-    if (action === 'mute') {
-      // Check if already muted
-      const [existingMute] = await db
-        .select({ id: userMutes.id })
-        .from(userMutes)
-        .where(
-          and(
-            eq(userMutes.muterId, authUser.userId),
-            eq(userMutes.mutedId, targetUserId)
-          )
-        )
-        .limit(1);
-
-      if (existingMute) {
-        throw new BusinessLogicError('User is already muted', 'ALREADY_MUTED');
+      if (!targetUser) {
+        throw new NotFoundError('User', targetUserId);
       }
 
-      // Create mute
-      const muteId = await generateSnowflakeId();
-      const [insertedMute] = await db
-        .insert(userMutes)
-        .values({
+      if (action === 'mute') {
+        const existingMute = await selectUserMuteIdByMuterAndMuted(
+          db,
+          authUser.userId,
+          targetUserId
+        );
+
+        if (existingMute) {
+          throw new BusinessLogicError(
+            'User is already muted',
+            'ALREADY_MUTED'
+          );
+        }
+
+        const muteId = await generateSnowflakeId();
+        const mute = await insertUserMuteReturning(db, {
           id: muteId,
           muterId: authUser.userId,
           mutedId: targetUserId,
           reason: reason || null,
-        })
-        .returning();
-      const mute = insertedMute;
+        });
+
+        logger.info(
+          'User muted successfully',
+          {
+            userId: authUser.userId,
+            targetUserId,
+            muteId: mute?.id,
+          },
+          'POST /api/users/[userId]/mute'
+        );
+
+        return successResponse({
+          success: true,
+          message: 'User muted successfully',
+          mute,
+        });
+      }
+
+      const deleted = await deleteUserMuteByMuterAndMutedReturningIds(
+        db,
+        authUser.userId,
+        targetUserId
+      );
+
+      if (deleted.length === 0) {
+        throw new BusinessLogicError('User is not muted', 'NOT_MUTED');
+      }
 
       logger.info(
-        'User muted successfully',
+        'User unmuted successfully',
         {
           userId: authUser.userId,
           targetUserId,
-          muteId: mute?.id,
         },
         'POST /api/users/[userId]/mute'
       );
 
       return successResponse({
         success: true,
-        message: 'User muted successfully',
-        mute,
+        message: 'User unmuted successfully',
       });
-    }
-    // Unmute
-    const deleted = await db
-      .delete(userMutes)
-      .where(
-        and(
-          eq(userMutes.muterId, authUser.userId),
-          eq(userMutes.mutedId, targetUserId)
-        )
-      )
-      .returning({ id: userMutes.id });
-
-    if (deleted.length === 0) {
-      throw new BusinessLogicError('User is not muted', 'NOT_MUTED');
-    }
-
-    logger.info(
-      'User unmuted successfully',
-      {
-        userId: authUser.userId,
-        targetUserId,
-      },
-      'POST /api/users/[userId]/mute'
-    );
-
-    return successResponse({
-      success: true,
-      message: 'User unmuted successfully',
     });
   }
 );
@@ -251,24 +237,17 @@ export const GET = withErrorHandling(
     const authUser = await authenticate(request);
     const { userId: targetUserId } = await context.params;
 
-    const [mute] = await db
-      .select({
-        id: userMutes.id,
-        createdAt: userMutes.createdAt,
-        reason: userMutes.reason,
-      })
-      .from(userMutes)
-      .where(
-        and(
-          eq(userMutes.muterId, authUser.userId),
-          eq(userMutes.mutedId, targetUserId)
-        )
-      )
-      .limit(1);
+    return asUser(authUser, async (db) => {
+      const mute = await selectUserMuteStatusSliceByMuterAndMuted(
+        db,
+        authUser.userId,
+        targetUserId
+      );
 
-    return successResponse({
-      isMuted: !!mute,
-      mute: mute || null,
+      return successResponse({
+        isMuted: !!mute,
+        mute: mute || null,
+      });
     });
   }
 );

@@ -7,8 +7,8 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { inArray } from '@babylon/db';
-import { db, nftCollection } from '@babylon/db/runtime';
+import { selectNftCollectionDisplayRowsByTokenIds } from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import type { NftHoldingsResponse } from '@/types/nft';
@@ -56,15 +56,9 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const rows =
     uniqueTokenIds.length === 0
       ? []
-      : await db
-          .select({
-            tokenId: nftCollection.tokenId,
-            name: nftCollection.name,
-            thumbnailUrl: nftCollection.thumbnailUrl,
-            imageUrl: nftCollection.imageUrl,
-          })
-          .from(nftCollection)
-          .where(inArray(nftCollection.tokenId, uniqueTokenIds));
+      : await asUser(user, async (db) =>
+          selectNftCollectionDisplayRowsByTokenIds(db, uniqueTokenIds)
+        );
 
   const byId = new Map(rows.map((r) => [r.tokenId, r]));
   const nfts = uniqueTokenIds
@@ -74,7 +68,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       return {
         tokenId: row.tokenId,
         name: row.name,
-        thumbnailUrl: row.thumbnailUrl ?? row.imageUrl,
+        thumbnailUrl: row.thumbnailUrl ?? row.imageUrl ?? '',
       };
     })
     .filter((v): v is NonNullable<typeof v> => v !== null);

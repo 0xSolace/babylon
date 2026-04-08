@@ -9,8 +9,17 @@
  * Vercel-compatible: No filesystem access, all data from database.
  */
 
-import { desc, eq } from '@babylon/db';
-import { db, games, getDbInstance, markets } from '@babylon/db/runtime';
+import {
+  fetchActiveMarketSummaries,
+  fetchActiveQuestionsForGameService,
+  fetchContinuousGameStateForGameService,
+  fetchGameServiceStats,
+  fetchLatestContinuousGameDayRow,
+  fetchPostsByActorForGameService,
+  fetchRecentPostsForGameService,
+  listAllGamesForGameService,
+  listAllOrganizationStatesAsSystem,
+} from '@babylon/db';
 import { logger } from '@babylon/shared';
 import { StaticDataRegistry } from './services/static-data-registry';
 import { getGameDayNumber } from './utils/date-utils';
@@ -32,18 +41,18 @@ export interface ActiveMarketSummary {
  */
 class GameService {
   async getRecentPosts(limit = 100, offset = 0) {
-    return await getDbInstance().getRecentPosts(limit, offset);
+    return await fetchRecentPostsForGameService(limit, offset);
   }
 
   async getPostsByActor(actorId: string, limit = 100) {
-    return await getDbInstance().getPostsByActor(actorId, limit);
+    return await fetchPostsByActorForGameService(actorId, limit);
   }
 
   async getCompanies() {
     // Get static organization data from registry
     const staticOrgs = StaticDataRegistry.getAllOrganizations();
     // Get dynamic price data from database
-    const orgStates = await getDbInstance().getAllOrganizationStates();
+    const orgStates = await listAllOrganizationStatesAsSystem();
     const priceMap = new Map(orgStates.map((s) => [s.id, s.currentPrice]));
 
     // Combine static and dynamic data, filter to companies
@@ -62,7 +71,7 @@ class GameService {
   }
 
   async getActiveQuestions() {
-    return await getDbInstance().getActiveQuestions();
+    return await fetchActiveQuestionsForGameService();
   }
 
   /**
@@ -70,14 +79,14 @@ class GameService {
    * Works even if engine is not running (daemon writes to database).
    */
   async getStats() {
-    return await getDbInstance().getStats();
+    return await fetchGameServiceStats();
   }
 
   /**
    * Get all games from database
    */
   async getAllGames() {
-    return await getDbInstance().getAllGames();
+    return await listAllGamesForGameService();
   }
 
   /**
@@ -86,7 +95,7 @@ class GameService {
    */
   async getStatus() {
     // Check game state from database
-    const gameState = await getDbInstance().getGameState();
+    const gameState = await fetchContinuousGameStateForGameService();
     return {
       isRunning: false,
       initialized: false,
@@ -101,8 +110,8 @@ class GameService {
     // On Vercel: Read from database instead of filesystem
     // The daemon writes posts to database, so we can query them directly
     const posts = actorId
-      ? await getDbInstance().getPostsByActor(actorId, limit)
-      : await getDbInstance().getRecentPosts(limit, offset);
+      ? await fetchPostsByActorForGameService(actorId, limit)
+      : await fetchRecentPostsForGameService(limit, offset);
 
     if (!posts || posts.length === 0) {
       return null;
@@ -129,15 +138,7 @@ class GameService {
    * Uses startedAt as single source of truth for day calculation.
    */
   async getCurrentGameDay(): Promise<number> {
-    const [game] = await db
-      .select({
-        currentDay: games.currentDay,
-        startedAt: games.startedAt,
-      })
-      .from(games)
-      .where(eq(games.isContinuous, true))
-      .orderBy(desc(games.startedAt))
-      .limit(1);
+    const game = await fetchLatestContinuousGameDayRow();
 
     if (!game) {
       logger.warn('No continuous game found', {}, 'GameService');
@@ -162,16 +163,7 @@ class GameService {
    * Used by NPC context providers to avoid direct DB access.
    */
   async getActiveMarketSummaries(limit = 5): Promise<ActiveMarketSummary[]> {
-    const activeMarkets = await db
-      .select({
-        id: markets.id,
-        question: markets.question,
-      })
-      .from(markets)
-      .where(eq(markets.resolved, false))
-      .limit(limit);
-
-    return activeMarkets;
+    return fetchActiveMarketSummaries(limit);
   }
 }
 

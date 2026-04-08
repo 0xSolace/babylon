@@ -10,6 +10,13 @@ const mockGetCacheOrFetch = mock(
   async <T>(_key: string, fetchFn: () => Promise<T>) => fetchFn()
 );
 
+mock.module('@/lib/db/run-with-optional-user-rls', () => ({
+  runWithOptionalUserRls: async (
+    _user: unknown,
+    fn: (db: unknown) => Promise<unknown>
+  ) => fn({}),
+}));
+
 mock.module('@babylon/api', () => ({
   addPublicReadHeaders: (
     response: Response,
@@ -78,7 +85,10 @@ describe('GET /api/feed/for-you', () => {
     const response = await GET(makeRequest());
     const payload = await response.json();
 
-    expect(mockBuildForYouFeed).toHaveBeenCalledWith('user-1');
+    expect(mockBuildForYouFeed).toHaveBeenCalledWith(
+      'user-1',
+      expect.anything()
+    );
     expect(response.headers.get('Cache-Control')).toBe('private, no-store');
     expect(response.headers.get('X-RateLimit-Limit')).toBe('60');
     expect(payload.generatedAt).toBe('2026-03-08T11:55:00.000Z');
@@ -227,7 +237,7 @@ describe('GET /api/feed/for-you', () => {
 
     const response = await GET(makeRequest());
 
-    expect(mockBuildForYouFeed).toHaveBeenCalledWith(null);
+    expect(mockBuildForYouFeed).toHaveBeenCalledWith(null, expect.anything());
     expect(response.headers.get('Cache-Control')).toBe('public, max-age=30');
     expect(response.headers.get('X-RateLimit-Limit')).toBe('100');
   });

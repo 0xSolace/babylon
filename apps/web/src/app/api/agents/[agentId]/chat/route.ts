@@ -22,9 +22,12 @@ import {
   checkProgress,
   withErrorHandling,
 } from '@babylon/api';
-import { eq } from '@babylon/db';
-import { db, messages, userAgentConfigs, users } from '@babylon/db/runtime';
-
+import {
+  insertMessageRow,
+  selectUserDisplayForNotification,
+  updateUserAgentConfigLastChatAtByUserId,
+} from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import {
   checkUserInput,
   GROQ_MODELS,
@@ -329,11 +332,9 @@ export const POST = withErrorHandling(
     const runtime = await agentRuntimeManager.getRuntime(agentId);
 
     // Fetch owner info for personalized conversation
-    const [ownerProfile] = await db
-      .select({ displayName: users.displayName, username: users.username })
-      .from(users)
-      .where(eq(users.id, user.id))
-      .limit(1);
+    const ownerProfile = await asUser(user.id, async (tx) =>
+      selectUserDisplayForNotification(tx, user.id)
+    );
     const ownerName =
       ownerProfile?.displayName || ownerProfile?.username || 'User';
     const ownerUsername = ownerProfile?.username || undefined;
@@ -771,17 +772,84 @@ export const POST = withErrorHandling(
       // Team chat mode: Write only to messages table (not agentMessages)
       // User message is written by frontend (once) before calling multiple agents
       responseMessageId = await generateSnowflakeId();
+    } else {
+      // Legacy DM mode: message IDs assigned before persist
+      responseMessageId = uuidv4();
+    }
 
-      // Write agent response to team chat
-      await db.insert(messages).values({
-        id: responseMessageId,
-        chatId: teamChatId,
-        senderId: agentId,
-        content: responseText,
-        createdAt: assistantMessageTime,
-        metadata: messageMetadata,
+    await asUser(user.id, async (tx) => {
+      if (isTeamChatMode && teamChatId) {
+        await insertMessageRow(tx, {
+          id: responseMessageId,
+          chatId: teamChatId,
+          senderId: agentId,
+          content: responseText,
+          createdAt: assistantMessageTime,
+          metadata: messageMetadata,
+        });
+      } else {
+        const userMessageId = uuidv4();
+
+        await tx.agentMessage.createMany({
+          data: [
+            {
+              id: userMessageId,
+              agentUserId: agentId,
+              role: 'user',
+              content: message,
+              pointsCost: 0,
+              metadata: {},
+              createdAt: userMessageTime,
+            },
+            {
+              id: responseMessageId,
+              agentUserId: agentId,
+              role: 'assistant',
+              content: responseText,
+              modelUsed,
+              pointsCost: actualPointsCost, // Use actual cost (0 for LLM failures)
+              createdAt: assistantMessageTime,
+              metadata: {
+                multiStep: true,
+                actionsExecuted: traceActionResults.length,
+                actions: traceActionResults.map((a) => ({
+                  type: a.actionType,
+                  success: a.success,
+                })),
+                isLLMFailure, // Track if this was a fallback response
+                // Note: tags are not included in legacy DM mode as it uses a different schema
+              },
+            },
+          ],
+        });
+      }
+
+      await updateUserAgentConfigLastChatAtByUserId(tx, agentId, new Date());
+
+      await tx.agentLog.create({
+        data: {
+          id: uuidv4(),
+          agentUserId: agentId,
+          type: 'chat',
+          level: isLLMFailure ? 'warn' : 'info',
+          message: isLLMFailure
+            ? 'Chat interaction completed with LLM failure'
+            : 'Chat interaction completed',
+          prompt: message,
+          completion: responseText,
+          metadata: {
+            usePro,
+            pointsCost: actualPointsCost,
+            modelUsed,
+            multiStep: true,
+            actionsExecuted: traceActionResults.length,
+            isLLMFailure,
+          },
+        },
       });
+    });
 
+    if (isTeamChatMode && teamChatId) {
       void notifyTeamChatMessage({
         chatId: teamChatId,
         messageId: responseMessageId,
@@ -789,7 +857,6 @@ export const POST = withErrorHandling(
         messagePreview: responseText,
       });
 
-      // Broadcast agent response to team chat
       broadcastChatMessage(teamChatId, {
         id: responseMessageId,
         content: responseText,
@@ -811,72 +878,7 @@ export const POST = withErrorHandling(
         { agentMessageId: responseMessageId, agentId },
         'AgentChat'
       );
-    } else {
-      // Legacy DM mode: Write to agentMessages table
-      const userMessageId = uuidv4();
-      responseMessageId = uuidv4();
-
-      await db.agentMessage.createMany({
-        data: [
-          {
-            id: userMessageId,
-            agentUserId: agentId,
-            role: 'user',
-            content: message,
-            pointsCost: 0,
-            metadata: {},
-            createdAt: userMessageTime,
-          },
-          {
-            id: responseMessageId,
-            agentUserId: agentId,
-            role: 'assistant',
-            content: responseText,
-            modelUsed,
-            pointsCost: actualPointsCost, // Use actual cost (0 for LLM failures)
-            createdAt: assistantMessageTime,
-            metadata: {
-              multiStep: true,
-              actionsExecuted: traceActionResults.length,
-              actions: traceActionResults.map((a) => ({
-                type: a.actionType,
-                success: a.success,
-              })),
-              isLLMFailure, // Track if this was a fallback response
-              // Note: tags are not included in legacy DM mode as it uses a different schema
-            },
-          },
-        ],
-      });
     }
-
-    // Update lastChatAt
-    await db
-      .update(userAgentConfigs)
-      .set({ lastChatAt: new Date(), updatedAt: new Date() })
-      .where(eq(userAgentConfigs.userId, agentId));
-
-    await db.agentLog.create({
-      data: {
-        id: uuidv4(),
-        agentUserId: agentId,
-        type: 'chat',
-        level: isLLMFailure ? 'warn' : 'info',
-        message: isLLMFailure
-          ? 'Chat interaction completed with LLM failure'
-          : 'Chat interaction completed',
-        prompt: message,
-        completion: responseText,
-        metadata: {
-          usePro,
-          pointsCost: actualPointsCost,
-          modelUsed,
-          multiStep: true,
-          actionsExecuted: traceActionResults.length,
-          isLLMFailure,
-        },
-      },
-    });
 
     // Deduct points ONLY after successful response generation and DB save
     // This ensures users don't lose points on failed/cancelled requests

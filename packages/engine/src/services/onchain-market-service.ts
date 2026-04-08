@@ -2,8 +2,10 @@
  * Service for creating and managing prediction markets on-chain
  */
 
-import { eq } from '@babylon/db';
-import { db, markets } from '@babylon/db/runtime';
+import {
+  fetchMarketRowForOnChainLink,
+  updateMarketOnChainLink,
+} from '@babylon/db';
 import { DIAMOND_ADDRESS, getCurrentRpcUrl, logger } from '@babylon/shared';
 import {
   type Address,
@@ -271,13 +273,7 @@ export async function getMarketIdFromTx(
  * This is idempotent - if the market already has an onChainMarketId, it won't create again
  */
 export async function ensureMarketOnChain(marketId: string): Promise<boolean> {
-  const result = await db
-    .select()
-    .from(markets)
-    .where(eq(markets.id, marketId))
-    .limit(1);
-
-  const market = result[0];
+  const market = await fetchMarketRowForOnChainLink(marketId);
 
   if (!market) {
     logger.warn('Market not found', { marketId }, 'OnChainMarketService');
@@ -311,13 +307,11 @@ export async function ensureMarketOnChain(marketId: string): Promise<boolean> {
       ).address;
     }
 
-    await db
-      .update(markets)
-      .set({
-        onChainMarketId,
-        oracleAddress: oracleAddr,
-      })
-      .where(eq(markets.id, marketId));
+    await updateMarketOnChainLink({
+      marketId,
+      onChainMarketId,
+      oracleAddress: oracleAddr,
+    });
 
     logger.info(
       'Market linked to on-chain market',

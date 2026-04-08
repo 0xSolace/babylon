@@ -14,7 +14,31 @@ import {
   it,
   mock,
 } from 'bun:test';
-import { NextRequest } from 'next/server';
+import * as babylonDb from '@babylon/db';
+
+class MockNextRequest {
+  headers: Headers;
+  constructor(
+    _url: string,
+    init?: {
+      headers?: Headers;
+    }
+  ) {
+    this.headers = init?.headers ?? new Headers();
+  }
+}
+
+mock.module('next/server', () => ({
+  NextRequest: MockNextRequest,
+  NextResponse: {
+    json(body: unknown, init?: { status?: number; headers?: HeadersInit }) {
+      return new Response(JSON.stringify(body), {
+        status: init?.status ?? 200,
+        headers: new Headers(init?.headers ?? {}),
+      });
+    },
+  },
+}));
 
 // Mock user data (minimal: only id and username)
 const mockUsers = new Map([
@@ -40,15 +64,15 @@ const mockValidateUserApiKey = mock(async (apiKey: string) => {
 // Track the userId being queried
 let lastQueriedUserId: string | null = null;
 
-let GET: (request: NextRequest) => Promise<Response>;
+let GET: (request: MockNextRequest) => Promise<Response>;
 
 // Helper to create mock NextRequest
-const createMockRequest = (apiKey: string | null): NextRequest => {
+const createMockRequest = (apiKey: string | null): MockNextRequest => {
   const headers = new Headers();
   if (apiKey) {
     headers.set('x-babylon-api-key', apiKey);
   }
-  return new NextRequest('http://localhost/api/auth/whoami', { headers });
+  return new MockNextRequest('http://localhost/api/auth/whoami', { headers });
 };
 
 describe('/api/auth/whoami endpoint', () => {
@@ -73,18 +97,32 @@ describe('/api/auth/whoami endpoint', () => {
     };
 
     mock.module('@babylon/db', () => ({
+      ...babylonDb,
+      selectUserIdAndUsernameById: mock(
+        async (_db: unknown, userId: string) => {
+          const u = mockUsers.get(userId);
+          return u ? { id: u.id, username: u.username } : undefined;
+        }
+      ),
+    }));
+
+    mock.module('drizzle-orm', () => ({
       eq: (field: unknown, value: string) => {
         lastQueriedUserId = value;
         return { field, value };
       },
     }));
 
-    mock.module('@babylon/db/runtime', () => ({
+    mock.module('@babylon/db/engine-storage', () => ({
       db: mockDb,
       users: {
         id: 'users.id',
         username: 'users.username',
       },
+      asUser: async <T>(
+        _userId: string,
+        op: (client: typeof mockDb) => Promise<T>
+      ) => op(mockDb),
     }));
 
     const actualShared = await import('@babylon/shared');
@@ -98,9 +136,10 @@ describe('/api/auth/whoami endpoint', () => {
       },
     }));
 
-    ({ GET } = await import(
+    const whoamiRoute = await import(
       '../../../../apps/web/src/app/api/auth/whoami/route'
-    ));
+    );
+    GET = whoamiRoute.GET as typeof GET;
   });
 
   beforeEach(() => {

@@ -9,7 +9,7 @@
  * Runs automatically when markets resolve.
  */
 
-import { db } from '@babylon/db/runtime';
+import { db } from '@babylon/db/engine-storage';
 
 import {
   type Evaluator,

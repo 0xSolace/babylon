@@ -1,4 +1,5 @@
 import { cachedDb } from '@babylon/api';
+import type { DrizzleClient } from '@babylon/db';
 import { logger } from '@babylon/shared';
 
 export type ProfileStats = {
@@ -21,10 +22,11 @@ const EMPTY_PROFILE_STATS: ProfileStats = {
 
 export async function getOptionalProfileStats(
   userId: string,
-  context: string
+  context: string,
+  scopedClient?: DrizzleClient
 ): Promise<ProfileStats> {
   try {
-    const stats = await cachedDb.getUserProfileStats(userId);
+    const stats = await cachedDb.getUserProfileStats(userId, scopedClient);
     if (!stats) {
       logger.warn(
         'Profile stats unavailable; returning zero fallback',

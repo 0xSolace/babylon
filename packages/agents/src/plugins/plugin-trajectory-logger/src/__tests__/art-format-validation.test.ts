@@ -175,7 +175,7 @@ describe('ART Format Validation', () => {
   afterAll(async () => {
     // Cleanup
     if (testTrajectoryIds.length > 0) {
-      const { db } = await import('@babylon/db');
+      const { db } = await import('@babylon/db/engine-storage');
       await db.trajectory.deleteMany({
         where: { trajectoryId: { in: testTrajectoryIds } },
       });

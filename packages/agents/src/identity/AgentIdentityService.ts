@@ -10,8 +10,14 @@
  * @packageDocumentation
  */
 
-import { eq, type JsonValue, type User } from '@babylon/db';
-import { agentLogs, db, users } from '@babylon/db/runtime';
+import {
+  insertAgentLogRow,
+  type JsonValue,
+  selectUserRowById,
+  type User,
+  updateUserAgent0RegistrationAfterAgent0,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import { syncAfterAgent0Registration } from '../agent0/reputation/agent0-reputation-sync';
 import { getAgent0SDK } from '../agent0/sdk-instance';
 import {
@@ -46,11 +52,7 @@ export class AgentIdentityService {
       'AgentIdentityService'
     );
 
-    const [agentUser] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
+    const agentUser = await selectUserRowById(db, agentUserId);
 
     if (!agentUser || !agentUser.isAgent) {
       throw new Error('Agent user not found');
@@ -85,11 +87,7 @@ export class AgentIdentityService {
       'AgentIdentityService'
     );
 
-    const [agentUser] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
+    const agentUser = await selectUserRowById(db, agentUserId);
 
     if (!agentUser || !agentUser.isAgent)
       throw new Error('Agent user not found');
@@ -161,15 +159,12 @@ export class AgentIdentityService {
       : 0;
     const metadataCID = registration.agentURI || '';
 
-    await db
-      .update(users)
-      .set({
-        agent0TokenId: tokenId,
-        agent0MetadataCID: metadataCID || null,
-        registrationTxHash: null, // RegistrationFile doesn't have txHash
-        onChainRegistered: true,
-      })
-      .where(eq(users.id, agentUserId));
+    await updateUserAgent0RegistrationAfterAgent0(db, agentUserId, {
+      agent0TokenId: tokenId,
+      agent0MetadataCID: metadataCID || null,
+      registrationTxHash: null,
+      onChainRegistered: true,
+    });
 
     // Fire-and-forget reputation sync; log but do not block registration
     syncAfterAgent0Registration(agentUserId, tokenId).catch((error) => {
@@ -180,7 +175,7 @@ export class AgentIdentityService {
       );
     });
 
-    await db.insert(agentLogs).values({
+    await insertAgentLogRow(db, {
       id: await generateSnowflakeId(),
       agentUserId,
       type: 'system',
@@ -245,11 +240,7 @@ export class AgentIdentityService {
       }
     }
 
-    const [agent] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
+    const agent = await selectUserRowById(db, agentUserId);
 
     if (!agent) {
       throw new Error('Agent not found after identity setup');
@@ -262,11 +253,7 @@ export class AgentIdentityService {
    * Returns false on failure instead of throwing (verification is non-critical).
    */
   async verifyAgentIdentity(agentUserId: string): Promise<boolean> {
-    const [agent] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
+    const agent = await selectUserRowById(db, agentUserId);
 
     if (!agent || !agent.isAgent || !agent.agent0TokenId) {
       logger.debug(

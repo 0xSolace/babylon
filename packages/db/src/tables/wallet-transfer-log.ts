@@ -41,6 +41,8 @@ export const walletTransferLog = pgTable(
   ]
 );
 
+export type WalletTransferLogInsert = typeof walletTransferLog.$inferInsert;
+
 export const walletTransferLogRelations = relations(
   walletTransferLog,
   ({ one }) => ({

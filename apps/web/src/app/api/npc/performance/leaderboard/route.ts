@@ -92,14 +92,13 @@ import {
   publicRateLimit,
   withErrorHandling,
 } from '@babylon/api';
-import { eq, inArray } from '@babylon/db';
 import {
-  actorState,
-  db,
-  perpPositions,
-  poolPositions,
-  pools,
-} from '@babylon/db/runtime';
+  selectActivePools,
+  selectActorStateTradingBalanceRowsByIds,
+  selectPerpPositionFallbackRowsForUserIds,
+  selectPoolPositionFallbackRowsForPoolIds,
+} from '@babylon/db';
+import { asPublic } from '@babylon/db/engine-storage';
 import {
   buildFallbackMetricsByPool,
   NPCInvestmentManager,
@@ -134,15 +133,10 @@ export const GET = withErrorHandling(async function GET(request: NextRequest) {
   const limit = parseLimit(limitParam);
   const minValue = parseMinValue(minValueParam);
 
-  const activePools = await db
-    .select()
-    .from(pools)
-    .where(eq(pools.isActive, true));
+  const activePools = await asPublic(async (tx) => selectActivePools(tx));
 
   const activePoolIds = activePools.map((pool) => pool.id);
 
-  // Fetch fallback data lazily so we can serve metrics even when
-  // getPortfolioMetrics() throws (e.g. missing actorState rows).
   let fallbackMetricsByPool: Map<string, PoolMetrics> | null = null;
   let fallbackMetricsPromise: Promise<Map<string, PoolMetrics>> | null = null;
 
@@ -156,47 +150,20 @@ export const GET = withErrorHandling(async function GET(request: NextRequest) {
         return fallbackMetricsByPool;
       }
 
-      const [balances, positionRows, perpRows] = await Promise.all([
-        db
-          .select({
-            id: actorState.id,
-            tradingBalance: actorState.tradingBalance,
-          })
-          .from(actorState)
-          .where(inArray(actorState.id, activePoolIds)),
-        db
-          .select({
-            id: poolPositions.id,
-            poolId: poolPositions.poolId,
-            marketType: poolPositions.marketType,
-            size: poolPositions.size,
-            leverage: poolPositions.leverage,
-            unrealizedPnL: poolPositions.unrealizedPnL,
-            realizedPnL: poolPositions.realizedPnL,
-            closedAt: poolPositions.closedAt,
-          })
-          .from(poolPositions)
-          .where(inArray(poolPositions.poolId, activePoolIds)),
-        db
-          .select({
-            id: perpPositions.id,
-            userId: perpPositions.userId,
-            size: perpPositions.size,
-            leverage: perpPositions.leverage,
-            unrealizedPnL: perpPositions.unrealizedPnL,
-            realizedPnL: perpPositions.realizedPnL,
-            closedAt: perpPositions.closedAt,
-          })
-          .from(perpPositions)
-          .where(inArray(perpPositions.userId, activePoolIds)),
-      ]);
-
-      fallbackMetricsByPool = buildFallbackMetricsByPool(
-        activePools,
-        balances,
-        positionRows,
-        perpRows
-      );
+      const built = await asPublic(async (tx) => {
+        const [balances, positionRows, perpRows] = await Promise.all([
+          selectActorStateTradingBalanceRowsByIds(tx, activePoolIds),
+          selectPoolPositionFallbackRowsForPoolIds(tx, activePoolIds),
+          selectPerpPositionFallbackRowsForUserIds(tx, activePoolIds),
+        ]);
+        return buildFallbackMetricsByPool(
+          activePools,
+          balances,
+          positionRows,
+          perpRows
+        );
+      });
+      fallbackMetricsByPool = built;
       return fallbackMetricsByPool;
     })();
 

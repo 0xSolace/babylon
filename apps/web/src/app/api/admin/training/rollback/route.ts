@@ -56,7 +56,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 
-import { db } from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 import { modelDeployer } from '@babylon/training';
 import type { NextRequest } from 'next/server';
 
@@ -71,10 +71,14 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   }
 
   // Get current deployed version
-  const currentModel = await db.trainedModel.findFirst({
-    where: { status: 'deployed' },
-    orderBy: { deployedAt: 'desc' },
-  });
+  const currentModel = await asSystem(
+    (tx) =>
+      tx.trainedModel.findFirst({
+        where: { status: 'deployed' },
+        orderBy: { deployedAt: 'desc' },
+      }),
+    'admin-training-rollback-current'
+  );
 
   if (!currentModel) {
     throw new BadRequestError('No currently deployed model');

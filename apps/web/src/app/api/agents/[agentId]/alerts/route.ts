@@ -10,9 +10,14 @@
  * Alerts are checked every autonomous tick (~3 min) by PriceAlertService.
  */
 
-import { authenticateUser, withErrorHandling } from '@babylon/api';
-import { eq, type PriceAlert } from '@babylon/db';
-import { db, userAgentConfigs, users } from '@babylon/db/runtime';
+import * as babylonApi from '@babylon/api';
+import {
+  type PriceAlert,
+  selectUserAgentConfigPriceAlertRowByUserId,
+  selectUserPrincipalById,
+  updateUserAgentConfigPriceAlertsById,
+} from '@babylon/db';
+import * as engineStorage from '@babylon/db/engine-storage';
 import { generateSnowflakeId } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -38,17 +43,11 @@ async function verifyAgentOwnership(
   | { error: NextResponse }
   | { config: { id: string; priceAlerts: PriceAlert[] }; userId: string }
 > {
-  const user = await authenticateUser(req);
+  const user = await babylonApi.authenticateUser(req);
 
-  const [agent] = await db
-    .select({
-      id: users.id,
-      isAgent: users.isAgent,
-      managedBy: users.managedBy,
-    })
-    .from(users)
-    .where(eq(users.id, agentId))
-    .limit(1);
+  const agent = await engineStorage.asUser(user.id, (tx) =>
+    selectUserPrincipalById(tx, agentId)
+  );
 
   if (!agent || !agent.isAgent) {
     return {
@@ -62,14 +61,9 @@ async function verifyAgentOwnership(
     };
   }
 
-  const [config] = await db
-    .select({
-      id: userAgentConfigs.id,
-      priceAlerts: userAgentConfigs.priceAlerts,
-    })
-    .from(userAgentConfigs)
-    .where(eq(userAgentConfigs.userId, agentId))
-    .limit(1);
+  const config = await engineStorage.asUser(user.id, (tx) =>
+    selectUserAgentConfigPriceAlertRowByUserId(tx, agentId)
+  );
 
   if (!config) {
     return {
@@ -92,7 +86,7 @@ async function verifyAgentOwnership(
 /**
  * GET - List all price alerts for an agent
  */
-export const GET = withErrorHandling(async function GET(
+export const GET = babylonApi.withErrorHandling(async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ agentId: string }> }
 ) {
@@ -114,7 +108,7 @@ export const GET = withErrorHandling(async function GET(
  *
  * If an alert for the same tokenSymbol+condition already exists, it is updated.
  */
-export const POST = withErrorHandling(async function POST(
+export const POST = babylonApi.withErrorHandling(async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ agentId: string }> }
 ) {
@@ -194,10 +188,14 @@ export const POST = withErrorHandling(async function POST(
     alerts.push(alert);
   }
 
-  await db
-    .update(userAgentConfigs)
-    .set({ priceAlerts: alerts, updatedAt: new Date() })
-    .where(eq(userAgentConfigs.id, result.config.id));
+  await engineStorage.asUser(result.userId, (tx) =>
+    updateUserAgentConfigPriceAlertsById(
+      tx,
+      result.config.id,
+      alerts,
+      new Date()
+    )
+  );
 
   return NextResponse.json(
     {
@@ -214,7 +212,7 @@ export const POST = withErrorHandling(async function POST(
  *
  * Query params: ?alertId=... OR ?tokenSymbol=...&condition=...
  */
-export const DELETE = withErrorHandling(async function DELETE(
+export const DELETE = babylonApi.withErrorHandling(async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ agentId: string }> }
 ) {
@@ -259,10 +257,14 @@ export const DELETE = withErrorHandling(async function DELETE(
     );
   }
 
-  await db
-    .update(userAgentConfigs)
-    .set({ priceAlerts: remaining, updatedAt: new Date() })
-    .where(eq(userAgentConfigs.id, result.config.id));
+  await engineStorage.asUser(result.userId, (tx) =>
+    updateUserAgentConfigPriceAlertsById(
+      tx,
+      result.config.id,
+      remaining,
+      new Date()
+    )
+  );
 
   return NextResponse.json({
     success: true,

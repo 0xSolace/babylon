@@ -76,9 +76,13 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { eq } from '@babylon/db';
-import { db, shareActions, users } from '@babylon/db/runtime';
-
+import {
+  selectShareActionById,
+  selectUserFarcasterShareVerificationSliceById,
+  selectUserTwitterShareVerificationSliceById,
+  updateShareActionVerificationByIdReturning,
+} from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import {
   logger,
   POINTS,
@@ -222,12 +226,9 @@ export const POST = withErrorHandling(
     const body = await request.json();
     const { shareId, platform, postUrl } = VerifyShareRequestSchema.parse(body);
 
-    // Get the share action
-    const [shareAction] = await db
-      .select()
-      .from(shareActions)
-      .where(eq(shareActions.id, shareId))
-      .limit(1);
+    const shareAction = await asUser(authUser, async (db) =>
+      selectShareActionById(db, shareId)
+    );
 
     if (!shareAction) {
       throw new BusinessLogicError('Share action not found', 'SHARE_NOT_FOUND');
@@ -287,17 +288,9 @@ export const POST = withErrorHandling(
       } else {
         const { tweetId, tweetUsername } = parsedTweetUrl;
 
-        // Verify tweet exists using Twitter API v2
-        const [user] = await db
-          .select({
-            twitterAccessToken: users.twitterAccessToken,
-            twitterTokenExpiresAt: users.twitterTokenExpiresAt,
-            twitterId: users.twitterId,
-            twitterUsername: users.twitterUsername,
-          })
-          .from(users)
-          .where(eq(users.id, canonicalUserId))
-          .limit(1);
+        const user = await asUser(authUser, async (db) =>
+          selectUserTwitterShareVerificationSliceById(db, canonicalUserId)
+        );
 
         // VALIDATION 1: Check if user has linked Twitter account
         if (!user?.twitterUsername) {
@@ -622,15 +615,9 @@ export const POST = withErrorHandling(
           );
 
           if (neynarData.cast) {
-            // VALIDATION 1: Check if user has linked Farcaster account
-            const [user] = await db
-              .select({
-                farcasterUsername: users.farcasterUsername,
-                farcasterFid: users.farcasterFid,
-              })
-              .from(users)
-              .where(eq(users.id, canonicalUserId))
-              .limit(1);
+            const user = await asUser(authUser, async (db) =>
+              selectUserFarcasterShareVerificationSliceById(db, canonicalUserId)
+            );
 
             if (!user?.farcasterUsername && !user?.farcasterFid) {
               verificationError =
@@ -772,10 +759,8 @@ export const POST = withErrorHandling(
       }
     }
 
-    // Update share action with verification status and points
-    const [updatedShareAction] = await db
-      .update(shareActions)
-      .set({
+    const [updatedShareAction] = await asUser(authUser, async (db) =>
+      updateShareActionVerificationByIdReturning(db, shareId, {
         verified,
         verifiedAt: verified ? new Date() : null,
         verificationDetails: verified
@@ -783,8 +768,7 @@ export const POST = withErrorHandling(
           : null,
         pointsAwarded: verified && pointsAwarded > 0,
       })
-      .where(eq(shareActions.id, shareId))
-      .returning();
+    );
 
     return successResponse({
       verified,

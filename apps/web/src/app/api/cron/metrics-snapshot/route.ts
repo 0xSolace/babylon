@@ -62,8 +62,9 @@ import {
   verifyCronAuth,
   withErrorHandling,
 } from '@babylon/api';
+import type { DrizzleClient } from '@babylon/db';
 import { generateSnowflakeId } from '@babylon/db';
-import { db, systemMetricsSnapshots } from '@babylon/db/runtime';
+import { asSystem, systemMetricsSnapshots } from '@babylon/db/engine-storage';
 import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -122,11 +123,11 @@ export const POST = withErrorHandling(async function POST(
   );
 
   try {
-    // Collect metrics first (before insert to avoid wasted work on conflict)
-    const metrics = await collectMetrics(snapshotTimestamp);
-
-    // Collect system health metrics
-    const systemHealth = await collectSystemHealth();
+    const { metrics, systemHealth } = await asSystem(async (db) => {
+      const collectedMetrics = await collectMetrics(db, snapshotTimestamp);
+      const health = await collectSystemHealth(db);
+      return { metrics: collectedMetrics, systemHealth: health };
+    }, 'cron-metrics-snapshot-collect');
 
     const pnlSnapshotsCreated =
       await snapshotAllUserPnlMetrics(snapshotTimestamp);
@@ -137,23 +138,27 @@ export const POST = withErrorHandling(async function POST(
 
     // Attempt insert with conflict handling (atomic, race-condition safe)
     // The unique index on (timestamp, environment) prevents duplicates
-    const insertResult = await db
-      .insert(systemMetricsSnapshots)
-      .values({
-        id: snapshotId,
-        timestamp: snapshotTimestamp,
-        environment,
-        ...metrics,
-        ...systemHealth,
-        snapshotDurationMs,
-      })
-      .onConflictDoNothing({
-        target: [
-          systemMetricsSnapshots.timestamp,
-          systemMetricsSnapshots.environment,
-        ],
-      })
-      .returning({ id: systemMetricsSnapshots.id });
+    const insertResult = await asSystem(
+      async (db) =>
+        db
+          .insert(systemMetricsSnapshots)
+          .values({
+            id: snapshotId,
+            timestamp: snapshotTimestamp,
+            environment,
+            ...metrics,
+            ...systemHealth,
+            snapshotDurationMs,
+          })
+          .onConflictDoNothing({
+            target: [
+              systemMetricsSnapshots.timestamp,
+              systemMetricsSnapshots.environment,
+            ],
+          })
+          .returning({ id: systemMetricsSnapshots.id }),
+      'cron-metrics-snapshot-insert'
+    );
 
     // If no rows returned, conflict occurred (snapshot already exists)
     if (insertResult.length === 0) {
@@ -255,7 +260,7 @@ export const POST = withErrorHandling(async function POST(
  * active users by counting distinct users who posted, commented,
  * or traded in the last 24 hours.
  */
-async function collectMetrics(snapshotTime: Date) {
+async function collectMetrics(db: DrizzleClient, snapshotTime: Date) {
   // Convert dates to ISO strings for proper PostgreSQL timestamp handling
   // Note: Drizzle's $queryRaw uses tagged template literals for safe parameterization.
   // The syntax `${value}::timestamp` produces `$1::timestamp` with the value bound separately,
@@ -411,7 +416,7 @@ async function collectMetrics(snapshotTime: Date) {
  * - Integrate with Vercel Analytics or external APM for real uptime/response metrics
  * - See TODOs below for specific improvements needed
  */
-async function collectSystemHealth() {
+async function collectSystemHealth(db: DrizzleClient) {
   // Get cron job stats from in-memory metrics
   const cronStats = cronMetrics.getDashboardMetrics();
 

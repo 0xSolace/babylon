@@ -49,7 +49,7 @@
  */
 
 import { withErrorHandling } from '@babylon/api';
-import { db } from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
@@ -61,22 +61,64 @@ export const GET = withErrorHandling(async function GET(
 ) {
   const { gameId } = await params;
 
-  // SECURITY CHECK: Verify game is completed
-  // For now, check if all questions for this game are resolved
-  const activeQuestions = await db.question.findMany({
-    where: {
-      // gameId: gameId,  // Add gameId to Question model if not exists
-      status: 'active',
-    },
-  });
+  const loadResult = await asSystem(async (db) => {
+    const activeQuestions = await db.question.findMany({
+      where: {
+        // gameId: gameId,  // Add gameId to Question model if not exists
+        status: 'active',
+      },
+    });
 
-  // If any questions still active, game is not complete
-  if (activeQuestions.length > 0) {
+    if (activeQuestions.length > 0) {
+      return {
+        kind: 'active' as const,
+        activeCount: activeQuestions.length,
+      };
+    }
+
+    const questions = await db.question.findMany({
+      where: {
+        status: 'resolved',
+      },
+      orderBy: { createdDate: 'asc' },
+    });
+
+    const questionNumbers = questions.map((q) => q.questionNumber);
+
+    const posts = await db.post.findMany({
+      where: {
+        gameId: gameId,
+        ...(questionNumbers.length === 0
+          ? { relatedQuestion: null }
+          : {
+              OR: [
+                { relatedQuestion: { in: questionNumbers } },
+                { relatedQuestion: null },
+              ],
+            }),
+      },
+      select: {
+        id: true,
+        content: true,
+        authorId: true,
+        gameId: true,
+        dayNumber: true,
+        sentiment: true,
+        createdAt: true,
+        relatedQuestion: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    return { kind: 'ready' as const, questions, posts };
+  }, 'training-games-export');
+
+  if (loadResult.kind === 'active') {
     logger.warn(
       'Training data requested for active game - rejected',
       {
         gameId,
-        activeQuestions: activeQuestions.length,
+        activeQuestions: loadResult.activeCount,
       },
       'TrainingDataAPI'
     );
@@ -92,42 +134,7 @@ export const GET = withErrorHandling(async function GET(
     );
   }
 
-  // Get all resolved questions
-  const questions = await db.question.findMany({
-    where: {
-      status: 'resolved',
-    },
-    orderBy: { createdDate: 'asc' },
-  });
-
-  // Get all posts from this time period, filtered by related question if available
-  const questionNumbers = questions.map((q) => q.questionNumber);
-
-  // Handle empty questionNumbers - avoid sending { in: [] } to Prisma
-  const posts = await db.post.findMany({
-    where: {
-      gameId: gameId,
-      ...(questionNumbers.length === 0
-        ? { relatedQuestion: null } // Only get posts without question association
-        : {
-            OR: [
-              { relatedQuestion: { in: questionNumbers } },
-              { relatedQuestion: null }, // Include posts without question association
-            ],
-          }),
-    },
-    select: {
-      id: true,
-      content: true,
-      authorId: true,
-      gameId: true,
-      dayNumber: true,
-      sentiment: true,
-      createdAt: true,
-      relatedQuestion: true,
-    },
-    orderBy: { createdAt: 'asc' },
-  });
+  const { questions, posts } = loadResult;
 
   // Collect posts that aren't associated with any question
   const unassociatedPosts = posts.filter((p) => p.relatedQuestion === null);

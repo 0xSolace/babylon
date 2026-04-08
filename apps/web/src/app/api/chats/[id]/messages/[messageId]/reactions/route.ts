@@ -18,15 +18,16 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { requireNftChatAccess } from '@babylon/api/services/nft-chat-gating-service';
-import { and, count, eq } from '@babylon/db';
 import {
-  asSystem,
-  asUser,
-  chatParticipants,
-  chats,
-  messageReactions,
-  messages,
-} from '@babylon/db/runtime';
+  deleteMessageReactionById,
+  insertChatMessageReactionRow,
+  selectChatParticipantRowForReactionAccess,
+  selectChatRowByIdForReaction,
+  selectMessageIdInChatForReaction,
+  selectMessageReactionIdForUserEmoji,
+  selectMessageReactionSummaryForViewer,
+} from '@babylon/db';
+import { asSystem, asUser } from '@babylon/db/engine-storage';
 import {
   ALLOWED_REACTION_EMOJI_SET,
   ChatMessageReactionCreateSchema,
@@ -38,23 +39,15 @@ async function requireChatAccess(
   user: Awaited<ReturnType<typeof authenticate>>,
   chatId: string
 ) {
-  const [chat] = await asSystem(async (db) => {
-    return await db.select().from(chats).where(eq(chats.id, chatId)).limit(1);
-  }, 'get-chat-for-reaction');
+  const chat = await asSystem(
+    (db) => selectChatRowByIdForReaction(db, chatId),
+    'get-chat-for-reaction'
+  );
   if (!chat) throw new NotFoundError('Chat', chatId);
 
-  const [isMember] = await asUser(user, async (db) => {
-    return await db
-      .select()
-      .from(chatParticipants)
-      .where(
-        and(
-          eq(chatParticipants.chatId, chatId),
-          eq(chatParticipants.userId, user.userId)
-        )
-      )
-      .limit(1);
-  });
+  const isMember = await asUser(user, async (db) =>
+    selectChatParticipantRowForReactionAccess(db, chatId, user.userId)
+  );
   if (!isMember) {
     throw new AuthorizationError(
       'You do not have access to this chat',
@@ -67,49 +60,18 @@ async function requireChatAccess(
 }
 
 async function requireMessageInChat(chatId: string, messageId: string) {
-  const [msg] = await asSystem(async (db) => {
-    return await db
-      .select({ id: messages.id })
-      .from(messages)
-      .where(and(eq(messages.id, messageId), eq(messages.chatId, chatId)))
-      .limit(1);
-  }, 'get-message-for-reaction');
+  const msg = await asSystem(
+    (db) => selectMessageIdInChatForReaction(db, messageId, chatId),
+    'get-message-for-reaction'
+  );
   if (!msg) throw new NotFoundError('Message', messageId);
 }
 
 async function getReactionSummary(messageId: string, currentUserId: string) {
-  const [countsByEmoji, myEmojis] = await Promise.all([
-    asSystem(async (db) => {
-      return await db
-        .select({
-          emoji: messageReactions.emoji,
-          count: count(),
-        })
-        .from(messageReactions)
-        .where(eq(messageReactions.messageId, messageId))
-        .groupBy(messageReactions.emoji);
-    }, 'get-message-reaction-counts'),
-    asSystem(async (db) => {
-      return await db
-        .select({ emoji: messageReactions.emoji })
-        .from(messageReactions)
-        .where(
-          and(
-            eq(messageReactions.messageId, messageId),
-            eq(messageReactions.userId, currentUserId)
-          )
-        );
-    }, 'get-message-reaction-mine'),
-  ]);
-
-  const myEmojiSet = new Set(myEmojis.map((r) => r.emoji));
-  return countsByEmoji
-    .map((r) => ({
-      emoji: r.emoji,
-      count: Number(r.count ?? 0),
-      reactedByMe: myEmojiSet.has(r.emoji),
-    }))
-    .filter((r) => r.count > 0);
+  return asSystem(
+    (db) => selectMessageReactionSummaryForViewer(db, messageId, currentUserId),
+    'get-message-reaction-summary'
+  );
 }
 
 export const POST = withErrorHandling(
@@ -141,23 +103,19 @@ export const POST = withErrorHandling(
     await requireChatAccess(user, chatId);
     await requireMessageInChat(chatId, messageId);
 
-    const [existing] = await asSystem(async (db) => {
-      return await db
-        .select({ id: messageReactions.id })
-        .from(messageReactions)
-        .where(
-          and(
-            eq(messageReactions.messageId, messageId),
-            eq(messageReactions.userId, user.userId),
-            eq(messageReactions.emoji, emoji)
-          )
-        )
-        .limit(1);
-    }, 'check-existing-message-reaction');
+    const existing = await asSystem(
+      (db) =>
+        selectMessageReactionIdForUserEmoji(db, {
+          messageId,
+          userId: user.userId,
+          emoji,
+        }),
+      'check-existing-message-reaction'
+    );
 
     if (!existing) {
       await asUser(user, async (db) => {
-        await db.insert(messageReactions).values({
+        await insertChatMessageReactionRow(db, {
           id: await generateSnowflakeId(),
           chatId,
           messageId,
@@ -211,25 +169,19 @@ export const DELETE = withErrorHandling(
     await requireChatAccess(user, chatId);
     await requireMessageInChat(chatId, messageId);
 
-    const [existing] = await asSystem(async (db) => {
-      return await db
-        .select({ id: messageReactions.id })
-        .from(messageReactions)
-        .where(
-          and(
-            eq(messageReactions.messageId, messageId),
-            eq(messageReactions.userId, user.userId),
-            eq(messageReactions.emoji, emoji)
-          )
-        )
-        .limit(1);
-    }, 'check-existing-message-reaction-delete');
+    const existing = await asSystem(
+      (db) =>
+        selectMessageReactionIdForUserEmoji(db, {
+          messageId,
+          userId: user.userId,
+          emoji,
+        }),
+      'check-existing-message-reaction-delete'
+    );
 
     if (existing) {
       await asUser(user, async (db) => {
-        await db
-          .delete(messageReactions)
-          .where(eq(messageReactions.id, existing.id));
+        await deleteMessageReactionById(db, existing.id);
       });
 
       await broadcastChatMessageReaction(chatId, {

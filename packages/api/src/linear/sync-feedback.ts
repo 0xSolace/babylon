@@ -4,7 +4,7 @@
  * Includes retry logic with exponential backoff for transient failures.
  */
 
-import { db } from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 
 import { FeedbackTypeSchema, logger } from '@babylon/shared';
 import { z } from 'zod';
@@ -102,10 +102,14 @@ export async function syncFeedbackToLinear(
   user: FeedbackUser
 ): Promise<void> {
   // Fetch feedback from DB to get current state (ensures consistency)
-  const feedback = await db.feedback.findUnique({
-    where: { id: feedbackId },
-    select: { comment: true, metadata: true },
-  });
+  const feedback = await asSystem(
+    async (c) =>
+      c.feedback.findUnique({
+        where: { id: feedbackId },
+        select: { comment: true, metadata: true },
+      }),
+    'linear-sync-feedback-load'
+  );
 
   if (!feedback) {
     logger.warn('Feedback not found for Linear sync', { feedbackId });
@@ -159,27 +163,29 @@ export async function syncFeedbackToLinear(
   // Note: This is not truly atomic (TOCTOU gap exists), but the idempotency
   // check above prevents duplicate Linear issues, and metadata merge is
   // additive only. Risk is acceptable for fire-and-forget background sync.
-  const freshFeedback = await db.feedback.findUnique({
-    where: { id: feedbackId },
-    select: { metadata: true },
-  });
+  await asSystem(async (c) => {
+    const freshFeedback = await c.feedback.findUnique({
+      where: { id: feedbackId },
+      select: { metadata: true },
+    });
 
-  const freshMetadata =
-    freshFeedback?.metadata && typeof freshFeedback.metadata === 'object'
-      ? (freshFeedback.metadata as Record<string, unknown>)
-      : {};
+    const freshMetadata =
+      freshFeedback?.metadata && typeof freshFeedback.metadata === 'object'
+        ? (freshFeedback.metadata as Record<string, unknown>)
+        : {};
 
-  await db.feedback.update({
-    where: { id: feedbackId },
-    data: {
-      metadata: {
-        ...freshMetadata,
-        linearIssueId: issue.id,
-        linearIssueIdentifier: issue.identifier,
-        linearIssueUrl: issue.url,
+    await c.feedback.update({
+      where: { id: feedbackId },
+      data: {
+        metadata: {
+          ...freshMetadata,
+          linearIssueId: issue.id,
+          linearIssueIdentifier: issue.identifier,
+          linearIssueUrl: issue.url,
+        },
       },
-    },
-  });
+    });
+  }, 'linear-sync-feedback-update-metadata');
 
   logger.info('Linear issue created for feedback', {
     feedbackId,

@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 /**
  * Real Archetype Benchmark
  *
@@ -8,13 +9,13 @@
  *   bun run packages/training/scripts/real-archetype-benchmark.ts
  */
 
-import { and, desc, eq, isNull } from '@babylon/db';
 import {
   agentPerformanceMetrics,
   db,
   poolPositions,
   users,
-} from '@babylon/db/runtime';
+} from '@babylon/db/engine-storage';
+import { and, desc, eq, isNull } from 'drizzle-orm';
 import { ArchetypeConfigService } from '../src/archetypes/ArchetypeConfigService';
 
 // Get the available archetypes from our actual config

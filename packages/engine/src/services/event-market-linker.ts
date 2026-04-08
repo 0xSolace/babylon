@@ -16,8 +16,10 @@
  * @module engine/services/event-market-linker
  */
 
-import { and, desc, eq, gte, inArray } from '@babylon/db';
-import { db, markets, questions, worldEvents } from '@babylon/db/runtime';
+import {
+  fetchEventMarketLinkerPayloadForMarket,
+  fetchEventMarketLinkerSummariesPayload,
+} from '@babylon/db';
 import { logger } from '@babylon/shared';
 
 /**
@@ -84,51 +86,12 @@ export class EventMarketLinkerService {
   ): Promise<EventMarketImpact[]> {
     const lookbackDate = new Date(Date.now() - lookbackHours * 60 * 60 * 1000);
 
-    // Get events linked to this question
-    const events = await db
-      .select({
-        id: worldEvents.id,
-        type: worldEvents.eventType,
-        description: worldEvents.description,
-        pointsToward: worldEvents.pointsToward,
-        timestamp: worldEvents.timestamp,
-      })
-      .from(worldEvents)
-      .where(
-        and(
-          eq(worldEvents.relatedQuestion, questionNumber),
-          gte(worldEvents.timestamp, lookbackDate)
-        )
-      )
-      .orderBy(desc(worldEvents.timestamp))
-      .limit(20);
-
-    // Get the question and market
-    const [question] = await db
-      .select({
-        id: questions.id,
-        text: questions.text,
-        questionNumber: questions.questionNumber,
-      })
-      .from(questions)
-      .where(eq(questions.questionNumber, questionNumber))
-      .limit(1);
-
-    if (!question) {
-      return [];
-    }
-
-    const [market] = await db
-      .select({
-        id: markets.id,
-        yesShares: markets.yesShares,
-        noShares: markets.noShares,
-      })
-      .from(markets)
-      .where(eq(markets.id, question.id))
-      .limit(1);
-
-    if (!market) {
+    const { events, question, market } =
+      await fetchEventMarketLinkerPayloadForMarket({
+        questionNumber,
+        lookbackDate,
+      });
+    if (!question || !market) {
       return [];
     }
 
@@ -176,32 +139,13 @@ export class EventMarketLinkerService {
   ): Promise<MarketEventSummary[]> {
     const lookbackDate = new Date(Date.now() - lookbackHours * 60 * 60 * 1000);
 
-    // Get all recent events with linked questions
-    const eventsWithQuestions = await db
-      .select({
-        eventId: worldEvents.id,
-        eventType: worldEvents.eventType,
-        description: worldEvents.description,
-        pointsToward: worldEvents.pointsToward,
-        relatedQuestion: worldEvents.relatedQuestion,
-        timestamp: worldEvents.timestamp,
-      })
-      .from(worldEvents)
-      .where(
-        and(
-          gte(worldEvents.timestamp, lookbackDate),
-          // Only include events with valid relatedQuestion values
-          gte(worldEvents.relatedQuestion, 1)
-        )
-      )
-      .orderBy(desc(worldEvents.timestamp))
-      .limit(100);
+    const { eventsWithQuestions, questionsWithEvents, marketsList } =
+      await fetchEventMarketLinkerSummariesPayload({ lookbackDate });
 
     if (eventsWithQuestions.length === 0) {
       return [];
     }
 
-    // Group events by question number
     const eventsByQuestion = new Map<
       number,
       Array<(typeof eventsWithQuestions)[0]>
@@ -213,42 +157,9 @@ export class EventMarketLinkerService {
       eventsByQuestion.set(event.relatedQuestion, existing);
     }
 
-    // Get all relevant questions - use inArray for DB-level filtering
-    const questionNumbers = Array.from(eventsByQuestion.keys());
-    if (questionNumbers.length === 0) {
+    if (questionsWithEvents.length === 0) {
       return [];
     }
-    const questionsWithEvents = await db
-      .select({
-        id: questions.id,
-        text: questions.text,
-        questionNumber: questions.questionNumber,
-        status: questions.status,
-      })
-      .from(questions)
-      .where(
-        and(
-          eq(questions.status, 'active'),
-          inArray(questions.questionNumber, questionNumbers)
-        )
-      )
-      .limit(50);
-
-    // Get markets for these questions - filter by known question IDs
-    const questionIds = questionsWithEvents.map((q) => q.id);
-    if (questionIds.length === 0) {
-      return [];
-    }
-    const marketsList = await db
-      .select({
-        id: markets.id,
-        yesShares: markets.yesShares,
-        noShares: markets.noShares,
-        resolved: markets.resolved,
-      })
-      .from(markets)
-      .where(and(eq(markets.resolved, false), inArray(markets.id, questionIds)))
-      .limit(50);
 
     const marketMap = new Map(marketsList.map((m) => [m.id, m]));
 

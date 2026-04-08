@@ -15,9 +15,8 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, asc, desc, eq, inArray, sql } from '@babylon/db';
-import { chatParticipants, chats, db, users } from '@babylon/db/runtime';
-
+import { selectNftGatedChatsDiscoveryContext } from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
@@ -53,36 +52,23 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     offset: searchParams.get('offset') ?? undefined,
   });
 
-  // Get user's wallet address
-  const [userData] = await db
-    .select({ walletAddress: users.walletAddress })
-    .from(users)
-    .where(eq(users.id, user.userId))
-    .limit(1);
+  const {
+    userWalletRow: userData,
+    totalNftGatedChats: totalCount,
+    pageChats: nftGatedChats,
+    userMemberChatIds,
+    activeMemberCountByChatId: memberCountMap,
+  } = await asSystem(
+    (db) =>
+      selectNftGatedChatsDiscoveryContext(db, {
+        userId: user.userId,
+        limit,
+        offset,
+      }),
+    'chats-nft-gated-list'
+  );
 
-  // Get total count of NFT-gated chats for pagination metadata
-  const [totalCountResult] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(chats)
-    .where(eq(chats.nftGated, true));
-  const totalCount = totalCountResult?.count ?? 0;
-
-  // Get paginated NFT-gated chats ordered by createdAt (newest first)
-  const nftGatedChats = await db
-    .select({
-      id: chats.id,
-      name: chats.name,
-      description: chats.description,
-      requiredNftContractAddress: chats.requiredNftContractAddress,
-      requiredNftTokenId: chats.requiredNftTokenId,
-      requiredNftChainId: chats.requiredNftChainId,
-      createdAt: chats.createdAt,
-    })
-    .from(chats)
-    .where(eq(chats.nftGated, true))
-    .orderBy(desc(chats.createdAt), asc(chats.id))
-    .limit(limit)
-    .offset(offset);
+  const memberOfSet = new Set(userMemberChatIds);
 
   if (nftGatedChats.length === 0) {
     return successResponse({
@@ -95,46 +81,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         hasMore: false,
       },
     });
-  }
-
-  // Get user's current active memberships
-  const userMemberships = await db
-    .select({ chatId: chatParticipants.chatId })
-    .from(chatParticipants)
-    .where(
-      and(
-        eq(chatParticipants.userId, user.userId),
-        eq(chatParticipants.isActive, true),
-        inArray(
-          chatParticipants.chatId,
-          nftGatedChats.map((c) => c.id)
-        )
-      )
-    );
-  const memberOfSet = new Set(userMemberships.map((m) => m.chatId));
-
-  // Get member counts for all chats in a single query using GROUP BY
-  const chatIds = nftGatedChats.map((c) => c.id);
-  const memberCountMap = new Map<string, number>();
-
-  if (chatIds.length > 0) {
-    const memberCountsResult = await db
-      .select({
-        chatId: chatParticipants.chatId,
-        count: sql<number>`count(*)::int`,
-      })
-      .from(chatParticipants)
-      .where(
-        and(
-          inArray(chatParticipants.chatId, chatIds),
-          eq(chatParticipants.isActive, true)
-        )
-      )
-      .groupBy(chatParticipants.chatId);
-
-    for (const row of memberCountsResult) {
-      memberCountMap.set(row.chatId, row.count);
-    }
   }
 
   // Check NFT access for each chat if user has wallet

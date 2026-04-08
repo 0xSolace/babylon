@@ -74,8 +74,14 @@ import {
   verifySiweMessage,
   withErrorHandling,
 } from '@babylon/api';
-import { eq, generateSnowflakeId, sql } from '@babylon/db';
-import { db, userApiKeys, users, withTransaction } from '@babylon/db/runtime';
+import {
+  generateSnowflakeId,
+  insertSiweAgentUserReturningSlice,
+  insertUserApiKeyRow,
+  selectUserIdByUsernameCaseInsensitive,
+  selectUserSiweAuthSliceByWalletAddress,
+} from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import { logger, UsernameSchema } from '@babylon/shared';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -118,31 +124,70 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
   const walletAddress = verifyResult.address.toLowerCase();
 
-  // Check if wallet already registered
-  const [existingUser] = await db
-    .select({
-      id: users.id,
-      username: users.username,
-      walletAddress: users.walletAddress,
-    })
-    .from(users)
-    .where(eq(users.walletAddress, walletAddress))
-    .limit(1);
+  const siweResult = await asSystem(async (tx) => {
+    const existingUser = await selectUserSiweAuthSliceByWalletAddress(
+      tx,
+      walletAddress
+    );
 
-  if (existingUser) {
-    // LOGIN FLOW: Existing user - issue new API key
+    if (existingUser) {
+      const apiKey = generateApiKey();
+      const keyHash = hashApiKey(apiKey);
+      const keyId = await generateSnowflakeId();
+
+      await insertUserApiKeyRow(tx, {
+        id: keyId,
+        userId: existingUser.id,
+        keyHash,
+        name: `SIWE Login ${new Date().toISOString().split('T')[0]}`,
+        createdAt: new Date(),
+      });
+
+      return { type: 'login' as const, existingUser, apiKey };
+    }
+
+    const existingUsername = await selectUserIdByUsernameCaseInsensitive(
+      tx,
+      username
+    );
+
+    if (existingUsername) {
+      return { type: 'username_taken' as const };
+    }
+
+    const userId = await generateSnowflakeId();
+    const now = new Date();
+
+    const user = await insertSiweAgentUserReturningSlice(tx, {
+      id: userId,
+      username,
+      displayName: username,
+      walletAddress,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    if (!user) {
+      throw new Error('Failed to create user');
+    }
+
     const apiKey = generateApiKey();
     const keyHash = hashApiKey(apiKey);
     const keyId = await generateSnowflakeId();
 
-    await db.insert(userApiKeys).values({
+    await insertUserApiKeyRow(tx, {
       id: keyId,
-      userId: existingUser.id,
+      userId,
       keyHash,
-      name: `SIWE Login ${new Date().toISOString().split('T')[0]}`,
-      createdAt: new Date(),
+      name: 'SIWE Registration',
+      createdAt: now,
     });
 
+    return { type: 'register' as const, user, apiKey };
+  }, 'auth-siwe-authenticate');
+
+  if (siweResult.type === 'login') {
+    const { existingUser, apiKey } = siweResult;
     logger.info(
       'SIWE agent login',
       {
@@ -159,18 +204,11 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       userId: existingUser.id,
       username: existingUser.username,
       walletAddress: existingUser.walletAddress,
-      apiKey, // Only shown once!
+      apiKey,
     });
   }
 
-  // REGISTER FLOW: New user - check username availability (case-insensitive)
-  const [existingUsername] = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(sql`lower(${users.username}) = lower(${username})`)
-    .limit(1);
-
-  if (existingUsername) {
+  if (siweResult.type === 'username_taken') {
     return NextResponse.json(
       {
         error: 'username_taken',
@@ -180,55 +218,14 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     );
   }
 
-  // Create user and API key in transaction
-  const result = await withTransaction(async (tx) => {
-    const userId = await generateSnowflakeId();
-
-    // Create user
-    const [user] = await tx
-      .insert(users)
-      .values({
-        id: userId,
-        username,
-        displayName: username,
-        walletAddress,
-        isAgent: true,
-        profileComplete: false,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .returning({
-        id: users.id,
-        username: users.username,
-        walletAddress: users.walletAddress,
-      });
-
-    if (!user) {
-      throw new Error('Failed to create user');
-    }
-
-    // Generate API key
-    const apiKey = generateApiKey();
-    const keyHash = hashApiKey(apiKey);
-    const keyId = await generateSnowflakeId();
-
-    await tx.insert(userApiKeys).values({
-      id: keyId,
-      userId,
-      keyHash,
-      name: 'SIWE Registration',
-      createdAt: new Date(),
-    });
-
-    return { user, apiKey };
-  });
+  const { user, apiKey } = siweResult;
 
   logger.info(
     'SIWE agent registration',
     {
-      userId: result.user.id,
-      username: result.user.username,
-      walletAddress: result.user.walletAddress,
+      userId: user.id,
+      username: user.username,
+      walletAddress: user.walletAddress,
     },
     'SIWE'
   );
@@ -236,10 +233,10 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   return successResponse({
     success: true,
     isNewUser: true,
-    userId: result.user.id,
-    username: result.user.username,
-    walletAddress: result.user.walletAddress,
-    apiKey: result.apiKey, // Only shown once!
+    userId: user.id,
+    username: user.username,
+    walletAddress: user.walletAddress,
+    apiKey,
   });
 });
 

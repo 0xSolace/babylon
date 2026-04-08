@@ -1,1 +1,2 @@
 bun check
+bun run enforce:db-boundary

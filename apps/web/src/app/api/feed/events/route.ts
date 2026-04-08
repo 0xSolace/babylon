@@ -8,7 +8,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 
-import { db, feedEvents } from '@babylon/db/runtime';
+import { asUser, feedEvents } from '@babylon/db/engine-storage';
 import { type FeedEventPayload, generateSnowflakeId } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
@@ -82,7 +82,9 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     }))
   );
 
-  await db.insert(feedEvents).values(rows);
+  await asUser(authUser, async (db) => {
+    await db.insert(feedEvents).values(rows);
+  });
 
   return successResponse({
     success: true,

@@ -58,7 +58,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import type { JsonObject } from '@babylon/db';
-import { db } from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -90,26 +90,6 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     );
   }
 
-  const existingFeedback = await db.feedback.findFirst({
-    where: {
-      fromUserId: agent.id,
-      gameId: payload.gameId,
-      interactionType: 'agent_to_game',
-    },
-    select: { id: true },
-  });
-
-  if (existingFeedback) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'Feedback already submitted for this game',
-        feedbackId: existingFeedback.id,
-      },
-      { status: 409 }
-    );
-  }
-
   const metadataBase: JsonObject =
     payload.metadata &&
     typeof payload.metadata === 'object' &&
@@ -122,20 +102,50 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     ...(payload.tags ? { tags: payload.tags } : {}),
   };
 
-  const feedback = await db.feedback.create({
-    data: {
-      id: await generateSnowflakeId(),
-      fromUserId: agent.id,
-      fromAgentId: agent.id,
-      score: payload.score,
-      comment: payload.comment,
-      category: 'game_review',
-      gameId: payload.gameId,
-      interactionType: 'agent_to_game',
-      metadata,
-      updatedAt: new Date(),
-    },
-  });
+  const outcome = await asSystem(async (db) => {
+    const duplicate = await db.feedback.findFirst({
+      where: {
+        fromUserId: agent.id,
+        gameId: payload.gameId,
+        interactionType: 'agent_to_game',
+      },
+      select: { id: true },
+    });
+
+    if (duplicate) {
+      return { kind: 'duplicate' as const, duplicate };
+    }
+
+    const created = await db.feedback.create({
+      data: {
+        id: await generateSnowflakeId(),
+        fromUserId: agent.id,
+        fromAgentId: agent.id,
+        score: payload.score,
+        comment: payload.comment,
+        category: 'game_review',
+        gameId: payload.gameId,
+        interactionType: 'agent_to_game',
+        metadata,
+        updatedAt: new Date(),
+      },
+    });
+
+    return { kind: 'created' as const, feedback: created };
+  }, 'feedback-agent-to-game');
+
+  if (outcome.kind === 'duplicate') {
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Feedback already submitted for this game',
+        feedbackId: outcome.duplicate.id,
+      },
+      { status: 409 }
+    );
+  }
+
+  const { feedback } = outcome;
 
   logger.info('Agent-to-game feedback created', {
     feedbackId: feedback.id,

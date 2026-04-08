@@ -12,10 +12,14 @@
 
 import { afterAll, beforeEach, describe, expect, it } from 'bun:test';
 import { getOrCreateReferralCode, PointsService } from '@babylon/api';
-import { and, count, eq, isNull } from '@babylon/db';
-import { db, pointsTransactions, referrals, users } from '@babylon/db/runtime';
-
+import {
+  db,
+  pointsTransactions,
+  referrals,
+  users,
+} from '@babylon/db/engine-storage';
 import { generateSnowflakeId, POINTS } from '@babylon/shared';
+import { and, count, eq, isNull } from 'drizzle-orm';
 
 // Test user IDs that we'll clean up
 const testUserIds: string[] = [];

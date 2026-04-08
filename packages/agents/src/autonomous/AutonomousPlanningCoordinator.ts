@@ -6,16 +6,18 @@
  */
 
 import { countTokensSync, truncateToTokenLimitSync } from '@babylon/api';
-import type { JsonValue } from '@babylon/db';
-import { and, desc, eq, inArray, isNull, sql } from '@babylon/db';
 import {
-  agentLogs,
-  db,
-  getDbInstance,
-  perpPositions,
-  positions,
-  users,
-} from '@babylon/db/runtime';
+  countActivePredictionPositionsByUserId,
+  countOpenPerpPositionsByUserId,
+  type JsonValue,
+  listAllOrganizationStatesAsSystem,
+  selectActivePredictionMarketsUnresolvedEndingAfterNowOrderCreatedDescLimit,
+  selectAgentLogsByTypesOrderCreatedDescLimit,
+  selectTrendingTagsWithNamesOrderScoreDescLimit,
+  selectUserRowById,
+  selectUserVirtualBalanceAndLifetimePnLById,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import { StaticDataRegistry, type StaticOrganization } from '@babylon/engine';
 import type { IAgentRuntime } from '@elizaos/core';
 import { callGroqDirect } from '../llm/direct-groq';
@@ -187,11 +189,7 @@ export class AutonomousPlanningCoordinator {
       'PlanningCoordinator'
     );
 
-    const [agent] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
+    const agent = await selectUserRowById(db, agentUserId);
 
     if (!agent) {
       throw new Error('Agent not found');
@@ -309,14 +307,10 @@ export class AutonomousPlanningCoordinator {
       })) as AgentGoal[];
 
     // Get user and agent config
-    const [user] = await db
-      .select({
-        virtualBalance: users.virtualBalance,
-        lifetimePnL: users.lifetimePnL,
-      })
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
+    const user = await selectUserVirtualBalanceAndLifetimePnLById(
+      db,
+      agentUserId
+    );
 
     const config = await getAgentConfig(agentUserId);
 
@@ -338,24 +332,15 @@ export class AutonomousPlanningCoordinator {
     }
 
     // Get portfolio info
-    const [positionCountResult] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(positions)
-      .where(
-        and(eq(positions.userId, agentUserId), eq(positions.status, 'active'))
-      );
-    const positionsCount = positionCountResult?.count ?? 0;
+    const positionsCount = await countActivePredictionPositionsByUserId(
+      db,
+      agentUserId
+    );
 
-    const [perpPositionCountResult] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(perpPositions)
-      .where(
-        and(
-          eq(perpPositions.userId, agentUserId),
-          isNull(perpPositions.closedAt)
-        )
-      );
-    const perpPositionsCount = perpPositionCountResult?.count ?? 0;
+    const perpPositionsCount = await countOpenPerpPositionsByUserId(
+      db,
+      agentUserId
+    );
 
     // Get pending interactions using new utilities
     const [pendingCommentReplies, pendingChatMessages] = await Promise.all([
@@ -364,17 +349,12 @@ export class AutonomousPlanningCoordinator {
     ]);
 
     // Get recent actions (last 10)
-    const recentLogs = await db
-      .select()
-      .from(agentLogs)
-      .where(
-        and(
-          eq(agentLogs.agentUserId, agentUserId),
-          inArray(agentLogs.type, ['trade', 'post', 'comment', 'dm'])
-        )
-      )
-      .orderBy(desc(agentLogs.createdAt))
-      .limit(10);
+    const recentLogs = await selectAgentLogsByTypesOrderCreatedDescLimit(
+      db,
+      agentUserId,
+      ['trade', 'post', 'comment', 'dm'],
+      10
+    );
 
     // Detect trading opportunities
     const tradingOpportunities = await detectTradingOpportunities(
@@ -949,14 +929,11 @@ async function detectTradingOpportunities(
   }> = [];
 
   // Get active prediction markets with high volume
-  const activeMarkets = await db.market.findMany({
-    where: {
-      resolved: false,
-      endDate: { gte: new Date() },
-    },
-    orderBy: { createdAt: 'desc' },
-    take: 10,
-  });
+  const activeMarkets =
+    await selectActivePredictionMarketsUnresolvedEndingAfterNowOrderCreatedDescLimit(
+      db,
+      10
+    );
 
   for (const market of activeMarkets) {
     const yesShares = Number(market.yesShares || 0);
@@ -983,7 +960,7 @@ async function detectTradingOpportunities(
   }
 
   // Get perp markets with significant price movement
-  const orgStates = await getDbInstance().getAllOrganizationStates();
+  const orgStates = await listAllOrganizationStatesAsSystem();
   const priceMap = new Map(
     orgStates.map((s): [string, number | null] => [s.id, s.currentPrice])
   );
@@ -1087,27 +1064,17 @@ async function detectSocialOpportunities(
   }
 
   // Check for trending topics to post about
-  const trendingTagsRaw = await db.query.trendingTags.findMany({
-    orderBy: (trendingTags, { desc: descFn }) => [descFn(trendingTags.score)],
-    limit: 5,
-    with: {
-      tag: {
-        columns: {
-          name: true,
-          displayName: true,
-        },
-      },
-    },
-  });
+  const trendingTagsRaw = await selectTrendingTagsWithNamesOrderScoreDescLimit(
+    db,
+    5
+  );
 
   for (const trending of trendingTagsRaw) {
-    if (trending.tag) {
-      opportunities.push({
-        type: 'post',
-        description: `Trending topic: ${trending.tag.displayName || trending.tag.name}`,
-        engagementScore: trending.score / 100, // Normalize score
-      });
-    }
+    opportunities.push({
+      type: 'post',
+      description: `Trending topic: ${trending.tagDisplayName || trending.tagName}`,
+      engagementScore: trending.score / 100, // Normalize score
+    });
   }
 
   // Sort by engagement score

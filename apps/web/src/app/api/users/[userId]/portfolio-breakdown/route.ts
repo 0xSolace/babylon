@@ -18,7 +18,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 
-import { db, users } from '@babylon/db/runtime';
+import { asPublic, users } from '@babylon/db/engine-storage';
 import { calculatePortfolioBreakdown } from '@babylon/engine';
 import { logger, UserIdParamSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
@@ -33,15 +33,17 @@ export const GET = withErrorHandling(
     let dbUser = await findUserByIdentifier(userId, { id: true });
 
     if (!dbUser) {
-      const [newUser] = await db
-        .insert(users)
-        .values({
-          id: userId,
-          privyId: userId,
-          isActor: false,
-          updatedAt: new Date(),
-        })
-        .returning();
+      const [newUser] = await asPublic(async (db) =>
+        db
+          .insert(users)
+          .values({
+            id: userId,
+            privyId: userId,
+            isActor: false,
+            updatedAt: new Date(),
+          })
+          .returning()
+      );
 
       if (!newUser) {
         throw new Error('Failed to create user');

@@ -54,7 +54,7 @@
  */
 
 import { authenticate, successResponse, withErrorHandling } from '@babylon/api';
-import { db } from '@babylon/db/runtime';
+import { asUser } from '@babylon/db/engine-storage';
 
 import { GetMutesSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
@@ -68,28 +68,31 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     offset: searchParams.get('offset') || '0',
   });
 
-  const [mutes, total] = await Promise.all([
-    db.userMute.findMany({
-      where: { muterId: authUser.userId },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-      skip: offset,
-      include: {
-        muted: {
-          select: {
-            id: true,
-            username: true,
-            displayName: true,
-            profileImageUrl: true,
-            isActor: true,
+  const { mutes, total } = await asUser(authUser, async (db) => {
+    const [muteRows, count] = await Promise.all([
+      db.userMute.findMany({
+        where: { muterId: authUser.userId },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset,
+        include: {
+          muted: {
+            select: {
+              id: true,
+              username: true,
+              displayName: true,
+              profileImageUrl: true,
+              isActor: true,
+            },
           },
         },
-      },
-    }),
-    db.userMute.count({
-      where: { muterId: authUser.userId },
-    }),
-  ]);
+      }),
+      db.userMute.count({
+        where: { muterId: authUser.userId },
+      }),
+    ]);
+    return { mutes: muteRows, total: count };
+  });
 
   return successResponse({
     mutes,

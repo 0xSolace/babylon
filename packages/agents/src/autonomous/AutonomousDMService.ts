@@ -4,8 +4,14 @@
  * Handles agents responding to direct messages autonomously
  */
 
-import { and, desc, eq, gte, ne } from '@babylon/db';
-import { chatParticipants, db, messages, users } from '@babylon/db/runtime';
+import {
+  selectChatParticipantExistsForChatAndUser,
+  selectChatParticipantsWithChatsByUserId,
+  selectMessagesByChatIdExcludingSenderSinceOrderCreatedDescLimit,
+  selectMessagesByChatIdOrderCreatedAscLimit,
+  selectUserRowById,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import type { IAgentRuntime } from '@elizaos/core';
 import { callGroqDirect } from '../llm/direct-groq';
 import { getAgentConfig } from '../shared/agent-config';
@@ -39,22 +45,16 @@ export class AutonomousDMService {
     // (Owner should use Agents/team chat instead of DMs)
     let ownerUserId: string | null = null;
     if (!isNpcUser(agentUserId)) {
-      const [agentRecord] = await db
-        .select({ managedBy: users.managedBy })
-        .from(users)
-        .where(eq(users.id, agentUserId))
-        .limit(1);
+      const agentRecord = await selectUserRowById(db, agentUserId);
       ownerUserId = agentRecord?.managedBy ?? null;
     }
 
     // Get agent's DM chats (non-group chats)
-    const dmChatsRaw = await db.query.chatParticipants.findMany({
-      where: (chatParticipants, { eq }) =>
-        eq(chatParticipants.userId, agentUserId),
-      with: {
-        chat: true,
-      },
-    });
+    const participantRows = await selectChatParticipantsWithChatsByUserId(
+      db,
+      agentUserId
+    );
+    const dmChatsRaw = participantRows.map((r) => ({ chat: r.chat }));
 
     let responsesCreated = 0;
 
@@ -65,18 +65,13 @@ export class AutonomousDMService {
       // Skip DMs with the owner - owner should use Agents chat instead
       // Directly check if owner is a participant (more reliable than checking arbitrary other participant)
       if (ownerUserId && chat.id) {
-        const ownerParticipation = await db
-          .select({ userId: chatParticipants.userId })
-          .from(chatParticipants)
-          .where(
-            and(
-              eq(chatParticipants.chatId, chat.id),
-              eq(chatParticipants.userId, ownerUserId)
-            )
-          )
-          .limit(1);
+        const ownerInChat = await selectChatParticipantExistsForChatAndUser(
+          db,
+          chat.id,
+          ownerUserId
+        );
 
-        if (ownerParticipation.length > 0) {
+        if (ownerInChat) {
           logger.debug(
             `Skipping DM with owner ${ownerUserId} - use Agents chat instead`,
             undefined,
@@ -88,27 +83,25 @@ export class AutonomousDMService {
 
       // Get recent messages in this chat
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-      const unreadMessages = await db
-        .select()
-        .from(messages)
-        .where(
-          and(
-            eq(messages.chatId, chat.id),
-            ne(messages.senderId, agentUserId),
-            gte(messages.createdAt, oneHourAgo)
-          )
-        )
-        .orderBy(desc(messages.createdAt))
-        .limit(5);
+      const unreadMessages =
+        await selectMessagesByChatIdExcludingSenderSinceOrderCreatedDescLimit(
+          db,
+          {
+            chatId: chat.id,
+            excludeSenderId: agentUserId,
+            since: oneHourAgo,
+            limit: 5,
+          }
+        );
 
       if (unreadMessages.length === 0) continue;
 
       // Get conversation context
-      const allMessages = await db.message.findMany({
-        where: { chatId: chat.id },
-        orderBy: { createdAt: 'asc' },
-        take: 10,
-      });
+      const allMessages = await selectMessagesByChatIdOrderCreatedAscLimit(
+        db,
+        chat.id,
+        10
+      );
 
       const latestMessage = unreadMessages[0];
       if (!latestMessage) continue;

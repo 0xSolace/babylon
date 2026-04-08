@@ -71,7 +71,7 @@
 import { X402Manager } from '@babylon/a2a';
 import { requireAdmin, withErrorHandling } from '@babylon/api';
 
-import { db } from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 
 import { generateSnowflakeId, logger, toISO } from '@babylon/shared';
 import { parseEther } from 'ethers';
@@ -129,17 +129,20 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
   const { recipientId, amountUSD, reason, recipientWalletAddress } =
     validation.data;
 
-  // Verify recipient exists and is not an actor
-  const recipient = await db.user.findUnique({
-    where: { id: recipientId },
-    select: {
-      id: true,
-      username: true,
-      displayName: true,
-      isActor: true,
-      walletAddress: true,
-    },
-  });
+  const recipient = await asSystem(
+    (tx) =>
+      tx.user.findUnique({
+        where: { id: recipientId },
+        select: {
+          id: true,
+          username: true,
+          displayName: true,
+          isActor: true,
+          walletAddress: true,
+        },
+      }),
+    'mod-escrow-create-recipient'
+  );
 
   if (!recipient) {
     return NextResponse.json(
@@ -194,20 +197,23 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
     );
   }
 
-  // Check for duplicate recent escrows BEFORE creating payment request (prevent spam and orphaned requests)
-  const recentDuplicate = await db.moderationEscrow.findFirst({
-    where: {
-      recipientId,
-      adminId,
-      amountUSD: amountUSD.toString(),
-      createdAt: {
-        gte: new Date(Date.now() - 5 * 60 * 1000), // Last 5 minutes
-      },
-      status: {
-        in: ['pending', 'paid'],
-      },
-    },
-  });
+  const recentDuplicate = await asSystem(
+    (tx) =>
+      tx.moderationEscrow.findFirst({
+        where: {
+          recipientId,
+          adminId,
+          amountUSD: amountUSD.toString(),
+          createdAt: {
+            gte: new Date(Date.now() - 5 * 60 * 1000),
+          },
+          status: {
+            in: ['pending', 'paid'],
+          },
+        },
+      }),
+    'mod-escrow-create-dup-check'
+  );
 
   if (recentDuplicate) {
     return NextResponse.json(
@@ -236,26 +242,30 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
     }
   );
 
-  // Create escrow record in database
   const expiresAt = new Date(paymentRequest.expiresAt);
-  const escrow = await db.moderationEscrow.create({
-    data: {
-      id: await generateSnowflakeId(),
-      recipientId,
-      adminId,
-      amountUSD: amountUSD.toString(),
-      amountWei: amountInWei,
-      status: 'pending',
-      reason: reason || null,
-      paymentRequestId: paymentRequest.requestId,
-      expiresAt,
-      updatedAt: new Date(),
-      metadata: {
-        recipientWalletAddress,
-        adminWalletAddress: adminWalletAddress,
-      },
-    },
-  });
+  const escrowId = await generateSnowflakeId();
+  const escrow = await asSystem(
+    (tx) =>
+      tx.moderationEscrow.create({
+        data: {
+          id: escrowId,
+          recipientId,
+          adminId,
+          amountUSD: amountUSD.toString(),
+          amountWei: amountInWei,
+          status: 'pending',
+          reason: reason || null,
+          paymentRequestId: paymentRequest.requestId,
+          expiresAt,
+          updatedAt: new Date(),
+          metadata: {
+            recipientWalletAddress,
+            adminWalletAddress: adminWalletAddress,
+          },
+        },
+      }),
+    'mod-escrow-create-insert'
+  );
 
   logger.info(
     `Admin ${adminId} created escrow payment for user ${recipientId}`,

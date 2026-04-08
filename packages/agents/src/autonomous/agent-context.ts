@@ -5,8 +5,8 @@
  * Eliminates duplicate boilerplate across autonomous services.
  */
 
-import { eq } from '@babylon/db';
-import { db, users } from '@babylon/db/runtime';
+import { selectUserAgentContextSliceById } from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import { StaticDataRegistry } from '@babylon/engine';
 
 export interface AgentContext {
@@ -44,16 +44,7 @@ export async function getAgentContext(
   }
 
   // USER_CONTROLLED: Get from User table
-  const [agent] = await db
-    .select({
-      id: users.id,
-      displayName: users.displayName,
-      isAgent: users.isAgent,
-      lifetimePnL: users.lifetimePnL,
-    })
-    .from(users)
-    .where(eq(users.id, agentUserId))
-    .limit(1);
+  const agent = await selectUserAgentContextSliceById(db, agentUserId);
 
   if (!agent?.isAgent) {
     throw new Error(`Agent not found: ${agentUserId}`);

@@ -22,12 +22,11 @@ import {
   getPrivyOfflineConfig,
   registerAgentOnSolanaForOwner,
 } from '@babylon/api/solana-registration-debug';
-import { and, eq } from '@babylon/db';
-import { closeDatabase, db, users } from '@babylon/db/runtime';
-
+import { closeDatabase, db, users } from '@babylon/db/engine-storage';
 import { getBaseUrl, getMCPEndpoint } from '@babylon/shared';
 import { Transaction } from '@solana/web3.js';
 import { config as loadEnvFile } from 'dotenv';
+import { and, eq } from 'drizzle-orm';
 
 type CliMode = 'inspect' | 'simulate' | 'register';
 

@@ -12,16 +12,22 @@
  * - More total interactions (10+ quality replies)
  */
 
-import { and, asc, count, desc, eq, gte, inArray } from '@babylon/db';
 import {
-  db,
-  followStatuses,
-  posts,
-  reactions,
-  userInteractions,
-  users,
-} from '@babylon/db/runtime';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+  countFollowingMechanicsActiveFollows,
+  deactivateNpcFollow,
+  fetchFollowingChanceContext,
+  fetchNpcFollowActive,
+  listActiveNpcFollowRowsForUser,
+  listFollowingMechanicsActiveFollowBatch,
+  listFollowingMechanicsActiveFollowPairs,
+  listFollowingMechanicsActivePlayerRows,
+  listFollowingMechanicsEngagementCounts,
+  listFollowingMechanicsInteractionsForUnfollowSweep,
+  listFollowingMechanicsReactionCountsSince,
+  listRecentUserNpcInteractionSlice,
+  upsertNpcFollowAndMarkInteractions,
+} from '@babylon/db';
+import { logger } from '@babylon/shared';
 import { NPC_FOLLOWING_CONFIG } from '../config/npc-activity';
 import { secureRandom } from '../utils/entropy';
 import { formatError } from '../utils/error-utils';
@@ -104,16 +110,12 @@ export class FollowingMechanics {
     // Higher quality interactions increase following chance
     const qualityMultiplier = Math.min(currentQualityScore * 1.5, 2.0); // Cap at 2x
 
-    // Check if already following
-    const existingFollow = await db
-      .select()
-      .from(followStatuses)
-      .where(
-        and(eq(followStatuses.userId, userId), eq(followStatuses.npcId, npcId))
-      )
-      .limit(1);
+    const { followRow, interactions } = await fetchFollowingChanceContext({
+      userId,
+      npcId,
+    });
 
-    if (existingFollow.length > 0 && existingFollow[0]?.isActive) {
+    if (followRow?.isActive) {
       return {
         willFollow: false,
         probability: 0,
@@ -121,19 +123,6 @@ export class FollowingMechanics {
         factors: { streak: 0, quality: 0, volume: 0 },
       };
     }
-
-    // Get all interactions for quality and volume metrics
-    const interactions = await db
-      .select({
-        qualityScore: userInteractions.qualityScore,
-      })
-      .from(userInteractions)
-      .where(
-        and(
-          eq(userInteractions.userId, userId),
-          eq(userInteractions.npcId, npcId)
-        )
-      );
 
     const totalReplies = interactions.length;
     const averageQuality =
@@ -218,51 +207,7 @@ export class FollowingMechanics {
     npcId: string,
     reason: string
   ): Promise<void> {
-    // Check if exists
-    const existing = await db
-      .select({ id: followStatuses.id })
-      .from(followStatuses)
-      .where(
-        and(eq(followStatuses.userId, userId), eq(followStatuses.npcId, npcId))
-      )
-      .limit(1);
-
-    if (existing.length > 0) {
-      // Update existing
-      await db
-        .update(followStatuses)
-        .set({
-          isActive: true,
-          followedAt: new Date(),
-          unfollowedAt: null,
-          followReason: reason,
-        })
-        .where(
-          and(
-            eq(followStatuses.userId, userId),
-            eq(followStatuses.npcId, npcId)
-          )
-        );
-    } else {
-      // Create new
-      await db.insert(followStatuses).values({
-        id: await generateSnowflakeId(),
-        userId,
-        npcId,
-        followReason: reason,
-      });
-    }
-
-    // Mark the interaction that triggered the follow
-    await db
-      .update(userInteractions)
-      .set({ wasFollowed: true })
-      .where(
-        and(
-          eq(userInteractions.userId, userId),
-          eq(userInteractions.npcId, npcId)
-        )
-      );
+    await upsertNpcFollowAndMarkInteractions({ userId, npcId, reason });
 
     // Create notification for the user (NPCs follow users, not the other way around)
     // For NPC follows, use the NPC's ID as actorId since they're not real users
@@ -289,33 +234,14 @@ export class FollowingMechanics {
    * Check if an NPC is following a player
    */
   static async isFollowing(userId: string, npcId: string): Promise<boolean> {
-    const follow = await db
-      .select({ isActive: followStatuses.isActive })
-      .from(followStatuses)
-      .where(
-        and(eq(followStatuses.userId, userId), eq(followStatuses.npcId, npcId))
-      )
-      .limit(1);
-
-    return follow[0]?.isActive ?? false;
+    return fetchNpcFollowActive(userId, npcId);
   }
 
   /**
    * Get all NPCs following a player
    */
   static async getFollowers(userId: string) {
-    const follows = await db
-      .select()
-      .from(followStatuses)
-      .where(
-        and(
-          eq(followStatuses.userId, userId),
-          eq(followStatuses.isActive, true)
-        )
-      )
-      .orderBy(desc(followStatuses.followedAt));
-
-    return follows;
+    return listActiveNpcFollowRowsForUser(userId);
   }
 
   /**
@@ -333,39 +259,18 @@ export class FollowingMechanics {
       'FollowingMechanics'
     );
 
-    await db
-      .update(followStatuses)
-      .set({
-        isActive: false,
-        unfollowedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(followStatuses.userId, userId),
-          eq(followStatuses.npcId, npcId),
-          eq(followStatuses.isActive, true)
-        )
-      );
+    await deactivateNpcFollow({ userId, npcId });
   }
 
   /**
    * Check if follow should be revoked (periodic check)
    */
   static async shouldUnfollow(userId: string, npcId: string): Promise<boolean> {
-    const interactions = await db
-      .select({
-        qualityScore: userInteractions.qualityScore,
-        timestamp: userInteractions.timestamp,
-      })
-      .from(userInteractions)
-      .where(
-        and(
-          eq(userInteractions.userId, userId),
-          eq(userInteractions.npcId, npcId)
-        )
-      )
-      .orderBy(desc(userInteractions.timestamp))
-      .limit(10);
+    const interactions = await listRecentUserNpcInteractionSlice({
+      userId,
+      npcId,
+      limit: 10,
+    });
 
     if (interactions.length === 0) return false;
 
@@ -423,20 +328,11 @@ export class FollowingMechanics {
       // Get active players (users who have posted in last 7 days)
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-      const activePlayers = await db
-        .select({
-          userId: users.id,
-          username: users.username,
-          postCount: count(posts.id),
-        })
-        .from(users)
-        .innerJoin(posts, eq(posts.authorId, users.id))
-        .where(
-          and(gte(posts.timestamp, sevenDaysAgo), eq(users.isActor, false))
-        )
-        .groupBy(users.id, users.username)
-        .having(gte(count(posts.id), NPC_FOLLOWING_CONFIG.minPostsToFollow))
-        .limit(NPC_FOLLOWING_CONFIG.maxActivePlayersToConsider);
+      const activePlayers = await listFollowingMechanicsActivePlayerRows({
+        since: sevenDaysAgo,
+        minPosts: NPC_FOLLOWING_CONFIG.minPostsToFollow,
+        limit: NPC_FOLLOWING_CONFIG.maxActivePlayersToConsider,
+      });
 
       // Calculate engagement scores for candidates
       // Engagement = likes given (0.5 pts each) + comments made (1 pt each)
@@ -445,27 +341,17 @@ export class FollowingMechanics {
 
       if (playerIds.length > 0) {
         // Get reaction counts (likes given by these users in last 7 days)
-        const reactionCounts = await db
-          .select({
-            userId: reactions.userId,
-            reactionCount: count(reactions.id),
-          })
-          .from(reactions)
-          .where(
-            and(
-              inArray(reactions.userId, playerIds),
-              gte(reactions.createdAt, sevenDaysAgo)
-            )
-          )
-          .groupBy(reactions.userId);
+        const reactionCounts = await listFollowingMechanicsReactionCountsSince({
+          userIds: playerIds,
+          since: sevenDaysAgo,
+        });
 
         // Calculate engagement score: posts (1pt) + reactions given (0.5pt)
-        // Coerce counts to numbers since DB may return strings
         for (const player of activePlayers) {
           const reactionData = reactionCounts.find(
             (r) => r.userId === player.userId
           );
-          const reactionScore = Number(reactionData?.reactionCount ?? 0) * 0.5;
+          const reactionScore = (reactionData?.reactionCount ?? 0) * 0.5;
           const postScore = Number(player.postCount);
           engagementScores.set(player.userId, postScore + reactionScore);
         }
@@ -491,15 +377,9 @@ export class FollowingMechanics {
 
       // Batch fetch all active follows for eligible players (eliminates N+1 queries)
       const eligiblePlayerIds = eligiblePlayers.map((p) => p.userId);
-      const allExistingFollows = await db
-        .select({ userId: followStatuses.userId, npcId: followStatuses.npcId })
-        .from(followStatuses)
-        .where(
-          and(
-            inArray(followStatuses.userId, eligiblePlayerIds),
-            eq(followStatuses.isActive, true)
-          )
-        );
+      const allExistingFollows = await listFollowingMechanicsActiveFollowPairs({
+        userIds: eligiblePlayerIds,
+      });
 
       // Build Map<userId, Set<npcId>> for O(1) lookup
       const followsByUser = new Map<string, Set<string>>();
@@ -528,29 +408,17 @@ export class FollowingMechanics {
       const candidateNpcs = shuffledNpcs.slice(0, maxNpcCandidates);
       const candidateNpcIds = candidateNpcs.map((n) => n.id);
 
-      const engagementCounts = await db
-        .select({
-          userId: reactions.userId,
-          authorId: posts.authorId,
-          engagementCount: count(reactions.id),
-        })
-        .from(reactions)
-        .innerJoin(posts, eq(posts.id, reactions.postId))
-        .where(
-          and(
-            inArray(reactions.userId, eligiblePlayerIds),
-            inArray(posts.authorId, candidateNpcIds),
-            gte(reactions.createdAt, engagementWindowStart)
-          )
-        )
-        .groupBy(reactions.userId, posts.authorId);
+      const engagementCounts = await listFollowingMechanicsEngagementCounts({
+        userIds: eligiblePlayerIds,
+        authorIds: candidateNpcIds,
+        since: engagementWindowStart,
+      });
 
       // Build Map<"userId-npcId", count> for O(1) lookup
-      // Coerce counts to numbers since DB may return strings
       const engagementByPair = new Map<string, number>();
       for (const row of engagementCounts) {
         const key = `${row.userId}-${row.authorId}`;
-        engagementByPair.set(key, Number(row.engagementCount));
+        engagementByPair.set(key, row.engagementCount);
       }
 
       // Track follows per player this tick
@@ -704,11 +572,7 @@ export class FollowingMechanics {
       const batchSize = NPC_FOLLOWING_CONFIG.unfollowCheckBatchSize;
 
       // Get total active follows count for offset calculation
-      const countResult = await db
-        .select({ total: count(followStatuses.id) })
-        .from(followStatuses)
-        .where(eq(followStatuses.isActive, true));
-      const totalFollows = Number(countResult[0]?.total ?? 0);
+      const totalFollows = await countFollowingMechanicsActiveFollows();
 
       // Calculate rotating offset based on time (changes every hour)
       const hourSeed = Math.floor(Date.now() / (60 * 60 * 1000));
@@ -718,17 +582,10 @@ export class FollowingMechanics {
           : 0;
 
       // Get active follows with deterministic ordering and rotating offset
-      const activeFollows = await db
-        .select({
-          id: followStatuses.id,
-          userId: followStatuses.userId,
-          npcId: followStatuses.npcId,
-        })
-        .from(followStatuses)
-        .where(eq(followStatuses.isActive, true))
-        .orderBy(asc(followStatuses.id))
-        .limit(batchSize)
-        .offset(offset);
+      const activeFollows = await listFollowingMechanicsActiveFollowBatch({
+        batchSize,
+        offset,
+      });
 
       if (activeFollows.length === 0) {
         return 0;
@@ -755,23 +612,13 @@ export class FollowingMechanics {
       const interactionCutoff = new Date(Date.now() - interactionCutoffMs);
       const MAX_INTERACTIONS_QUERY_LIMIT = 1000;
 
-      const recentInteractions = await db
-        .select({
-          userId: userInteractions.userId,
-          npcId: userInteractions.npcId,
-          qualityScore: userInteractions.qualityScore,
-          timestamp: userInteractions.timestamp,
-        })
-        .from(userInteractions)
-        .where(
-          and(
-            inArray(userInteractions.userId, userIds),
-            inArray(userInteractions.npcId, npcIds),
-            gte(userInteractions.timestamp, interactionCutoff)
-          )
-        )
-        .orderBy(desc(userInteractions.timestamp))
-        .limit(MAX_INTERACTIONS_QUERY_LIMIT);
+      const recentInteractions =
+        await listFollowingMechanicsInteractionsForUnfollowSweep({
+          userIds,
+          npcIds,
+          since: interactionCutoff,
+          limit: MAX_INTERACTIONS_QUERY_LIMIT,
+        });
 
       // Build a map of interactions by (userId-npcId) key
       // Store the 10 most recent interactions per pair (matching shouldUnfollow logic)

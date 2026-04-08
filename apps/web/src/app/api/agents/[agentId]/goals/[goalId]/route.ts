@@ -122,7 +122,7 @@
  */
 
 import { authenticate, withErrorHandling } from '@babylon/api';
-import { db } from '@babylon/db/runtime';
+import { asUser } from '@babylon/db/engine-storage';
 
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -138,25 +138,28 @@ export const GET = withErrorHandling(async function GET(
   const userId = authUser.userId;
   const { agentId, goalId } = await params;
 
-  // Verify ownership
-  const agent = await db.user.findUnique({
-    where: { id: agentId },
-    select: { isAgent: true, managedBy: true },
-  });
+  const agent = await asUser(userId, (tx) =>
+    tx.user.findUnique({
+      where: { id: agentId },
+      select: { isAgent: true, managedBy: true },
+    })
+  );
 
   if (!agent?.isAgent || agent.managedBy !== userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
   }
 
-  const goal = await db.agentGoal.findUnique({
-    where: { id: goalId },
-    include: {
-      AgentGoalAction: {
-        orderBy: { createdAt: 'desc' },
-        take: 20,
+  const goal = await asUser(userId, (tx) =>
+    tx.agentGoal.findUnique({
+      where: { id: goalId },
+      include: {
+        AgentGoalAction: {
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+        },
       },
-    },
-  });
+    })
+  );
 
   if (!goal || goal.agentUserId !== agentId) {
     return NextResponse.json({ error: 'Goal not found' }, { status: 404 });
@@ -182,20 +185,22 @@ export const PUT = withErrorHandling(async function PUT(
   const userId = authUser.userId;
   const { agentId, goalId } = await params;
 
-  // Verify ownership
-  const agent = await db.user.findUnique({
-    where: { id: agentId },
-    select: { isAgent: true, managedBy: true },
-  });
+  const agent = await asUser(userId, (tx) =>
+    tx.user.findUnique({
+      where: { id: agentId },
+      select: { isAgent: true, managedBy: true },
+    })
+  );
 
   if (!agent?.isAgent || agent.managedBy !== userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
   }
 
-  // Get existing goal
-  const existingGoal = await db.agentGoal.findUnique({
-    where: { id: goalId },
-  });
+  const existingGoal = await asUser(userId, (tx) =>
+    tx.agentGoal.findUnique({
+      where: { id: goalId },
+    })
+  );
 
   if (!existingGoal || existingGoal.agentUserId !== agentId) {
     return NextResponse.json({ error: 'Goal not found' }, { status: 404 });
@@ -255,11 +260,12 @@ export const PUT = withErrorHandling(async function PUT(
     }
   }
 
-  // Update goal
-  const updatedGoal = await db.agentGoal.update({
-    where: { id: goalId },
-    data: updates,
-  });
+  const updatedGoal = await asUser(userId, (tx) =>
+    tx.agentGoal.update({
+      where: { id: goalId },
+      data: updates,
+    })
+  );
 
   return NextResponse.json({
     success: true,
@@ -283,29 +289,32 @@ export const DELETE = withErrorHandling(async function DELETE(
   const userId = authUser.userId;
   const { agentId, goalId } = await params;
 
-  // Verify ownership
-  const agent = await db.user.findUnique({
-    where: { id: agentId },
-    select: { isAgent: true, managedBy: true },
-  });
+  const agent = await asUser(userId, (tx) =>
+    tx.user.findUnique({
+      where: { id: agentId },
+      select: { isAgent: true, managedBy: true },
+    })
+  );
 
   if (!agent?.isAgent || agent.managedBy !== userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
   }
 
-  // Verify goal exists and belongs to agent
-  const goal = await db.agentGoal.findUnique({
-    where: { id: goalId },
-  });
+  const goal = await asUser(userId, (tx) =>
+    tx.agentGoal.findUnique({
+      where: { id: goalId },
+    })
+  );
 
   if (!goal || goal.agentUserId !== agentId) {
     return NextResponse.json({ error: 'Goal not found' }, { status: 404 });
   }
 
-  // Delete goal (cascades to goal actions)
-  await db.agentGoal.delete({
-    where: { id: goalId },
-  });
+  await asUser(userId, (tx) =>
+    tx.agentGoal.delete({
+      where: { id: goalId },
+    })
+  );
 
   return NextResponse.json({
     success: true,

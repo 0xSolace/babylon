@@ -5,8 +5,12 @@
  * Shows the parent chain (walking UP) and direct replies (children).
  */
 
-import { and, eq, isNull } from '@babylon/db';
-import { comments, db, posts, users } from '@babylon/db/runtime';
+import {
+  selectCommentsOnPostForThreadMap,
+  selectCommentWithAuthorById,
+  selectPostWithAuthorByIdForCommentContext,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import type {
   Action,
   ActionResult,
@@ -131,22 +135,7 @@ export const checkCommentDetailAction: Action = {
     }
 
     try {
-      // Get the target comment with its post
-      const [targetComment] = await db
-        .select({
-          id: comments.id,
-          content: comments.content,
-          authorId: comments.authorId,
-          parentCommentId: comments.parentCommentId,
-          postId: comments.postId,
-          createdAt: comments.createdAt,
-          authorUsername: users.username,
-          authorDisplayName: users.displayName,
-        })
-        .from(comments)
-        .leftJoin(users, eq(comments.authorId, users.id))
-        .where(eq(comments.id, commentId))
-        .limit(1);
+      const targetComment = await selectCommentWithAuthorById(db, commentId);
 
       if (!targetComment) {
         return {
@@ -156,19 +145,10 @@ export const checkCommentDetailAction: Action = {
         };
       }
 
-      // Get the post
-      const [post] = await db
-        .select({
-          id: posts.id,
-          content: posts.content,
-          authorId: posts.authorId,
-          authorUsername: users.username,
-          authorDisplayName: users.displayName,
-        })
-        .from(posts)
-        .leftJoin(users, eq(posts.authorId, users.id))
-        .where(eq(posts.id, targetComment.postId))
-        .limit(1);
+      const post = await selectPostWithAuthorByIdForCommentContext(
+        db,
+        targetComment.postId
+      );
 
       if (!post) {
         return {
@@ -189,24 +169,10 @@ export const checkCommentDetailAction: Action = {
         authorDisplayName: string | null;
       };
 
-      const allComments: CommentRow[] = await db
-        .select({
-          id: comments.id,
-          content: comments.content,
-          authorId: comments.authorId,
-          parentCommentId: comments.parentCommentId,
-          createdAt: comments.createdAt,
-          authorUsername: users.username,
-          authorDisplayName: users.displayName,
-        })
-        .from(comments)
-        .leftJoin(users, eq(comments.authorId, users.id))
-        .where(
-          and(
-            eq(comments.postId, targetComment.postId),
-            isNull(comments.deletedAt)
-          )
-        );
+      const allComments: CommentRow[] = await selectCommentsOnPostForThreadMap(
+        db,
+        targetComment.postId
+      );
 
       // Build comment map
       const commentMap = new Map<string, CommentWithRelations>();

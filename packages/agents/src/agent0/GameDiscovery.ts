@@ -6,7 +6,7 @@
  * Uses Agent0 SDK directly.
  */
 
-import { db } from '@babylon/db/runtime';
+import * as engineStorage from '@babylon/db/engine-storage';
 
 import type { SDK } from 'agent0-sdk';
 import { z } from 'zod';
@@ -168,9 +168,13 @@ export class GameDiscovery {
       }
 
       if (process.env.NEXT_RUNTIME === 'nodejs') {
-        const config = await db.gameConfig.findUnique({
-          where: { key: 'agent0_registration' },
-        });
+        const config = await engineStorage.asSystem(
+          async (c) =>
+            c.gameConfig.findUnique({
+              where: { key: 'agent0_registration' },
+            }),
+          'game-discovery-agent0-config'
+        );
 
         const validation = GameConfigValueSchema.safeParse(config?.value);
         if (validation.success) {

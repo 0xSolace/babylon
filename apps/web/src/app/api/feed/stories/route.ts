@@ -8,10 +8,11 @@ import {
 import { toISO } from '@babylon/shared';
 
 import type { NextRequest } from 'next/server';
+import { runWithOptionalUserRls } from '@/lib/db/run-with-optional-user-rls';
 import { decodeCursor, encodeCursor, findCursorIndex } from '../feed-cursor';
 import {
   buildStoriesFeed,
-  enrichStoriesForUser,
+  enrichStoriesForUserWithDb,
   type StoriesPipelineResult,
 } from './pipeline';
 
@@ -43,7 +44,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   const fullResult = await getCacheOrFetch<StoriesPipelineResult>(
     CACHE_KEY,
-    buildStoriesFeed,
+    () => runWithOptionalUserRls(null, (db) => buildStoriesFeed(db)),
     { ttl: CACHE_TTL_S }
   );
 
@@ -56,7 +57,9 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     ? structuredClone(fullResult.stories)
     : fullResult.stories;
   if (needsEnrichment) {
-    await enrichStoriesForUser(stories, fullResult.postIds, userId);
+    await runWithOptionalUserRls(user, (db) =>
+      enrichStoriesForUserWithDb(db, stories, fullResult.postIds, userId)
+    );
   }
 
   const decoded = cursorParam ? decodeCursor(cursorParam) : null;

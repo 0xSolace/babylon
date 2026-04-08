@@ -7,8 +7,8 @@
  * @packageDocumentation
  */
 
-import { eq } from '@babylon/db';
-import { db, users } from '@babylon/db/runtime';
+import { selectUserRowById } from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import type { IAgentRuntime } from '@elizaos/core';
 import type { BabylonRuntime } from '../plugins/babylon/types';
 import { agentPnLService } from '../services/AgentPnLService';
@@ -102,12 +102,7 @@ export class AutonomousA2AService {
       };
     }
 
-    const agentResult = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
-    const agent = agentResult[0];
+    const agent = await selectUserRowById(db, agentUserId);
     const config = await getAgentConfig(agentUserId);
 
     if (!agent || !agent.isAgent || !isAutonomousTradingEnabled(config)) {
@@ -481,12 +476,7 @@ Your JSON response:`;
       return { success: false };
     }
 
-    const agentResult = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
-    const agent = agentResult[0];
+    const agent = await selectUserRowById(db, agentUserId);
     const postingConfig = await getAgentConfig(agentUserId);
 
     if (!agent || !agent.isAgent || !postingConfig?.autonomousPosting) {
@@ -522,12 +512,7 @@ Your JSON response:`;
       return { success: false, engagements: 0 };
     }
 
-    const agentResult = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
-    const agent = agentResult[0];
+    const agent = await selectUserRowById(db, agentUserId);
 
     if (!agent || !agent.isAgent) {
       return { success: false, engagements: 0 };
@@ -604,12 +589,7 @@ Your JSON response:`;
       return { success: false, actionsTaken: 0 };
     }
 
-    const agentResult = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
-    const agent = agentResult[0];
+    const agent = await selectUserRowById(db, agentUserId);
     const tradingConfig = await getAgentConfig(agentUserId);
 
     if (

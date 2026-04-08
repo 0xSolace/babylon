@@ -6,7 +6,6 @@
  */
 
 import { callGroqDirect } from '@babylon/agents/llm/direct-groq';
-import { and, desc, eq, gte, isNull } from '@babylon/db';
 import {
   db,
   markets,
@@ -14,8 +13,7 @@ import {
   perpPositions,
   positions,
   users,
-} from '@babylon/db/runtime';
-
+} from '@babylon/db/engine-storage';
 import {
   formatRandomContext,
   generateRandomMarketContext,
@@ -23,6 +21,7 @@ import {
   shuffleArray,
   WalletService,
 } from '@babylon/engine';
+import { and, desc, eq, gte, isNull } from 'drizzle-orm';
 
 async function testTradingDecision() {
   console.log('🧪 Testing agent trading decision...\n');

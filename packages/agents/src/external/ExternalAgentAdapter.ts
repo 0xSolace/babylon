@@ -16,7 +16,7 @@
  * @packageDocumentation
  */
 
-import { db } from '@babylon/db/runtime';
+import * as engineStorage from '@babylon/db/engine-storage';
 
 import { createDecipheriv } from 'crypto';
 import { logger } from '../shared/logger';
@@ -155,13 +155,17 @@ export class ExternalAgentAdapter {
    * @internal
    */
   private async loadConnections(): Promise<void> {
-    const externalAgents = await db.query.externalAgentConnections.findMany({
-      where: (externalAgentConnections, { eq }) =>
-        eq(externalAgentConnections.isHealthy, true),
-      with: {
-        agentRegistry: true,
-      },
-    });
+    const externalAgents = await engineStorage.asSystem(
+      async (c) =>
+        c.query.externalAgentConnections.findMany({
+          where: (externalAgentConnections, { eq }) =>
+            eq(externalAgentConnections.isHealthy, true),
+          with: {
+            agentRegistry: true,
+          },
+        }),
+      'external-agent-load-connections'
+    );
 
     for (const agent of externalAgents) {
       this.connections.set(agent.externalId, {
@@ -204,10 +208,14 @@ export class ExternalAgentAdapter {
   async fetchConnection(
     externalId: string
   ): Promise<ExternalAgentConnection | null> {
-    const agent = await db.externalAgentConnection.findUnique({
-      where: { externalId },
-      include: { AgentRegistry: true },
-    });
+    const agent = await engineStorage.asSystem(
+      async (c) =>
+        c.externalAgentConnection.findUnique({
+          where: { externalId },
+          include: { AgentRegistry: true },
+        }),
+      'external-agent-fetch-connection'
+    );
 
     if (!agent) return null;
 
@@ -460,13 +468,17 @@ export class ExternalAgentAdapter {
     connection.lastHealthCheck = new Date();
 
     // Update database
-    await db.externalAgentConnection.update({
-      where: { externalId },
-      data: {
-        isHealthy,
-        lastHealthCheck: new Date(),
-      },
-    });
+    await engineStorage.asSystem(
+      async (c) =>
+        c.externalAgentConnection.update({
+          where: { externalId },
+          data: {
+            isHealthy,
+            lastHealthCheck: new Date(),
+          },
+        }),
+      'external-agent-health-update'
+    );
 
     return isHealthy;
   }

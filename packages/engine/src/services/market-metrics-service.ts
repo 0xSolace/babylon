@@ -10,18 +10,12 @@
  * @module engine/services/market-metrics-service
  */
 
-import { desc, eq, gte, inArray, sql } from '@babylon/db';
 import {
-  db,
-  markets,
-  perpMarketSnapshots,
-  positions,
-  predictionPriceHistories,
-  stockPrices,
-} from '@babylon/db/runtime';
+  loadMarketMetricsPerpSlice,
+  loadMarketMetricsPredictionSlice,
+} from '@babylon/db';
 import { logger } from '@babylon/shared';
 import { first, last } from '../utils/array-utils';
-import { formatError } from '../utils/error-utils';
 import { StaticDataRegistry } from './static-data-registry';
 
 /**
@@ -211,47 +205,13 @@ export class MarketMetricsService {
   private static async gatherPredictionMetrics(
     lookbackDate: Date
   ): Promise<PredictionMarketMetrics[]> {
-    // Get active markets with position counts (capped at 50 for performance)
-    const activeMarkets = await db
-      .select({
-        id: markets.id,
-        question: markets.question,
-        yesShares: markets.yesShares,
-        noShares: markets.noShares,
-        liquidity: markets.liquidity,
-        resolved: markets.resolved,
-      })
-      .from(markets)
-      .where(eq(markets.resolved, false))
-      .limit(50);
-
-    // Get position counts per market
-    const positionCounts = await db
-      .select({
-        marketId: positions.marketId,
-        count: sql<number>`count(*)::int`,
-      })
-      .from(positions)
-      .where(eq(positions.status, 'active'))
-      .groupBy(positions.marketId);
+    const { activeMarkets, positionCounts, priceHistories } =
+      await loadMarketMetricsPredictionSlice({ lookbackDate });
 
     const positionCountMap = new Map(
       positionCounts.map((p) => [p.marketId, p.count])
     );
 
-    // Get price history for volatility calculation (limit to prevent unbounded growth)
-    const priceHistories = await db
-      .select({
-        marketId: predictionPriceHistories.marketId,
-        yesPrice: predictionPriceHistories.yesPrice,
-        createdAt: predictionPriceHistories.createdAt,
-      })
-      .from(predictionPriceHistories)
-      .where(gte(predictionPriceHistories.createdAt, lookbackDate))
-      .orderBy(desc(predictionPriceHistories.createdAt))
-      .limit(1000);
-
-    // Group price history by market
     const historyByMarket = new Map<
       string,
       Array<{ yesPrice: number; createdAt: Date }>
@@ -271,19 +231,19 @@ export class MarketMetricsService {
       const liquidity = Number(market.liquidity);
       const positionCount = positionCountMap.get(market.id) || 0;
 
-      // Calculate volatility from price history
       const history = historyByMarket.get(market.id) || [];
       const volatility = this.calculateVolatility(
         history.map((h) => h.yesPrice)
       );
 
-      // Calculate 24h price change
       const priceChange24h = this.calculatePriceChange(
-        history.map((h) => ({ yesPrice: h.yesPrice, timestamp: h.createdAt })),
+        history.map((h) => ({
+          yesPrice: h.yesPrice,
+          timestamp: h.createdAt,
+        })),
         currentProbability
       );
 
-      // Activity level based on position count
       let activityLevel: 'low' | 'medium' | 'high' = 'low';
       if (positionCount > 20) activityLevel = 'high';
       else if (positionCount > 5) activityLevel = 'medium';
@@ -316,19 +276,10 @@ export class MarketMetricsService {
       orgNameMap.set(org.id, org.name);
     }
 
-    // Get recent stock prices (limit to prevent unbounded growth)
-    const recentPrices = await db
-      .select({
-        orgId: stockPrices.organizationId,
-        price: stockPrices.price,
-        timestamp: stockPrices.timestamp,
-      })
-      .from(stockPrices)
-      .where(gte(stockPrices.timestamp, lookbackDate))
-      .orderBy(desc(stockPrices.timestamp))
-      .limit(500);
+    const { recentPrices, snapshotRows } = await loadMarketMetricsPerpSlice({
+      lookbackDate,
+    });
 
-    // Group by organization
     const pricesByOrg = new Map<
       string,
       Array<{ price: number; timestamp: Date }>
@@ -339,63 +290,15 @@ export class MarketMetricsService {
       pricesByOrg.set(p.orgId, existing);
     }
 
-    // Enhance with PerpMarketSnapshot data if available (provides 24h price comparison)
-    // Only fetch snapshots for organizations we actually have price data for
     const snapshotMap = new Map<
       string,
       { price24hAgo: number | null; price24hAgoUpdatedAt: Date | null }
     >();
-    const orgIds = Array.from(pricesByOrg.keys());
-
-    if (orgIds.length > 0) {
-      try {
-        const snapshots = await db
-          .select({
-            organizationId: perpMarketSnapshots.organizationId,
-            price24hAgo: perpMarketSnapshots.price24hAgo,
-            price24hAgoUpdatedAt: perpMarketSnapshots.price24hAgoUpdatedAt,
-          })
-          .from(perpMarketSnapshots)
-          .where(inArray(perpMarketSnapshots.organizationId, orgIds));
-
-        for (const snapshot of snapshots) {
-          snapshotMap.set(snapshot.organizationId, {
-            price24hAgo: snapshot.price24hAgo,
-            price24hAgoUpdatedAt: snapshot.price24hAgoUpdatedAt,
-          });
-        }
-      } catch (error) {
-        // Only swallow "missing table" errors (Postgres error code 42P01)
-        // Other errors (connection, permission, query issues) should propagate
-        const errorMessage = formatError(error);
-        const errorCode =
-          error && typeof error === 'object' && 'code' in error
-            ? (error as { code?: string }).code
-            : undefined;
-
-        // Prefer Postgres error code 42P01 for missing table detection
-        // Fallback message check only for non-Postgres drivers (simplified pattern)
-        const isMissingTableError =
-          errorCode === '42P01' ||
-          errorMessage.toLowerCase().includes('does not exist');
-
-        if (isMissingTableError) {
-          // Table may not exist in all environments - continue without snapshot data
-          logger.debug(
-            'PerpMarketSnapshot table not available, using stockPrices only',
-            { error: errorMessage },
-            'MarketMetrics'
-          );
-        } else {
-          // Real DB error - log as error and rethrow
-          logger.error(
-            'Failed to query PerpMarketSnapshot',
-            { error: errorMessage, errorCode },
-            'MarketMetrics'
-          );
-          throw error;
-        }
-      }
+    for (const snapshot of snapshotRows) {
+      snapshotMap.set(snapshot.organizationId, {
+        price24hAgo: snapshot.price24hAgo,
+        price24hAgoUpdatedAt: snapshot.price24hAgoUpdatedAt,
+      });
     }
 
     // Freshness window for 24h snapshot (25 hours to allow for slight delays)

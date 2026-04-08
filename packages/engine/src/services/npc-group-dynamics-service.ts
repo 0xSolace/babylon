@@ -13,34 +13,42 @@
  */
 
 import {
-  and,
-  count,
-  desc,
-  eq,
-  gte,
-  inArray,
-  lt,
-  notInArray,
-  or,
-  sql,
+  applyNpcJoinGroupDynamicsWritesAsSystem,
+  applyNpcKickUserFromGroupChatAsSystem,
+  applyNpcLeaveGroupWritesAsSystem,
+  bootstrapLegacyNpcGroupForChatAsSystem,
+  countActiveNpcGroupMembershipsForUserAsSystem,
+  countChatParticipantsForChatIdAsSystem,
+  countFollowsFromUserToNpcIdsAsSystem,
+  countGroupChatsWhereIsGroupTrueAsSystem,
+  countLikesOnPostsSinceAsSystem,
+  countSharesOnPostsSinceAsSystem,
+  countUserCommentsOnParentPostsSinceAsSystem,
+  fetchChatParticipantIdActiveByChatAndUserAsSystem,
+  fetchGroupInviteIdStatusByGroupAndUserAsSystem,
+  fetchLatestNpcActiveGroupMembershipJoinedAtAsSystem,
+  insertNpcGroupDynamicMessageAsSystem,
+  insertPendingGroupInviteAsSystem,
+  listActiveChatParticipantUserIdsByChatIdAsSystem,
+  listActorRelationshipsTargetVsEngagedNpcsAsSystem,
+  listAllGroupChatsWhereIsGroupTrueAsSystem,
+  listChatParticipantsByChatIdAsSystem,
+  listChatParticipantUserIdsByChatIdAsSystem,
+  listDistinctNpcIdsFromUserInteractionsSinceAsSystem,
+  listDistinctShareUserIdsAsSystem,
+  listGroupChatsWithTierJoinLimitedAsSystem,
+  listMessageSendersForChatSinceAsSystem,
+  listNegativeActorRelationshipsForMemberVsOthersAsSystem,
+  listNonActorUsersByIdsForKickAsSystem,
+  listNpcManagedGroupChatsForKickAsSystem,
+  listPoolPositionsByPoolIdLimitAsSystem,
+  listPositiveActorRelationshipsForCandidateInGroupAsSystem,
+  listPostIdsByAuthorIdsAsSystem,
+  listPotentialInviteUsersAsSystem,
+  listRecentMessagesByChatOrderDescLimitAsSystem,
+  listUserDisplayNamesByIdsAsSystem,
+  updateGroupInviteDeclinedToPendingAsSystem,
 } from '@babylon/db';
-import {
-  actorRelationships,
-  chatParticipants,
-  chats,
-  db,
-  follows,
-  groupInvites,
-  groupMembers,
-  groups,
-  messages,
-  poolPositions,
-  posts,
-  reactions,
-  shares,
-  userInteractions,
-  users,
-} from '@babylon/db/runtime';
 import { GROUP_CONFIG, generateSnowflakeId, logger } from '@babylon/shared';
 import { NPC_GROUP_DYNAMICS_CONFIG } from '../config/npc-activity';
 import { BabylonLLMClient } from '../llm/openai-client';
@@ -227,18 +235,12 @@ export class NPCGroupDynamicsService {
   private static async processGroupJoins(rng: RngFunction): Promise<number> {
     let joinsProcessed = 0;
 
-    // Get all NPC group chats
-    const groupList = await db
-      .select()
-      .from(chats)
-      .where(eq(chats.isGroup, true));
+    const groupList = await listAllGroupChatsWhereIsGroupTrueAsSystem();
 
     for (const group of groupList) {
-      // Get participants for this group
-      const participants = await db
-        .select({ userId: chatParticipants.userId })
-        .from(chatParticipants)
-        .where(eq(chatParticipants.chatId, group.id));
+      const participants = await listChatParticipantUserIdsByChatIdAsSystem(
+        group.id
+      );
 
       // Don't add to full groups
       if (participants.length >= NPC_GROUP_DYNAMICS_CONFIG.maxGroupSize) {
@@ -263,104 +265,36 @@ export class NPCGroupDynamicsService {
           continue;
         }
 
-        // Check if candidate has positive relationships with current members
         const relationships =
-          memberIdsArray.length > 0
-            ? await db
-                .select()
-                .from(actorRelationships)
-                .where(
-                  and(
-                    or(
-                      and(
-                        eq(actorRelationships.actor1Id, candidate.id),
-                        inArray(actorRelationships.actor2Id, memberIdsArray)
-                      ),
-                      and(
-                        eq(actorRelationships.actor2Id, candidate.id),
-                        inArray(actorRelationships.actor1Id, memberIdsArray)
-                      )
-                    ),
-                    gte(actorRelationships.sentiment, 0.3)
-                  )
-                )
-            : [];
+          await listPositiveActorRelationshipsForCandidateInGroupAsSystem(
+            candidate.id,
+            memberIdsArray,
+            0.3
+          );
 
         // Must have at least 2 friends in the group
         if (relationships.length >= 2) {
-          // Check if already a participant (could be inactive)
-          const [existingParticipant] = await db
-            .select({
-              id: chatParticipants.id,
-              isActive: chatParticipants.isActive,
-            })
-            .from(chatParticipants)
-            .where(
-              and(
-                eq(chatParticipants.chatId, group.id),
-                eq(chatParticipants.userId, candidate.id)
-              )
-            )
-            .limit(1);
+          const existingParticipant =
+            await fetchChatParticipantIdActiveByChatAndUserAsSystem(
+              group.id,
+              candidate.id
+            );
 
-          if (existingParticipant) {
-            // Reactivate if inactive
-            if (!existingParticipant.isActive) {
-              await db
-                .update(chatParticipants)
-                .set({
-                  isActive: true,
-                  joinedAt: new Date(),
-                })
-                .where(eq(chatParticipants.id, existingParticipant.id));
-            }
-          } else {
-            // Add new participant
-            await db.insert(chatParticipants).values({
-              id: await generateSnowflakeId(),
-              chatId: group.id,
-              userId: candidate.id,
-            });
-          }
+          const newChatParticipantId = existingParticipant
+            ? undefined
+            : await generateSnowflakeId();
+          const newGroupMemberId = group.groupId
+            ? await generateSnowflakeId()
+            : undefined;
 
-          // Also handle groupMembers if chat has a groupId
-          if (group.groupId) {
-            const [existingMember] = await db
-              .select({ id: groupMembers.id, isActive: groupMembers.isActive })
-              .from(groupMembers)
-              .where(
-                and(
-                  eq(groupMembers.groupId, group.groupId),
-                  eq(groupMembers.userId, candidate.id)
-                )
-              )
-              .limit(1);
-
-            if (existingMember) {
-              // Reactivate if inactive
-              if (!existingMember.isActive) {
-                await db
-                  .update(groupMembers)
-                  .set({
-                    isActive: true,
-                    joinedAt: new Date(),
-                    kickedAt: sql`NULL`,
-                    kickReason: sql`NULL`,
-                  })
-                  .where(eq(groupMembers.id, existingMember.id));
-              }
-            } else {
-              // Add new member
-              await db.insert(groupMembers).values({
-                id: await generateSnowflakeId(),
-                groupId: group.groupId,
-                userId: candidate.id,
-                role: 'member',
-                isActive: true,
-                addedBy: null, // NPC joining autonomously
-              });
-            }
-          }
+          await applyNpcJoinGroupDynamicsWritesAsSystem({
+            chatId: group.id,
+            candidateUserId: candidate.id,
+            chatLegacyGroupId: group.groupId,
+            existingParticipant: existingParticipant ?? null,
+            newChatParticipantId,
+            newGroupMemberId,
+          });
 
           joinsProcessed++;
           logger.info(
@@ -388,18 +322,12 @@ export class NPCGroupDynamicsService {
   private static async processGroupLeaves(rng: RngFunction): Promise<number> {
     let leavesProcessed = 0;
 
-    // Get all group chats
-    const groupChats = await db
-      .select()
-      .from(chats)
-      .where(eq(chats.isGroup, true));
+    const groupChats = await listAllGroupChatsWhereIsGroupTrueAsSystem();
 
     for (const chat of groupChats) {
-      // Get all participants for this chat
-      const participantList = await db
-        .select()
-        .from(chatParticipants)
-        .where(eq(chatParticipants.chatId, chat.id));
+      const participantList = await listChatParticipantsByChatIdAsSystem(
+        chat.id
+      );
 
       // Don't process if group would become too small
       if (participantList.length <= NPC_GROUP_DYNAMICS_CONFIG.minGroupSize) {
@@ -426,47 +354,21 @@ export class NPCGroupDynamicsService {
 
         if (memberIds.length === 0) continue;
 
-        const negativeRelationships = await db
-          .select()
-          .from(actorRelationships)
-          .where(
-            and(
-              or(
-                and(
-                  eq(actorRelationships.actor1Id, membership.userId),
-                  inArray(actorRelationships.actor2Id, memberIds)
-                ),
-                and(
-                  eq(actorRelationships.actor2Id, membership.userId),
-                  inArray(actorRelationships.actor1Id, memberIds)
-                )
-              ),
-              lt(actorRelationships.sentiment, -0.3)
-            )
+        const negativeRelationships =
+          await listNegativeActorRelationshipsForMemberVsOthersAsSystem(
+            membership.userId,
+            memberIds,
+            -0.3
           );
 
         // Leave if too many enemies in group
         if (negativeRelationships.length >= 2) {
-          await db
-            .delete(chatParticipants)
-            .where(eq(chatParticipants.id, membership.id));
-
-          // Also update groupMembers if chat has a groupId
-          if (chat.groupId) {
-            await db
-              .update(groupMembers)
-              .set({
-                isActive: false,
-                kickedAt: new Date(),
-                kickReason: `Left - ${negativeRelationships.length} negative relationships`,
-              })
-              .where(
-                and(
-                  eq(groupMembers.groupId, chat.groupId),
-                  eq(groupMembers.userId, membership.userId)
-                )
-              );
-          }
+          await applyNpcLeaveGroupWritesAsSystem({
+            chatParticipantRowId: membership.id,
+            chatGroupId: chat.groupId,
+            userId: membership.userId,
+            negativeRelationshipCount: negativeRelationships.length,
+          });
 
           leavesProcessed++;
           logger.info(
@@ -503,18 +405,7 @@ export class NPCGroupDynamicsService {
   ): Promise<number> {
     let messagesPosted = 0;
 
-    // Get active group chats with tier info in a single query (avoids N+1)
-    const groupList = await db
-      .select({
-        id: chats.id,
-        name: chats.name,
-        groupId: chats.groupId,
-        tier: groups.tier,
-      })
-      .from(chats)
-      .leftJoin(groups, eq(groups.id, chats.groupId))
-      .where(eq(chats.isGroup, true))
-      .limit(20);
+    const groupList = await listGroupChatsWithTierJoinLimitedAsSystem(20);
 
     for (const group of groupList) {
       // Tier is already available from the JOIN
@@ -528,19 +419,14 @@ export class NPCGroupDynamicsService {
         continue;
       }
 
-      // Get participants
-      const participantList = await db
-        .select()
-        .from(chatParticipants)
-        .where(eq(chatParticipants.chatId, group.id));
+      const participantList = await listChatParticipantsByChatIdAsSystem(
+        group.id
+      );
 
-      // Get recent messages
-      const recentMsgs = await db
-        .select()
-        .from(messages)
-        .where(eq(messages.chatId, group.id))
-        .orderBy(desc(messages.createdAt))
-        .limit(10);
+      const recentMsgs = await listRecentMessagesByChatOrderDescLimitAsSystem(
+        group.id,
+        10
+      );
 
       // Get NPCs in this group by checking StaticDataRegistry
       // NPCs are not in the User table, they're in the static registry
@@ -566,11 +452,10 @@ export class NPCGroupDynamicsService {
       const npcActor = StaticDataRegistry.getActor(randomNpc.id);
 
       // Get NPC's current positions for insider trading context
-      const npcPositions = await db
-        .select()
-        .from(poolPositions)
-        .where(eq(poolPositions.poolId, randomNpc.id))
-        .limit(5);
+      const npcPositions = await listPoolPositionsByPoolIdLimitAsSystem(
+        randomNpc.id,
+        5
+      );
 
       // Get NPC-specific events (things that happened to THIS NPC)
       const npcName = npcActor?.name || randomNpc.displayName || 'Unknown';
@@ -592,13 +477,7 @@ export class NPCGroupDynamicsService {
       const messageSenderIds = recentMsgs.slice(0, 5).map((m) => m.senderId);
       const senders =
         messageSenderIds.length > 0
-          ? await db
-              .select({
-                id: users.id,
-                displayName: users.displayName,
-              })
-              .from(users)
-              .where(inArray(users.id, messageSenderIds))
+          ? await listUserDisplayNamesByIdsAsSystem(messageSenderIds)
           : [];
       const senderMap = new Map(
         senders.map((s) => [s.id, s.displayName || 'Someone'])
@@ -715,20 +594,13 @@ Return your response as XML:
         continue;
       }
 
-      // Create the message
-      await db.insert(messages).values({
-        id: await generateSnowflakeId(),
+      await insertNpcGroupDynamicMessageAsSystem({
+        messageId: await generateSnowflakeId(),
         content: messageContent,
         chatId: group.id,
         senderId: randomNpc.id,
         createdAt: new Date(),
       });
-
-      // Update chat updated timestamp
-      await db
-        .update(chats)
-        .set({ updatedAt: new Date() })
-        .where(eq(chats.id, group.id));
 
       messagesPosted++;
       logger.debug(
@@ -795,48 +667,23 @@ Return your response as XML:
       enemyPenalties: 0,
     };
 
-    // 1. Check follows (all-time)
-    const [followResult] =
-      npcIds.length > 0
-        ? await db
-            .select({ count: count() })
-            .from(follows)
-            .where(
-              and(
-                eq(follows.followerId, userId),
-                inArray(follows.followingId, npcIds)
-              )
-            )
-        : [{ count: 0 }];
-    const followCount = followResult?.count ?? 0;
+    const followCount = await countFollowsFromUserToNpcIdsAsSystem(
+      userId,
+      npcIds
+    );
     breakdown.follows = followCount * 5;
     score += breakdown.follows;
 
     // 2. Count comments on NPC posts (last 7 days)
     // This requires a subquery to find posts by NPCs that user commented on
-    const npcPosts =
-      npcIds.length > 0
-        ? await db
-            .select({ id: posts.id })
-            .from(posts)
-            .where(inArray(posts.authorId, npcIds))
-        : [];
-    const npcPostIds = npcPosts.map((p) => p.id);
+    const npcPostRows = await listPostIdsByAuthorIdsAsSystem(npcIds);
+    const npcPostIds = npcPostRows.map((p) => p.id);
 
-    const [commentResult] =
-      npcPostIds.length > 0
-        ? await db
-            .select({ count: count() })
-            .from(posts)
-            .where(
-              and(
-                eq(posts.authorId, userId),
-                inArray(posts.commentOnPostId, npcPostIds),
-                gte(posts.createdAt, oneWeekAgo)
-              )
-            )
-        : [{ count: 0 }];
-    const commentCount = commentResult?.count ?? 0;
+    const commentCount = await countUserCommentsOnParentPostsSinceAsSystem(
+      userId,
+      npcPostIds,
+      oneWeekAgo
+    );
 
     // Ideal: 1-3 comments per week
     if (commentCount >= 1 && commentCount <= 3) {
@@ -856,22 +703,11 @@ Return your response as XML:
       score += goodComments + penalty;
     }
 
-    // 3. Count likes on NPC posts (last 7 days)
-    const [likeResult] =
-      npcPostIds.length > 0
-        ? await db
-            .select({ count: count() })
-            .from(reactions)
-            .where(
-              and(
-                eq(reactions.userId, userId),
-                eq(reactions.type, 'like'),
-                inArray(reactions.postId, npcPostIds),
-                gte(reactions.createdAt, oneWeekAgo)
-              )
-            )
-        : [{ count: 0 }];
-    const likeCount = likeResult?.count ?? 0;
+    const likeCount = await countLikesOnPostsSinceAsSystem(
+      userId,
+      npcPostIds,
+      oneWeekAgo
+    );
 
     // Ideal: 3-10 likes per week
     if (likeCount >= 3 && likeCount <= 10) {
@@ -895,21 +731,11 @@ Return your response as XML:
       score += breakdown.likes;
     }
 
-    // 4. Count reposts/shares of NPC posts (last 7 days)
-    const [repostResult] =
-      npcPostIds.length > 0
-        ? await db
-            .select({ count: count() })
-            .from(shares)
-            .where(
-              and(
-                eq(shares.userId, userId),
-                inArray(shares.postId, npcPostIds),
-                gte(shares.createdAt, oneWeekAgo)
-              )
-            )
-        : [{ count: 0 }];
-    const repostCount = repostResult?.count ?? 0;
+    const repostCount = await countSharesOnPostsSinceAsSystem(
+      userId,
+      npcPostIds,
+      oneWeekAgo
+    );
 
     // Ideal: 1-2 reposts per week
     if (repostCount >= 1 && repostCount <= 2) {
@@ -969,42 +795,21 @@ Return your response as XML:
 
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-    // Get all NPCs the user has engaged with (via UserInteraction table)
-    const userInteractionList = await db
-      .select({ npcId: userInteractions.npcId })
-      .from(userInteractions)
-      .where(
-        and(
-          eq(userInteractions.userId, userId),
-          gte(userInteractions.timestamp, thirtyDaysAgo)
-        )
+    const userEngagedNpcIds =
+      await listDistinctNpcIdsFromUserInteractionsSinceAsSystem(
+        userId,
+        thirtyDaysAgo
       );
-
-    // Get unique NPC IDs
-    const userEngagedNpcIds = [
-      ...new Set(userInteractionList.map((i) => i.npcId)),
-    ];
 
     if (userEngagedNpcIds.length === 0) {
       return { modifier: 1.0, friendBoosts: 0, enemyPenalties: 0 };
     }
 
-    // For each target NPC (in the group), check relationships with NPCs user engages with
     for (const targetNpcId of targetNpcIds) {
-      const relationships = await db
-        .select()
-        .from(actorRelationships)
-        .where(
-          or(
-            and(
-              eq(actorRelationships.actor1Id, targetNpcId),
-              inArray(actorRelationships.actor2Id, userEngagedNpcIds)
-            ),
-            and(
-              eq(actorRelationships.actor2Id, targetNpcId),
-              inArray(actorRelationships.actor1Id, userEngagedNpcIds)
-            )
-          )
+      const relationships =
+        await listActorRelationshipsTargetVsEngagedNpcsAsSystem(
+          targetNpcId,
+          userEngagedNpcIds
         );
 
       for (const rel of relationships) {
@@ -1065,18 +870,12 @@ Return your response as XML:
   private static async inviteUsersToGroups(rng: RngFunction): Promise<number> {
     let usersInvited = 0;
 
-    // Get groups with space for more members
-    const groupList = await db
-      .select()
-      .from(chats)
-      .where(eq(chats.isGroup, true));
+    const groupList = await listAllGroupChatsWhereIsGroupTrueAsSystem();
 
     for (const group of groupList) {
-      // Get participants for this group
-      const participants = await db
-        .select({ userId: chatParticipants.userId })
-        .from(chatParticipants)
-        .where(eq(chatParticipants.chatId, group.id));
+      const participants = await listChatParticipantUserIdsByChatIdAsSystem(
+        group.id
+      );
 
       // Check if group has space
       if (participants.length >= NPC_GROUP_DYNAMICS_CONFIG.maxGroupSize) {
@@ -1104,32 +903,13 @@ Return your response as XML:
 
       const npcIds = npcMemberIds;
 
-      // Get active real users (not NPCs) who aren't in this group
-      // First get users who have at least one share
-      const usersWithShares = await db
-        .select({ userId: shares.userId })
-        .from(shares);
-      const userIdsWithShares = [
-        ...new Set(usersWithShares.map((s) => s.userId)),
-      ];
+      const userIdsWithShares = await listDistinctShareUserIdsAsSystem();
 
-      const potentialInvites =
-        userIdsWithShares.length > 0
-          ? await db
-              .select()
-              .from(users)
-              .where(
-                and(
-                  eq(users.isActor, false),
-                  notInArray(
-                    users.id,
-                    memberIdsArray.length > 0 ? memberIdsArray : ['']
-                  ),
-                  inArray(users.id, userIdsWithShares)
-                )
-              )
-              .limit(30)
-          : [];
+      const potentialInvites = await listPotentialInviteUsersAsSystem({
+        excludeMemberIds: memberIdsArray,
+        candidateUserIds: userIdsWithShares,
+        limit: 30,
+      });
 
       if (potentialInvites.length === 0) {
         continue;
@@ -1202,107 +982,61 @@ Return your response as XML:
       let groupId = group.groupId;
 
       if (!groupId) {
-        // Create Group record if it doesn't exist (for legacy chats)
         const newGroupId = await generateSnowflakeId();
-        await db.insert(groups).values({
-          id: newGroupId,
-          name: group.name || 'NPC Group',
-          type: 'npc',
-          ownerId: invitingNpcId,
-          createdById: invitingNpcId,
-          updatedAt: new Date(),
-        });
-
-        // Update chat with groupId
-        await db
-          .update(chats)
-          .set({ groupId: newGroupId })
-          .where(eq(chats.id, group.id));
-
-        // Backfill GroupMember for existing chat participants
-        const existingParticipants = await db
-          .select({ userId: chatParticipants.userId })
-          .from(chatParticipants)
-          .where(
-            and(
-              eq(chatParticipants.chatId, group.id),
-              eq(chatParticipants.isActive, true)
-            )
-          );
-
-        for (const participant of existingParticipants) {
-          // Check if GroupMember already exists
-          const [existingMember] = await db
-            .select({ id: groupMembers.id })
-            .from(groupMembers)
-            .where(
-              and(
-                eq(groupMembers.groupId, newGroupId),
-                eq(groupMembers.userId, participant.userId)
-              )
-            )
-            .limit(1);
-
-          if (!existingMember) {
-            const isOwner = participant.userId === invitingNpcId;
-            await db.insert(groupMembers).values({
-              id: await generateSnowflakeId(),
-              groupId: newGroupId,
-              userId: participant.userId,
-              role: isOwner ? 'owner' : 'member',
-              addedBy: invitingNpcId,
-            });
-          }
+        const existingParticipants =
+          await listActiveChatParticipantUserIdsByChatIdAsSystem(group.id);
+        const backfillMembers: Array<{
+          userId: string;
+          rowId: string;
+          role: 'owner' | 'member';
+        }> = [];
+        for (const p of existingParticipants) {
+          backfillMembers.push({
+            userId: p.userId,
+            rowId: await generateSnowflakeId(),
+            role: p.userId === invitingNpcId ? 'owner' : 'member',
+          });
         }
-
+        await bootstrapLegacyNpcGroupForChatAsSystem({
+          newGroupId,
+          chatId: group.id,
+          groupDisplayName: group.name || 'NPC Group',
+          invitingNpcId,
+          backfillMembers,
+        });
         groupId = newGroupId;
       }
 
       if (!groupId) continue;
 
-      // Check for existing invite (unique constraint on groupId + invitedUserId)
-      const [existingInvite] = await db
-        .select({ id: groupInvites.id, status: groupInvites.status })
-        .from(groupInvites)
-        .where(
-          and(
-            eq(groupInvites.groupId, groupId),
-            eq(groupInvites.invitedUserId, selectedCandidate.user.id)
-          )
-        )
-        .limit(1);
+      const inviteMessage = `Join our group chat "${group.name}"!`;
+      const existingInvite =
+        await fetchGroupInviteIdStatusByGroupAndUserAsSystem(
+          groupId,
+          selectedCandidate.user.id
+        );
 
       if (existingInvite) {
         if (existingInvite.status === 'pending') {
-          // Already has pending invite, skip
           continue;
         }
         if (existingInvite.status === 'accepted') {
-          // Already accepted, nothing to do - don't count as new invite
           continue;
         }
-        // For declined invites, reset to pending (re-invite flow)
         if (existingInvite.status === 'declined') {
-          await db
-            .update(groupInvites)
-            .set({
-              status: 'pending',
-              invitedBy: invitingNpcId,
-              invitedAt: new Date(),
-              respondedAt: null,
-              message: `Join our group chat "${group.name}"!`,
-            })
-            .where(eq(groupInvites.id, existingInvite.id));
+          await updateGroupInviteDeclinedToPendingAsSystem({
+            inviteId: existingInvite.id,
+            invitingNpcId,
+            message: inviteMessage,
+          });
         }
       } else {
-        // Create new invitation
-        await db.insert(groupInvites).values({
+        await insertPendingGroupInviteAsSystem({
           id: await generateSnowflakeId(),
           groupId,
           invitedUserId: selectedCandidate.user.id,
           invitedBy: invitingNpcId,
-          status: 'pending',
-          message: `Join our group chat "${group.name}"!`,
+          message: inviteMessage,
         });
       }
       usersInvited++;
@@ -1338,19 +1072,8 @@ Return your response as XML:
     const filtered: T[] = [];
 
     for (const candidate of candidates) {
-      // Check 1: Total active NPC groups limit (only NPC groups count toward limit)
-      const [countResult] = await db
-        .select({ count: count() })
-        .from(groupMembers)
-        .innerJoin(groups, eq(groupMembers.groupId, groups.id))
-        .where(
-          and(
-            eq(groupMembers.userId, candidate.user.id),
-            eq(groupMembers.isActive, true),
-            eq(groups.type, 'npc')
-          )
-        );
-      const activeNpcGroupCount = countResult?.count ?? 0;
+      const activeNpcGroupCount =
+        await countActiveNpcGroupMembershipsForUserAsSystem(candidate.user.id);
 
       if (activeNpcGroupCount >= GROUP_CONFIG.MAX_ACTIVE_USER_GROUPS) {
         logger.debug(
@@ -1365,24 +1088,14 @@ Return your response as XML:
         continue;
       }
 
-      // Check 2: Invite cooldown (only NPC groups count toward cooldown)
-      const [latestMembership] = await db
-        .select({ joinedAt: groupMembers.joinedAt })
-        .from(groupMembers)
-        .innerJoin(groups, eq(groupMembers.groupId, groups.id))
-        .where(
-          and(
-            eq(groupMembers.userId, candidate.user.id),
-            eq(groupMembers.isActive, true),
-            eq(groups.type, 'npc')
-          )
-        )
-        .orderBy(desc(groupMembers.joinedAt))
-        .limit(1);
+      const latestJoinedAt =
+        await fetchLatestNpcActiveGroupMembershipJoinedAtAsSystem(
+          candidate.user.id
+        );
 
-      if (latestMembership) {
+      if (latestJoinedAt) {
         const hoursSinceJoin =
-          (Date.now() - latestMembership.joinedAt.getTime()) / (1000 * 60 * 60);
+          (Date.now() - latestJoinedAt.getTime()) / (1000 * 60 * 60);
 
         if (hoursSinceJoin < GROUP_CONFIG.INVITE_COOLDOWN_HOURS) {
           logger.debug(
@@ -1454,54 +1167,21 @@ Return your response as XML:
 
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-    // Only NPC-managed group chats participate in NPC kick dynamics
-    const groupList = await db
-      .select({
-        id: chats.id,
-        name: chats.name,
-        groupId: chats.groupId,
-      })
-      .from(chats)
-      .innerJoin(groups, eq(chats.groupId, groups.id))
-      .where(and(eq(chats.isGroup, true), eq(groups.type, 'npc')));
+    const groupList = await listNpcManagedGroupChatsForKickAsSystem();
 
     for (const group of groupList) {
-      // Get participants for this group
-      const participantList = await db
-        .select()
-        .from(chatParticipants)
-        .where(eq(chatParticipants.chatId, group.id));
+      const participantList = await listChatParticipantsByChatIdAsSystem(
+        group.id
+      );
 
-      // Get recent messages
-      const recentMsgs = await db
-        .select({ senderId: messages.senderId })
-        .from(messages)
-        .where(
-          and(
-            eq(messages.chatId, group.id),
-            gte(messages.createdAt, sevenDaysAgo)
-          )
-        );
+      const recentMsgs = await listMessageSendersForChatSinceAsSystem(
+        group.id,
+        sevenDaysAgo
+      );
 
-      // Get user details for participants (both users and agents, excluding NPCs)
       const participantUserIds = participantList.map((p) => p.userId);
       const participantUsers =
-        participantUserIds.length > 0
-          ? await db
-              .select({
-                id: users.id,
-                displayName: users.displayName,
-                isActor: users.isActor,
-                isAgent: users.isAgent,
-              })
-              .from(users)
-              .where(
-                and(
-                  inArray(users.id, participantUserIds),
-                  eq(users.isActor, false)
-                )
-              )
-          : [];
+        await listNonActorUsersByIdsForKickAsSystem(participantUserIds);
 
       if (participantUsers.length === 0) continue;
 
@@ -1545,20 +1225,8 @@ Return your response as XML:
         const tickMultiplier = category === 'spam' ? 0.2 : 0.05;
 
         if (randomChance(kickProbability * tickMultiplier, rng)) {
-          // PROTECTION: Don't kick if user would fall below minimum group count
-          const [userGroupCount] = await db
-            .select({ count: count() })
-            .from(groupMembers)
-            .innerJoin(groups, eq(groupMembers.groupId, groups.id))
-            .where(
-              and(
-                eq(groupMembers.userId, userId),
-                eq(groupMembers.isActive, true),
-                eq(groups.type, 'npc')
-              )
-            );
-
-          const currentGroups = userGroupCount?.count ?? 0;
+          const currentGroups =
+            await countActiveNpcGroupMembershipsForUserAsSystem(userId);
           if (currentGroups <= GROUP_CONFIG.MIN_DEFAULT_GROUPS) {
             logger.debug(
               'Skipping kick - user at or below minimum group count',
@@ -1575,33 +1243,12 @@ Return your response as XML:
             continue;
           }
 
-          // Remove from chat participants
-          await db
-            .delete(chatParticipants)
-            .where(
-              and(
-                eq(chatParticipants.chatId, group.id),
-                eq(chatParticipants.userId, userId)
-              )
-            );
-
-          // If GroupMember exists, mark as removed
-          // Chat.groupId → Group.id relationship
-          if (group.groupId) {
-            await db
-              .update(groupMembers)
-              .set({
-                isActive: false,
-                kickedAt: new Date(),
-                kickReason: reason,
-              })
-              .where(
-                and(
-                  eq(groupMembers.groupId, group.groupId),
-                  eq(groupMembers.userId, userId)
-                )
-              );
-          }
+          await applyNpcKickUserFromGroupChatAsSystem({
+            chatId: group.id,
+            userId,
+            groupId: group.groupId,
+            kickReason: reason,
+          });
 
           usersKicked++;
           logger.info(
@@ -1640,29 +1287,17 @@ Return your response as XML:
     totalMembers: number;
     avgGroupSize: number;
   }> {
-    // Get total group count
-    const [countResult] = await db
-      .select({ count: count() })
-      .from(chats)
-      .where(eq(chats.isGroup, true));
-    const totalGroups = countResult?.count ?? 0;
+    const totalGroups = await countGroupChatsWhereIsGroupTrueAsSystem();
 
-    // Get all groups
-    const groupList = await db
-      .select()
-      .from(chats)
-      .where(eq(chats.isGroup, true));
+    const groupList = await listAllGroupChatsWhereIsGroupTrueAsSystem();
 
-    // Get participant counts for each group
     let activeGroups = 0;
     let totalMembers = 0;
 
     for (const group of groupList) {
-      const [partCountResult] = await db
-        .select({ count: count() })
-        .from(chatParticipants)
-        .where(eq(chatParticipants.chatId, group.id));
-      const participantCount = partCountResult?.count ?? 0;
+      const participantCount = await countChatParticipantsForChatIdAsSystem(
+        group.id
+      );
 
       if (participantCount >= NPC_GROUP_DYNAMICS_CONFIG.minGroupSize) {
         activeGroups++;

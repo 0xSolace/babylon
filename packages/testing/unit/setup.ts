@@ -23,12 +23,28 @@ beforeAll(() => {
   void Reflect.set(process.env, 'REDIS_URL', 'redis://localhost:6379');
 
   const mockDatabase = createMockDatabase();
+
+  const rlsPassthrough = {
+    asSystem: async <T>(
+      op: (client: MockDatabaseClient) => Promise<T>,
+      _operationName?: string
+    ): Promise<T> => op(mockDatabase),
+    asUser: async <T>(
+      _userIdOrUser: unknown,
+      op: (client: MockDatabaseClient) => Promise<T>
+    ): Promise<T> => op(mockDatabase),
+    asPublic: async <T>(
+      op: (client: MockDatabaseClient) => Promise<T>
+    ): Promise<T> => op(mockDatabase),
+  };
+
   mock.module('@babylon/db', () => ({
     db: mockDatabase,
     dbBase: mockDatabase,
   }));
-  mock.module('@babylon/db/runtime', () => ({
+  mock.module('@babylon/db/engine-storage', () => ({
     db: mockDatabase,
+    ...rlsPassthrough,
   }));
 
   // Mock Redis as well

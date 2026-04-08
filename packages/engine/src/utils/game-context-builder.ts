@@ -21,8 +21,11 @@
  * - Anti-repetition guidance integration
  */
 
-import { and, desc, eq, gte } from '@babylon/db';
-import { db, posts, questions, worldEvents } from '@babylon/db/runtime';
+import {
+  listPostsOptionalGameIdCreatedAtGteOrderedDesc,
+  listQuestionsOrderedDescLimit,
+  listWorldEventsOptionalGameIdOrderedDesc,
+} from '@babylon/db';
 import { parseStringArraySafe } from '../services/jsonb-validators';
 import type {
   Actor,
@@ -121,107 +124,86 @@ export async function buildRichGameContext(
   const [allEvents, allPosts, allQuestions, worldFacts] = await Promise.all([
     // Get ALL events from start of game to current day
     includeEventHistory
-      ? db
-          .select()
-          .from(worldEvents)
-          .where(gameId ? eq(worldEvents.gameId, gameId) : undefined)
-          .orderBy(desc(worldEvents.timestamp))
-          .limit(maxEvents)
-          .then((events) =>
-            events.map((e) => {
-              const day = (e as { day?: number }).day || extractDayFromEvent(e);
-              return {
-                id: e.id,
-                day,
-                type: e.eventType as WorldEvent['type'],
-                actors: truncateArray(
-                  parseStringArraySafe(e.actors, {
-                    field: 'worldEvents.actors',
-                  }),
-                  CONTEXT_LIMITS.MAX_ACTORS_PER_EVENT
-                ),
-                description: truncateText(
-                  e.description || '',
-                  CONTEXT_LIMITS.MAX_EVENT_DESCRIPTION_LENGTH
-                ),
-                relatedQuestion: e.relatedQuestion || null,
-                pointsToward: (e.pointsToward as 'YES' | 'NO' | null) || null,
-                visibility: e.visibility as WorldEvent['visibility'],
-              } as WorldEvent;
-            })
-          )
+      ? listWorldEventsOptionalGameIdOrderedDesc({
+          gameId,
+          limit: maxEvents,
+        }).then((events) =>
+          events.map((e) => {
+            const day = (e as { day?: number }).day || extractDayFromEvent(e);
+            return {
+              id: e.id,
+              day,
+              type: e.eventType as WorldEvent['type'],
+              actors: truncateArray(
+                parseStringArraySafe(e.actors, {
+                  field: 'worldEvents.actors',
+                }),
+                CONTEXT_LIMITS.MAX_ACTORS_PER_EVENT
+              ),
+              description: truncateText(
+                e.description || '',
+                CONTEXT_LIMITS.MAX_EVENT_DESCRIPTION_LENGTH
+              ),
+              relatedQuestion: e.relatedQuestion || null,
+              pointsToward: (e.pointsToward as 'YES' | 'NO' | null) || null,
+              visibility: e.visibility as WorldEvent['visibility'],
+            } as WorldEvent;
+          })
+        )
       : Promise.resolve([]),
 
     // Get ALL feed posts from start of game
     includeFeedHistory
-      ? db
-          .select()
-          .from(posts)
-          .where(
-            and(
-              gameId ? eq(posts.gameId, gameId) : undefined,
-              gte(
-                posts.createdAt,
-                new Date(Date.now() - maxDays * 24 * 60 * 60 * 1000)
-              )
-            )
-          )
-          .orderBy(desc(posts.createdAt))
-          .limit(maxPosts)
-          .then((posts) =>
-            posts.map((p) => {
-              const day = p.dayNumber || extractDayFromPost(p);
-              return {
-                id: p.id,
-                day,
-                timestamp: p.createdAt.toISOString(),
-                type: p.type as FeedPost['type'],
-                content: truncateText(
-                  p.content,
-                  CONTEXT_LIMITS.MAX_POST_CONTENT_LENGTH
-                ),
-                author: p.authorId,
-                authorName: truncateText(
-                  (p as { authorName?: string }).authorName || 'Unknown',
-                  50
-                ),
-                sentiment: p.sentiment ?? null,
-                clueStrength:
-                  (p as { clueStrength?: number }).clueStrength ?? null,
-                pointsToward:
-                  (p as { pointsToward?: boolean | null }).pointsToward ?? null,
-                relatedEvent:
-                  (p as { relatedEvent?: string | null }).relatedEvent ?? null,
-              } as FeedPost;
-            })
-          )
+      ? listPostsOptionalGameIdCreatedAtGteOrderedDesc({
+          gameId,
+          createdAtGte: new Date(Date.now() - maxDays * 24 * 60 * 60 * 1000),
+          limit: maxPosts,
+        }).then((posts) =>
+          posts.map((p) => {
+            const day = p.dayNumber || extractDayFromPost(p);
+            return {
+              id: p.id,
+              day,
+              timestamp: p.createdAt.toISOString(),
+              type: p.type as FeedPost['type'],
+              content: truncateText(
+                p.content,
+                CONTEXT_LIMITS.MAX_POST_CONTENT_LENGTH
+              ),
+              author: p.authorId,
+              authorName: truncateText(
+                (p as { authorName?: string }).authorName || 'Unknown',
+                50
+              ),
+              sentiment: p.sentiment ?? null,
+              clueStrength:
+                (p as { clueStrength?: number }).clueStrength ?? null,
+              pointsToward:
+                (p as { pointsToward?: boolean | null }).pointsToward ?? null,
+              relatedEvent:
+                (p as { relatedEvent?: string | null }).relatedEvent ?? null,
+            } as FeedPost;
+          })
+        )
       : Promise.resolve([]),
 
     // Get all questions (active and resolved)
     // Note: questions table doesn't have gameId, so we get all recent questions
-    db
-      .select()
-      .from(questions)
-      .orderBy(desc(questions.createdAt))
-      .limit(50)
-      .then((questions) =>
-        questions.map(
-          (q) =>
-            ({
-              id: q.id,
-              text: truncateText(
-                q.text,
-                CONTEXT_LIMITS.MAX_QUESTION_TEXT_LENGTH
-              ),
-              scenario: q.scenarioId || 0,
-              outcome: q.resolvedOutcome ?? false,
-              rank: 0,
-              status: q.status || 'active',
-              resolvedOutcome: q.resolvedOutcome ?? undefined,
-              resolutionDate: q.resolutionDate?.toISOString(),
-            }) as Question
-        )
-      ),
+    listQuestionsOrderedDescLimit(50).then((questions) =>
+      questions.map(
+        (q) =>
+          ({
+            id: q.id,
+            text: truncateText(q.text, CONTEXT_LIMITS.MAX_QUESTION_TEXT_LENGTH),
+            scenario: q.scenarioId || 0,
+            outcome: q.resolvedOutcome ?? false,
+            rank: 0,
+            status: q.status || 'active',
+            resolvedOutcome: q.resolvedOutcome ?? undefined,
+            resolutionDate: q.resolutionDate?.toISOString(),
+          }) as Question
+      )
+    ),
 
     // Get world facts
     worldFactsService.generateWorldContext(false),

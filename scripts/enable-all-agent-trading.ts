@@ -4,23 +4,27 @@
  * Enable autonomous trading for all agents
  */
 
-import { eq } from '@babylon/db';
-import { db, users } from '@babylon/db/runtime';
+import { asSystem, users } from '@babylon/db/engine-storage';
+import { eq } from 'drizzle-orm';
 
 async function enableAllAgentTrading() {
   console.log('🤖 Enabling autonomous trading for all agents...\n');
 
   try {
     // 1. Get all agents
-    const allAgents = await db
-      .select({
-        id: users.id,
-        username: users.username,
-        autonomousTrading: users.autonomousTrading,
-        agentPointsBalance: users.agentPointsBalance,
-      })
-      .from(users)
-      .where(eq(users.isAgent, true));
+    const allAgents = await asSystem(
+      async (c) =>
+        c
+          .select({
+            id: users.id,
+            username: users.username,
+            autonomousTrading: users.autonomousTrading,
+            agentPointsBalance: users.agentPointsBalance,
+          })
+          .from(users)
+          .where(eq(users.isAgent, true)),
+      'script-enable-trading-list'
+    );
 
     console.log(`Found ${allAgents.length} total agents\n`);
 
@@ -53,13 +57,17 @@ async function enableAllAgentTrading() {
 
     for (const agent of agentsToEnable) {
       try {
-        await db
-          .update(users)
-          .set({
-            autonomousTrading: true,
-            updatedAt: new Date(),
-          })
-          .where(eq(users.id, agent.id));
+        await asSystem(
+          async (c) =>
+            c
+              .update(users)
+              .set({
+                autonomousTrading: true,
+                updatedAt: new Date(),
+              })
+              .where(eq(users.id, agent.id)),
+          'script-enable-trading-update'
+        );
 
         successCount++;
         console.log(

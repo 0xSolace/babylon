@@ -5,13 +5,16 @@
  * Integrates PNL normalization, game scores, and user feedback into reputation.
  */
 
-import { and, desc, eq, gte } from '@babylon/db';
 import {
-  agentPerformanceMetrics,
-  db,
-  feedbacks,
-  users,
-} from '@babylon/db/runtime';
+  fetchAgentPerformanceMetricsByUserId,
+  fetchFeedbackById,
+  fetchUserLifetimePnLAndDeposited,
+  insertAgentPerformanceMetricsRow,
+  insertFeedbackRow,
+  listReputationLeaderboardAgentRows,
+  listUsersLeaderboardProfilesByIds,
+  updateAgentPerformanceMetricsByUserId,
+} from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import { clamp01, clampPercent } from '../utils/math-utils';
 import {
@@ -161,15 +164,10 @@ export async function updateGameMetrics(
     'ReputationService'
   );
 
-  // Get or create metrics
-  let [metrics] = await db
-    .select()
-    .from(agentPerformanceMetrics)
-    .where(eq(agentPerformanceMetrics.userId, userId))
-    .limit(1);
+  let metrics = await fetchAgentPerformanceMetricsByUserId(userId);
 
   if (!metrics) {
-    await db.insert(agentPerformanceMetrics).values({
+    await insertAgentPerformanceMetricsRow({
       id: await generateSnowflakeId(),
       userId,
       gamesPlayed: 0,
@@ -178,46 +176,33 @@ export async function updateGameMetrics(
       updatedAt: new Date(),
     });
 
-    [metrics] = await db
-      .select()
-      .from(agentPerformanceMetrics)
-      .where(eq(agentPerformanceMetrics.userId, userId))
-      .limit(1);
+    metrics = await fetchAgentPerformanceMetricsByUserId(userId);
   }
 
   if (!metrics) {
     throw new Error(`Failed to create metrics for user ${userId}`);
   }
 
-  // Calculate new average game score
   const totalGames = metrics.gamesPlayed + 1;
   const newAverageScore =
     (metrics.averageGameScore * metrics.gamesPlayed + gameScore) / totalGames;
 
-  // Update metrics
-  await db
-    .update(agentPerformanceMetrics)
-    .set({
-      gamesPlayed: totalGames,
-      gamesWon: won ? metrics.gamesWon + 1 : metrics.gamesWon,
-      averageGameScore: newAverageScore,
-      lastGameScore: gameScore,
-      lastGamePlayedAt: new Date(),
-      lastActivityAt: new Date(),
-      firstActivityAt: metrics.firstActivityAt || new Date(),
-    })
-    .where(eq(agentPerformanceMetrics.userId, userId));
+  await updateAgentPerformanceMetricsByUserId(userId, {
+    gamesPlayed: totalGames,
+    gamesWon: won ? metrics.gamesWon + 1 : metrics.gamesWon,
+    averageGameScore: newAverageScore,
+    lastGameScore: gameScore,
+    lastGamePlayedAt: new Date(),
+    lastActivityAt: new Date(),
+    firstActivityAt: metrics.firstActivityAt || new Date(),
+  });
 
-  // Recalculate reputation
   await recalculateReputation(userId);
 
-  // Return updated metrics
-  const [updated] = await db
-    .select()
-    .from(agentPerformanceMetrics)
-    .where(eq(agentPerformanceMetrics.userId, userId))
-    .limit(1);
-
+  const updated = await fetchAgentPerformanceMetricsByUserId(userId);
+  if (!updated) {
+    throw new Error(`Metrics missing after update for user ${userId}`);
+  }
   return updated;
 }
 
@@ -241,34 +226,20 @@ export async function updateTradingMetrics(
     'ReputationService'
   );
 
-  // Get user's lifetime PNL and total deposits
-  const [user] = await db
-    .select({
-      lifetimePnL: users.lifetimePnL,
-      totalDeposited: users.totalDeposited,
-    })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
+  const user = await fetchUserLifetimePnLAndDeposited(userId);
 
   if (!user) {
     throw new Error(`User ${userId} not found`);
   }
 
-  // Normalize PNL based on total deposits
-  const totalInvested = Number.parseFloat(user.totalDeposited.toString());
-  const lifetimePnLNum = Number.parseFloat(user.lifetimePnL.toString());
+  const totalInvested = Number.parseFloat(String(user.totalDeposited ?? 0));
+  const lifetimePnLNum = Number.parseFloat(String(user.lifetimePnL ?? 0));
   const normalized = normalizePnL(lifetimePnLNum, totalInvested);
 
-  // Get or create metrics
-  let [metrics] = await db
-    .select()
-    .from(agentPerformanceMetrics)
-    .where(eq(agentPerformanceMetrics.userId, userId))
-    .limit(1);
+  let metrics = await fetchAgentPerformanceMetricsByUserId(userId);
 
   if (!metrics) {
-    await db.insert(agentPerformanceMetrics).values({
+    await insertAgentPerformanceMetricsRow({
       id: await generateSnowflakeId(),
       userId,
       normalizedPnL: normalized,
@@ -277,53 +248,39 @@ export async function updateTradingMetrics(
       updatedAt: new Date(),
     });
 
-    [metrics] = await db
-      .select()
-      .from(agentPerformanceMetrics)
-      .where(eq(agentPerformanceMetrics.userId, userId))
-      .limit(1);
+    metrics = await fetchAgentPerformanceMetricsByUserId(userId);
   }
 
   if (!metrics) {
     throw new Error(`Failed to create metrics for user ${userId}`);
   }
 
-  // Update trade counts
   const newTotalTrades = metrics.totalTrades + 1;
   const newProfitableTrades = profitable
     ? metrics.profitableTrades + 1
     : metrics.profitableTrades;
 
-  // Calculate win rate
   const winRate = calculateWinRate(newProfitableTrades, newTotalTrades);
 
-  // Calculate average ROI (simplified - would need full trade history for accuracy)
-  const avgROI = lifetimePnLNum / totalInvested;
+  const avgROI =
+    totalInvested > 0 ? lifetimePnLNum / totalInvested : metrics.averageROI;
 
-  // Update metrics
-  await db
-    .update(agentPerformanceMetrics)
-    .set({
-      normalizedPnL: normalized,
-      totalTrades: newTotalTrades,
-      profitableTrades: newProfitableTrades,
-      winRate,
-      averageROI: avgROI,
-      lastActivityAt: new Date(),
-      firstActivityAt: metrics.firstActivityAt || new Date(),
-    })
-    .where(eq(agentPerformanceMetrics.userId, userId));
+  await updateAgentPerformanceMetricsByUserId(userId, {
+    normalizedPnL: normalized,
+    totalTrades: newTotalTrades,
+    profitableTrades: newProfitableTrades,
+    winRate,
+    averageROI: avgROI,
+    lastActivityAt: new Date(),
+    firstActivityAt: metrics.firstActivityAt || new Date(),
+  });
 
-  // Recalculate reputation
   await recalculateReputation(userId);
 
-  // Return updated metrics
-  const [updated] = await db
-    .select()
-    .from(agentPerformanceMetrics)
-    .where(eq(agentPerformanceMetrics.userId, userId))
-    .limit(1);
-
+  const updated = await fetchAgentPerformanceMetricsByUserId(userId);
+  if (!updated) {
+    throw new Error(`Metrics missing after update for user ${userId}`);
+  }
   return updated;
 }
 
@@ -354,29 +311,20 @@ export async function updateFeedbackMetrics(
     'ReputationService'
   );
 
-  // Get or create metrics
-  let [metrics] = await db
-    .select()
-    .from(agentPerformanceMetrics)
-    .where(eq(agentPerformanceMetrics.userId, userId))
-    .limit(1);
+  let metrics = await fetchAgentPerformanceMetricsByUserId(userId);
 
   if (!metrics) {
-    await db.insert(agentPerformanceMetrics).values({
+    await insertAgentPerformanceMetricsRow({
       id: await generateSnowflakeId(),
       userId,
       totalFeedbackCount: 0,
-      averageFeedbackScore: 50, // Start at neutral
+      averageFeedbackScore: 50,
       intelFeedbackCount: 0,
       averageIntelScore: 50,
       updatedAt: new Date(),
     });
 
-    [metrics] = await db
-      .select()
-      .from(agentPerformanceMetrics)
-      .where(eq(agentPerformanceMetrics.userId, userId))
-      .limit(1);
+    metrics = await fetchAgentPerformanceMetricsByUserId(userId);
   }
 
   if (!metrics) {
@@ -412,37 +360,29 @@ export async function updateFeedbackMetrics(
     averageIntelScore = newIntelAverage;
   }
 
-  // Update metrics
-  await db
-    .update(agentPerformanceMetrics)
-    .set({
-      totalFeedbackCount: newCount,
-      averageFeedbackScore: newAverage,
-      intelFeedbackCount,
-      averageIntelScore,
-      positiveCount: isPositive
-        ? metrics.positiveCount + 1
-        : metrics.positiveCount,
-      neutralCount: isNeutral ? metrics.neutralCount + 1 : metrics.neutralCount,
-      negativeCount: isNegative
-        ? metrics.negativeCount + 1
-        : metrics.negativeCount,
-      totalInteractions: metrics.totalInteractions + 1,
-      lastActivityAt: new Date(),
-      firstActivityAt: metrics.firstActivityAt || new Date(),
-    })
-    .where(eq(agentPerformanceMetrics.userId, userId));
+  await updateAgentPerformanceMetricsByUserId(userId, {
+    totalFeedbackCount: newCount,
+    averageFeedbackScore: newAverage,
+    intelFeedbackCount,
+    averageIntelScore,
+    positiveCount: isPositive
+      ? metrics.positiveCount + 1
+      : metrics.positiveCount,
+    neutralCount: isNeutral ? metrics.neutralCount + 1 : metrics.neutralCount,
+    negativeCount: isNegative
+      ? metrics.negativeCount + 1
+      : metrics.negativeCount,
+    totalInteractions: metrics.totalInteractions + 1,
+    lastActivityAt: new Date(),
+    firstActivityAt: metrics.firstActivityAt || new Date(),
+  });
 
-  // Recalculate reputation
   await recalculateReputation(userId);
 
-  // Return updated metrics
-  const [updated] = await db
-    .select()
-    .from(agentPerformanceMetrics)
-    .where(eq(agentPerformanceMetrics.userId, userId))
-    .limit(1);
-
+  const updated = await fetchAgentPerformanceMetricsByUserId(userId);
+  if (!updated) {
+    throw new Error(`Metrics missing after update for user ${userId}`);
+  }
   return updated;
 }
 
@@ -455,17 +395,12 @@ export async function updateFeedbackMetrics(
 export async function recalculateReputation(
   userId: string
 ): Promise<RecalculatedReputation | null> {
-  const [metrics] = await db
-    .select()
-    .from(agentPerformanceMetrics)
-    .where(eq(agentPerformanceMetrics.userId, userId))
-    .limit(1);
+  const metrics = await fetchAgentPerformanceMetricsByUserId(userId);
 
   if (!metrics) {
     return null;
   }
 
-  // Calculate composite reputation
   const reputationScore = calculateReputationScore(
     metrics.normalizedPnL,
     metrics.averageFeedbackScore,
@@ -474,22 +409,16 @@ export async function recalculateReputation(
     metrics.averageIntelScore ?? metrics.averageFeedbackScore
   );
 
-  // Determine trust level
   const trustLevel = getTrustLevel(reputationScore);
 
-  // Calculate confidence based on sample size (games + feedback)
   const sampleSize = metrics.gamesPlayed + metrics.totalFeedbackCount;
   const confidenceScore = calculateConfidenceScore(sampleSize);
 
-  // Update metrics
-  await db
-    .update(agentPerformanceMetrics)
-    .set({
-      reputationScore,
-      trustLevel,
-      confidenceScore,
-    })
-    .where(eq(agentPerformanceMetrics.userId, userId));
+  await updateAgentPerformanceMetricsByUserId(userId, {
+    reputationScore,
+    trustLevel,
+    confidenceScore,
+  });
 
   logger.info(
     'Recalculated reputation',
@@ -514,24 +443,16 @@ export async function recalculateReputation(
 export async function getReputationBreakdown(
   userId: string
 ): Promise<ReputationScoreBreakdown | null> {
-  let [metrics] = await db
-    .select()
-    .from(agentPerformanceMetrics)
-    .where(eq(agentPerformanceMetrics.userId, userId))
-    .limit(1);
+  let metrics = await fetchAgentPerformanceMetricsByUserId(userId);
 
   if (!metrics) {
-    await db.insert(agentPerformanceMetrics).values({
+    await insertAgentPerformanceMetricsRow({
       id: await generateSnowflakeId(),
       userId,
       updatedAt: new Date(),
     });
 
-    [metrics] = await db
-      .select()
-      .from(agentPerformanceMetrics)
-      .where(eq(agentPerformanceMetrics.userId, userId))
-      .limit(1);
+    metrics = await fetchAgentPerformanceMetricsByUserId(userId);
   }
 
   if (!metrics) {
@@ -576,64 +497,33 @@ export async function getReputationLeaderboard(
     activeSince?: Date | null;
   }
 ): Promise<LeaderboardEntry[]> {
-  const leaderboardFilters = [
-    gte(agentPerformanceMetrics.gamesPlayed, minGames),
-  ];
-
-  if (options?.activeSince) {
-    leaderboardFilters.push(
-      gte(agentPerformanceMetrics.lastActivityAt, options.activeSince)
-    );
-  }
-
-  const topAgents = await db
-    .select({
-      userId: agentPerformanceMetrics.userId,
-      reputationScore: agentPerformanceMetrics.reputationScore,
-      trustLevel: agentPerformanceMetrics.trustLevel,
-      confidenceScore: agentPerformanceMetrics.confidenceScore,
-      gamesPlayed: agentPerformanceMetrics.gamesPlayed,
-      winRate: agentPerformanceMetrics.winRate,
-      normalizedPnL: agentPerformanceMetrics.normalizedPnL,
-    })
-    .from(agentPerformanceMetrics)
-    .where(and(...leaderboardFilters))
-    .orderBy(desc(agentPerformanceMetrics.reputationScore))
-    .limit(limit);
-
-  // Fetch user data for each agent
-  const results = await Promise.all(
-    topAgents.map(async (agent, index) => {
-      const [user] = await db
-        .select({
-          id: users.id,
-          username: users.username,
-          displayName: users.displayName,
-          profileImageUrl: users.profileImageUrl,
-          isActor: users.isActor,
-        })
-        .from(users)
-        .where(eq(users.id, agent.userId))
-        .limit(1);
-
-      return {
-        rank: index + 1,
-        userId: agent.userId,
-        username: user?.username ?? null,
-        displayName: user?.displayName ?? null,
-        profileImageUrl: user?.profileImageUrl ?? null,
-        isActor: user?.isActor ?? null,
-        reputationScore: agent.reputationScore,
-        trustLevel: agent.trustLevel,
-        confidenceScore: agent.confidenceScore,
-        gamesPlayed: agent.gamesPlayed,
-        winRate: agent.winRate,
-        normalizedPnL: agent.normalizedPnL,
-      };
-    })
+  const topAgents = await listReputationLeaderboardAgentRows(
+    minGames,
+    limit,
+    options?.activeSince ?? null
   );
 
-  return results;
+  const userIds = topAgents.map((a) => a.userId);
+  const userRows = await listUsersLeaderboardProfilesByIds(userIds);
+  const userById = new Map(userRows.map((u) => [u.id, u]));
+
+  return topAgents.map((agent, index) => {
+    const user = userById.get(agent.userId);
+    return {
+      rank: index + 1,
+      userId: agent.userId,
+      username: user?.username ?? null,
+      displayName: user?.displayName ?? null,
+      profileImageUrl: user?.profileImageUrl ?? null,
+      isActor: user?.isActor ?? null,
+      reputationScore: agent.reputationScore,
+      trustLevel: agent.trustLevel,
+      confidenceScore: agent.confidenceScore,
+      gamesPlayed: agent.gamesPlayed,
+      winRate: agent.winRate,
+      normalizedPnL: agent.normalizedPnL,
+    };
+  });
 }
 
 // AUTO-FEEDBACK GENERATION FUNCTIONS
@@ -743,9 +633,8 @@ export async function generateGameCompletionFeedback(
       'Challenging game. Focus on improving risk management and decision quality.';
   }
 
-  // Create feedback record
   const feedbackId = await generateSnowflakeId();
-  await db.insert(feedbacks).values({
+  await insertFeedbackRow({
     id: feedbackId,
     toUserId: agentId,
     score,
@@ -772,12 +661,10 @@ export async function generateGameCompletionFeedback(
     interactionType: 'game_to_agent',
   });
 
-  // Get created feedback
-  const [feedback] = await db
-    .select()
-    .from(feedbacks)
-    .where(eq(feedbacks.id, feedbackId))
-    .limit(1);
+  const feedback = await fetchFeedbackById(feedbackId);
+  if (!feedback) {
+    throw new Error(`Feedback row missing after insert: ${feedbackId}`);
+  }
 
   logger.info('Generated game feedback', { feedbackId, score }, 'AutoFeedback');
 
@@ -820,9 +707,8 @@ export async function generateTradeCompletionFeedback(
     comment = 'Challenging trade. Focus on risk management and timing.';
   }
 
-  // Create feedback record
   const feedbackId = await generateSnowflakeId();
-  await db.insert(feedbacks).values({
+  await insertFeedbackRow({
     id: feedbackId,
     toUserId: agentId,
     score,
@@ -846,12 +732,10 @@ export async function generateTradeCompletionFeedback(
     interactionType: 'trade_to_agent',
   });
 
-  // Get created feedback
-  const [feedback] = await db
-    .select()
-    .from(feedbacks)
-    .where(eq(feedbacks.id, feedbackId))
-    .limit(1);
+  const feedback = await fetchFeedbackById(feedbackId);
+  if (!feedback) {
+    throw new Error(`Feedback row missing after insert: ${feedbackId}`);
+  }
 
   logger.info(
     'Generated trade feedback',

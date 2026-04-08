@@ -148,8 +148,25 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, eq, ne, or, sql } from '@babylon/db';
-import { db, users } from '@babylon/db/runtime';
+import {
+  insertMinimalUserMeReturning,
+  selectMeRouteReferrerByReferralCode,
+  selectMeRouteReferrerByUsernameCaseInsensitive,
+  selectUserIdByFarcasterFidExcludingUserId,
+  selectUserIdByPrivyId,
+  selectUserIdByTelegramIdExcludingUserId,
+  selectUserIdByTwitterIdExcludingUserId,
+  selectUserMeProfileByPrivyId,
+  selectUserMeProfilesByFarcasterOrTwitter,
+  type UserMeProfileRow,
+  type UserProfileUpdatePatch,
+  updateUserByIdReturningMeProfile,
+  updateUserMeAdminPromoteReturning,
+  updateUserMeWalletBackfillReturning,
+  updateUserPrivySessionByIdReturningMeProfile,
+  updateUserReferredByReturningMeProfile,
+} from '@babylon/db';
+import { asSystem, asUser } from '@babylon/db/engine-storage';
 import {
   checkForAdminEmail,
   getAllVerifiedEmails,
@@ -172,263 +189,148 @@ type PrivyUserWithWallets = PrivyUser &
   PrivyUserWithEmails &
   PrivyUserWalletsLite;
 
-const userSelectFields = {
-  id: users.id,
-  privyId: users.privyId,
-  privyWalletId: users.privyWalletId,
-  offlineWalletReady: users.offlineWalletReady,
-  offlineWalletReadyAt: users.offlineWalletReadyAt,
-  username: users.username,
-  displayName: users.displayName,
-  bio: users.bio,
-  profileImageUrl: users.profileImageUrl,
-  coverImageUrl: users.coverImageUrl,
-  walletAddress: users.walletAddress,
-  email: users.email, // For displaying pending referrals
-  emailVerified: users.emailVerified,
-  emailNotificationsEnabled: users.emailNotificationsEnabled,
-  emailNotificationsRealtime: users.emailNotificationsRealtime,
-  emailNotificationsDailySummary: users.emailNotificationsDailySummary,
-  emailNotificationsWeeklySummary: users.emailNotificationsWeeklySummary,
-  emailNotificationsMonthlySummary: users.emailNotificationsMonthlySummary,
-  profileComplete: users.profileComplete,
-  hasUsername: users.hasUsername,
-  hasBio: users.hasBio,
-  hasProfileImage: users.hasProfileImage,
-  onChainRegistered: users.onChainRegistered,
-  nftTokenId: users.nftTokenId,
-  agent0TokenId: users.agent0TokenId,
-  referralCode: users.referralCode,
-  referredBy: users.referredBy,
-  reputationPoints: users.reputationPoints,
-  virtualBalance: users.virtualBalance,
-  pointsAwardedForProfile: users.pointsAwardedForProfile,
-  pointsAwardedForFarcasterFollow: users.pointsAwardedForFarcasterFollow,
-  pointsAwardedForTwitterFollow: users.pointsAwardedForTwitterFollow,
-  pointsAwardedForDiscordJoin: users.pointsAwardedForDiscordJoin,
-  pointsAwardedForEmail: users.pointsAwardedForEmail,
-  hasFarcaster: users.hasFarcaster,
-  hasTwitter: users.hasTwitter,
-  hasDiscord: users.hasDiscord,
-  farcasterUsername: users.farcasterUsername,
-  farcasterFid: users.farcasterFid,
-  twitterUsername: users.twitterUsername,
-  twitterId: users.twitterId,
-  discordUsername: users.discordUsername,
-  hasTelegram: users.hasTelegram,
-  telegramId: users.telegramId,
-  telegramUsername: users.telegramUsername,
-  showTwitterPublic: users.showTwitterPublic,
-  showFarcasterPublic: users.showFarcasterPublic,
-  showWalletPublic: users.showWalletPublic,
-  isAdmin: users.isAdmin,
-  isActor: users.isActor,
-  createdAt: users.createdAt,
-  updatedAt: users.updatedAt,
-  gameGuideCompletedAt: users.gameGuideCompletedAt,
-} as const;
-
-type UserSelectResult = {
-  id: string;
-  privyId: string | null;
-  privyWalletId: string | null;
-  offlineWalletReady: boolean;
-  offlineWalletReadyAt: Date | null;
-  username: string | null;
-  displayName: string | null;
-  bio: string | null;
-  profileImageUrl: string | null;
-  coverImageUrl: string | null;
-  walletAddress: string | null;
-  email: string | null;
-  emailVerified: boolean;
-  emailNotificationsEnabled: boolean;
-  emailNotificationsRealtime: boolean;
-  emailNotificationsDailySummary: boolean;
-  emailNotificationsWeeklySummary: boolean;
-  emailNotificationsMonthlySummary: boolean;
-  profileComplete: boolean;
-  hasUsername: boolean;
-  hasBio: boolean;
-  hasProfileImage: boolean;
-  onChainRegistered: boolean;
-  nftTokenId: number | null;
-  agent0TokenId: number | null;
-  referralCode: string | null;
-  referredBy: string | null;
-  reputationPoints: number;
-  virtualBalance: string;
-  pointsAwardedForProfile: boolean;
-  pointsAwardedForFarcasterFollow: boolean;
-  pointsAwardedForTwitterFollow: boolean;
-  pointsAwardedForDiscordJoin: boolean;
-  pointsAwardedForEmail: boolean;
-  hasFarcaster: boolean;
-  hasTwitter: boolean;
-  hasDiscord: boolean;
-  hasTelegram: boolean;
-  telegramId: string | null;
-  telegramUsername: string | null;
-  farcasterUsername: string | null;
-  farcasterFid: string | null;
-  twitterUsername: string | null;
-  twitterId: string | null;
-  discordUsername: string | null;
-  showTwitterPublic: boolean;
-  showFarcasterPublic: boolean;
-  showWalletPublic: boolean;
-  isAdmin: boolean;
-  isActor: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-  gameGuideCompletedAt: Date | null;
-};
-
 async function syncMissingPrivyIdentityFields(
-  dbUser: UserSelectResult,
+  dbUser: UserMeProfileRow,
   privyIdentity: PrivyIdentitySnapshot
 ): Promise<{
-  user: UserSelectResult;
+  user: UserMeProfileRow;
   newlyLinked: Array<'farcaster' | 'twitter' | 'telegram'>;
 }> {
-  const updateData: Partial<typeof users.$inferInsert> = {};
-  const newlyLinked: Array<'farcaster' | 'twitter' | 'telegram'> = [];
+  const syncResult = await asSystem(async (db) => {
+    const updateData: UserProfileUpdatePatch = {};
+    const newlyLinked: Array<'farcaster' | 'twitter' | 'telegram'> = [];
 
-  if ((!dbUser.email || !dbUser.emailVerified) && privyIdentity.email) {
-    updateData.email = privyIdentity.email;
-    updateData.emailVerified = true;
-  }
-
-  if (!dbUser.hasFarcaster && privyIdentity.farcasterFid) {
-    const [existingFarcasterUser] = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(
-        and(
-          eq(users.farcasterFid, privyIdentity.farcasterFid),
-          ne(users.id, dbUser.id)
-        )
-      )
-      .limit(1);
-
-    if (existingFarcasterUser) {
-      logger.warn(
-        'Privy Farcaster identity already linked to another user, skipping sync',
-        {
-          userId: dbUser.id,
-          farcasterFid: privyIdentity.farcasterFid,
-          conflictingUserId: existingFarcasterUser.id,
-        },
-        'GET /api/users/me'
-      );
-    } else {
-      updateData.hasFarcaster = true;
-      updateData.farcasterFid = privyIdentity.farcasterFid;
-      if (privyIdentity.farcasterUsername) {
-        updateData.farcasterUsername = privyIdentity.farcasterUsername;
-      }
-      newlyLinked.push('farcaster');
+    if ((!dbUser.email || !dbUser.emailVerified) && privyIdentity.email) {
+      updateData.email = privyIdentity.email;
+      updateData.emailVerified = true;
     }
-  }
 
-  if (!dbUser.hasTwitter && privyIdentity.twitterId) {
-    const [existingTwitterUser] = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(
-        and(
-          eq(users.twitterId, privyIdentity.twitterId),
-          ne(users.id, dbUser.id)
-        )
-      )
-      .limit(1);
+    if (!dbUser.hasFarcaster && privyIdentity.farcasterFid) {
+      const existingFarcasterUser =
+        await selectUserIdByFarcasterFidExcludingUserId(
+          db,
+          privyIdentity.farcasterFid,
+          dbUser.id
+        );
 
-    if (existingTwitterUser) {
-      logger.warn(
-        'Privy X identity already linked to another user, skipping sync',
-        {
-          userId: dbUser.id,
-          twitterId: privyIdentity.twitterId,
-          conflictingUserId: existingTwitterUser.id,
-        },
-        'GET /api/users/me'
-      );
-    } else {
-      updateData.hasTwitter = true;
-      updateData.twitterId = privyIdentity.twitterId;
-      if (privyIdentity.twitterUsername) {
-        updateData.twitterUsername = privyIdentity.twitterUsername;
+      if (existingFarcasterUser) {
+        logger.warn(
+          'Privy Farcaster identity already linked to another user, skipping sync',
+          {
+            userId: dbUser.id,
+            farcasterFid: privyIdentity.farcasterFid,
+            conflictingUserId: existingFarcasterUser.id,
+          },
+          'GET /api/users/me'
+        );
+      } else {
+        updateData.hasFarcaster = true;
+        updateData.farcasterFid = privyIdentity.farcasterFid;
+        if (privyIdentity.farcasterUsername) {
+          updateData.farcasterUsername = privyIdentity.farcasterUsername;
+        }
+        newlyLinked.push('farcaster');
       }
-      newlyLinked.push('twitter');
     }
-  }
 
-  if (!dbUser.hasTelegram && privyIdentity.telegramUserId) {
-    const [existingTelegramUser] = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(
-        and(
-          eq(users.telegramId, privyIdentity.telegramUserId),
-          ne(users.id, dbUser.id)
-        )
-      )
-      .limit(1);
-
-    if (existingTelegramUser) {
-      logger.warn(
-        'Privy Telegram identity already linked to another user, skipping sync',
-        {
-          userId: dbUser.id,
-          telegramUserId: privyIdentity.telegramUserId,
-          conflictingUserId: existingTelegramUser.id,
-        },
-        'GET /api/users/me'
+    if (!dbUser.hasTwitter && privyIdentity.twitterId) {
+      const existingTwitterUser = await selectUserIdByTwitterIdExcludingUserId(
+        db,
+        privyIdentity.twitterId,
+        dbUser.id
       );
-    } else {
-      updateData.hasTelegram = true;
-      updateData.telegramId = privyIdentity.telegramUserId;
-      updateData.telegramVerifiedAt = new Date();
-      if (privyIdentity.telegramUsername) {
-        updateData.telegramUsername = privyIdentity.telegramUsername;
+
+      if (existingTwitterUser) {
+        logger.warn(
+          'Privy X identity already linked to another user, skipping sync',
+          {
+            userId: dbUser.id,
+            twitterId: privyIdentity.twitterId,
+            conflictingUserId: existingTwitterUser.id,
+          },
+          'GET /api/users/me'
+        );
+      } else {
+        updateData.hasTwitter = true;
+        updateData.twitterId = privyIdentity.twitterId;
+        if (privyIdentity.twitterUsername) {
+          updateData.twitterUsername = privyIdentity.twitterUsername;
+        }
+        newlyLinked.push('twitter');
       }
-      newlyLinked.push('telegram');
     }
-  }
 
-  if (Object.keys(updateData).length === 0) {
-    return { user: dbUser, newlyLinked };
-  }
+    if (!dbUser.hasTelegram && privyIdentity.telegramUserId) {
+      const existingTelegramUser =
+        await selectUserIdByTelegramIdExcludingUserId(
+          db,
+          privyIdentity.telegramUserId,
+          dbUser.id
+        );
 
-  const oldPrivyId = dbUser.privyId;
+      if (existingTelegramUser) {
+        logger.warn(
+          'Privy Telegram identity already linked to another user, skipping sync',
+          {
+            userId: dbUser.id,
+            telegramUserId: privyIdentity.telegramUserId,
+            conflictingUserId: existingTelegramUser.id,
+          },
+          'GET /api/users/me'
+        );
+      } else {
+        updateData.hasTelegram = true;
+        updateData.telegramId = privyIdentity.telegramUserId;
+        updateData.telegramVerifiedAt = new Date();
+        if (privyIdentity.telegramUsername) {
+          updateData.telegramUsername = privyIdentity.telegramUsername;
+        }
+        newlyLinked.push('telegram');
+      }
+    }
 
-  const [updatedUser] = await db
-    .update(users)
-    .set({
+    if (Object.keys(updateData).length === 0) {
+      return {
+        user: dbUser,
+        newlyLinked,
+        invalidate: false as const,
+        oldPrivyId: null as string | null,
+      };
+    }
+
+    const oldPrivyId = dbUser.privyId;
+
+    const updatedUser = await updateUserByIdReturningMeProfile(db, dbUser.id, {
       ...updateData,
       updatedAt: new Date(),
-    })
-    .where(eq(users.id, dbUser.id))
-    .returning(userSelectFields);
+    });
 
-  const finalUser = updatedUser ?? dbUser;
+    const finalUser = updatedUser ?? dbUser;
 
-  // Refresh identifier + user caches after any Privy identity sync (email/social fields).
-  // Always invalidate: privyId may be unchanged while other cached user fields change.
-  await cachedDb.invalidateUserIdentifierCaches(
-    {
-      id: finalUser.id,
-      privyId: finalUser.privyId,
-      username: finalUser.username,
-    },
-    oldPrivyId !== finalUser.privyId && oldPrivyId
-      ? { privyId: oldPrivyId }
-      : undefined
-  );
+    return {
+      user: finalUser,
+      newlyLinked,
+      invalidate: true as const,
+      oldPrivyId,
+    };
+  }, 'syncMissingPrivyIdentityFields');
+
+  if (syncResult.invalidate) {
+    await cachedDb.invalidateUserIdentifierCaches(
+      {
+        id: syncResult.user.id,
+        privyId: syncResult.user.privyId,
+        username: syncResult.user.username,
+      },
+      syncResult.oldPrivyId !== syncResult.user.privyId && syncResult.oldPrivyId
+        ? { privyId: syncResult.oldPrivyId }
+        : undefined
+    );
+  }
 
   return {
-    user: finalUser,
-    newlyLinked,
+    user: syncResult.user,
+    newlyLinked: syncResult.newlyLinked,
   };
 }
 
@@ -482,7 +384,7 @@ async function awardPointsForNewPrivyIdentityLinks(
 }
 
 function buildUserResponse(
-  dbUser: UserSelectResult,
+  dbUser: UserMeProfileRow,
   stats: Awaited<ReturnType<typeof getOptionalProfileStats>>
 ) {
   return {
@@ -541,77 +443,72 @@ function buildUserResponse(
 }
 
 async function updateReferrerForIncompleteUser(
-  dbUser: UserSelectResult,
+  dbUser: UserMeProfileRow,
   referralCode: string
-): Promise<UserSelectResult> {
+): Promise<UserMeProfileRow> {
   const normalizedCode = referralCode.trim();
 
-  // First, try to find referrer by username (legacy system, case-insensitive)
-  let [referrer] = await db
-    .select({ id: users.id, username: users.username })
-    .from(users)
-    .where(sql`lower(${users.username}) = lower(${normalizedCode})`)
-    .limit(1);
-
-  // If not found by username, try by referralCode
-  if (!referrer) {
-    [referrer] = await db
-      .select({ id: users.id, username: users.username })
-      .from(users)
-      .where(eq(users.referralCode, normalizedCode))
-      .limit(1);
-  }
-
-  if (referrer && referrer.id !== dbUser.id) {
-    const previousReferrer = dbUser.referredBy;
-
-    const [updatedUser] = await db
-      .update(users)
-      .set({ referredBy: referrer.id })
-      .where(eq(users.id, dbUser.id))
-      .returning(userSelectFields);
-
-    if (!updatedUser) {
-      throw new InternalServerError('Failed to update user record');
-    }
-
-    if (previousReferrer && previousReferrer !== referrer.id) {
-      logger.info(
-        'Updated user with NEW referrer (latest referral wins)',
-        {
-          userId: updatedUser.id,
-          previousReferrer,
-          newReferrer: referrer.id,
-          referrerUsername: referrer.username,
-          referralCode,
-        },
-        'GET /api/users/me'
-      );
-    } else if (!previousReferrer) {
-      logger.info(
-        'Updated existing user with referrer',
-        {
-          userId: updatedUser.id,
-          referrerId: referrer.id,
-          referrerUsername: referrer.username,
-          referralCode,
-        },
-        'GET /api/users/me'
-      );
-    }
-
-    return updatedUser;
-  }
-
-  if (referrer?.id === dbUser.id) {
-    logger.warn(
-      'Self-referral attempt blocked for existing user',
-      { userId: dbUser.id, referralCode },
-      'GET /api/users/me'
+  return asSystem(async (db) => {
+    let referrer = await selectMeRouteReferrerByUsernameCaseInsensitive(
+      db,
+      normalizedCode
     );
-  }
 
-  return dbUser;
+    if (!referrer) {
+      referrer = await selectMeRouteReferrerByReferralCode(db, normalizedCode);
+    }
+
+    if (referrer && referrer.id !== dbUser.id) {
+      const previousReferrer = dbUser.referredBy;
+
+      const updatedUser = await updateUserReferredByReturningMeProfile(
+        db,
+        dbUser.id,
+        referrer.id
+      );
+
+      if (!updatedUser) {
+        throw new InternalServerError('Failed to update user record');
+      }
+
+      if (previousReferrer && previousReferrer !== referrer.id) {
+        logger.info(
+          'Updated user with NEW referrer (latest referral wins)',
+          {
+            userId: updatedUser.id,
+            previousReferrer,
+            newReferrer: referrer.id,
+            referrerUsername: referrer.username,
+            referralCode,
+          },
+          'GET /api/users/me'
+        );
+      } else if (!previousReferrer) {
+        logger.info(
+          'Updated existing user with referrer',
+          {
+            userId: updatedUser.id,
+            referrerId: referrer.id,
+            referrerUsername: referrer.username,
+            referralCode,
+          },
+          'GET /api/users/me'
+        );
+      }
+
+      return updatedUser;
+    }
+
+    if (referrer?.id === dbUser.id) {
+      logger.warn(
+        'Self-referral attempt blocked for existing user',
+        { userId: dbUser.id, referralCode },
+        'GET /api/users/me'
+      );
+    }
+
+    return dbUser;
+  }, 'updateReferrerForIncompleteUser');
 }
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
@@ -639,11 +536,11 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     'GET /api/users/me'
   );
 
-  let [dbUser] = await db
-    .select(userSelectFields)
-    .from(users)
-    .where(eq(users.privyId, privyId))
-    .limit(1);
+  const initialRow = await asSystem(
+    async (db) => selectUserMeProfileByPrivyId(db, privyId),
+    'users-me-initial-load'
+  );
+  let dbUser = initialRow;
 
   // Create minimal user record on first authentication
   if (!dbUser) {
@@ -709,19 +606,11 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     // If found, auto-link the new Privy session to the existing account
     // This allows users to login with their social account and access their existing Babylon account
     if (farcasterFid || twitterId) {
-      const conditions = [];
-      if (farcasterFid) {
-        conditions.push(eq(users.farcasterFid, farcasterFid));
-      }
-      if (twitterId) {
-        conditions.push(eq(users.twitterId, twitterId));
-      }
-
-      const existingUsersWithSocial = await db
-        .select(userSelectFields)
-        .from(users)
-        .where(or(...conditions))
-        .limit(2);
+      const existingUsersWithSocial = await asSystem(
+        async (db) =>
+          selectUserMeProfilesByFarcasterOrTwitter(db, farcasterFid, twitterId),
+        'users-me-social-dedupe'
+      );
 
       // If multiple users found, it means Farcaster and Twitter belong to different accounts
       // Skip auto-linking to prevent linking the wrong account
@@ -773,64 +662,67 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           'GET /api/users/me'
         );
 
-        // Check if the new privyId is already linked to a different user
-        const [existingUserWithPrivyId] = await db
-          .select({ id: users.id })
-          .from(users)
-          .where(eq(users.privyId, privyId))
-          .limit(1);
+        const linkResult = await asSystem(async (db) => {
+          const existingUserWithPrivyId = await selectUserIdByPrivyId(
+            db,
+            privyId
+          );
 
-        if (
-          existingUserWithPrivyId &&
-          existingUserWithPrivyId.id !== existingUserWithSocial.id
-        ) {
+          if (
+            existingUserWithPrivyId &&
+            existingUserWithPrivyId.id !== existingUserWithSocial.id
+          ) {
+            return { kind: 'conflict' as const };
+          }
+
+          const oldPrivyId = existingUserWithSocial.privyId;
+          const updatedUser =
+            await updateUserPrivySessionByIdReturningMeProfile(
+              db,
+              existingUserWithSocial.id,
+              privyId,
+              new Date()
+            );
+
+          return {
+            kind: 'linked' as const,
+            updatedUser: updatedUser ?? null,
+            oldPrivyId,
+          };
+        }, 'users-me-privy-autolink');
+
+        if (linkResult.kind === 'conflict') {
           logger.warn(
             'New privyId already linked to a different user - skipping auto-link to prevent account conflict',
             {
               newPrivyId: privyId,
-              existingPrivyUserId: existingUserWithPrivyId.id,
               socialMatchUserId: existingUserWithSocial.id,
             },
             'GET /api/users/me'
           );
-          // Skip auto-linking, let normal flow continue
-        } else {
-          // Update the existing user's privyId to the new one
-          const oldPrivyId = existingUserWithSocial.privyId;
-          const [updatedUser] = await db
-            .update(users)
-            .set({
-              privyId,
-              updatedAt: new Date(),
-            })
-            .where(eq(users.id, existingUserWithSocial.id))
-            .returning(userSelectFields);
+        } else if (linkResult.updatedUser) {
+          dbUser = linkResult.updatedUser;
 
-          if (updatedUser) {
-            dbUser = updatedUser;
+          await cachedDb.invalidateUserIdentifierCaches(
+            {
+              id: linkResult.updatedUser.id,
+              privyId: linkResult.updatedUser.privyId,
+              username: linkResult.updatedUser.username,
+            },
+            {
+              privyId: linkResult.oldPrivyId,
+            }
+          );
 
-            // Invalidate identifier caches for privyId change
-            await cachedDb.invalidateUserIdentifierCaches(
-              {
-                id: updatedUser.id,
-                privyId: updatedUser.privyId,
-                username: updatedUser.username,
-              },
-              {
-                privyId: oldPrivyId,
-              }
-            );
-
-            logger.info(
-              'Successfully linked new Privy session to existing user',
-              {
-                userId: updatedUser.id,
-                username: updatedUser.username,
-                newPrivyId: privyId,
-              },
-              'GET /api/users/me'
-            );
-          }
+          logger.info(
+            'Successfully linked new Privy session to existing user',
+            {
+              userId: linkResult.updatedUser.id,
+              username: linkResult.updatedUser.username,
+              newPrivyId: privyId,
+            },
+            'GET /api/users/me'
+          );
         }
       }
     }
@@ -856,10 +748,9 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         );
       }
 
-      // Get cached profile stats for the linked user
-      const stats = await getOptionalProfileStats(
-        linkedUser.id,
-        'GET /api/users/me'
+      // Profile stats under viewer RLS (no shared cache when scoped)
+      const stats = await asUser(authUser, async (scopedDb) =>
+        getOptionalProfileStats(linkedUser.id, 'GET /api/users/me', scopedDb)
       );
 
       const responseUser = buildUserResponse(linkedUser, stats);
@@ -884,48 +775,45 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       });
     }
 
-    // Resolve referrer if referralCode provided
     let resolvedReferrerId: string | null = null;
     if (referralCode) {
-      const normalizedCode = referralCode.trim();
+      resolvedReferrerId = await asSystem(async (db) => {
+        const normalizedCode = referralCode.trim();
 
-      // First, try to find referrer by username (legacy system, case-insensitive)
-      const [referrerByUsername] = await db
-        .select({ id: users.id, username: users.username })
-        .from(users)
-        .where(sql`lower(${users.username}) = lower(${normalizedCode})`)
-        .limit(1);
+        const referrerByUsername =
+          await selectMeRouteReferrerByUsernameCaseInsensitive(
+            db,
+            normalizedCode
+          );
 
-      if (referrerByUsername && referrerByUsername.id !== canonicalUserId) {
-        resolvedReferrerId = referrerByUsername.id;
+        if (referrerByUsername && referrerByUsername.id !== canonicalUserId) {
+          logger.info(
+            'Found valid referrer by username for new user',
+            {
+              referrerId: referrerByUsername.id,
+              referrerUsername: referrerByUsername.username,
+              referredUserId: canonicalUserId,
+              referralCode: normalizedCode,
+            },
+            'GET /api/users/me'
+          );
+          return referrerByUsername.id;
+        }
+        if (referrerByUsername?.id === canonicalUserId) {
+          logger.warn(
+            'Self-referral attempt blocked (username lookup)',
+            { userId: canonicalUserId, referralCode: normalizedCode },
+            'GET /api/users/me'
+          );
+          return null;
+        }
 
-        logger.info(
-          'Found valid referrer by username for new user',
-          {
-            referrerId: referrerByUsername.id,
-            referrerUsername: referrerByUsername.username,
-            referredUserId: canonicalUserId,
-            referralCode: normalizedCode,
-          },
-          'GET /api/users/me'
+        const referrerByCode = await selectMeRouteReferrerByReferralCode(
+          db,
+          normalizedCode
         );
-      } else if (referrerByUsername?.id === canonicalUserId) {
-        logger.warn(
-          'Self-referral attempt blocked (username lookup)',
-          { userId: canonicalUserId, referralCode: normalizedCode },
-          'GET /api/users/me'
-        );
-      } else {
-        // If not found by username, try by referralCode
-        const [referrerByCode] = await db
-          .select({ id: users.id, username: users.username })
-          .from(users)
-          .where(eq(users.referralCode, normalizedCode))
-          .limit(1);
 
         if (referrerByCode && referrerByCode.id !== canonicalUserId) {
-          resolvedReferrerId = referrerByCode.id;
-
           logger.info(
             'Found valid referrer by referralCode for new user',
             {
@@ -936,20 +824,24 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
             },
             'GET /api/users/me'
           );
-        } else if (referrerByCode?.id === canonicalUserId) {
+          return referrerByCode.id;
+        }
+        if (referrerByCode?.id === canonicalUserId) {
           logger.warn(
             'Self-referral attempt blocked (referralCode lookup)',
             { userId: canonicalUserId, referralCode: normalizedCode },
             'GET /api/users/me'
           );
-        } else {
-          logger.warn(
-            'Invalid referral code provided (not found by username or referralCode)',
-            { referralCode: normalizedCode, userId: canonicalUserId },
-            'GET /api/users/me'
-          );
+          return null;
         }
-      }
+
+        logger.warn(
+          'Invalid referral code provided (not found by username or referralCode)',
+          { referralCode: normalizedCode, userId: canonicalUserId },
+          'GET /api/users/me'
+        );
+        return null;
+      }, 'users-me-resolve-referrer-new');
     }
 
     logger.info(
@@ -987,33 +879,34 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       );
     }
 
-    const [newUser] = await db
-      .insert(users)
-      .values({
-        id: canonicalUserId,
-        privyId,
-        privyWalletId: embeddedWalletId,
-        walletAddress: dbWalletAddress,
-        referredBy: resolvedReferrerId,
-        email,
-        farcasterUsername,
-        farcasterFid,
-        twitterUsername,
-        twitterId,
-        hasFarcaster: !!farcasterUsername,
-        hasTwitter: !!twitterUsername,
-        hasTelegram: !!telegramUserId,
-        telegramId: telegramUserId,
-        telegramUsername,
-        telegramVerifiedAt: telegramUserId ? new Date() : null,
-        profileComplete: false,
-        hasUsername: false,
-        hasBio: false,
-        hasProfileImage: false,
-        isAdmin: shouldBeAdmin,
-        updatedAt: new Date(),
-      })
-      .returning(userSelectFields);
+    const newUser = await asSystem(
+      async (db) =>
+        insertMinimalUserMeReturning(db, {
+          id: canonicalUserId,
+          privyId,
+          privyWalletId: embeddedWalletId,
+          walletAddress: dbWalletAddress,
+          referredBy: resolvedReferrerId,
+          email,
+          farcasterUsername,
+          farcasterFid,
+          twitterUsername,
+          twitterId,
+          hasFarcaster: !!farcasterUsername,
+          hasTwitter: !!twitterUsername,
+          hasTelegram: !!telegramUserId,
+          telegramId: telegramUserId,
+          telegramUsername,
+          telegramVerifiedAt: telegramUserId ? new Date() : null,
+          profileComplete: false,
+          hasUsername: false,
+          hasBio: false,
+          hasProfileImage: false,
+          isAdmin: shouldBeAdmin,
+          updatedAt: new Date(),
+        }),
+      'users-me-create-minimal-user'
+    );
 
     if (!newUser) {
       throw new InternalServerError('Failed to create user record');
@@ -1111,17 +1004,17 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         );
       }
 
-      const [updated] = await db
-        .update(users)
-        .set({
-          privyWalletId: offlineWallet.privyWalletId,
-          walletAddress: resolvedAddress,
-          offlineWalletReady: true,
-          offlineWalletReadyAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(eq(users.id, dbUser.id))
-        .returning(userSelectFields);
+      const updated = await asSystem(
+        async (db) =>
+          updateUserMeWalletBackfillReturning(db, dbUser!.id, {
+            privyWalletId: offlineWallet.privyWalletId,
+            walletAddress: resolvedAddress,
+            offlineWalletReady: true,
+            offlineWalletReadyAt: new Date(),
+            updatedAt: new Date(),
+          }),
+        'users-me-wallet-backfill'
+      );
       if (updated) dbUser = updated;
     } catch (error) {
       logger.warn(
@@ -1201,11 +1094,11 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           'GET /api/users/me'
         );
 
-        const [updatedUser] = await db
-          .update(users)
-          .set({ isAdmin: true, updatedAt: new Date() })
-          .where(eq(users.id, dbUser.id))
-          .returning(userSelectFields);
+        const updatedUser = await asSystem(
+          async (db) =>
+            updateUserMeAdminPromoteReturning(db, dbUser!.id, new Date()),
+          'users-me-admin-promote'
+        );
 
         if (updatedUser) {
           dbUser = updatedUser;
@@ -1214,8 +1107,9 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     }
   }
 
-  // Get cached profile stats
-  const stats = await getOptionalProfileStats(dbUser.id, 'GET /api/users/me');
+  const stats = await asUser(authUser, async (scopedDb) =>
+    getOptionalProfileStats(dbUser.id, 'GET /api/users/me', scopedDb)
+  );
 
   const responseUser = buildUserResponse(dbUser, stats);
 

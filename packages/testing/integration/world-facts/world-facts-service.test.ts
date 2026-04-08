@@ -6,10 +6,9 @@
  */
 
 import { afterEach, beforeAll, describe, expect, test } from 'bun:test';
-import { eq, like, or } from '@babylon/db';
-import { db, worldFacts } from '@babylon/db/runtime';
-
+import { db, worldFacts } from '@babylon/db/engine-storage';
 import { worldFactsService } from '@babylon/engine';
+import { eq, like, or } from 'drizzle-orm';
 
 // Skip if DATABASE_URL is not set
 const shouldSkip = !process.env.DATABASE_URL;

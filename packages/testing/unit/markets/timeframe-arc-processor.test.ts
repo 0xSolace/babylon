@@ -1,49 +1,26 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import * as actualShared from '@babylon/shared';
 
-let mockDbSelectOffset: ReturnType<typeof mock>;
-let mockDbSelectLimit: ReturnType<typeof mock>;
-let mockDbSelectOrderBy: ReturnType<typeof mock>;
-let mockDbSelectWhere: ReturnType<typeof mock>;
-let mockDbSelectFrom: ReturnType<typeof mock>;
-let mockDbSelect: ReturnType<typeof mock>;
-let mockDbUpdateWhere: ReturnType<typeof mock>;
-let mockDbUpdateSet: ReturnType<typeof mock>;
-let mockDbUpdate: ReturnType<typeof mock>;
-
-function resetDbMocks() {
-  mockDbSelectOffset = mock(async () => []);
-  mockDbSelectLimit = mock(() => ({ offset: mockDbSelectOffset }));
-  mockDbSelectOrderBy = mock(() => ({ limit: mockDbSelectLimit }));
-  mockDbSelectWhere = mock(() => ({ orderBy: mockDbSelectOrderBy }));
-  mockDbSelectFrom = mock(() => ({ where: mockDbSelectWhere }));
-  mockDbSelect = mock(() => ({ from: mockDbSelectFrom }));
-
-  mockDbUpdateWhere = mock(async () => []);
-  mockDbUpdateSet = mock(() => ({ where: mockDbUpdateWhere }));
-  mockDbUpdate = mock(() => ({ set: mockDbUpdateSet }));
-}
-
-resetDbMocks();
+const mockListActiveTimeframedMarketsPage = mock(
+  async (_params: { limit: number; offset: number }) => [] as unknown[]
+);
+const mockUpdateTimeframedMarketArcState = mock(
+  async (_params: {
+    marketId: string;
+    arcState: string;
+    arcStateEnteredAt: Date;
+    updatedAt: Date;
+    traceLabel: string;
+  }) => {}
+);
+const mockUpdateTimeframedMarketEventStats = mock(async () => {});
 
 mock.module('@babylon/db', () => ({
   asc: (column: unknown) => ({ op: 'asc', column }),
   eq: (left: unknown, right: unknown) => ({ op: 'eq', left, right }),
-}));
-
-mock.module('@babylon/db/runtime', () => ({
-  db: {
-    get select() {
-      return mockDbSelect;
-    },
-    get update() {
-      return mockDbUpdate;
-    },
-  },
-  timeframedMarkets: {
-    id: 'timeframedMarkets.id',
-    isActive: 'timeframedMarkets.isActive',
-  },
+  listActiveTimeframedMarketsPage: mockListActiveTimeframedMarketsPage,
+  updateTimeframedMarketArcState: mockUpdateTimeframedMarketArcState,
+  updateTimeframedMarketEventStats: mockUpdateTimeframedMarketEventStats,
 }));
 
 const mockLoggerInfo = mock();
@@ -64,7 +41,10 @@ const { TimeframeArcProcessor } = await import(
 
 describe('TimeframeArcProcessor', () => {
   beforeEach(() => {
-    resetDbMocks();
+    mockListActiveTimeframedMarketsPage.mockReset();
+    mockListActiveTimeframedMarketsPage.mockResolvedValue([]);
+    mockUpdateTimeframedMarketArcState.mockClear();
+    mockUpdateTimeframedMarketEventStats.mockClear();
     mockLoggerInfo.mockClear();
   });
 
@@ -79,23 +59,26 @@ describe('TimeframeArcProcessor', () => {
       eventsGenerated: 0,
     };
 
-    mockDbSelectOffset.mockResolvedValueOnce([expiredMarket]);
+    mockListActiveTimeframedMarketsPage
+      .mockResolvedValueOnce([expiredMarket])
+      .mockResolvedValue([]);
 
     const processor = new TimeframeArcProcessor();
     const result = await processor.processTick(now);
 
     expect(result.marketsProcessed).toBe(1);
     expect(result.transitionsOccurred).toBe(1);
-    expect(mockDbUpdateSet).toHaveBeenCalledTimes(1);
-    expect(mockDbUpdateSet).toHaveBeenCalledWith({
+    expect(mockUpdateTimeframedMarketArcState).toHaveBeenCalledTimes(1);
+    expect(mockUpdateTimeframedMarketArcState).toHaveBeenCalledWith({
+      marketId: 'market-1',
       arcState: 'resolution',
       arcStateEnteredAt: now,
       updatedAt: now,
+      traceLabel: 'timeframe-arc-resolution-pending',
     });
 
-    const updatePayload = mockDbUpdateSet.mock.calls[0]?.[0] as
-      | Record<string, unknown>
-      | undefined;
+    const updatePayload = mockUpdateTimeframedMarketArcState.mock
+      .calls[0]?.[0] as Record<string, unknown> | undefined;
     expect(updatePayload).toBeDefined();
     expect(updatePayload).not.toHaveProperty('isActive');
     expect(updatePayload).not.toHaveProperty('isResolved');
@@ -113,13 +96,15 @@ describe('TimeframeArcProcessor', () => {
       eventsGenerated: 0,
     };
 
-    mockDbSelectOffset.mockResolvedValueOnce([expiredMarket]);
+    mockListActiveTimeframedMarketsPage
+      .mockResolvedValueOnce([expiredMarket])
+      .mockResolvedValue([]);
 
     const processor = new TimeframeArcProcessor();
     const result = await processor.processTick(now);
 
     expect(result.marketsProcessed).toBe(1);
     expect(result.transitionsOccurred).toBe(0);
-    expect(mockDbUpdateSet).not.toHaveBeenCalled();
+    expect(mockUpdateTimeframedMarketArcState).not.toHaveBeenCalled();
   });
 });

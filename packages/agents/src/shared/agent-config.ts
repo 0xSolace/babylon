@@ -5,8 +5,17 @@
  * This replaces direct access to agent fields that were previously on the User table.
  */
 
-import { eq, type User, type UserAgentConfig } from '@babylon/db';
-import { db, userAgentConfigs, users } from '@babylon/db/runtime';
+import {
+  insertUserAgentConfigOnConflictDoNothing,
+  insertUserAgentConfigReturningFull,
+  selectUserAgentConfigByUserId,
+  selectUserIdAndIsAgent,
+  selectUserRowById,
+  type User,
+  type UserAgentConfig,
+  updateUserAgentConfigByUserId,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import { generateSnowflakeId } from './snowflake';
 
 /** User with agent configuration attached */
@@ -20,12 +29,8 @@ export type UserWithAgentConfig = User & {
 async function fetchAgentConfig(
   userId: string
 ): Promise<UserAgentConfig | null> {
-  const result = await db
-    .select()
-    .from(userAgentConfigs)
-    .where(eq(userAgentConfigs.userId, userId))
-    .limit(1);
-  return result[0] ?? null;
+  const row = await selectUserAgentConfigByUserId(db, userId);
+  return row ?? null;
 }
 
 export async function getAgentConfig(
@@ -34,28 +39,20 @@ export async function getAgentConfig(
   const existing = await fetchAgentConfig(userId);
   if (existing) return existing;
 
-  const [user] = await db
-    .select({ id: users.id, isAgent: users.isAgent })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
+  const user = await selectUserIdAndIsAgent(db, userId);
 
   if (!user?.isAgent) return null;
 
   const now = new Date();
-  const [created] = await db
-    .insert(userAgentConfigs)
-    .values({
-      id: await generateSnowflakeId(),
-      userId,
-      // Explicit true ensures agents trade by default regardless of DB migration state
-      autonomousTrading: true,
-      status: 'idle',
-      createdAt: now,
-      updatedAt: now,
-    })
-    .onConflictDoNothing({ target: userAgentConfigs.userId })
-    .returning();
+  const created = await insertUserAgentConfigOnConflictDoNothing(db, {
+    id: await generateSnowflakeId(),
+    userId,
+    // Explicit true ensures agents trade by default regardless of DB migration state
+    autonomousTrading: true,
+    status: 'idle',
+    createdAt: now,
+    updatedAt: now,
+  });
 
   if (created) return created;
 
@@ -68,13 +65,7 @@ export async function getAgentConfig(
 export async function getUserWithAgentConfig(
   userId: string
 ): Promise<UserWithAgentConfig | null> {
-  const userResult = await db
-    .select()
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
-
-  const user = userResult[0];
+  const user = await selectUserRowById(db, userId);
   if (!user) return null;
 
   const config = await getAgentConfig(userId);
@@ -106,32 +97,27 @@ export async function upsertAgentConfig(
   const existing = await getAgentConfig(userId);
 
   if (existing) {
-    const result = await db
-      .update(userAgentConfigs)
-      .set({
-        ...config,
-        updatedAt: new Date(),
-      })
-      .where(eq(userAgentConfigs.userId, userId))
-      .returning();
-    return result[0]!;
+    const updated = await updateUserAgentConfigByUserId(
+      db,
+      userId,
+      config,
+      new Date()
+    );
+    return updated!;
   }
 
   // Generate a new ID using snowflake for consistency
   const id = await generateSnowflakeId();
   const now = new Date();
-  const result = await db
-    .insert(userAgentConfigs)
-    .values({
-      id,
-      userId,
-      ...config,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .returning();
+  const row = await insertUserAgentConfigReturningFull(db, {
+    id,
+    userId,
+    ...config,
+    createdAt: now,
+    updatedAt: now,
+  });
 
-  return result[0]!;
+  return row!;
 }
 
 /**

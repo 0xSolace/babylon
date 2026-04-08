@@ -5,8 +5,8 @@
  * Handles feedback submission, reputation queries, and sync with local database.
  */
 
-import { eq } from '@babylon/db';
-import { agentPerformanceMetrics, db } from '@babylon/db/runtime';
+import { updateAgentPerformanceMetricsOnChainScoresReturningFull } from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import {
   getCurrentRpcUrl,
   REPUTATION_SYSTEM_ABI,
@@ -211,17 +211,16 @@ export async function syncOnChainReputation(userId: string, tokenId: number) {
     throw new Error('Failed to fetch on-chain reputation');
   }
 
-  // Update local database with on-chain data using Drizzle
-  const updated = await db
-    .update(agentPerformanceMetrics)
-    .set({
+  const updated = await updateAgentPerformanceMetricsOnChainScoresReturningFull(
+    db,
+    userId,
+    {
       onChainReputationSync: true,
       lastSyncedAt: new Date(),
       onChainTrustScore: Number(onChainRep.trustScore),
       onChainAccuracyScore: Number(onChainRep.accuracyScore),
-    })
-    .where(eq(agentPerformanceMetrics.userId, userId))
-    .returning();
+    }
+  );
 
   logger.info('Synced on-chain reputation', {
     userId,
@@ -230,7 +229,7 @@ export async function syncOnChainReputation(userId: string, tokenId: number) {
     accuracyScore: onChainRep.accuracyScore.toString(),
   });
 
-  return updated[0];
+  return updated;
 }
 
 /**

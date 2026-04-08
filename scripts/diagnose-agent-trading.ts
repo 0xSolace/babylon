@@ -4,8 +4,8 @@
  * Diagnose why agents aren't trading
  */
 
-import { eq } from '@babylon/db';
-import { agentRegistries, db, users } from '@babylon/db/runtime';
+import { agentRegistries, db, users } from '@babylon/db/engine-storage';
+import { eq } from 'drizzle-orm';
 
 async function diagnose() {
   console.log('🔍 Diagnosing agent trading issue...\n');

@@ -9,41 +9,18 @@
  */
 
 import { requireAdmin, successResponse, withErrorHandling } from '@babylon/api';
-import { and, asc, eq, isNull, or } from '@babylon/db';
-import { db, questions } from '@babylon/db/runtime';
+import { selectAdminPendingResolutionReviews } from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import { toISOOrNull } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
   await requireAdmin(request);
 
-  const pending = await db
-    .select({
-      id: questions.id,
-      questionNumber: questions.questionNumber,
-      text: questions.text,
-      outcome: questions.outcome,
-      resolutionDate: questions.resolutionDate,
-      resolutionProofUrl: questions.resolutionProofUrl,
-      resolutionDescription: questions.resolutionDescription,
-      resolutionConfidence: questions.resolutionConfidence,
-      resolutionReviewStatus: questions.resolutionReviewStatus,
-      requiresManualReview: questions.requiresManualReview,
-      updatedAt: questions.updatedAt,
-    })
-    .from(questions)
-    .where(
-      and(
-        eq(questions.status, 'active'),
-        eq(questions.requiresManualReview, true),
-        or(
-          isNull(questions.resolutionReviewStatus),
-          eq(questions.resolutionReviewStatus, 'pending')
-        )
-      )
-    )
-    .orderBy(asc(questions.resolutionDate))
-    .limit(200);
+  const pending = await asSystem(
+    (tx) => selectAdminPendingResolutionReviews(tx, { limit: 200 }),
+    'admin-resolutions-pending-queue'
+  );
 
   return successResponse({
     success: true,

@@ -112,9 +112,8 @@
  */
 
 import { requireAdmin, successResponse, withErrorHandling } from '@babylon/api';
-import { and, desc, eq, sql } from '@babylon/db';
-import { db, reports } from '@babylon/db/runtime';
-
+import { fetchAdminReportsListPageBundle } from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import { GetReportsSchema, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
@@ -143,108 +142,10 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     'GET /api/admin/reports'
   );
 
-  // Build where conditions for SQL query
-  const whereConditions = [];
-  if (params.status) whereConditions.push(eq(reports.status, params.status));
-  if (params.category)
-    whereConditions.push(eq(reports.category, params.category));
-  if (params.priority)
-    whereConditions.push(eq(reports.priority, params.priority));
-  if (params.reportType)
-    whereConditions.push(eq(reports.reportType, params.reportType));
-  if (params.reporterId)
-    whereConditions.push(eq(reports.reporterId, params.reporterId));
-  if (params.reportedUserId)
-    whereConditions.push(eq(reports.reportedUserId, params.reportedUserId));
-  if (params.reportedPostId)
-    whereConditions.push(eq(reports.reportedPostId, params.reportedPostId));
-  const whereClause =
-    whereConditions.length > 0 ? and(...whereConditions) : undefined;
-
-  // Build orderBy SQL
-  let orderByClause;
-  if (params.sortBy === 'created') {
-    orderByClause =
-      params.sortOrder === 'desc' ? desc(reports.createdAt) : reports.createdAt;
-  } else if (params.sortBy === 'updated') {
-    orderByClause =
-      params.sortOrder === 'desc' ? desc(reports.updatedAt) : reports.updatedAt;
-  } else if (params.sortBy === 'priority') {
-    orderByClause =
-      params.sortOrder === 'desc' ? desc(reports.priority) : reports.priority;
-  } else {
-    orderByClause = desc(reports.createdAt);
-  }
-
-  // Use aliases for the multiple user joins
-  const reporterAlias = sql`"reporter"`;
-  const reportedUserAlias = sql`"reportedUser"`;
-  const resolverAlias = sql`"resolver"`;
-
-  // Query with multiple LEFT JOINs to get user data
-  const reportsQuery = await db
-    .select({
-      id: reports.id,
-      reporterId: reports.reporterId,
-      reportedUserId: reports.reportedUserId,
-      reportedPostId: reports.reportedPostId,
-      reportedCommentId: reports.reportedCommentId,
-      reportType: reports.reportType,
-      category: reports.category,
-      reason: reports.reason,
-      evidence: reports.evidence,
-      status: reports.status,
-      priority: reports.priority,
-      resolution: reports.resolution,
-      resolvedBy: reports.resolvedBy,
-      resolvedAt: reports.resolvedAt,
-      createdAt: reports.createdAt,
-      updatedAt: reports.updatedAt,
-      // Reporter user data
-      reporterUsername: sql<string | null>`${reporterAlias}."username"`,
-      reporterDisplayName: sql<string | null>`${reporterAlias}."displayName"`,
-      reporterProfileImageUrl: sql<
-        string | null
-      >`${reporterAlias}."profileImageUrl"`,
-      // Reported user data
-      reportedUserUsername: sql<string | null>`${reportedUserAlias}."username"`,
-      reportedUserDisplayName: sql<
-        string | null
-      >`${reportedUserAlias}."displayName"`,
-      reportedUserProfileImageUrl: sql<
-        string | null
-      >`${reportedUserAlias}."profileImageUrl"`,
-      reportedUserIsBanned: sql<
-        boolean | null
-      >`${reportedUserAlias}."isBanned"`,
-      // Resolver user data
-      resolverUsername: sql<string | null>`${resolverAlias}."username"`,
-      resolverDisplayName: sql<string | null>`${resolverAlias}."displayName"`,
-    })
-    .from(reports)
-    .leftJoin(
-      sql`"User" AS ${reporterAlias}`,
-      sql`${reports.reporterId} = ${reporterAlias}."id"`
-    )
-    .leftJoin(
-      sql`"User" AS ${reportedUserAlias}`,
-      sql`${reports.reportedUserId} = ${reportedUserAlias}."id"`
-    )
-    .leftJoin(
-      sql`"User" AS ${resolverAlias}`,
-      sql`${reports.resolvedBy} = ${resolverAlias}."id"`
-    )
-    .where(whereClause)
-    .orderBy(orderByClause)
-    .limit(params.limit)
-    .offset(params.offset);
-
-  // Get total count for pagination
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(reports)
-    .where(whereClause);
-  const total = countResult?.count ?? 0;
+  const { rows: reportsQuery, total } = await asSystem(
+    (tx) => fetchAdminReportsListPageBundle(tx, params),
+    'admin-reports-list'
+  );
 
   // Parse evaluation from resolution field and format response
   const reportsWithEvaluation = reportsQuery.map((report) => {

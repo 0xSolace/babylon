@@ -6,8 +6,8 @@
  * helper functions for authentication, optional authentication, and error responses.
  */
 
-import { eq } from '@babylon/db';
-import { db, users } from '@babylon/db/runtime';
+import { selectUserByPrivyIdForAuth } from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import { type AuthenticatedUser } from '@babylon/shared';
 import { PrivyClient } from '@privy-io/server-auth';
 import type { NextRequest } from 'next/server';
@@ -117,12 +117,10 @@ export async function authenticate(
       }
     }
 
-    const dbUserResult = await db
-      .select({ id: users.id, walletAddress: users.walletAddress })
-      .from(users)
-      .where(eq(users.privyId, token))
-      .limit(1);
-    const dbUser = dbUserResult[0];
+    const dbUser = await asSystem(
+      async (c) => selectUserByPrivyIdForAuth(c, token),
+      'auth-test-privy-did-lookup'
+    );
 
     if (!dbUser) {
       throw new AuthenticationError('Test user not found');
@@ -183,16 +181,10 @@ export async function authenticate(
     try {
       const claims = await privy.verifyAuthToken(tokenToVerify);
 
-      const dbUserResult = await db
-        .select({
-          id: users.id,
-          walletAddress: users.walletAddress,
-          isAdmin: users.isAdmin,
-        })
-        .from(users)
-        .where(eq(users.privyId, claims.userId))
-        .limit(1);
-      const dbUser = dbUserResult[0];
+      const dbUser = await asSystem(
+        async (c) => selectUserByPrivyIdForAuth(c, claims.userId),
+        'auth-privy-user-lookup'
+      );
 
       const authedUser: AuthenticatedUser = {
         userId: dbUser?.id ?? claims.userId,
@@ -324,16 +316,10 @@ export async function optionalAuth(
     try {
       const claims = await privy.verifyAuthToken(tokenToVerify);
 
-      const dbUserResult = await db
-        .select({
-          id: users.id,
-          walletAddress: users.walletAddress,
-          isAdmin: users.isAdmin,
-        })
-        .from(users)
-        .where(eq(users.privyId, claims.userId))
-        .limit(1);
-      const dbUser = dbUserResult[0];
+      const dbUser = await asSystem(
+        async (c) => selectUserByPrivyIdForAuth(c, claims.userId),
+        'optional-auth-privy-user-lookup'
+      );
 
       return {
         userId: dbUser?.id ?? claims.userId,

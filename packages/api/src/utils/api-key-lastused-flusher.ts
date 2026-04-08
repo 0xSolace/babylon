@@ -18,10 +18,12 @@
  */
 
 import { randomBytes } from 'node:crypto';
-
-import { type DrizzleClient, eq, type Transaction } from '@babylon/db';
-import { asSystem, userApiKeys } from '@babylon/db/runtime';
-
+import {
+  type DrizzleClient,
+  type Transaction,
+  updateUserApiKeyLastUsedAt,
+} from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import { logger } from '@babylon/shared';
 import { getRedisClient, isRedisAvailable } from '../redis';
 
@@ -189,10 +191,11 @@ async function flushPendingUpdates(
         // Execute all updates within single transaction
         // WHY: Transaction ensures atomicity and reduces per-query commit overhead.
         for (const update of updates) {
-          await tx
-            .update(userApiKeys)
-            .set({ lastUsedAt: new Date(update.timestamp) })
-            .where(eq(userApiKeys.id, update.keyId));
+          await updateUserApiKeyLastUsedAt(
+            tx,
+            update.keyId,
+            new Date(update.timestamp)
+          );
         }
       });
     });

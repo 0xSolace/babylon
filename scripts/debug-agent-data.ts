@@ -4,8 +4,13 @@
  * Debug script to check agent data and trade records
  */
 
-import { desc, eq, sql } from '@babylon/db';
-import { agentTrades, db, perpPositions, users } from '@babylon/db/runtime';
+import {
+  agentTrades,
+  db,
+  perpPositions,
+  users,
+} from '@babylon/db/engine-storage';
+import { desc, eq, sql } from 'drizzle-orm';
 
 async function debugAgentData() {
   console.log('🔍 Debugging agent data...\n');

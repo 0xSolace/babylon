@@ -12,8 +12,15 @@ import {
   provisionAgentPrivyWallet,
   signPrivyEvmTransaction,
 } from '@babylon/api';
-import { eq, type JsonValue } from '@babylon/db';
-import { agentLogs, db, users } from '@babylon/db/runtime';
+import {
+  insertAgentLogRow,
+  type JsonValue,
+  selectAgentWalletStateSliceById,
+  selectUserRowById,
+  updateUserAgent0RegistrationAfterAgent0,
+  updateUserPrivyWalletProvisioned,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 
 import { v4 as uuidv4 } from 'uuid';
 import { getAgent0SDK } from '../agent0/sdk-instance';
@@ -50,31 +57,27 @@ export class AgentWalletService {
     privyUserId: string;
     privyWalletId: string;
   }> {
-    const [agent] = await db
-      .select({
-        id: users.id,
-        isAgent: users.isAgent,
-        walletAddress: users.walletAddress,
-        privyId: users.privyId,
-        privyWalletId: users.privyWalletId,
-        offlineWalletReady: users.offlineWalletReady,
-      })
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
+    const row = await selectAgentWalletStateSliceById(db, agentUserId);
 
-    if (!agent || !agent.isAgent) {
+    if (!row || !row.isAgent) {
       throw new Error('Agent user not found');
     }
+
+    const agent: AgentWalletStateSnapshot = {
+      walletAddress: row.walletAddress,
+      privyId: row.privyId,
+      privyWalletId: row.privyWalletId,
+      offlineWalletReady: row.offlineWalletReady ?? false,
+    };
 
     if (isAgentWalletReady(agent)) {
       logger.info(
         'Agent wallet already provisioned and ready',
         {
           agentUserId,
-          walletAddress: agent.walletAddress,
-          privyId: agent.privyId,
-          privyWalletId: agent.privyWalletId,
+          walletAddress: row.walletAddress,
+          privyId: row.privyId,
+          privyWalletId: row.privyWalletId,
         },
         'AgentWalletService'
       );
@@ -86,9 +89,7 @@ export class AgentWalletService {
       };
     }
 
-    const assessment = assessAgentWalletState(
-      agent as AgentWalletStateSnapshot
-    );
+    const assessment = assessAgentWalletState(agent);
     if (
       assessment.classification !== 'empty' &&
       assessment.classification !== 'recover_with_existing_privy_user' &&
@@ -100,7 +101,7 @@ export class AgentWalletService {
     }
     const existingPrivyId =
       assessment.remediationAction === 'provision_with_existing_privy_user'
-        ? agent.privyId
+        ? row.privyId
         : null;
 
     logger.info(
@@ -118,19 +119,16 @@ export class AgentWalletService {
       existingPrivyId,
     });
 
-    await db
-      .update(users)
-      .set({
-        walletAddress: provisionedWallet.walletAddress,
-        privyId: provisionedWallet.privyId,
-        privyWalletId: provisionedWallet.privyWalletId,
-        offlineWalletReady: true,
-        offlineWalletReadyAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(users.id, agentUserId));
+    const now = new Date();
+    await updateUserPrivyWalletProvisioned(db, agentUserId, {
+      walletAddress: provisionedWallet.walletAddress,
+      privyId: provisionedWallet.privyId,
+      privyWalletId: provisionedWallet.privyWalletId,
+      offlineWalletReadyAt: now,
+      updatedAt: now,
+    });
 
-    await db.insert(agentLogs).values({
+    await insertAgentLogRow(db, {
       id: uuidv4(),
       agentUserId,
       type: 'system',
@@ -143,7 +141,7 @@ export class AgentWalletService {
         createdPrivyUser: provisionedWallet.createdPrivyUser,
         createdWallet: provisionedWallet.createdWallet,
         updatedSigner: provisionedWallet.updatedSigner,
-      },
+      } as JsonValue,
     });
 
     logger.info(
@@ -181,11 +179,7 @@ export class AgentWalletService {
       'AgentWalletService'
     );
 
-    const [agent] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
+    const agent = await selectUserRowById(db, agentUserId);
 
     if (!agent || !agent.isAgent) {
       throw new Error('Agent user not found');
@@ -261,18 +255,15 @@ export class AgentWalletService {
     const metadataCID = registration.agentURI || '';
 
     // Step 4: Update agent with on-chain data
-    await db
-      .update(users)
-      .set({
-        agent0TokenId: tokenId,
-        agent0MetadataCID: metadataCID || null,
-        registrationTxHash: null, // RegistrationFile doesn't have txHash
-        onChainRegistered: true,
-      })
-      .where(eq(users.id, agentUserId));
+    await updateUserAgent0RegistrationAfterAgent0(db, agentUserId, {
+      agent0TokenId: tokenId,
+      agent0MetadataCID: metadataCID || null,
+      registrationTxHash: null,
+      onChainRegistered: true,
+    });
 
     // Step 5: Log registration
-    await db.insert(agentLogs).values({
+    await insertAgentLogRow(db, {
       id: uuidv4(),
       agentUserId,
       type: 'system',
@@ -337,29 +328,25 @@ export class AgentWalletService {
       data: string;
     }
   ): Promise<string> {
-    const [agent] = await db
-      .select({
-        id: users.id,
-        isAgent: users.isAgent,
-        privyId: users.privyId,
-        privyWalletId: users.privyWalletId,
-        walletAddress: users.walletAddress,
-        offlineWalletReady: users.offlineWalletReady,
-      })
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
+    const row = await selectAgentWalletStateSliceById(db, agentUserId);
 
-    if (!agent || !agent.isAgent) {
+    if (!row || !row.isAgent) {
       throw new Error('Agent not found');
     }
+
+    const agent: AgentWalletStateSnapshot = {
+      walletAddress: row.walletAddress,
+      privyId: row.privyId,
+      privyWalletId: row.privyWalletId,
+      offlineWalletReady: row.offlineWalletReady ?? false,
+    };
 
     if (!isAgentWalletReady(agent)) {
       throw new Error('Agent wallet is not offline-ready');
     }
 
     const signedTransaction = await signPrivyEvmTransaction({
-      walletId: agent.privyWalletId!,
+      walletId: row.privyWalletId!,
       to: transactionData.to as `0x${string}`,
       data: transactionData.data as `0x${string}`,
       valueWei: parseTransactionValue(transactionData.value),
@@ -379,11 +366,7 @@ export class AgentWalletService {
    * Returns false on failure instead of throwing.
    */
   async verifyOnChainIdentity(agentUserId: string): Promise<boolean> {
-    const [agent] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
+    const agent = await selectUserRowById(db, agentUserId);
 
     if (!agent || !agent.isAgent || !agent.agent0TokenId) {
       return false;

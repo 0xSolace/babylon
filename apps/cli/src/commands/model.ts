@@ -11,7 +11,6 @@
  *   ollama         - Manage Ollama local models (list, pull, delete)
  */
 
-import { desc, eq, gte } from '@babylon/db';
 import {
   benchmarkResults,
   closeDatabase,
@@ -20,6 +19,7 @@ import {
   trajectories,
 } from '@babylon/db/runtime';
 import { HuggingFaceModelUploader } from '@babylon/training';
+import { desc, eq, gte } from 'drizzle-orm';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import { getFlag, getOption, parseArgs, wantsHelp } from '../lib/args.js';

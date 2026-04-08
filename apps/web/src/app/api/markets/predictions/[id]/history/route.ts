@@ -4,12 +4,11 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, desc, eq, gte } from '@babylon/db';
-import { db, predictionPriceHistories } from '@babylon/db/runtime';
-
+import { selectPredictionPriceHistoryRowsForMarketDesc } from '@babylon/db';
 import { PredictionMarketIdSchema, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
+import { runWithOptionalUserRls } from '@/lib/db/run-with-optional-user-rls';
 
 type TimeRange = '1H' | '4H' | '1D' | '1W' | 'ALL';
 
@@ -111,7 +110,7 @@ export const GET = withErrorHandling(
     request: NextRequest,
     context: { params: Promise<{ id: string }> }
   ) => {
-    const { error, rateLimitInfo } = await publicRateLimit(request);
+    const { error, rateLimitInfo, user } = await publicRateLimit(request);
     if (error) return error;
 
     const { id: marketId } = PredictionMarketIdSchema.parse(
@@ -130,48 +129,45 @@ export const GET = withErrorHandling(
         ? null
         : new Date(now.getTime() - RANGE_MS[selectedRange]);
 
-    const rawHistory = await db
-      .select()
-      .from(predictionPriceHistories)
-      .where(
-        since
-          ? and(
-              eq(predictionPriceHistories.marketId, marketId),
-              gte(predictionPriceHistories.createdAt, since)
-            )
-          : eq(predictionPriceHistories.marketId, marketId)
-      )
-      .orderBy(desc(predictionPriceHistories.createdAt))
-      .limit(range ? Math.max(limit * 10, 5000) : limit);
+    return runWithOptionalUserRls(user, async (db) => {
+      const rawHistory = await selectPredictionPriceHistoryRowsForMarketDesc(
+        db,
+        {
+          marketId,
+          since,
+          limit: range ? Math.max(limit * 10, 5000) : limit,
+        }
+      );
 
-    const ascending = rawHistory.reverse().map((point) => ({
-      ...point,
-      yesPrice: Number(point.yesPrice),
-      noPrice: Number(point.noPrice),
-      yesShares: Number(point.yesShares),
-      noShares: Number(point.noShares),
-      liquidity: Number(point.liquidity),
-    }));
+      const ascending = rawHistory.reverse().map((point) => ({
+        ...point,
+        yesPrice: Number(point.yesPrice),
+        noPrice: Number(point.noPrice),
+        yesShares: Number(point.yesShares),
+        noShares: Number(point.noShares),
+        liquidity: Number(point.liquidity),
+      }));
 
-    const history = range
-      ? downsamplePredictionHistory(ascending, limit)
-      : ascending;
+      const history = range
+        ? downsamplePredictionHistory(ascending, limit)
+        : ascending;
 
-    const res = successResponse({
-      marketId,
-      history: history.map((point) => ({
-        id: point.id,
-        yesPrice: point.yesPrice,
-        noPrice: point.noPrice,
-        yesShares: point.yesShares,
-        noShares: point.noShares,
-        liquidity: point.liquidity,
-        eventType: point.eventType,
-        source: point.source,
-        timestamp: toISO(point.createdAt),
-      })),
+      const res = successResponse({
+        marketId,
+        history: history.map((point) => ({
+          id: point.id,
+          yesPrice: point.yesPrice,
+          noPrice: point.noPrice,
+          yesShares: point.yesShares,
+          noShares: point.noShares,
+          liquidity: point.liquidity,
+          eventType: point.eventType,
+          source: point.source,
+          timestamp: toISO(point.createdAt),
+        })),
+      });
+      if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
+      return res;
     });
-    if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
-    return res;
   }
 );

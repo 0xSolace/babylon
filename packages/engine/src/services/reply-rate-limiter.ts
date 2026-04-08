@@ -4,9 +4,13 @@
  * Enforces exactly 1 reply per hour per NPC for each player.
  */
 
-import { and, desc, eq } from '@babylon/db';
-import { db, userInteractions } from '@babylon/db/runtime';
-import { generateSnowflakeId } from '@babylon/shared';
+import {
+  fetchLatestUserNpcInteraction,
+  fetchUserNpcInteractionTimestampsForStreak,
+  insertUserNpcReplyInteraction,
+  listUserInteractionsDesc,
+  listUserNpcInteractionsDesc,
+} from '@babylon/db';
 
 export interface RateLimitResult {
   allowed: boolean;
@@ -36,18 +40,7 @@ export class ReplyRateLimiter {
     userId: string,
     npcId: string
   ): Promise<RateLimitResult> {
-    // Get last interaction with this NPC
-    const [lastInteraction] = await db
-      .select()
-      .from(userInteractions)
-      .where(
-        and(
-          eq(userInteractions.userId, userId),
-          eq(userInteractions.npcId, npcId)
-        )
-      )
-      .orderBy(desc(userInteractions.timestamp))
-      .limit(1);
+    const lastInteraction = await fetchLatestUserNpcInteraction(userId, npcId);
 
     // First reply to this NPC - always allowed
     if (!lastInteraction) {
@@ -118,19 +111,11 @@ export class ReplyRateLimiter {
     userId: string,
     npcId: string
   ): Promise<number> {
-    const interactions = await db
-      .select({
-        timestamp: userInteractions.timestamp,
-      })
-      .from(userInteractions)
-      .where(
-        and(
-          eq(userInteractions.userId, userId),
-          eq(userInteractions.npcId, npcId)
-        )
-      )
-      .orderBy(desc(userInteractions.timestamp))
-      .limit(24);
+    const interactions = await fetchUserNpcInteractionTimestampsForStreak(
+      userId,
+      npcId,
+      24
+    );
 
     if (interactions.length < 2) return 0;
 
@@ -164,14 +149,12 @@ export class ReplyRateLimiter {
     commentId: string,
     qualityScore: number
   ): Promise<void> {
-    await db.insert(userInteractions).values({
-      id: await generateSnowflakeId(),
+    await insertUserNpcReplyInteraction({
       userId,
       npcId,
       postId,
       commentId,
       qualityScore,
-      timestamp: new Date(),
     });
   }
 
@@ -179,16 +162,7 @@ export class ReplyRateLimiter {
    * Get user's reply statistics for an NPC
    */
   static async getReplyStats(userId: string, npcId: string) {
-    const interactions = await db
-      .select()
-      .from(userInteractions)
-      .where(
-        and(
-          eq(userInteractions.userId, userId),
-          eq(userInteractions.npcId, npcId)
-        )
-      )
-      .orderBy(desc(userInteractions.timestamp));
+    const interactions = await listUserNpcInteractionsDesc(userId, npcId);
 
     if (interactions.length === 0) {
       return {
@@ -263,11 +237,7 @@ export class ReplyRateLimiter {
    * Get all NPCs user has replied to with their stats
    */
   static async getAllReplyStats(userId: string) {
-    const interactions = await db
-      .select()
-      .from(userInteractions)
-      .where(eq(userInteractions.userId, userId))
-      .orderBy(desc(userInteractions.timestamp));
+    const interactions = await listUserInteractionsDesc(userId);
 
     // Group by NPC
     const npcMap = new Map<string, typeof interactions>();

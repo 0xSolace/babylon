@@ -6,7 +6,7 @@
  * Publishes game metadata, capabilities, and endpoints for agent discovery.
  */
 
-import { db } from '@babylon/db/runtime';
+import * as engineStorage from '@babylon/db/engine-storage';
 
 import { getA2AEndpoint, getMCPEndpoint } from '@babylon/shared';
 import { SDK } from 'agent0-sdk';
@@ -52,9 +52,13 @@ export async function registerBabylonGame(): Promise<BabylonRegistrationResult |
       'BabylonRegistry'
     );
 
-    const config = await db.gameConfig.findUnique({
-      where: { key: 'agent0_registration' },
-    });
+    const config = await engineStorage.asSystem(
+      async (c) =>
+        c.gameConfig.findUnique({
+          where: { key: 'agent0_registration' },
+        }),
+      'babylon-registry-read-config'
+    );
 
     if (config?.value) {
       const value = config.value as Record<string, JsonValue>;
@@ -210,30 +214,34 @@ export async function registerBabylonGame(): Promise<BabylonRegistrationResult |
   logger.info(`   Token ID: ${tokenId}`, undefined, 'BabylonRegistry');
   logger.info(`   Metadata CID: ${metadataCID}`, undefined, 'BabylonRegistry');
 
-  await db.gameConfig.upsert({
-    where: { key: 'agent0_registration' },
-    create: {
-      id: await generateSnowflakeId(),
-      key: 'agent0_registration',
-      value: {
-        registered: true,
-        agentId,
-        tokenId,
-        metadataCID,
-        registeredAt: new Date().toISOString(),
-      },
-      updatedAt: new Date(),
-    },
-    update: {
-      value: {
-        registered: true,
-        agentId,
-        tokenId,
-        metadataCID,
-        registeredAt: new Date().toISOString(),
-      },
-    },
-  });
+  await engineStorage.asSystem(
+    async (c) =>
+      c.gameConfig.upsert({
+        where: { key: 'agent0_registration' },
+        create: {
+          id: await generateSnowflakeId(),
+          key: 'agent0_registration',
+          value: {
+            registered: true,
+            agentId,
+            tokenId,
+            metadataCID,
+            registeredAt: new Date().toISOString(),
+          },
+          updatedAt: new Date(),
+        },
+        update: {
+          value: {
+            registered: true,
+            agentId,
+            tokenId,
+            metadataCID,
+            registeredAt: new Date().toISOString(),
+          },
+        },
+      }),
+    'babylon-registry-upsert-config'
+  );
 
   return {
     tokenId,

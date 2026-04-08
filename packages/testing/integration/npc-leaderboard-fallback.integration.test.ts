@@ -15,14 +15,13 @@ import {
   expect,
   test,
 } from 'bun:test';
-import { eq, type Pool } from '@babylon/db';
+import { type Pool } from '@babylon/db';
 import {
   actorState,
   db,
   perpPositions,
   poolPositions,
-} from '@babylon/db/runtime';
-
+} from '@babylon/db/engine-storage';
 import {
   buildFallbackMetricsByPool,
   type FallbackPerpRow,
@@ -30,6 +29,7 @@ import {
   NPCInvestmentManager,
 } from '@babylon/engine';
 import { generateSnowflakeId } from '@babylon/shared';
+import { eq } from 'drizzle-orm';
 
 describe('NPC Leaderboard Fallback Metrics', () => {
   const TEST_POOL_ID = 'test-fallback-pool-' + Date.now();

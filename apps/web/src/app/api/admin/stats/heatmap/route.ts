@@ -21,7 +21,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 
-import { db } from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
@@ -89,12 +89,13 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const queryStart = (startDate ?? defaultStart).toISOString();
   const queryEnd = (endDate ?? now).toISOString();
 
-  if (type === 'hourly') {
-    // Hourly heatmap: aggregate by day of week (0-6) and hour (0-23)
-    let hourlyData: HourlyDataPoint[];
+  return await asSystem(async (tx) => {
+    if (type === 'hourly') {
+      // Hourly heatmap: aggregate by day of week (0-6) and hour (0-23)
+      let hourlyData: HourlyDataPoint[];
 
-    if (activityType === 'trades') {
-      hourlyData = await db.$queryRaw<HourlyDataPoint>`
+      if (activityType === 'trades') {
+        hourlyData = await tx.$queryRaw<HourlyDataPoint>`
         SELECT 
           EXTRACT(DOW FROM bt."createdAt")::text as day_of_week,
           EXTRACT(HOUR FROM bt."createdAt")::text as hour,
@@ -110,8 +111,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         GROUP BY EXTRACT(DOW FROM bt."createdAt"), EXTRACT(HOUR FROM bt."createdAt")
         ORDER BY day_of_week, hour
       `;
-    } else if (activityType === 'posts') {
-      hourlyData = await db.$queryRaw<HourlyDataPoint>`
+      } else if (activityType === 'posts') {
+        hourlyData = await tx.$queryRaw<HourlyDataPoint>`
         SELECT 
           EXTRACT(DOW FROM p."createdAt")::text as day_of_week,
           EXTRACT(HOUR FROM p."createdAt")::text as hour,
@@ -127,8 +128,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         GROUP BY EXTRACT(DOW FROM p."createdAt"), EXTRACT(HOUR FROM p."createdAt")
         ORDER BY day_of_week, hour
       `;
-    } else if (activityType === 'messages') {
-      hourlyData = await db.$queryRaw<HourlyDataPoint>`
+      } else if (activityType === 'messages') {
+        hourlyData = await tx.$queryRaw<HourlyDataPoint>`
         SELECT 
           EXTRACT(DOW FROM m."createdAt")::text as day_of_week,
           EXTRACT(HOUR FROM m."createdAt")::text as hour,
@@ -146,9 +147,9 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         GROUP BY EXTRACT(DOW FROM m."createdAt"), EXTRACT(HOUR FROM m."createdAt")
         ORDER BY day_of_week, hour
       `;
-    } else {
-      // All activities combined
-      hourlyData = await db.$queryRaw<HourlyDataPoint>`
+      } else {
+        // All activities combined
+        hourlyData = await tx.$queryRaw<HourlyDataPoint>`
         WITH all_activities AS (
           SELECT bt."createdAt" as activity_time
           FROM "BalanceTransaction" bt
@@ -206,46 +207,46 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         GROUP BY EXTRACT(DOW FROM activity_time), EXTRACT(HOUR FROM activity_time)
         ORDER BY day_of_week, hour
       `;
+      }
+
+      // Build 7x24 grid, filling zeros for missing slots
+      const counts = new Map(
+        hourlyData.map((r) => [`${r.day_of_week}-${r.hour}`, Number(r.count)])
+      );
+      const maxCount = Math.max(0, ...counts.values());
+
+      const data = Array.from({ length: 7 * 24 }, (_, i) => {
+        const dayOfWeek = Math.floor(i / 24);
+        const hour = i % 24;
+        const count = counts.get(`${dayOfWeek}-${hour}`) ?? 0;
+        return {
+          dayOfWeek,
+          hour,
+          count,
+          intensity: maxCount > 0 ? count / maxCount : 0,
+        };
+      });
+
+      const totalActivities = data.reduce((sum, d) => sum + d.count, 0);
+
+      return successResponse({
+        type: 'hourly',
+        activityType,
+        data,
+        metadata: {
+          startDate: queryStart,
+          endDate: queryEnd,
+          maxCount,
+          totalActivities,
+        },
+      });
     }
 
-    // Build 7x24 grid, filling zeros for missing slots
-    const counts = new Map(
-      hourlyData.map((r) => [`${r.day_of_week}-${r.hour}`, Number(r.count)])
-    );
-    const maxCount = Math.max(0, ...counts.values());
+    // Calendar heatmap: daily activity counts
+    let calendarData: CalendarDataPoint[];
 
-    const data = Array.from({ length: 7 * 24 }, (_, i) => {
-      const dayOfWeek = Math.floor(i / 24);
-      const hour = i % 24;
-      const count = counts.get(`${dayOfWeek}-${hour}`) ?? 0;
-      return {
-        dayOfWeek,
-        hour,
-        count,
-        intensity: maxCount > 0 ? count / maxCount : 0,
-      };
-    });
-
-    const totalActivities = data.reduce((sum, d) => sum + d.count, 0);
-
-    return successResponse({
-      type: 'hourly',
-      activityType,
-      data,
-      metadata: {
-        startDate: queryStart,
-        endDate: queryEnd,
-        maxCount,
-        totalActivities,
-      },
-    });
-  }
-
-  // Calendar heatmap: daily activity counts
-  let calendarData: CalendarDataPoint[];
-
-  if (activityType === 'trades') {
-    calendarData = await db.$queryRaw<CalendarDataPoint>`
+    if (activityType === 'trades') {
+      calendarData = await tx.$queryRaw<CalendarDataPoint>`
       SELECT 
         DATE(bt."createdAt") as date,
         COUNT(*)::text as count
@@ -260,8 +261,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       GROUP BY DATE(bt."createdAt")
       ORDER BY date
     `;
-  } else if (activityType === 'posts') {
-    calendarData = await db.$queryRaw<CalendarDataPoint>`
+    } else if (activityType === 'posts') {
+      calendarData = await tx.$queryRaw<CalendarDataPoint>`
       SELECT 
         DATE(p."createdAt") as date,
         COUNT(*)::text as count
@@ -276,8 +277,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       GROUP BY DATE(p."createdAt")
       ORDER BY date
     `;
-  } else if (activityType === 'messages') {
-    calendarData = await db.$queryRaw<CalendarDataPoint>`
+    } else if (activityType === 'messages') {
+      calendarData = await tx.$queryRaw<CalendarDataPoint>`
       SELECT 
         DATE(m."createdAt") as date,
         COUNT(*)::text as count
@@ -294,9 +295,9 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       GROUP BY DATE(m."createdAt")
       ORDER BY date
     `;
-  } else {
-    // All activities combined
-    calendarData = await db.$queryRaw<CalendarDataPoint>`
+    } else {
+      // All activities combined
+      calendarData = await tx.$queryRaw<CalendarDataPoint>`
       WITH all_activities AS (
         SELECT DATE(bt."createdAt") as activity_date
         FROM "BalanceTransaction" bt
@@ -353,32 +354,33 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       GROUP BY activity_date
       ORDER BY date
     `;
-  }
+    }
 
-  // Process calendar data
-  const maxCount = Math.max(0, ...calendarData.map((r) => Number(r.count)));
+    // Process calendar data
+    const maxCount = Math.max(0, ...calendarData.map((r) => Number(r.count)));
 
-  const data = calendarData.map((row) => {
-    const count = Number(row.count);
-    const date =
-      row.date instanceof Date
-        ? (toISO(row.date).split('T')[0] ?? '')
-        : String(row.date);
-    return { date, count, intensity: maxCount > 0 ? count / maxCount : 0 };
-  });
+    const data = calendarData.map((row) => {
+      const count = Number(row.count);
+      const date =
+        row.date instanceof Date
+          ? (toISO(row.date).split('T')[0] ?? '')
+          : String(row.date);
+      return { date, count, intensity: maxCount > 0 ? count / maxCount : 0 };
+    });
 
-  const totalActivities = data.reduce((sum, d) => sum + d.count, 0);
+    const totalActivities = data.reduce((sum, d) => sum + d.count, 0);
 
-  return successResponse({
-    type: 'calendar',
-    activityType,
-    data,
-    metadata: {
-      startDate: queryStart,
-      endDate: queryEnd,
-      maxCount,
-      totalActivities,
-      daysWithActivity: data.length,
-    },
-  });
+    return successResponse({
+      type: 'calendar',
+      activityType,
+      data,
+      metadata: {
+        startDate: queryStart,
+        endDate: queryEnd,
+        maxCount,
+        totalActivities,
+        daysWithActivity: data.length,
+      },
+    });
+  }, 'admin-stats-heatmap');
 });

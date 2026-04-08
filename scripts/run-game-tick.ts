@@ -14,7 +14,7 @@
  *   --interval=N  Seconds between ticks (default: 60, only with --loop)
  */
 
-import { closeDatabase } from '@babylon/db/runtime';
+import { closeDatabase } from '@babylon/db/engine-storage';
 
 import { executeGameTick } from '@babylon/engine';
 import { logger } from '@babylon/shared';

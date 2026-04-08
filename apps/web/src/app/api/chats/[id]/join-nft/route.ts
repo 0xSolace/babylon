@@ -18,19 +18,16 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import {
-  and,
-  eq,
+  applyNftGatedChatUserSelfJoin,
+  insertNftGatedChatSystemJoinMessage,
   isUniqueConstraintError,
+  selectActiveChatParticipantForNftJoin,
+  selectChatRowByIdForNftJoin,
+  selectUserJoinAnnouncementSlice,
+  selectUserWalletAddressRowForNftJoin,
   toDatabaseErrorType,
 } from '@babylon/db';
-import {
-  chatParticipants,
-  chats,
-  db,
-  groupMembers,
-  messages,
-  users,
-} from '@babylon/db/runtime';
+import { asUser } from '@babylon/db/engine-storage';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
@@ -50,10 +47,9 @@ export const POST = withErrorHandling(
       throw new BusinessLogicError('Chat ID is required', 'CHAT_ID_REQUIRED');
     }
 
-    // Get the chat
-    const chat = await db.query.chats.findFirst({
-      where: eq(chats.id, chatId),
-    });
+    const chat = await asUser(user.userId, async (tx) =>
+      selectChatRowByIdForNftJoin(tx, chatId)
+    );
 
     if (!chat) {
       throw new NotFoundError('Chat', chatId);
@@ -66,14 +62,9 @@ export const POST = withErrorHandling(
       );
     }
 
-    // Check if user is already an active participant
-    const existingParticipant = await db.query.chatParticipants.findFirst({
-      where: and(
-        eq(chatParticipants.chatId, chatId),
-        eq(chatParticipants.userId, user.userId),
-        eq(chatParticipants.isActive, true)
-      ),
-    });
+    const existingParticipant = await asUser(user.userId, async (tx) =>
+      selectActiveChatParticipantForNftJoin(tx, chatId, user.userId)
+    );
 
     if (existingParticipant) {
       return successResponse({
@@ -83,12 +74,9 @@ export const POST = withErrorHandling(
       });
     }
 
-    // Get user's wallet address
-    const [userData] = await db
-      .select({ walletAddress: users.walletAddress })
-      .from(users)
-      .where(eq(users.id, user.userId))
-      .limit(1);
+    const userData = await asUser(user.userId, async (tx) =>
+      selectUserWalletAddressRowForNftJoin(tx, user.userId)
+    );
 
     if (!userData?.walletAddress) {
       throw new BusinessLogicError(
@@ -123,72 +111,13 @@ export const POST = withErrorHandling(
     const now = new Date();
 
     try {
-      await db.transaction(async (tx) => {
-        // Check for existing inactive participant and reactivate
-        const inactiveParticipant = await tx.query.chatParticipants.findFirst({
-          where: and(
-            eq(chatParticipants.chatId, chatId),
-            eq(chatParticipants.userId, user.userId),
-            eq(chatParticipants.isActive, false)
-          ),
+      await asUser(user.userId, async (tx) => {
+        await applyNftGatedChatUserSelfJoin(tx, {
+          chatId,
+          userId: user.userId,
+          groupId: chat.groupId,
+          now,
         });
-
-        if (inactiveParticipant) {
-          // Reactivate existing participant
-          await tx
-            .update(chatParticipants)
-            .set({
-              isActive: true,
-              joinedAt: now,
-            })
-            .where(eq(chatParticipants.id, inactiveParticipant.id));
-        } else {
-          // Create new participant
-          const participantId = await generateSnowflakeId();
-          await tx.insert(chatParticipants).values({
-            id: participantId,
-            chatId,
-            userId: user.userId,
-            joinedAt: now,
-            isActive: true,
-          });
-        }
-
-        // If there's a linked group, add to group members
-        if (chat.groupId) {
-          // Check for existing membership (active or inactive) and reactivate
-          const existingMember = await tx.query.groupMembers.findFirst({
-            where: and(
-              eq(groupMembers.groupId, chat.groupId),
-              eq(groupMembers.userId, user.userId)
-            ),
-          });
-
-          if (existingMember) {
-            // Reactivate existing membership
-            await tx
-              .update(groupMembers)
-              .set({
-                isActive: true,
-                joinedAt: now,
-                kickedAt: null,
-                kickReason: null,
-              })
-              .where(eq(groupMembers.id, existingMember.id));
-          } else {
-            // Create new membership
-            const memberId = await generateSnowflakeId();
-            await tx.insert(groupMembers).values({
-              id: memberId,
-              groupId: chat.groupId,
-              userId: user.userId,
-              role: 'member',
-              addedBy: user.userId,
-              joinedAt: now,
-              isActive: true,
-            });
-          }
-        }
       });
     } catch (error) {
       // Handle race condition - if user was already added by concurrent request
@@ -203,24 +132,20 @@ export const POST = withErrorHandling(
       throw error;
     }
 
-    // Get user's display name for system message
-    const [joiningUser] = await db
-      .select({ displayName: users.displayName, username: users.username })
-      .from(users)
-      .where(eq(users.id, user.userId))
-      .limit(1);
+    const joiningUser = await asUser(user.userId, async (tx) =>
+      selectUserJoinAnnouncementSlice(tx, user.userId)
+    );
     const joinerName =
       joiningUser?.displayName || joiningUser?.username || 'Someone';
 
-    // Create system message for joining
     const messageId = await generateSnowflakeId();
-    await db.insert(messages).values({
-      id: messageId,
-      chatId,
-      senderId: 'system',
-      type: 'system',
-      content: `${joinerName} joined the group`,
-      createdAt: now,
+    await asUser(user.userId, async (tx) => {
+      await insertNftGatedChatSystemJoinMessage(tx, {
+        id: messageId,
+        chatId,
+        content: `${joinerName} joined the group`,
+        createdAt: now,
+      });
     });
 
     logger.info(

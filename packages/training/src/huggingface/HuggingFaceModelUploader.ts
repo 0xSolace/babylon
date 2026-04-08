@@ -4,8 +4,12 @@
  * Uploads trained RL models to HuggingFace Hub with benchmark results and model cards.
  */
 
-import { desc, eq } from '@babylon/db';
-import { benchmarkResults, db, trainedModels } from '@babylon/db/runtime';
+import {
+  selectBenchmarkResultsByModelIdRunAtDesc,
+  selectTrainedModelByModelId,
+  updateTrainedModelHfDeployedByModelId,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import {
@@ -86,13 +90,7 @@ export class HuggingFaceModelUploader {
       this.huggingFaceToken = token;
 
       // Step 1: Load model from database
-      const modelResult = await db
-        .select()
-        .from(trainedModels)
-        .where(eq(trainedModels.modelId, options.modelId))
-        .limit(1);
-
-      const model = modelResult[0];
+      const model = await selectTrainedModelByModelId(db, options.modelId);
 
       if (!model) {
         throw new Error(`Model not found: ${options.modelId}`);
@@ -181,14 +179,7 @@ export class HuggingFaceModelUploader {
 
       logger.info('Model uploaded successfully', { modelUrl, filesUploaded });
 
-      // Update model status in database
-      await db
-        .update(trainedModels)
-        .set({
-          status: 'deployed',
-          deployedAt: new Date(),
-        })
-        .where(eq(trainedModels.modelId, options.modelId));
+      await updateTrainedModelHfDeployedByModelId(db, options.modelId);
 
       return {
         success: true,
@@ -215,11 +206,10 @@ export class HuggingFaceModelUploader {
   ): Promise<ModelCardBenchmarkResult[]> {
     // Query benchmark results from database
     try {
-      const results = await db
-        .select()
-        .from(benchmarkResults)
-        .where(eq(benchmarkResults.modelId, modelId))
-        .orderBy(desc(benchmarkResults.runAt));
+      const results = await selectBenchmarkResultsByModelIdRunAtDesc(
+        db,
+        modelId
+      );
 
       return results.map((r) => ({
         benchmarkId: r.benchmarkId,

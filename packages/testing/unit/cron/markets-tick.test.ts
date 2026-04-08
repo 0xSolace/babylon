@@ -203,7 +203,7 @@ const createMutationBuilder = (operation: 'insert' | 'update' | 'delete') => {
 };
 
 const registerMocks = async () => {
-  const actualDbRuntime = await import('@babylon/db/runtime');
+  const actualDbRuntime = await import('@babylon/db/engine-storage');
 
   const cronRouteMockDb = {
     select: mock((columns?: Record<string, unknown>) => {
@@ -264,7 +264,7 @@ const registerMocks = async () => {
     asPublic: async <T>(fn: (db: unknown) => Promise<T>) => fn({}),
   }));
 
-  mock.module('@babylon/db/runtime', () => ({
+  mock.module('@babylon/db/engine-storage', () => ({
     ...actualDbRuntime,
     db: cronRouteMockDb,
     games: TABLE_REFS.games,

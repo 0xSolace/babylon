@@ -20,12 +20,13 @@
 import {
   type AdminPermission,
   type AdminRoleType,
-  and,
-  eq,
-  isNull,
-  notInArray,
+  selectActiveAdminRoleSliceForUser,
+  selectAdminGateUserRow,
+  selectLegacyAdminsExcludingUserIds,
+  selectRoleAdminsJoinedUsers,
+  selectUserLegacyAdminPrivySlice,
 } from '@babylon/db';
-import { adminRoles, db, ROLE_PERMISSIONS, users } from '@babylon/db/runtime';
+import { asSystem, ROLE_PERMISSIONS } from '@babylon/db/engine-storage';
 import { checkForAdminEmail, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import type { AuthenticatedUser } from './auth-middleware';
@@ -53,43 +54,39 @@ export async function getAdminRole(
   userId: string,
   privyId?: string
 ): Promise<{ role: AdminRoleType | null; permissions: AdminPermission[] }> {
-  // Check the adminRoles table first - only non-revoked roles
-  const [adminRole] = await db
-    .select({
-      role: adminRoles.role,
-      permissions: adminRoles.permissions,
-    })
-    .from(adminRoles)
-    .where(and(eq(adminRoles.userId, userId), isNull(adminRoles.revokedAt)))
-    .limit(1);
+  const dbPart = await asSystem(async (c) => {
+    const adminRole = await selectActiveAdminRoleSliceForUser(c, userId);
 
-  if (adminRole?.role) {
-    const role = adminRole.role as AdminRoleType;
-    const permissions =
-      (adminRole.permissions as AdminPermission[]) || ROLE_PERMISSIONS[role];
-    return { role, permissions };
+    if (adminRole?.role) {
+      const role = adminRole.role as AdminRoleType;
+      const permissions =
+        (adminRole.permissions as AdminPermission[]) || ROLE_PERMISSIONS[role];
+      return { type: 'role' as const, role, permissions, user: null };
+    }
+
+    const user = await selectUserLegacyAdminPrivySlice(c, userId);
+
+    if (user?.isAdmin) {
+      return {
+        type: 'legacy' as const,
+        role: 'ADMIN' as const,
+        permissions: ROLE_PERMISSIONS.ADMIN,
+        user: null,
+      };
+    }
+
+    return { type: 'privy' as const, user };
+  }, 'admin-get-role');
+
+  if (dbPart.type === 'role') {
+    return { role: dbPart.role, permissions: dbPart.permissions };
+  }
+  if (dbPart.type === 'legacy') {
+    return { role: dbPart.role, permissions: dbPart.permissions };
   }
 
-  // Get user data for isAdmin check
-  const [user] = await db
-    .select({
-      isAdmin: users.isAdmin,
-      privyId: users.privyId,
-    })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
+  const user = dbPart.user;
 
-  // Backward compatibility: Check isAdmin flag for legacy admins
-  // NOTE: isAdmin flag now grants ADMIN role, not SUPER_ADMIN
-  // SUPER_ADMIN must be explicitly granted via AdminRole table
-  if (user?.isAdmin) {
-    return { role: 'ADMIN', permissions: ROLE_PERMISSIONS.ADMIN };
-  }
-
-  // Check admin email domain - fetch verified email directly from Privy for security
-  // This ensures we're using Privy's verified email, not a potentially tampered database value
-  // Check ALL linked emails, not just the primary one (handles users who linked admin email later)
   const adminDomain = process.env.ADMIN_EMAIL_DOMAIN?.trim();
   const effectivePrivyId = privyId ?? user?.privyId;
 
@@ -97,7 +94,6 @@ export async function getAdminRole(
     const privyClient = getPrivyClient();
     const privyUser = await privyClient.getUser(effectivePrivyId);
 
-    // Check all verified emails including linkedAccounts
     const { adminEmail, allVerifiedEmails } = checkForAdminEmail(privyUser);
 
     if (adminEmail) {
@@ -111,8 +107,6 @@ export async function getAdminRole(
         },
         'getAdminRole'
       );
-      // Grant ADMIN role (not SUPER_ADMIN) for email domain matches
-      // SUPER_ADMIN must be explicitly granted via AdminRole table
       return { role: 'ADMIN', permissions: ROLE_PERMISSIONS.ADMIN };
     }
   }
@@ -122,19 +116,10 @@ export async function getAdminRole(
 
 /**
  * Authenticate request and verify admin privileges.
- *
- * In development mode:
- * - Accepts x-dev-admin-token header with valid dev token
- * - Falls back to standard Privy auth + admin check
- *
- * In production:
- * - Requires valid Privy authentication
- * - Requires isAdmin flag in database OR role in adminRoles table
  */
 export async function requireAdmin(
   request: NextRequest
 ): Promise<AuthenticatedAdminUser> {
-  // In development, check for dev admin token first
   if (isDevelopment) {
     const devAdminToken = request.headers.get('x-dev-admin-token');
     if (devAdminToken && isValidDevAdminToken(devAdminToken)) {
@@ -156,20 +141,12 @@ export async function requireAdmin(
     }
   }
 
-  // Standard authentication flow
   const user = await authenticate(request);
 
-  // Check if user is banned
-  const [dbUser] = await db
-    .select({
-      isAdmin: users.isAdmin,
-      isBanned: users.isBanned,
-      username: users.username,
-      displayName: users.displayName,
-    })
-    .from(users)
-    .where(eq(users.id, user.userId))
-    .limit(1);
+  const dbUser = await asSystem(
+    async (c) => selectAdminGateUserRow(c, user.userId),
+    'require-admin-user-row'
+  );
 
   if (!dbUser) {
     logger.warn(
@@ -189,7 +166,6 @@ export async function requireAdmin(
     throw new AuthorizationError('User is banned', 'admin', 'access');
   }
 
-  // Get admin role (checks both adminRoles table, isAdmin flag, and Privy email domain)
   const { role, permissions } = await getAdminRole(user.userId, user.privyId);
 
   if (!role) {
@@ -281,20 +257,12 @@ export async function requireSuperAdmin(
  * Check if a user ID has admin privileges (without requiring request auth)
  */
 export async function isUserAdmin(userId: string): Promise<boolean> {
-  // getAdminRole already handles both adminRoles table and legacy isAdmin flag
   const { role } = await getAdminRole(userId);
   return role !== null;
 }
 
 /**
  * Get all admin users with their roles
- *
- * This function returns all admins from two sources:
- * 1. Users with active roles in the AdminRole table (non-revoked)
- * 2. Legacy admins (isAdmin = true) who haven't been migrated to AdminRole
- *
- * Performance: Uses SQL NOT IN to filter legacy admins at database level,
- * avoiding fetching all legacy admins and filtering in memory.
  */
 export async function getAllAdmins(): Promise<
   Array<{
@@ -308,41 +276,15 @@ export async function getAllAdmins(): Promise<
     grantedBy: string;
   }>
 > {
-  // Get users from adminRoles table (non-revoked)
-  const roleAdmins = await db
-    .select({
-      userId: adminRoles.userId,
-      role: adminRoles.role,
-      permissions: adminRoles.permissions,
-      grantedAt: adminRoles.grantedAt,
-      grantedBy: adminRoles.grantedBy,
-      username: users.username,
-      displayName: users.displayName,
-      profileImageUrl: users.profileImageUrl,
-    })
-    .from(adminRoles)
-    .innerJoin(users, eq(adminRoles.userId, users.id))
-    .where(isNull(adminRoles.revokedAt));
-
-  // Extract user IDs for NOT IN clause
-  const roleUserIds = roleAdmins.map((a) => a.userId);
-
-  // Get legacy admins (isAdmin = true but NOT in adminRoles)
-  // Use SQL NOT IN to filter at database level instead of in memory
-  const legacyAdmins = await db
-    .select({
-      id: users.id,
-      username: users.username,
-      displayName: users.displayName,
-      profileImageUrl: users.profileImageUrl,
-      createdAt: users.createdAt,
-    })
-    .from(users)
-    .where(
-      roleUserIds.length > 0
-        ? and(eq(users.isAdmin, true), notInArray(users.id, roleUserIds))
-        : eq(users.isAdmin, true)
+  const { roleAdmins, legacyAdmins } = await asSystem(async (c) => {
+    const roleAdmins = await selectRoleAdminsJoinedUsers(c);
+    const roleUserIds = roleAdmins.map((a) => a.userId);
+    const legacyAdmins = await selectLegacyAdminsExcludingUserIds(
+      c,
+      roleUserIds
     );
+    return { roleAdmins, legacyAdmins };
+  }, 'admin-list-all-admins');
 
   const results: Array<{
     userId: string;
@@ -355,7 +297,6 @@ export async function getAllAdmins(): Promise<
     grantedBy: string;
   }> = [];
 
-  // Add role-based admins
   for (const admin of roleAdmins) {
     const role = admin.role as AdminRoleType;
     results.push({
@@ -371,7 +312,6 @@ export async function getAllAdmins(): Promise<
     });
   }
 
-  // Add legacy admins (already filtered by database - not in adminRoles)
   for (const legacy of legacyAdmins) {
     results.push({
       userId: legacy.id,
@@ -381,7 +321,7 @@ export async function getAllAdmins(): Promise<
       role: 'ADMIN',
       permissions: ROLE_PERMISSIONS.ADMIN,
       grantedAt: legacy.createdAt,
-      grantedBy: legacy.id, // Self-granted for legacy
+      grantedBy: legacy.id,
     });
   }
 

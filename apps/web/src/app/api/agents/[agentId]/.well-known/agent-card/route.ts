@@ -55,7 +55,7 @@
 import { generateAgentCardSync } from '@babylon/a2a';
 import { getAgentConfig } from '@babylon/agents';
 import { withErrorHandling } from '@babylon/api';
-import { db } from '@babylon/db/runtime';
+import { asPublic } from '@babylon/db/engine-storage';
 import { toISOOrNull } from '@babylon/shared';
 import { NextResponse } from 'next/server';
 
@@ -92,23 +92,25 @@ export const GET = withErrorHandling(async function GET(
 ) {
   const { agentId } = await params;
 
-  const agent = await db.user.findUnique({
-    where: { id: agentId },
-    select: {
-      id: true,
-      displayName: true,
-      bio: true,
-      profileImageUrl: true,
-      isAgent: true,
-      // Agent0 fields for on-chain identity and reputation
-      agent0TokenId: true,
-      agent0MetadataCID: true,
-      onChainRegistered: true,
-      agent0RegisteredAt: true,
-      agent0TrustScore: true,
-      agent0FeedbackCount: true,
-    },
-  });
+  const agent = await asPublic((tx) =>
+    tx.user.findUnique({
+      where: { id: agentId },
+      select: {
+        id: true,
+        displayName: true,
+        bio: true,
+        profileImageUrl: true,
+        isAgent: true,
+        // Agent0 fields for on-chain identity and reputation
+        agent0TokenId: true,
+        agent0MetadataCID: true,
+        onChainRegistered: true,
+        agent0RegisteredAt: true,
+        agent0TrustScore: true,
+        agent0FeedbackCount: true,
+      },
+    })
+  );
 
   if (!agent || !agent.isAgent) {
     return NextResponse.json(

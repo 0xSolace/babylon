@@ -5,8 +5,8 @@
  * Useful for getting context about the full conversation history.
  */
 
-import { desc, eq } from '@babylon/db';
-import { db, messages, users } from '@babylon/db/runtime';
+import { selectTeamChatMessagesWithSenders } from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import { COORDINATOR_INFO, COORDINATOR_SENDER_ID } from '@babylon/shared';
 import type {
   Action,
@@ -91,22 +91,11 @@ export const checkTeamChatAction: Action = {
     const limit = Math.min(Math.max(1, requestedLimit), 50);
 
     try {
-      // Fetch recent messages from team chat
-      const recentMessages = await db
-        .select({
-          id: messages.id,
-          content: messages.content,
-          senderId: messages.senderId,
-          createdAt: messages.createdAt,
-          senderDisplayName: users.displayName,
-          senderUsername: users.username,
-          isAgent: users.isAgent,
-        })
-        .from(messages)
-        .leftJoin(users, eq(messages.senderId, users.id))
-        .where(eq(messages.chatId, teamChatId))
-        .orderBy(desc(messages.createdAt))
-        .limit(limit);
+      const recentMessages = await selectTeamChatMessagesWithSenders(
+        db,
+        teamChatId,
+        limit
+      );
 
       // Reverse to show oldest first
       const chronologicalMessages = recentMessages.reverse();

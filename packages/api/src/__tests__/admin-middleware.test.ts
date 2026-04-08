@@ -13,7 +13,7 @@ const MOCK_ROLE_PERMISSIONS = {
   VIEWER: ['view_stats'],
 } as const;
 
-mock.module('@babylon/db/runtime', () => ({
+mock.module('@babylon/db/engine-storage', () => ({
   ROLE_PERMISSIONS: MOCK_ROLE_PERMISSIONS,
   adminRoles: adminRolesTable,
   users: usersTable,

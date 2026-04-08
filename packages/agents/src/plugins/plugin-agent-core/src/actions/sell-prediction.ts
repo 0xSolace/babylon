@@ -8,8 +8,14 @@ import {
   PredictionDbAdapter,
   PredictionMarketService,
 } from '@babylon/core/markets/prediction';
-import { and, type DrizzleClient, eq, type JsonValue } from '@babylon/db';
-import { asUser, db, positions } from '@babylon/db/runtime';
+import {
+  type DrizzleClient,
+  type JsonValue,
+  selectActivePredictionPositionForUser,
+} from '@babylon/db';
+import * as engineStorage from '@babylon/db/engine-storage';
+
+const db = engineStorage.db;
 
 import {
   FEE_CONFIG,
@@ -109,18 +115,11 @@ export const sellPredictionAction: Action = {
     }
 
     try {
-      // Get position
-      const [position] = await db
-        .select()
-        .from(positions)
-        .where(
-          and(
-            eq(positions.id, positionId),
-            eq(positions.userId, agentUserId),
-            eq(positions.status, 'active')
-          )
-        )
-        .limit(1);
+      const position = await selectActivePredictionPositionForUser(
+        db,
+        positionId,
+        agentUserId
+      );
 
       if (!position) {
         return {
@@ -140,7 +139,7 @@ export const sellPredictionAction: Action = {
         };
       }
 
-      const sell = await asUser(
+      const sell = await engineStorage.asUser(
         { userId: agentUserId },
         async (txDb: DrizzleClient) => {
           const marketId = position.marketId;

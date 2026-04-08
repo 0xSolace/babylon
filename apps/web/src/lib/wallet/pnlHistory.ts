@@ -1,12 +1,15 @@
-import { and, asc, eq, gte, inArray, isNull, or, sql } from '@babylon/db';
 import {
-  db,
-  markets,
-  perpPositions,
-  positions,
-  userPnLSnapshots,
-  users,
-} from '@babylon/db/runtime';
+  type DrizzleClient,
+  insertUserPnLSnapshotsBatchOnConflictDoNothing,
+  selectActivePredictionPositionsWithMarketForUserIds,
+  selectDistinctActivePredictionPositionUserIds,
+  selectDistinctOpenPerpPositionUserIds,
+  selectNonActorUserIdsWithNonZeroLifetimePnL,
+  selectPerpUnrealizedPnLSumByUserIdsOpenOnly,
+  selectUserPnLSnapshotsForScopedChart,
+  selectUsersForPnlMetricsLoad,
+} from '@babylon/db';
+import { asPublic, asSystem } from '@babylon/db/engine-storage';
 import { FEE_CONFIG } from '@babylon/engine/config/fees';
 import { toNumber } from '@babylon/engine/portfolio-valuation';
 import { calculatePredictionPositionSnapshot } from './predictionPositionSnapshot';
@@ -183,31 +186,14 @@ export function buildScopedPnlHistoryPoints(params: {
 /**
  * Compute canonical current P&L metrics for the requested users.
  */
-export async function loadCurrentUserPnlMetrics(
+async function loadCurrentUserPnlMetricsImpl(
+  db: DrizzleClient,
   targetUserIds?: string[],
   options: {
     onPredictionPricingError?: 'fallback' | 'throw';
   } = {}
 ): Promise<Map<string, UserPnlMetrics>> {
-  const userFilter =
-    targetUserIds && targetUserIds.length > 0
-      ? and(
-          eq(users.isActor, false),
-          or(
-            inArray(users.id, targetUserIds),
-            inArray(users.privyId, targetUserIds)
-          )
-        )
-      : eq(users.isActor, false);
-
-  const userRows = await db
-    .select({
-      id: users.id,
-      lifetimePnL: users.lifetimePnL,
-      privyId: users.privyId,
-    })
-    .from(users)
-    .where(userFilter);
+  const userRows = await selectUsersForPnlMetricsLoad(db, targetUserIds);
 
   if (userRows.length === 0) {
     return new Map();
@@ -231,19 +217,8 @@ export async function loadCurrentUserPnlMetrics(
     positionUserIds,
     PNL_METRIC_QUERY_BATCH_SIZE
   )) {
-    const perpUnrealizedRows = await db
-      .select({
-        userId: perpPositions.userId,
-        unrealizedPnL: sql<number>`COALESCE(SUM(${perpPositions.unrealizedPnL}), 0)`,
-      })
-      .from(perpPositions)
-      .where(
-        and(
-          inArray(perpPositions.userId, userIdBatch),
-          isNull(perpPositions.closedAt)
-        )
-      )
-      .groupBy(perpPositions.userId);
+    const perpUnrealizedRows =
+      await selectPerpUnrealizedPnLSumByUserIdsOpenOnly(db, userIdBatch);
 
     for (const row of perpUnrealizedRows) {
       const canonicalUserId = aliasToCanonicalUserId.get(row.userId);
@@ -257,23 +232,10 @@ export async function loadCurrentUserPnlMetrics(
       metrics.currentPnL = metrics.lifetimePnL + metrics.unrealizedPnL;
     }
 
-    const predictionRows = await db
-      .select({
-        userId: positions.userId,
-        shares: positions.shares,
-        avgPrice: positions.avgPrice,
-        side: positions.side,
-        yesShares: markets.yesShares,
-        noShares: markets.noShares,
-      })
-      .from(positions)
-      .innerJoin(markets, eq(positions.marketId, markets.id))
-      .where(
-        and(
-          inArray(positions.userId, userIdBatch),
-          eq(positions.status, 'active'),
-          eq(markets.resolved, false)
-        )
+    const predictionRows =
+      await selectActivePredictionPositionsWithMarketForUserIds(
+        db,
+        userIdBatch
       );
 
     for (const row of predictionRows) {
@@ -317,50 +279,37 @@ export async function loadScopedPnlHistoryPoints(params: {
     return [];
   }
 
-  const snapshotRows = await db
-    .select({
-      userId: userPnLSnapshots.userId,
-      snapshotAt: userPnLSnapshots.snapshotAt,
-      currentPnL: userPnLSnapshots.currentPnL,
-    })
-    .from(userPnLSnapshots)
-    .where(
+  return asPublic(async (db) => {
+    const snapshotRows = await selectUserPnLSnapshotsForScopedChart(
+      db,
+      scopeUserIds,
       cutoff
-        ? and(
-            inArray(userPnLSnapshots.userId, scopeUserIds),
-            gte(userPnLSnapshots.snapshotAt, cutoff)
-          )
-        : inArray(userPnLSnapshots.userId, scopeUserIds)
-    )
-    .orderBy(asc(userPnLSnapshots.snapshotAt));
+    );
 
-  const liveMetricsByUserId = await loadCurrentUserPnlMetrics(scopeUserIds, {
-    onPredictionPricingError: 'fallback',
-  });
+    const liveMetricsByUserId = await loadCurrentUserPnlMetricsImpl(
+      db,
+      scopeUserIds,
+      {
+        onPredictionPricingError: 'fallback',
+      }
+    );
 
-  return buildScopedPnlHistoryPoints({
-    liveMetricsByUserId,
-    now,
-    scopeUserIds,
-    snapshots: snapshotRows,
+    return buildScopedPnlHistoryPoints({
+      liveMetricsByUserId,
+      now,
+      scopeUserIds,
+      snapshots: snapshotRows,
+    });
   });
 }
 
-async function loadSnapshotCandidateUserIds(): Promise<string[]> {
+async function loadSnapshotCandidateUserIds(
+  db: DrizzleClient
+): Promise<string[]> {
   const [lifetimeRows, perpRows, predictionRows] = await Promise.all([
-    db
-      .select({ userId: users.id })
-      .from(users)
-      .where(and(eq(users.isActor, false), sql`${users.lifetimePnL} <> 0`)),
-    db
-      .selectDistinct({ userId: perpPositions.userId })
-      .from(perpPositions)
-      .where(isNull(perpPositions.closedAt)),
-    db
-      .selectDistinct({ userId: positions.userId })
-      .from(positions)
-      .innerJoin(markets, eq(positions.marketId, markets.id))
-      .where(and(eq(positions.status, 'active'), eq(markets.resolved, false))),
+    selectNonActorUserIdsWithNonZeroLifetimePnL(db),
+    selectDistinctOpenPerpPositionUserIds(db),
+    selectDistinctActivePredictionPositionUserIds(db),
   ]);
 
   return Array.from(
@@ -380,47 +329,52 @@ async function loadSnapshotCandidateUserIds(): Promise<string[]> {
 export async function snapshotAllUserPnlMetrics(
   snapshotAt: Date
 ): Promise<number> {
-  const normalizedSnapshotAt = getHourBoundary(snapshotAt);
-  const targetUserIds = await loadSnapshotCandidateUserIds();
+  return asSystem(async (db) => {
+    const normalizedSnapshotAt = getHourBoundary(snapshotAt);
+    const targetUserIds = await loadSnapshotCandidateUserIds(db);
 
-  if (targetUserIds.length === 0) {
-    return 0;
-  }
+    if (targetUserIds.length === 0) {
+      return 0;
+    }
 
-  const metricsByUserId = await loadCurrentUserPnlMetrics(targetUserIds, {
-    onPredictionPricingError: 'throw',
-  });
-  const snapshotRows = Array.from(metricsByUserId.values()).map((metrics) => ({
-    id: `${metrics.userId}:${normalizedSnapshotAt.toISOString()}:pnl`,
-    userId: metrics.userId,
-    snapshotAt: normalizedSnapshotAt,
-    lifetimePnL: metrics.lifetimePnL,
-    unrealizedPnL: metrics.unrealizedPnL,
-    currentPnL: metrics.currentPnL,
-  }));
-
-  if (snapshotRows.length === 0) {
-    return 0;
-  }
-
-  let insertedCount = 0;
-
-  for (
-    let i = 0;
-    i < snapshotRows.length;
-    i += PNL_SNAPSHOT_INSERT_BATCH_SIZE
-  ) {
-    const batch = snapshotRows.slice(i, i + PNL_SNAPSHOT_INSERT_BATCH_SIZE);
-    const inserted = await db
-      .insert(userPnLSnapshots)
-      .values(batch)
-      .onConflictDoNothing({
-        target: [userPnLSnapshots.userId, userPnLSnapshots.snapshotAt],
+    const metricsByUserId = await loadCurrentUserPnlMetricsImpl(
+      db,
+      targetUserIds,
+      {
+        onPredictionPricingError: 'throw',
+      }
+    );
+    const snapshotRows = Array.from(metricsByUserId.values()).map(
+      (metrics) => ({
+        id: `${metrics.userId}:${normalizedSnapshotAt.toISOString()}:pnl`,
+        userId: metrics.userId,
+        snapshotAt: normalizedSnapshotAt,
+        lifetimePnL: metrics.lifetimePnL,
+        unrealizedPnL: metrics.unrealizedPnL,
+        currentPnL: metrics.currentPnL,
       })
-      .returning({ id: userPnLSnapshots.id });
+    );
 
-    insertedCount += inserted.length;
-  }
+    if (snapshotRows.length === 0) {
+      return 0;
+    }
 
-  return insertedCount;
+    let insertedCount = 0;
+
+    for (
+      let i = 0;
+      i < snapshotRows.length;
+      i += PNL_SNAPSHOT_INSERT_BATCH_SIZE
+    ) {
+      const batch = snapshotRows.slice(i, i + PNL_SNAPSHOT_INSERT_BATCH_SIZE);
+      const inserted = await insertUserPnLSnapshotsBatchOnConflictDoNothing(
+        db,
+        batch
+      );
+
+      insertedCount += inserted.length;
+    }
+
+    return insertedCount;
+  }, 'pnl-snapshot-all-users');
 }

@@ -13,8 +13,14 @@
  * Based on: https://art.openpipe.ai/fundamentals/ruler
  */
 
-import { and, asc, eq, inArray, isNull, not } from '@babylon/db';
-import { db, trajectories } from '@babylon/db/runtime';
+import {
+  selectTrajectoryAiJudgeResultByTrajectoryId,
+  selectTrajectoryIdsUnscoredInWindowForRuler,
+  selectTrajectoryJudgeContextsByIdsPendingScore,
+  selectUnscoredTrainingTrajectoryContextsOrderStartAsc,
+  updateTrajectoryAiJudgeResultByTrajectoryId,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import type { JsonValue } from '@babylon/shared';
 import { asUUID } from '@elizaos/core';
 import { v4 as uuidv4 } from 'uuid';
@@ -146,18 +152,10 @@ export class RulerScoringService {
       return null;
     }
 
-    const updatedResult = await db
-      .select({
-        trajectoryId: trajectories.trajectoryId,
-        aiJudgeReward: trajectories.aiJudgeReward,
-        aiJudgeReasoning: trajectories.aiJudgeReasoning,
-        judgedAt: trajectories.judgedAt,
-      })
-      .from(trajectories)
-      .where(eq(trajectories.trajectoryId, trajectoryId))
-      .limit(1);
-
-    const updated = updatedResult[0];
+    const updated = await selectTrajectoryAiJudgeResultByTrajectoryId(
+      db,
+      trajectoryId
+    );
 
     if (!updated || updated.aiJudgeReward === null) {
       return null;
@@ -365,15 +363,12 @@ export class RulerScoringService {
 
       const trajectoryId = richTrajectories[i]!.traj.trajectoryId;
 
-      await db
-        .update(trajectories)
-        .set({
-          aiJudgeReward: Math.max(0, Math.min(1, scoreData.score)),
-          aiJudgeReasoning: scoreData.explanation,
-          judgedAt: new Date(),
-          isTrainingData: true,
-        })
-        .where(eq(trajectories.trajectoryId, trajectoryId));
+      await updateTrajectoryAiJudgeResultByTrajectoryId(db, trajectoryId, {
+        aiJudgeReward: Math.max(0, Math.min(1, scoreData.score)),
+        aiJudgeReasoning: scoreData.explanation,
+        judgedAt: new Date(),
+        isTrainingData: true,
+      });
 
       scored++;
     }
@@ -652,62 +647,21 @@ Return ONLY the JSON, no other text.`;
    */
   private async getTrajectoriesToScore(trajectoryIds?: string[]) {
     if (trajectoryIds && trajectoryIds.length > 0) {
-      return await db
-        .select({
-          trajectoryId: trajectories.trajectoryId,
-          stepsJson: trajectories.stepsJson,
-          scenarioId: trajectories.scenarioId,
-          finalPnL: trajectories.finalPnL,
-          episodeLength: trajectories.episodeLength,
-          archetype: trajectories.archetype,
-        })
-        .from(trajectories)
-        .where(
-          and(
-            inArray(trajectories.trajectoryId, trajectoryIds),
-            isNull(trajectories.aiJudgeReward)
-          )
-        );
+      return await selectTrajectoryJudgeContextsByIdsPendingScore(
+        db,
+        trajectoryIds
+      );
     }
 
-    // Get all unscored trajectories
-    return await db
-      .select({
-        trajectoryId: trajectories.trajectoryId,
-        stepsJson: trajectories.stepsJson,
-        scenarioId: trajectories.scenarioId,
-        finalPnL: trajectories.finalPnL,
-        episodeLength: trajectories.episodeLength,
-        archetype: trajectories.archetype,
-      })
-      .from(trajectories)
-      .where(
-        and(
-          isNull(trajectories.aiJudgeReward),
-          eq(trajectories.isTrainingData, true),
-          not(eq(trajectories.stepsJson, 'null')),
-          not(eq(trajectories.stepsJson, '[]'))
-        )
-      )
-      .orderBy(asc(trajectories.startTime));
+    return await selectUnscoredTrainingTrajectoryContextsOrderStartAsc(db);
   }
 
   /**
    * Score all unscored trajectories in a time window
    */
   async scoreWindow(windowId: string): Promise<number> {
-    const trajectoriesResult = await db
-      .select({ trajectoryId: trajectories.trajectoryId })
-      .from(trajectories)
-      .where(
-        and(
-          eq(trajectories.windowId, windowId),
-          eq(trajectories.isTrainingData, true),
-          isNull(trajectories.aiJudgeReward),
-          not(eq(trajectories.stepsJson, 'null')),
-          not(eq(trajectories.stepsJson, '[]'))
-        )
-      );
+    const trajectoriesResult =
+      await selectTrajectoryIdsUnscoredInWindowForRuler(db, windowId);
 
     if (trajectoriesResult.length === 0) {
       return 0;

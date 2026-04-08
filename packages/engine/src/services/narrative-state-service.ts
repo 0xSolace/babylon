@@ -5,9 +5,13 @@
  * Works with both PostgreSQL and JSON backends.
  */
 
-import { db } from '@babylon/db/runtime';
+import {
+  type DatabaseArcPlan,
+  fetchQuestionArcPlanByQuestionId,
+  insertQuestionArcPlanRow,
+} from '@babylon/db';
 
-import { generateSnowflakeId, logger } from '@babylon/shared';
+import { logger } from '@babylon/shared';
 import { type RngFunction } from '../utils/randomization';
 import type { QuestionArcPlan as ArcPlanType } from './question-arc-planner';
 
@@ -53,34 +57,29 @@ export async function saveArcPlan(
   questionId: string,
   arc: ArcPlanType
 ): Promise<void> {
-  await db.questionArcPlan.create({
-    data: {
-      id: await generateSnowflakeId(),
-      questionId,
-      uncertaintyPeakDay: arc.uncertaintyPeakDay,
-      clarityOnsetDay: arc.clarityOnsetDay,
-      verificationDay: arc.verificationDay,
-      insiderActorIds: arc.insiders,
-      deceiverActorIds: arc.deceivers,
-      phaseRatios: {
-        early: ratio(
-          arc.phases.early.targetCorrectSignals,
-          arc.phases.early.targetWrongSignals
-        ),
-        middle: ratio(
-          arc.phases.middle.targetCorrectSignals,
-          arc.phases.middle.targetWrongSignals
-        ),
-        late: ratio(
-          arc.phases.late.targetCorrectSignals,
-          arc.phases.late.targetWrongSignals
-        ),
-        climax: 1.0,
-      },
-      // Store deterministic event schedule
-      eventSchedule: arc.eventSchedule ?? [],
-      createdAt: new Date(),
+  await insertQuestionArcPlanRow({
+    questionId,
+    uncertaintyPeakDay: arc.uncertaintyPeakDay,
+    clarityOnsetDay: arc.clarityOnsetDay,
+    verificationDay: arc.verificationDay,
+    insiderActorIds: arc.insiders,
+    deceiverActorIds: arc.deceivers,
+    phaseRatios: {
+      early: ratio(
+        arc.phases.early.targetCorrectSignals,
+        arc.phases.early.targetWrongSignals
+      ),
+      middle: ratio(
+        arc.phases.middle.targetCorrectSignals,
+        arc.phases.middle.targetWrongSignals
+      ),
+      late: ratio(
+        arc.phases.late.targetCorrectSignals,
+        arc.phases.late.targetWrongSignals
+      ),
+      climax: 1.0,
     },
+    eventSchedule: arc.eventSchedule ?? [],
   });
   logger.info(
     'Saved arc plan',
@@ -89,18 +88,13 @@ export async function saveArcPlan(
   );
 }
 
-/** Type for the database arc plan record */
-export type DatabaseArcPlan = NonNullable<
-  Awaited<ReturnType<typeof db.questionArcPlan.findFirst>>
->;
+export type { DatabaseArcPlan };
 
 /** Get arc plan for a question */
 export async function getArcPlan(
   questionId: string
 ): Promise<DatabaseArcPlan | null> {
-  return db.questionArcPlan.findFirst({
-    where: { questionId },
-  });
+  return fetchQuestionArcPlanByQuestionId(questionId);
 }
 
 /**

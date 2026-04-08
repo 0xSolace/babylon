@@ -9,17 +9,16 @@
  */
 
 import { countTokensSync, truncateToTokenLimitSync } from '@babylon/api';
-import { and, desc, eq, gte, inArray, isNull, lte, ne } from '@babylon/db';
 import {
-  comments,
-  db,
-  perpPositions,
-  positions,
-  posts,
-  reactions,
-  users,
-} from '@babylon/db/runtime';
-
+  countReactionsLikesByCommentIdsGrouped,
+  selectCommentPostIdsByAuthorId,
+  selectNonDeletedCommentsSliceOrderCreatedDescLimit,
+  selectOpenPerpPositionContextSliceByUserId,
+  selectPredictionPositionActiveSliceByUserId,
+  selectRecentPostsForEngagementByOthersInTimestampWindowOrderCreatedDescLimit,
+  selectUsersDisplayUsernameByIds,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import { StaticDataRegistry } from '@babylon/engine';
 import type { IAgentRuntime } from '@elizaos/core';
 import { parseKeyValueXml } from '@elizaos/core';
@@ -76,34 +75,23 @@ export class AutonomousCommentingService {
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
     // Get posts agent already commented on
-    const agentComments = await db
-      .select({ postId: comments.postId })
-      .from(comments)
-      .where(eq(comments.authorId, agentUserId));
+    const agentComments = await selectCommentPostIdsByAuthorId(db, agentUserId);
 
     const commentedPostIds = new Set(
       agentComments.map((c) => c.postId).filter((id) => id !== null) as string[]
     );
 
     // Get recent posts with author info
-    const recentPostsRaw = await db
-      .select({
-        id: posts.id,
-        content: posts.content,
-        authorId: posts.authorId,
-        createdAt: posts.createdAt,
-      })
-      .from(posts)
-      .where(
-        and(
-          ne(posts.authorId, agentUserId),
-          isNull(posts.deletedAt),
-          gte(posts.timestamp, oneDayAgo),
-          lte(posts.timestamp, now)
-        )
-      )
-      .orderBy(desc(posts.createdAt))
-      .limit(15);
+    const recentPostsRaw =
+      await selectRecentPostsForEngagementByOthersInTimestampWindowOrderCreatedDescLimit(
+        db,
+        {
+          excludeAuthorId: agentUserId,
+          since: oneDayAgo,
+          until: now,
+          limit: 15,
+        }
+      );
 
     // Filter to posts agent hasn't commented on
     const uncommentedPosts = recentPostsRaw.filter(
@@ -121,19 +109,8 @@ export class AutonomousCommentingService {
 
     // Get comments for these posts (including parentCommentId for threading)
     const postIds = uncommentedPosts.map((p) => p.id);
-    const allComments = await db
-      .select({
-        id: comments.id,
-        content: comments.content,
-        postId: comments.postId,
-        authorId: comments.authorId,
-        parentCommentId: comments.parentCommentId,
-        createdAt: comments.createdAt,
-      })
-      .from(comments)
-      .where(isNull(comments.deletedAt))
-      .orderBy(desc(comments.createdAt))
-      .limit(200); // Increased to capture more thread context
+    const allComments =
+      await selectNonDeletedCommentsSliceOrderCreatedDescLimit(db, 200); // Increased to capture more thread context
 
     // Filter comments to our posts
     const postComments = allComments.filter(
@@ -142,18 +119,15 @@ export class AutonomousCommentingService {
 
     // Get like counts for these comments
     const commentIds = postComments.map((c) => c.id);
-    const likeCountsRaw = await db
-      .select({
-        commentId: reactions.commentId,
-      })
-      .from(reactions)
-      .where(and(eq(reactions.type, 'like')));
+    const likeCountsRaw =
+      commentIds.length > 0
+        ? await countReactionsLikesByCommentIdsGrouped(db, commentIds)
+        : [];
 
-    // Count likes per comment (filter in memory since inArray might not work)
     const likeCounts = new Map<string, number>();
     for (const r of likeCountsRaw) {
-      if (r.commentId && commentIds.includes(r.commentId)) {
-        likeCounts.set(r.commentId, (likeCounts.get(r.commentId) || 0) + 1);
+      if (r.commentId) {
+        likeCounts.set(r.commentId, Number(r.count));
       }
     }
 
@@ -193,14 +167,10 @@ export class AutonomousCommentingService {
 
     // Fetch remaining authors from database
     if (missingAuthorIds.length > 0) {
-      const authorUsers = await db
-        .select({
-          id: users.id,
-          displayName: users.displayName,
-          username: users.username,
-        })
-        .from(users)
-        .where(inArray(users.id, missingAuthorIds));
+      const authorUsers = await selectUsersDisplayUsernameByIds(
+        db,
+        missingAuthorIds
+      );
 
       for (const u of authorUsers) {
         authorMap.set(u.id, u.displayName || u.username || 'User');
@@ -327,24 +297,17 @@ export class AutonomousCommentingService {
     }
 
     // Get agent's trading context
-    const agentPositions = await db
-      .select()
-      .from(positions)
-      .where(
-        and(eq(positions.userId, agentUserId), eq(positions.status, 'active'))
-      )
-      .limit(5);
+    const agentPositions = await selectPredictionPositionActiveSliceByUserId(
+      db,
+      agentUserId,
+      5
+    );
 
-    const agentPerpPositions = await db
-      .select()
-      .from(perpPositions)
-      .where(
-        and(
-          eq(perpPositions.userId, agentUserId),
-          isNull(perpPositions.closedAt)
-        )
-      )
-      .limit(5);
+    const agentPerpPositions = await selectOpenPerpPositionContextSliceByUserId(
+      db,
+      agentUserId,
+      5
+    );
 
     const config = await getAgentConfig(agentUserId);
 

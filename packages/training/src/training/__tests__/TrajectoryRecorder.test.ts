@@ -6,12 +6,12 @@
  */
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
-import * as actualDbRuntime from '@babylon/db/runtime';
+import * as actualDbRuntime from '@babylon/db/engine-storage';
 import * as fs from 'fs';
 import * as path from 'path';
 
 // Mock ONLY external dependencies - not the code under test (TrajectoryRecorder imports runtime)
-mock.module('@babylon/db/runtime', () => ({
+mock.module('@babylon/db/engine-storage', () => ({
   ...actualDbRuntime,
   db: {
     insert: mock(() => ({

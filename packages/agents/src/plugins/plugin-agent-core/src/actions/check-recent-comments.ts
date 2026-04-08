@@ -4,8 +4,13 @@
  * Returns recent comments for a user (self or another user by ID) with thread context.
  */
 
-import { desc, eq, inArray } from '@babylon/db';
-import { comments, db, posts, users } from '@babylon/db/runtime';
+import {
+  selectCommentWithAuthorById,
+  selectPostsWithAuthorsByPostIds,
+  selectRecentCommentsByAuthorId,
+  selectUserDisplayAndUsernameById,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import type {
   Action,
   ActionResult,
@@ -64,25 +69,13 @@ async function buildThread(
   let depth = 0;
 
   while (currentId && depth < maxDepth) {
-    const [comment] = await db
-      .select({
-        id: comments.id,
-        content: comments.content,
-        authorId: comments.authorId,
-        parentCommentId: comments.parentCommentId,
-        authorName: users.displayName,
-        authorUsername: users.username,
-      })
-      .from(comments)
-      .leftJoin(users, eq(comments.authorId, users.id))
-      .where(eq(comments.id, currentId))
-      .limit(1);
+    const comment = await selectCommentWithAuthorById(db, currentId);
 
     if (!comment) break;
 
     const isTarget = comment.authorId === targetUserId;
     thread.unshift({
-      authorName: comment.authorName || comment.authorUsername || 'User',
+      authorName: comment.authorDisplayName || comment.authorUsername || 'User',
       content: comment.content,
       isTarget,
     });
@@ -164,14 +157,10 @@ export const checkRecentCommentsAction: Action = {
       // Get user info if checking someone else
       let targetName = 'You';
       if (!isSelf) {
-        const [targetUser] = await db
-          .select({
-            displayName: users.displayName,
-            username: users.username,
-          })
-          .from(users)
-          .where(eq(users.id, targetUserId))
-          .limit(1);
+        const targetUser = await selectUserDisplayAndUsernameById(
+          db,
+          targetUserId
+        );
 
         if (!targetUser) {
           return {
@@ -183,19 +172,11 @@ export const checkRecentCommentsAction: Action = {
         targetName = targetUser.displayName || targetUser.username || 'User';
       }
 
-      // Get recent comments
-      const recentComments = await db
-        .select({
-          id: comments.id,
-          content: comments.content,
-          createdAt: comments.createdAt,
-          postId: comments.postId,
-          parentCommentId: comments.parentCommentId,
-        })
-        .from(comments)
-        .where(eq(comments.authorId, targetUserId))
-        .orderBy(desc(comments.createdAt))
-        .limit(limit);
+      const recentComments = await selectRecentCommentsByAuthorId(
+        db,
+        targetUserId,
+        limit
+      );
 
       if (recentComments.length === 0) {
         return {
@@ -209,18 +190,7 @@ export const checkRecentCommentsAction: Action = {
       // Get all unique post IDs
       const postIds = [...new Set(recentComments.map((c) => c.postId))];
 
-      // Fetch posts with author info
-      const postsData = await db
-        .select({
-          id: posts.id,
-          content: posts.content,
-          authorId: posts.authorId,
-          authorName: users.displayName,
-          authorUsername: users.username,
-        })
-        .from(posts)
-        .leftJoin(users, eq(posts.authorId, users.id))
-        .where(inArray(posts.id, postIds));
+      const postsData = await selectPostsWithAuthorsByPostIds(db, postIds);
 
       const postMap = new Map(postsData.map((p) => [p.id, p]));
 

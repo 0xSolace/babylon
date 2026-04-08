@@ -6,10 +6,15 @@
  * over-the-top satirical content and applies character mappings.
  */
 
-import type { ParodyHeadline, RSSHeadline } from '@babylon/db';
-import { desc, gte, inArray } from '@babylon/db';
-import { db, parodyHeadlines } from '@babylon/db/runtime';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+import {
+  insertParodyHeadlineRow,
+  type JsonValue,
+  listParodyHeadlinesGeneratedSince,
+  markParodyHeadlinesUsed,
+  type ParodyHeadline,
+  type RSSHeadline,
+} from '@babylon/db';
+import { logger } from '@babylon/shared';
 import { BabylonLLMClient } from '../llm/openai-client';
 import { characterMappingService } from './character-mapping-service';
 import { StaticDataRegistry } from './static-data-registry';
@@ -228,20 +233,15 @@ Generate the parody now.`;
         headline.source?.name
       );
 
-      const [parodyHeadline] = await db
-        .insert(parodyHeadlines)
-        .values({
-          id: await generateSnowflakeId(),
-          originalHeadlineId: headline.id,
-          originalTitle: headline.title,
-          originalSource: headline.source?.name || 'Unknown',
-          parodyTitle: parody.parodyTitle,
-          parodyContent: parody.parodyContent || null,
-          characterMappings: parody.characterMappings,
-          organizationMappings: parody.organizationMappings,
-          generatedAt: new Date(),
-        })
-        .returning();
+      const parodyHeadline = await insertParodyHeadlineRow({
+        originalHeadlineId: headline.id,
+        originalTitle: headline.title,
+        originalSource: headline.source?.name || 'Unknown',
+        parodyTitle: parody.parodyTitle,
+        parodyContent: parody.parodyContent || null,
+        characterMappings: parody.characterMappings as JsonValue,
+        organizationMappings: parody.organizationMappings as JsonValue,
+      });
 
       if (parodyHeadline) {
         parodies.push(parodyHeadline);
@@ -268,24 +268,14 @@ Generate the parody now.`;
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - daysBack);
 
-    return db
-      .select()
-      .from(parodyHeadlines)
-      .where(gte(parodyHeadlines.generatedAt, sevenDaysAgo))
-      .orderBy(desc(parodyHeadlines.generatedAt));
+    return listParodyHeadlinesGeneratedSince(sevenDaysAgo);
   }
 
   /**
    * Mark parody headlines as used in game context
    */
   async markAsUsed(parodyIds: string[]): Promise<void> {
-    await db
-      .update(parodyHeadlines)
-      .set({
-        isUsed: true,
-        usedAt: new Date(),
-      })
-      .where(inArray(parodyHeadlines.id, parodyIds));
+    await markParodyHeadlinesUsed(parodyIds);
   }
 
   /**

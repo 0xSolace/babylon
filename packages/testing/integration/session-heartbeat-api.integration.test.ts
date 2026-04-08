@@ -11,10 +11,14 @@
  */
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { and, eq, isNull } from '@babylon/db';
-import { db, userActivityLogs, userSessions, users } from '@babylon/db/runtime';
-
+import {
+  db,
+  userActivityLogs,
+  userSessions,
+  users,
+} from '@babylon/db/engine-storage';
 import { generateSnowflakeId } from '@babylon/shared';
+import { and, eq, isNull } from 'drizzle-orm';
 
 const BASE_URL =
   process.env.TEST_API_URL ||

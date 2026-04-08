@@ -21,8 +21,11 @@
  * - All dispatches instrumented with action-type and timing telemetry
  */
 
-import { eq } from '@babylon/db';
-import { db, messages, userAgentConfigs } from '@babylon/db/runtime';
+import {
+  insertMessageRow,
+  updateUserAgentConfigLastChatAtByUserId,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import type { MessageMetadata, MessageTag } from '@babylon/shared';
 import { checkUserInput, logger } from '@babylon/shared';
 import {
@@ -859,7 +862,7 @@ export async function dispatchAgentChat(
   const responseMessageId = await generateSnowflakeId();
   const responseTime = new Date();
 
-  await db.insert(messages).values({
+  await insertMessageRow(db, {
     id: responseMessageId,
     chatId: teamChatId,
     senderId: resolvedAgentId,
@@ -875,11 +878,8 @@ export async function dispatchAgentChat(
     messagePreview: responseText,
   });
 
-  // Update agent's lastChatAt
-  await db
-    .update(userAgentConfigs)
-    .set({ lastChatAt: new Date(), updatedAt: new Date() })
-    .where(eq(userAgentConfigs.userId, resolvedAgentId));
+  const chatStamp = new Date();
+  await updateUserAgentConfigLastChatAtByUserId(db, resolvedAgentId, chatStamp);
 
   // --- Broadcast so SSE clients see the agent response immediately ---
   broadcastFn(teamChatId, {

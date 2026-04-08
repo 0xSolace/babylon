@@ -1,7 +1,8 @@
 /**
  * Database runtime — connection, RLS helpers, Drizzle table symbols, JSON snapshot hooks.
  *
- * Application and integration code wires the DB through this entry.
+ * Outside `packages/db`, import `@babylon/db/engine-storage` (same exports). This entry stays
+ * for internal re-exports and tooling that already resolves `@babylon/db/runtime`.
  * Prefer `@babylon/db` for operators, row types (`export type * from './tables'`), and query helpers
  * that do not require the process-wide service singleton.
  */

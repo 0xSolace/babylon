@@ -10,13 +10,13 @@
  */
 
 import { createTestAgent } from '@babylon/agents';
-import { desc, eq } from '@babylon/db';
 import {
   closeDatabase,
   db,
   userAgentConfigs,
   users,
 } from '@babylon/db/runtime';
+import { desc, eq } from 'drizzle-orm';
 
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';

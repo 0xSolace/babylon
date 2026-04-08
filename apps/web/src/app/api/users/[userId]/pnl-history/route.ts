@@ -6,9 +6,11 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, eq } from '@babylon/db';
-import { db, users } from '@babylon/db/runtime';
-
+import {
+  type DrizzleClient,
+  selectManagedAgentUserIdsByOwner,
+} from '@babylon/db';
+import { asPublic } from '@babylon/db/engine-storage';
 import { logger, UserIdParamSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -42,21 +44,21 @@ function parseScope(value: string | null): PnlHistoryScope {
   }
 }
 
-async function resolveScopeUserIds(params: {
-  entityId: string | null;
-  ownerUserId: string;
-  scope: PnlHistoryScope;
-}): Promise<string[]> {
+async function resolveScopeUserIds(
+  db: DrizzleClient,
+  params: {
+    entityId: string | null;
+    ownerUserId: string;
+    scope: PnlHistoryScope;
+  }
+): Promise<string[]> {
   const { entityId, ownerUserId, scope } = params;
 
   if (scope === 'owner') {
     return [ownerUserId];
   }
 
-  const agentRows = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(and(eq(users.managedBy, ownerUserId), eq(users.isAgent, true)));
+  const agentRows = await selectManagedAgentUserIdsByOwner(db, ownerUserId);
 
   if (scope === 'team') {
     return [ownerUserId, ...agentRows.map((row) => row.id)];
@@ -103,11 +105,13 @@ export const GET = withErrorHandling(
       return successResponse({ points: [] });
     }
 
-    const scopeUserIds = await resolveScopeUserIds({
-      entityId,
-      ownerUserId: dbUser.id,
-      scope,
-    });
+    const scopeUserIds = await asPublic(async (db) =>
+      resolveScopeUserIds(db, {
+        entityId,
+        ownerUserId: dbUser.id,
+        scope,
+      })
+    );
 
     if (scopeUserIds.length === 0) {
       return successResponse({ points: [] });

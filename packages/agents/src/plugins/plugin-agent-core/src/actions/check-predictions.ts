@@ -10,9 +10,11 @@
  */
 
 import { PredictionPricing } from '@babylon/core/markets/prediction/client';
-import { desc, eq, gte } from '@babylon/db';
-import { db, markets } from '@babylon/db/runtime';
-
+import {
+  selectMarketByIdForPredictionCheck,
+  selectMarketsListForAgentPredictions,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import type { MessageTag } from '@babylon/shared';
 import type {
   Action,
@@ -122,11 +124,10 @@ export const checkPredictionsAction: Action = {
       // SINGLE MARKET MODE: When marketId is provided
       // =========================================================================
       if (marketId) {
-        const [prediction] = await db
-          .select()
-          .from(markets)
-          .where(eq(markets.id, marketId))
-          .limit(1);
+        const prediction = await selectMarketByIdForPredictionCheck(
+          db,
+          marketId
+        );
 
         if (!prediction) {
           return {
@@ -207,22 +208,11 @@ export const checkPredictionsAction: Action = {
       // LIST MODE: When no marketId provided
       // =========================================================================
 
-      // Build query based on status filter
-      let query = db.select().from(markets);
-
-      if (statusFilter === 'active') {
-        query = query.where(eq(markets.resolved, false)) as typeof query;
-        // Also filter for markets that haven't ended
-        const now = new Date();
-        query = query.where(gte(markets.endDate, now)) as typeof query;
-      } else if (statusFilter === 'resolved') {
-        query = query.where(eq(markets.resolved, true)) as typeof query;
-      }
-      // 'all' - no filter
-
-      const predictions = await query
-        .orderBy(desc(markets.createdAt))
-        .limit(limit);
+      const predictions = await selectMarketsListForAgentPredictions(
+        db,
+        statusFilter,
+        limit
+      );
 
       if (predictions.length === 0) {
         const statusText = statusFilter === 'all' ? '' : ` ${statusFilter}`;

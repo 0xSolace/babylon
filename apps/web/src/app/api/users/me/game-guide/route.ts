@@ -1,9 +1,8 @@
 // POST /api/users/me/game-guide - Mark game guide as completed
 
 import { authenticate, successResponse, withErrorHandling } from '@babylon/api';
-import { eq } from '@babylon/db';
-import { db, users } from '@babylon/db/runtime';
-
+import { updateUserGameGuideCompletedAtByPrivyId } from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
@@ -11,11 +10,9 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   const authUser = await authenticate(request);
   const now = new Date();
 
-  const result = await db
-    .update(users)
-    .set({ gameGuideCompletedAt: now, updatedAt: now })
-    .where(eq(users.privyId, authUser.privyId!))
-    .returning({ id: users.id });
+  const result = await asUser(authUser, async (db) =>
+    updateUserGameGuideCompletedAtByPrivyId(db, authUser.privyId!, now)
+  );
 
   if (result.length === 0) {
     logger.warn(

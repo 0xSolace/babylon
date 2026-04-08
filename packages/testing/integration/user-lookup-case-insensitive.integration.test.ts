@@ -14,10 +14,9 @@ import {
   findUserByIdentifier,
   findUserByIdentifierWithSelect,
 } from '@babylon/api';
-import { eq } from '@babylon/db';
-import { db, users } from '@babylon/db/runtime';
-
+import { db, users } from '@babylon/db/engine-storage';
 import { generateSnowflakeId } from '@babylon/shared';
+import { eq } from 'drizzle-orm';
 
 // Test user IDs that we'll clean up
 const testUserIds: string[] = [];

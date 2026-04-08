@@ -78,16 +78,8 @@ import {
   requireAdmin,
   withErrorHandling,
 } from '@babylon/api';
-import { asc, desc, eq, inArray } from '@babylon/db';
-import {
-  asSystem,
-  chatParticipants,
-  chats,
-  groups,
-  messages,
-  users,
-} from '@babylon/db/runtime';
-
+import { fetchAdminGroupsListRawData } from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import { StaticDataRegistry } from '@babylon/engine';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -124,129 +116,60 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   );
 
   // Get all data using asSystem in a single call to avoid nested async issues
-  const { chatsList, allUsers, allActors, allUserGroups } = await asSystem(
-    async (database) => {
-      // Get all group chats
-      const chatsList = await database
-        .select()
-        .from(chats)
-        .where(eq(chats.isGroup, true))
-        .orderBy(
-          sortOrder === 'asc' ? asc(chats.createdAt) : desc(chats.createdAt)
-        );
-
-      // Get all chat IDs
-      const chatIds = chatsList.map((c) => c.id);
-
-      // Get all participants for these chats
-      const participantsList =
-        chatIds.length > 0
-          ? await database
-              .select({
-                chatId: chatParticipants.chatId,
-                userId: chatParticipants.userId,
-                joinedAt: chatParticipants.joinedAt,
-              })
-              .from(chatParticipants)
-              .where(inArray(chatParticipants.chatId, chatIds))
-          : [];
-
-      // Get last 10 messages for each chat
-      const messagesList =
-        chatIds.length > 0
-          ? await database
-              .select({
-                id: messages.id,
-                chatId: messages.chatId,
-                senderId: messages.senderId,
-                content: messages.content,
-                createdAt: messages.createdAt,
-              })
-              .from(messages)
-              .where(inArray(messages.chatId, chatIds))
-              .orderBy(desc(messages.createdAt))
-          : [];
-
-      // Get all unique participant IDs
-      const allParticipantIds = [
-        ...new Set(participantsList.map((p) => p.userId)),
-      ];
-      const allMessageSenderIds = [
-        ...new Set(messagesList.map((m) => m.senderId)),
-      ];
-      const allUserIds = [
-        ...new Set([...allParticipantIds, ...allMessageSenderIds]),
-      ];
-
-      // Get all users and actors at once
-      const allUsers =
-        allUserIds.length > 0
-          ? await database
-              .select({
-                id: users.id,
-                username: users.username,
-                displayName: users.displayName,
-                isActor: users.isActor,
-                profileImageUrl: users.profileImageUrl,
-              })
-              .from(users)
-              .where(inArray(users.id, allUserIds))
-          : [];
-
-      const allActors = allUserIds
-        .map((id) => StaticDataRegistry.getActor(id))
-        .filter((a): a is NonNullable<typeof a> => a !== null)
-        .map((a) => ({
-          id: a.id,
-          name: a.name,
-          profileImageUrl: a.profileImageUrl,
-        }));
-
-      // Get all groups - indexed by ID for lookup
-      const allUserGroups = await database
-        .select({
-          id: groups.id,
-          name: groups.name,
-          createdById: groups.createdById,
-          ownerId: groups.ownerId,
-          type: groups.type,
-        })
-        .from(groups);
-
-      // Group participants and messages by chat
-      const participantsByChat = new Map<string, typeof participantsList>();
-      participantsList.forEach((p) => {
-        const list = participantsByChat.get(p.chatId) || [];
-        list.push(p);
-        participantsByChat.set(p.chatId, list);
-      });
-
-      const messagesByChat = new Map<string, typeof messagesList>();
-      messagesList.forEach((m) => {
-        const list = messagesByChat.get(m.chatId) || [];
-        if (list.length < 10) {
-          // Keep only last 10 messages per chat
-          list.push(m);
-        }
-        messagesByChat.set(m.chatId, list);
-      });
-
-      // Attach participants and messages to chats
-      const chatsWithRelations = chatsList.map((chat) => ({
-        ...chat,
-        participants: participantsByChat.get(chat.id) || [],
-        messages: messagesByChat.get(chat.id) || [],
-      }));
-
-      return {
-        chatsList: chatsWithRelations,
-        allUsers,
-        allActors,
-        allUserGroups,
-      };
-    },
+  const {
+    chatsList: rawChatsList,
+    participantsList,
+    messagesList,
+    allUsers,
+    allUserGroups,
+  } = await asSystem(
+    (database) =>
+      fetchAdminGroupsListRawData(
+        database,
+        sortOrder === 'asc' ? 'asc' : 'desc'
+      ),
     'admin-groups'
   );
+
+  // Group participants and messages by chat
+  const participantsByChat = new Map<string, typeof participantsList>();
+  participantsList.forEach((p) => {
+    const list = participantsByChat.get(p.chatId) || [];
+    list.push(p);
+    participantsByChat.set(p.chatId, list);
+  });
+
+  const messagesByChat = new Map<string, typeof messagesList>();
+  messagesList.forEach((m) => {
+    const list = messagesByChat.get(m.chatId) || [];
+    if (list.length < 10) {
+      // Keep only last 10 messages per chat
+      list.push(m);
+    }
+    messagesByChat.set(m.chatId, list);
+  });
+
+  // Attach participants and messages to chats
+  const chatsList = rawChatsList.map((chat) => ({
+    ...chat,
+    participants: participantsByChat.get(chat.id) || [],
+    messages: messagesByChat.get(chat.id) || [],
+  }));
+
+  const allUserIds = [
+    ...new Set([
+      ...participantsList.map((p) => p.userId),
+      ...messagesList.map((m) => m.senderId),
+    ]),
+  ];
+  const allActors = allUserIds
+    .map((id) => StaticDataRegistry.getActor(id))
+    .filter((a): a is NonNullable<typeof a> => a !== null)
+    .map((a) => ({
+      id: a.id,
+      name: a.name,
+      profileImageUrl: a.profileImageUrl,
+    }));
 
   // Create maps for quick lookup
   const usersMap = new Map(allUsers.map((u) => [u.id, u]));

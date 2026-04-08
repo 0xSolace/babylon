@@ -3,14 +3,10 @@ import {
   PerpDbAdapter,
   type PriceImpactPort,
 } from '@babylon/core/markets/perps';
-import { and, eq, isNull } from '@babylon/db';
 import {
-  db,
-  organizationState,
-  perpMarketSnapshots,
-  perpPositions,
-} from '@babylon/db/runtime';
-
+  fetchPerpBasePriceForTicker,
+  fetchPerpPriceImpactReadContext,
+} from '@babylon/db';
 import {
   calculatePriceFromHoldings,
   logger,
@@ -30,16 +26,12 @@ export async function applyPerpUserTradePriceImpact(
   try {
     const normalizedTicker = ticker.toUpperCase();
 
-    const [snapshot] = await db
-      .select({
-        organizationId: perpMarketSnapshots.organizationId,
-        currentPrice: perpMarketSnapshots.currentPrice,
-      })
-      .from(perpMarketSnapshots)
-      .where(eq(perpMarketSnapshots.ticker, normalizedTicker))
-      .limit(1);
+    const read = await fetchPerpPriceImpactReadContext(normalizedTicker);
 
-    if (!snapshot) {
+    const snap = read.snapshot;
+    const { state, openPositions } = read;
+
+    if (!snap) {
       logger.warn(
         'PerpMarketSnapshot not found for price impact',
         { ticker: normalizedTicker },
@@ -48,46 +40,19 @@ export async function applyPerpUserTradePriceImpact(
       return undefined;
     }
 
-    const [state] = await db
-      .select({
-        id: organizationState.id,
-        currentPrice: organizationState.currentPrice,
-        basePrice: organizationState.basePrice,
-      })
-      .from(organizationState)
-      .where(eq(organizationState.id, snapshot.organizationId))
-      .limit(1);
-
     if (!state) {
       logger.warn(
         'OrganizationState not found for price impact',
-        { ticker: normalizedTicker, organizationId: snapshot.organizationId },
+        { ticker: normalizedTicker, organizationId: snap.organizationId },
         'PerpPriceImpact'
       );
       return undefined;
     }
 
-    const initialPrice = Number(
-      state.basePrice ?? snapshot.currentPrice ?? 100
-    );
+    const initialPrice = Number(state.basePrice ?? snap.currentPrice ?? 100);
     const currentPrice = Number(
-      snapshot.currentPrice ?? state.currentPrice ?? initialPrice
+      snap.currentPrice ?? state.currentPrice ?? initialPrice
     );
-
-    const openPositions = await db
-      .select({
-        side: perpPositions.side,
-        size: perpPositions.size,
-        leverage: perpPositions.leverage,
-        userId: perpPositions.userId,
-      })
-      .from(perpPositions)
-      .where(
-        and(
-          eq(perpPositions.ticker, normalizedTicker),
-          isNull(perpPositions.closedAt)
-        )
-      );
 
     let netHoldings = 0;
     let invalidPositions = 0;
@@ -125,7 +90,7 @@ export async function applyPerpUserTradePriceImpact(
 
     await PriceUpdateService.applyUpdates([
       {
-        organizationId: snapshot.organizationId,
+        organizationId: snap.organizationId,
         newPrice,
         source: 'user_trade',
         reason: 'User trade price impact',
@@ -159,22 +124,7 @@ export async function applyPerpUserTradePriceImpact(
 export async function getPerpBasePrice(
   ticker: string
 ): Promise<number | undefined> {
-  const normalizedTicker = ticker.toUpperCase();
-
-  const [snapshot] = await db
-    .select({ organizationId: perpMarketSnapshots.organizationId })
-    .from(perpMarketSnapshots)
-    .where(eq(perpMarketSnapshots.ticker, normalizedTicker))
-    .limit(1);
-  if (!snapshot) return undefined;
-
-  const [state] = await db
-    .select({ basePrice: organizationState.basePrice })
-    .from(organizationState)
-    .where(eq(organizationState.id, snapshot.organizationId))
-    .limit(1);
-
-  return state ? Number(state.basePrice ?? 100) : undefined;
+  return fetchPerpBasePriceForTicker(ticker.toUpperCase());
 }
 
 /**

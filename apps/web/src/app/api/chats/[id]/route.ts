@@ -59,16 +59,18 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { requireNftChatAccess } from '@babylon/api/services/nft-chat-gating-service';
-import { and, count, desc, eq, inArray, lt } from '@babylon/db';
 import {
-  asSystem,
-  asUser,
-  chatParticipants,
-  chats,
-  messageReactions,
-  messages,
-  users,
-} from '@babylon/db/runtime';
+  type DrizzleClient,
+  selectChatParticipantRowForChatReadAccess,
+  selectChatParticipantsByChatId,
+  selectChatRowById,
+  selectMessageReactionCountsGrouped,
+  selectMessagesPageForChatDetail,
+  selectReplyTargetMessagesInChat,
+  selectUserDisplaySlicesByIds,
+  selectUserReactionsOnMessages,
+} from '@babylon/db';
+import { asSystem, asUser } from '@babylon/db/engine-storage';
 import { StaticDataRegistry } from '@babylon/engine';
 import {
   ChatQuerySchema,
@@ -122,10 +124,10 @@ export const GET = withErrorHandling(
       'GET /api/chats/[id]'
     );
 
-    // Get chat first to check if it's a game chat
-    const [chat] = await asSystem(async (db) => {
-      return await db.select().from(chats).where(eq(chats.id, chatId)).limit(1);
-    }, 'get-chat-by-id');
+    const chat = await asSystem(
+      (db) => selectChatRowById(db, chatId),
+      'get-chat-by-id'
+    );
 
     if (!chat) {
       throw new NotFoundError('Chat', chatId);
@@ -145,21 +147,13 @@ export const GET = withErrorHandling(
       );
     } else {
       // Normal mode: require authentication and membership
-      authUser = await authenticate(request);
-      userId = authUser.userId;
+      const authedUser = await authenticate(request);
+      authUser = authedUser;
+      userId = authedUser.userId;
 
-      const [isMember] = await asUser(authUser, async (db) => {
-        return await db
-          .select()
-          .from(chatParticipants)
-          .where(
-            and(
-              eq(chatParticipants.chatId, chatId),
-              eq(chatParticipants.userId, authUser!.userId)
-            )
-          )
-          .limit(1);
-      });
+      const isMember = await asUser(authedUser, async (db) =>
+        selectChatParticipantRowForChatReadAccess(db, chatId, authedUser.userId)
+      );
 
       if (!isMember) {
         throw new AuthorizationError(
@@ -169,69 +163,35 @@ export const GET = withErrorHandling(
         );
       }
 
-      await requireNftChatAccess(authUser, chatId);
+      await requireNftChatAccess(authedUser, chatId);
     }
 
-    // Get chat with messages
-    const fetchChatData = async (
-      db: Parameters<Parameters<typeof asSystem>[0]>[0]
-    ) => {
-      // Get chat participants
-      const participantsList = await db
-        .select()
-        .from(chatParticipants)
-        .where(eq(chatParticipants.chatId, chatId));
+    /** Authenticated members use user RLS; debug game-chat access uses system context (matches prior asUser / asSystem split). */
+    const withMemberRlsOrDebugSystem = async <T>(
+      fn: (db: DrizzleClient) => Promise<T>,
+      systemOperationName: string
+    ): Promise<T> =>
+      authUser
+        ? await asUser(authUser, fn)
+        : await asSystem(fn, systemOperationName);
 
-      // Build message query with cursor-based pagination
-      let messagesList;
-      if (cursor) {
-        // Get the cursor message to find its createdAt
-        const [cursorMessage] = await db
-          .select({ createdAt: messages.createdAt })
-          .from(messages)
-          .where(eq(messages.id, cursor))
-          .limit(1);
-
-        if (cursorMessage) {
-          messagesList = await db
-            .select()
-            .from(messages)
-            .where(
-              and(
-                eq(messages.chatId, chatId),
-                lt(messages.createdAt, cursorMessage.createdAt)
-              )
-            )
-            .orderBy(desc(messages.createdAt))
-            .limit(effectiveLimit + 1);
-        } else {
-          messagesList = await db
-            .select()
-            .from(messages)
-            .where(eq(messages.chatId, chatId))
-            .orderBy(desc(messages.createdAt))
-            .limit(effectiveLimit + 1);
-        }
-      } else {
-        messagesList = await db
-          .select()
-          .from(messages)
-          .where(eq(messages.chatId, chatId))
-          .orderBy(desc(messages.createdAt))
-          .limit(effectiveLimit + 1);
-      }
-
+    const fetchChatData = async (db: DrizzleClient) => {
+      const participantsList = await selectChatParticipantsByChatId(db, chatId);
+      const messagesList = await selectMessagesPageForChatDetail(db, {
+        chatId,
+        cursorMessageId: cursor,
+        pageSize: effectiveLimit + 1,
+      });
       return { chat, participants: participantsList, messages: messagesList };
     };
 
-    const fullChat = authUser
-      ? await asUser(authUser, fetchChatData)
-      : await asSystem(fetchChatData, 'get-chat-with-messages-debug');
+    const fullChat = await withMemberRlsOrDebugSystem(
+      fetchChatData,
+      'get-chat-with-messages-debug'
+    );
 
     // Get participant details
-    const fetchParticipantDetails = async (
-      db: Parameters<Parameters<typeof asSystem>[0]>[0]
-    ) => {
+    const fetchParticipantDetails = async (db: DrizzleClient) => {
       const participantUserIds = fullChat.participants.map((p) => p.userId);
       const senderIds = [...new Set(fullChat.messages.map((m) => m.senderId))];
 
@@ -240,20 +200,7 @@ export const GET = withErrorHandling(
         ...new Set([...participantUserIds, ...(senderIds as string[])]),
       ].filter((id) => id !== 'system'); // Exclude system sender
 
-      const usersList =
-        allUserIds.length > 0
-          ? await db
-              .select({
-                id: users.id,
-                displayName: users.displayName,
-                username: users.username,
-                profileImageUrl: users.profileImageUrl,
-                isAgent: users.isAgent,
-                managedBy: users.managedBy,
-              })
-              .from(users)
-              .where(inArray(users.id, allUserIds))
-          : [];
+      const usersList = await selectUserDisplaySlicesByIds(db, allUserIds);
 
       const actorsList = (senderIds as string[])
         .map((id) => StaticDataRegistry.getActor(id))
@@ -267,9 +214,11 @@ export const GET = withErrorHandling(
       return { users: usersList, actors: actorsList };
     };
 
-    const { users: usersList, actors: actorsList } = authUser
-      ? await asUser(authUser, fetchParticipantDetails)
-      : await asSystem(fetchParticipantDetails, 'get-chat-participants-debug');
+    const { users: usersList, actors: actorsList } =
+      await withMemberRlsOrDebugSystem(
+        fetchParticipantDetails,
+        'get-chat-participants-debug'
+      );
 
     const usersMap = new Map(usersList.map((u) => [u.id, u]));
     const actorsMap = new Map(actorsList.map((a) => [a.id, a]));
@@ -358,32 +307,16 @@ export const GET = withErrorHandling(
     >();
     if (messageIds.length > 0) {
       const [counts, mine] = await Promise.all([
-        asSystem(async (db) => {
-          return await db
-            .select({
-              messageId: messageReactions.messageId,
-              emoji: messageReactions.emoji,
-              count: count(),
-            })
-            .from(messageReactions)
-            .where(inArray(messageReactions.messageId, messageIds))
-            .groupBy(messageReactions.messageId, messageReactions.emoji);
-        }, 'get-message-reaction-counts'),
+        asSystem(
+          (db) => selectMessageReactionCountsGrouped(db, messageIds),
+          'get-message-reaction-counts'
+        ),
         authUser
-          ? asSystem(async (db) => {
-              return await db
-                .select({
-                  messageId: messageReactions.messageId,
-                  emoji: messageReactions.emoji,
-                })
-                .from(messageReactions)
-                .where(
-                  and(
-                    inArray(messageReactions.messageId, messageIds),
-                    eq(messageReactions.userId, authUser!.userId)
-                  )
-                );
-            }, 'get-message-reactions-mine')
+          ? asSystem(
+              (db) =>
+                selectUserReactionsOnMessages(db, messageIds, authUser.userId),
+              'get-message-reactions-mine'
+            )
           : Promise.resolve([]),
       ]);
 
@@ -392,7 +325,7 @@ export const GET = withErrorHandling(
         const arr = reactionsByMessageId.get(row.messageId) ?? [];
         arr.push({
           emoji: row.emoji,
-          count: Number(row.count ?? 0),
+          count: row.count,
           reactedByMe: mineSet.has(`${row.messageId}:${row.emoji}`),
         });
         reactionsByMessageId.set(row.messageId, arr);
@@ -412,18 +345,14 @@ export const GET = withErrorHandling(
       { id: string; content: string; senderId: string; senderName?: string }
     >();
     if (replyToIds.length > 0) {
-      const replyMessages = await asSystem(async (db) => {
-        return await db
-          .select({
-            id: messages.id,
-            content: messages.content,
-            senderId: messages.senderId,
-          })
-          .from(messages)
-          .where(
-            and(inArray(messages.id, replyToIds), eq(messages.chatId, chatId))
-          );
-      }, 'get-reply-to-messages');
+      const replyMessages = await asSystem(
+        (db) =>
+          selectReplyTargetMessagesInChat(db, {
+            messageIds: replyToIds,
+            chatId,
+          }),
+        'get-reply-to-messages'
+      );
 
       for (const rm of replyMessages) {
         const sender = usersMap.get(rm.senderId);

@@ -9,27 +9,36 @@
  */
 
 import { verifyApiKey } from '@babylon/api';
-import type { JsonValue } from '@babylon/db';
-import {
-  type AgentRegistry,
-  and,
-  desc,
-  type ExternalAgentConnection,
-  eq,
-  gte,
-  ilike,
-  inArray,
-  isNull,
-  or,
-  type User,
+import type {
+  AgentCapability,
+  AgentRegistry,
+  AgentRegistryDiscoveryJoinRow,
+  AgentRegistryWithRelationsJoinRow,
+  ExternalAgentConnection,
+  JsonValue,
+  User,
 } from '@babylon/db';
 import {
-  agentCapabilities,
-  agentRegistries,
-  db,
-  externalAgentConnections,
-  users,
-} from '@babylon/db/runtime';
+  insertAgentCapabilityRow,
+  insertAgentRegistryRow,
+  insertExternalAgentConnectionRow,
+  selectAgentRegistriesForDiscovery,
+  selectAgentRegistryByActorId,
+  selectAgentRegistryByAgentId,
+  selectAgentRegistryByUserId,
+  selectAgentRegistryWithRelationsByAgentId,
+  selectExternalAgentConnectionByExternalId,
+  selectExternalConnectionRevokedAtByExternalId,
+  selectExternalConnectionsForApiKeyVerification,
+  selectUserRowByIdForRegistry,
+  updateAgentRegistryClearRuntime,
+  updateAgentRegistryLinkExternalToUser,
+  updateAgentRegistryRuntimeInitialized,
+  updateAgentRegistryStatusByAgentId,
+  updateAgentRegistryTrustLevel,
+  updateExternalAgentConnectionRevoke,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import { type StaticActor, StaticDataRegistry } from '@babylon/engine';
 import { logger } from '@babylon/shared';
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
@@ -62,7 +71,7 @@ const ALGORITHM = 'aes-256-cbc';
  * @internal
  */
 type RegistryWithRelations = AgentRegistry & {
-  capabilities: typeof agentCapabilities.$inferSelect | null;
+  capabilities: AgentCapability | null;
   User?: User | null;
   Actor?: StaticActor | null;
   externalConnection?: ExternalAgentConnection | null;
@@ -98,23 +107,13 @@ export class AgentRegistryService {
   }): Promise<AgentRegistration> {
     const { userId, name, systemPrompt, capabilities, trustLevel = 0 } = params;
 
-    // Verify user exists
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
+    const user = await selectUserRowByIdForRegistry(db, userId);
 
     if (!user) {
       throw new Error(`User not found: ${userId}`);
     }
 
-    // Check if already registered
-    const [existing] = await db
-      .select()
-      .from(agentRegistries)
-      .where(eq(agentRegistries.userId, userId))
-      .limit(1);
+    const existing = await selectAgentRegistryByUserId(db, userId);
 
     if (existing) {
       throw new Error(
@@ -125,8 +124,7 @@ export class AgentRegistryService {
     const registryId = `agent-user-${userId}`;
     const capabilityId = `cap-${userId}`;
 
-    // Create registry entry
-    await db.insert(agentRegistries).values({
+    await insertAgentRegistryRow(db, {
       id: registryId,
       agentId: userId,
       type: AgentType.USER_CONTROLLED,
@@ -141,8 +139,7 @@ export class AgentRegistryService {
       updatedAt: new Date(),
     });
 
-    // Create capabilities
-    await db.insert(agentCapabilities).values({
+    await insertAgentCapabilityRow(db, {
       id: capabilityId,
       agentRegistryId: registryId,
       strategies: capabilities.strategies ?? [],
@@ -164,7 +161,6 @@ export class AgentRegistryService {
       updatedAt: new Date(),
     });
 
-    // Fetch complete registry with relations
     const registry = await this.getRegistryWithRelations(userId);
     if (!registry) {
       throw new Error('Failed to create agent registry');
@@ -200,12 +196,7 @@ export class AgentRegistryService {
       throw new Error(`Actor not found: ${actorId}`);
     }
 
-    // Check if already registered
-    const [existing] = await db
-      .select()
-      .from(agentRegistries)
-      .where(eq(agentRegistries.actorId, actorId))
-      .limit(1);
+    const existing = await selectAgentRegistryByActorId(db, actorId);
 
     if (existing) {
       throw new Error(
@@ -216,8 +207,7 @@ export class AgentRegistryService {
     const registryId = `agent-npc-${actorId}`;
     const capabilityId = `cap-${actorId}`;
 
-    // Create registry entry with SYSTEM trust level for NPCs
-    await db.insert(agentRegistries).values({
+    await insertAgentRegistryRow(db, {
       id: registryId,
       agentId: actorId,
       type: AgentType.NPC,
@@ -231,8 +221,7 @@ export class AgentRegistryService {
       updatedAt: new Date(),
     });
 
-    // Create capabilities
-    await db.insert(agentCapabilities).values({
+    await insertAgentCapabilityRow(db, {
       id: capabilityId,
       agentRegistryId: registryId,
       strategies: capabilities.strategies ?? [],
@@ -252,7 +241,6 @@ export class AgentRegistryService {
       updatedAt: new Date(),
     });
 
-    // Fetch complete registry with relations
     const registry = await this.getRegistryWithRelations(actorId);
     if (!registry) {
       throw new Error('Failed to create agent registry');
@@ -287,14 +275,12 @@ export class AgentRegistryService {
       registeredByUserId,
     } = params;
 
-    // Check if already registered
-    const [existing] = await db
-      .select()
-      .from(externalAgentConnections)
-      .where(eq(externalAgentConnections.externalId, externalId))
-      .limit(1);
+    const existingConn = await selectExternalAgentConnectionByExternalId(
+      db,
+      externalId
+    );
 
-    if (existing) {
+    if (existingConn) {
       throw new Error(`External agent already registered: ${externalId}`);
     }
 
@@ -302,8 +288,7 @@ export class AgentRegistryService {
     const capabilityId = `cap-${externalId}`;
     const connectionId = `ext-conn-${externalId}`;
 
-    // Create registry entry with UNTRUSTED trust level by default
-    await db.insert(agentRegistries).values({
+    await insertAgentRegistryRow(db, {
       id: registryId,
       agentId: externalId,
       type: AgentType.EXTERNAL,
@@ -323,8 +308,7 @@ export class AgentRegistryService {
       updatedAt: new Date(),
     });
 
-    // Create capabilities
-    await db.insert(agentCapabilities).values({
+    await insertAgentCapabilityRow(db, {
       id: capabilityId,
       agentRegistryId: registryId,
       strategies: capabilities.strategies ?? [],
@@ -344,8 +328,7 @@ export class AgentRegistryService {
       updatedAt: new Date(),
     });
 
-    // Create external connection
-    await db.insert(externalAgentConnections).values({
+    await insertExternalAgentConnectionRow(db, {
       id: connectionId,
       agentRegistryId: registryId,
       externalId,
@@ -364,7 +347,6 @@ export class AgentRegistryService {
       updatedAt: new Date(),
     });
 
-    // Fetch complete registry with relations
     const registry = await this.getRegistryWithRelations(externalId);
     if (!registry) {
       throw new Error('Failed to create agent registry');
@@ -398,76 +380,31 @@ export class AgentRegistryService {
       offset = 0,
     } = filter;
 
-    // Build where conditions
-    const conditions = [];
-
+    let dbTypes: Array<'USER_CONTROLLED' | 'NPC' | 'EXTERNAL'> | undefined;
     if (types && types.length > 0) {
-      // Filter out USER_COORDINATOR since it's a virtual type not stored in database
-      const dbTypes = types.filter(
+      const filtered = types.filter(
         (t) => t !== AgentType.USER_COORDINATOR
       ) as Array<'USER_CONTROLLED' | 'NPC' | 'EXTERNAL'>;
-      if (dbTypes.length > 0) {
-        conditions.push(inArray(agentRegistries.type, dbTypes));
-      } else if (types.length > 0) {
-        // Caller requested only virtual types (e.g., USER_COORDINATOR) which don't exist in DB
-        // Return empty result immediately to avoid returning all agents
+      if (filtered.length === 0) {
         return [];
       }
+      dbTypes = filtered;
     }
 
-    if (statuses && statuses.length > 0) {
-      conditions.push(inArray(agentRegistries.status, statuses));
-    }
+    const registrationsRaw = await selectAgentRegistriesForDiscovery(db, {
+      types: dbTypes,
+      statuses:
+        statuses && statuses.length > 0
+          ? (statuses as AgentRegistry['status'][])
+          : undefined,
+      minTrustLevel,
+      search,
+      limit,
+      offset,
+    });
 
-    if (minTrustLevel !== undefined) {
-      conditions.push(gte(agentRegistries.trustLevel, minTrustLevel));
-    }
-
-    if (search) {
-      const searchCondition = or(
-        ilike(agentRegistries.name, `%${search}%`),
-        ilike(agentRegistries.systemPrompt, `%${search}%`)
-      );
-      if (searchCondition) {
-        conditions.push(searchCondition);
-      }
-    }
-
-    const registrationsRaw = await db
-      .select()
-      .from(agentRegistries)
-      .leftJoin(
-        agentCapabilities,
-        eq(agentCapabilities.agentRegistryId, agentRegistries.id)
-      )
-      .leftJoin(users, eq(users.id, agentRegistries.userId))
-      .leftJoin(
-        externalAgentConnections,
-        eq(externalAgentConnections.agentRegistryId, agentRegistries.id)
-      )
-      .where(conditions.length > 0 ? and(...conditions) : undefined)
-      .orderBy(
-        desc(agentRegistries.trustLevel),
-        desc(agentRegistries.registeredAt)
-      )
-      .limit(limit)
-      .offset(offset);
-
-    // Map to registry with relations format, getting Actor from static registry
-    const registrations: RegistryWithRelations[] = registrationsRaw.map(
-      (row) => {
-        const actorId = row.AgentRegistry.actorId;
-        const staticActor = actorId
-          ? StaticDataRegistry.getActor(actorId)
-          : null;
-        return {
-          ...row.AgentRegistry,
-          capabilities: row.AgentCapability,
-          User: row.User,
-          Actor: staticActor,
-          externalConnection: row.ExternalAgentConnection,
-        };
-      }
+    const registrations: RegistryWithRelations[] = registrationsRaw.map((row) =>
+      this.withStaticActor(row)
     );
 
     // Filter by required capabilities if specified
@@ -550,15 +487,11 @@ export class AgentRegistryService {
     agentId: string,
     status: AgentStatus
   ): Promise<AgentRegistration> {
-    await db
-      .update(agentRegistries)
-      .set({
-        status,
-        lastActiveAt: status === AgentStatus.ACTIVE ? new Date() : undefined,
-        terminatedAt:
-          status === AgentStatus.TERMINATED ? new Date() : undefined,
-      })
-      .where(eq(agentRegistries.agentId, agentId));
+    await updateAgentRegistryStatusByAgentId(db, agentId, {
+      status: status as AgentRegistry['status'],
+      lastActiveAt: status === AgentStatus.ACTIVE ? new Date() : undefined,
+      terminatedAt: status === AgentStatus.TERMINATED ? new Date() : undefined,
+    });
 
     const registry = await this.getRegistryWithRelations(agentId);
     if (!registry) {
@@ -582,13 +515,12 @@ export class AgentRegistryService {
     agentId: string,
     runtimeInstanceId: string
   ): Promise<void> {
-    await db
-      .update(agentRegistries)
-      .set({
-        runtimeInstanceId,
-        status: AgentStatus.INITIALIZED,
-      })
-      .where(eq(agentRegistries.agentId, agentId));
+    await updateAgentRegistryRuntimeInitialized(
+      db,
+      agentId,
+      runtimeInstanceId,
+      AgentStatus.INITIALIZED as AgentRegistry['status']
+    );
   }
 
   /**
@@ -601,13 +533,11 @@ export class AgentRegistryService {
    * @returns {Promise<void>}
    */
   async clearRuntimeInstance(agentId: string): Promise<void> {
-    await db
-      .update(agentRegistries)
-      .set({
-        runtimeInstanceId: null,
-        status: AgentStatus.REGISTERED,
-      })
-      .where(eq(agentRegistries.agentId, agentId));
+    await updateAgentRegistryClearRuntime(
+      db,
+      agentId,
+      AgentStatus.REGISTERED as AgentRegistry['status']
+    );
   }
 
   /**
@@ -623,10 +553,7 @@ export class AgentRegistryService {
     agentId: string,
     trustLevel: TrustLevel
   ): Promise<void> {
-    await db
-      .update(agentRegistries)
-      .set({ trustLevel })
-      .where(eq(agentRegistries.agentId, agentId));
+    await updateAgentRegistryTrustLevel(db, agentId, trustLevel);
   }
 
   /**
@@ -645,12 +572,7 @@ export class AgentRegistryService {
     agentId: string,
     userId: string
   ): Promise<AgentRegistration> {
-    // Verify agent is EXTERNAL type
-    const [registry] = await db
-      .select()
-      .from(agentRegistries)
-      .where(eq(agentRegistries.agentId, agentId))
-      .limit(1);
+    const registry = await selectAgentRegistryByAgentId(db, agentId);
 
     if (!registry) {
       throw new Error(`Agent not found: ${agentId}`);
@@ -662,22 +584,13 @@ export class AgentRegistryService {
       );
     }
 
-    // Verify user exists and not already linked to another agent
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
+    const user = await selectUserRowByIdForRegistry(db, userId);
 
     if (!user) {
       throw new Error(`User not found: ${userId}`);
     }
 
-    const [existingAgentRegistry] = await db
-      .select()
-      .from(agentRegistries)
-      .where(eq(agentRegistries.userId, userId))
-      .limit(1);
+    const existingAgentRegistry = await selectAgentRegistryByUserId(db, userId);
 
     if (existingAgentRegistry) {
       throw new Error(
@@ -685,14 +598,12 @@ export class AgentRegistryService {
       );
     }
 
-    // Link external agent to user
-    await db
-      .update(agentRegistries)
-      .set({
-        userId,
-        trustLevel: Math.max(registry.trustLevel, 1), // At least BASIC trust when linked
-      })
-      .where(eq(agentRegistries.agentId, agentId));
+    await updateAgentRegistryLinkExternalToUser(
+      db,
+      agentId,
+      userId,
+      Math.max(registry.trustLevel, 1)
+    );
 
     const updated = await this.getRegistryWithRelations(agentId);
     if (!updated) {
@@ -714,15 +625,7 @@ export class AgentRegistryService {
   async verifyExternalAgentApiKey(
     apiKey: string
   ): Promise<AgentRegistration | null> {
-    const agents = await db
-      .select()
-      .from(externalAgentConnections)
-      .where(
-        and(
-          eq(externalAgentConnections.authType, 'apiKey'),
-          isNull(externalAgentConnections.revokedAt)
-        )
-      );
+    const agents = await selectExternalConnectionsForApiKeyVerification(db);
 
     for (const agent of agents) {
       if (!agent.authCredentials) continue;
@@ -780,27 +683,18 @@ export class AgentRegistryService {
     revokedBy: string
   ): Promise<void> {
     const now = new Date();
-    const [updated] = await db
-      .update(externalAgentConnections)
-      .set({
-        revokedAt: now,
-        revokedBy,
-        updatedAt: now,
-      })
-      .where(
-        and(
-          eq(externalAgentConnections.externalId, externalId),
-          isNull(externalAgentConnections.revokedAt)
-        )
-      )
-      .returning({ externalId: externalAgentConnections.externalId });
+    const updated = await updateExternalAgentConnectionRevoke(
+      db,
+      externalId,
+      revokedBy,
+      now
+    );
 
     if (!updated) {
-      const [agent] = await db
-        .select({ revokedAt: externalAgentConnections.revokedAt })
-        .from(externalAgentConnections)
-        .where(eq(externalAgentConnections.externalId, externalId))
-        .limit(1);
+      const agent = await selectExternalConnectionRevokedAtByExternalId(
+        db,
+        externalId
+      );
 
       if (!agent) {
         throw new Error(`External agent not found: ${externalId}`);
@@ -828,13 +722,31 @@ export class AgentRegistryService {
   async getExternalAgentConnection(
     externalId: string
   ): Promise<ExternalAgentConnection | null> {
-    const [agent] = await db
-      .select()
-      .from(externalAgentConnections)
-      .where(eq(externalAgentConnections.externalId, externalId))
-      .limit(1);
-
+    const agent = await selectExternalAgentConnectionByExternalId(
+      db,
+      externalId
+    );
     return agent ?? null;
+  }
+
+  private joinRowToRegistryBase(
+    row: AgentRegistryDiscoveryJoinRow | AgentRegistryWithRelationsJoinRow
+  ): Omit<RegistryWithRelations, 'Actor'> {
+    return {
+      ...row.AgentRegistry,
+      capabilities: row.AgentCapability ?? null,
+      User: row.User ?? null,
+      externalConnection: row.ExternalAgentConnection ?? null,
+    };
+  }
+
+  private withStaticActor(
+    row: AgentRegistryDiscoveryJoinRow | AgentRegistryWithRelationsJoinRow
+  ): RegistryWithRelations {
+    const base = this.joinRowToRegistryBase(row);
+    const actorId = base.actorId;
+    const staticActor = actorId ? StaticDataRegistry.getActor(actorId) : null;
+    return { ...base, Actor: staticActor };
   }
 
   /**
@@ -843,34 +755,9 @@ export class AgentRegistryService {
   private async getRegistryWithRelations(
     agentId: string
   ): Promise<RegistryWithRelations | null> {
-    const [row] = await db
-      .select()
-      .from(agentRegistries)
-      .leftJoin(
-        agentCapabilities,
-        eq(agentCapabilities.agentRegistryId, agentRegistries.id)
-      )
-      .leftJoin(users, eq(users.id, agentRegistries.userId))
-      .leftJoin(
-        externalAgentConnections,
-        eq(externalAgentConnections.agentRegistryId, agentRegistries.id)
-      )
-      .where(eq(agentRegistries.agentId, agentId))
-      .limit(1);
-
+    const row = await selectAgentRegistryWithRelationsByAgentId(db, agentId);
     if (!row) return null;
-
-    // Get Actor from static registry
-    const actorId = row.AgentRegistry.actorId;
-    const staticActor = actorId ? StaticDataRegistry.getActor(actorId) : null;
-
-    return {
-      ...row.AgentRegistry,
-      capabilities: row.AgentCapability,
-      User: row.User,
-      Actor: staticActor,
-      externalConnection: row.ExternalAgentConnection,
-    };
+    return this.withStaticActor(row);
   }
 
   /**

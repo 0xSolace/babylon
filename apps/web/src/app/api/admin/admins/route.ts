@@ -10,8 +10,8 @@
  */
 
 import { requireAdmin, successResponse, withErrorHandling } from '@babylon/api';
-import { and, eq } from '@babylon/db';
-import { db, users } from '@babylon/db/runtime';
+import { selectAdminHumanUsersForAdminList } from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
@@ -22,27 +22,10 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   logger.info('Admin list requested', {}, 'GET /api/admin/admins');
 
   // Get all admin users
-  const admins = await db
-    .select({
-      id: users.id,
-      username: users.username,
-      displayName: users.displayName,
-      walletAddress: users.walletAddress,
-      profileImageUrl: users.profileImageUrl,
-      isActor: users.isActor,
-      isAdmin: users.isAdmin,
-      isBanned: users.isBanned,
-      onChainRegistered: users.onChainRegistered,
-      hasFarcaster: users.hasFarcaster,
-      hasTwitter: users.hasTwitter,
-      farcasterUsername: users.farcasterUsername,
-      twitterUsername: users.twitterUsername,
-      createdAt: users.createdAt,
-      updatedAt: users.updatedAt,
-    })
-    .from(users)
-    .where(and(eq(users.isAdmin, true), eq(users.isActor, false)))
-    .orderBy(users.createdAt);
+  const admins = await asSystem(
+    (tx) => selectAdminHumanUsersForAdminList(tx),
+    'admin-admins-list'
+  );
 
   logger.info(`Found ${admins.length} admins`, {}, 'GET /api/admin/admins');
 

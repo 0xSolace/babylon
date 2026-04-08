@@ -16,7 +16,6 @@
  */
 
 import { afterEach, beforeAll, describe, expect, test } from 'bun:test';
-import { eq, inArray } from '@babylon/db';
 import {
   db,
   nftClaims,
@@ -24,9 +23,9 @@ import {
   nftOwnership,
   nftSnapshot,
   users,
-} from '@babylon/db/runtime';
-
+} from '@babylon/db/engine-storage';
 import { generateSnowflakeId } from '@babylon/shared';
+import { eq, inArray } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 
 const BASE_URL =

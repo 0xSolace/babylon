@@ -7,21 +7,27 @@
  * Token-aware: Limits context size to prevent LLM token overflows
  */
 
-import { and, asc, desc, eq, gte, inArray, isNull, lte, or } from '@babylon/db';
 import {
-  actorRelationships,
-  actorState,
-  chatParticipants,
-  chats,
-  db,
-  getDbInstance,
-  markets,
-  messages,
-  poolPositions,
-  posts,
-  stockPrices,
-  worldEvents,
-} from '@babylon/db/runtime';
+  fetchActorStateByIdForMarketContext,
+  fetchMarketQuestionNumberAliasByMarketId,
+  fetchPerpPriceHistoryAndOpenPositionsForOrg,
+  listActorRelationshipsForNpcIds,
+  listActorRelationshipsForSingleNpc,
+  listAllActorStatesForMarketContext,
+  listAllOrganizationStatesForMarketContext,
+  listGroupChatMessagesForChatIdsOrderedDesc,
+  listGroupChatsByIdsForInsider,
+  listGroupChatsIdNameForMarketContext,
+  listInsiderParticipantChatIdsForUser,
+  listMessagesForChatOrderedDescLimit,
+  listOpenPoolPositionsForNpc,
+  listOpenPoolPositionsForPoolIds,
+  listRecentFeedPostsForMarketContext,
+  listRecentPostsByNpcForMarketContext,
+  listRecentWorldEventsForMarketContext,
+  listTopUnresolvedPredictionMarketsForMarketContext,
+  listWorldEventsForNpcPersonalContext,
+} from '@babylon/db';
 import { logger } from '@babylon/shared';
 import {
   getSimulationPrice,
@@ -159,7 +165,7 @@ export class MarketContextService {
     // Fetch all NPCs from static registry and state table
     // Filter out test actors (Group Test Alice, Bob, Charlie)
     const staticActors = StaticDataRegistry.getAllActors();
-    const actorStates = await db.select().from(actorState);
+    const actorStates = await listAllActorStatesForMarketContext();
     const stateMap = new Map(actorStates.map((s) => [s.id, s]));
 
     // Combine static and dynamic data, filter test actors
@@ -197,27 +203,17 @@ export class MarketContextService {
     );
 
     // Get group chats with messages
-    const groupChats = await db
-      .select({
-        id: chats.id,
-        name: chats.name,
-      })
-      .from(chats)
-      .where(eq(chats.isGroup, true));
+    const groupChats = await listGroupChatsIdNameForMarketContext();
 
-    // Get messages for each group chat
-    const groupChatMessages = new Map<string, typeof messagesData>();
-    const messagesData = await db
-      .select()
-      .from(messages)
-      .where(
-        inArray(
-          messages.chatId,
-          groupChats.map((c) => c.id)
-        )
-      )
-      .orderBy(desc(messages.createdAt))
-      .limit(500); // Limit total messages
+    type GroupChatMsgRow = Awaited<
+      ReturnType<typeof listGroupChatMessagesForChatIdsOrderedDesc>
+    >[number];
+    const groupChatMessages = new Map<string, GroupChatMsgRow[]>();
+
+    const messagesData = await listGroupChatMessagesForChatIdsOrderedDesc({
+      chatIds: groupChats.map((chat) => chat.id),
+      limit: 500,
+    });
 
     // Group messages by chat
     for (const msg of messagesData) {
@@ -231,45 +227,10 @@ export class MarketContextService {
 
     // Fetch all relationships for all NPCs in one query
     const npcIds = npcs.map((npc) => npc.id);
-    const allRelationships =
-      npcIds.length > 0
-        ? await db
-            .select()
-            .from(actorRelationships)
-            .where(
-              or(
-                inArray(actorRelationships.actor1Id, npcIds),
-                inArray(actorRelationships.actor2Id, npcIds)
-              )
-            )
-        : [];
+    const allRelationships = await listActorRelationshipsForNpcIds(npcIds);
 
     // Fetch all NPC positions in one query (poolId = actorId for backward compatibility)
-    const allPositions =
-      npcIds.length > 0
-        ? await db
-            .select({
-              id: poolPositions.id,
-              poolId: poolPositions.poolId,
-              marketType: poolPositions.marketType,
-              ticker: poolPositions.ticker,
-              marketId: poolPositions.marketId,
-              side: poolPositions.side,
-              entryPrice: poolPositions.entryPrice,
-              currentPrice: poolPositions.currentPrice,
-              size: poolPositions.size,
-              shares: poolPositions.shares,
-              unrealizedPnL: poolPositions.unrealizedPnL,
-              openedAt: poolPositions.openedAt,
-            })
-            .from(poolPositions)
-            .where(
-              and(
-                inArray(poolPositions.poolId, npcIds),
-                isNull(poolPositions.closedAt)
-              )
-            )
-        : [];
+    const allPositions = await listOpenPoolPositionsForPoolIds(npcIds);
 
     // Group positions by NPC ID
     const positionsByNpc = new Map<string, typeof allPositions>();
@@ -402,7 +363,7 @@ export class MarketContextService {
     }
 
     // Get dynamic state from database
-    const npcState = await getDbInstance().getActorState(npcId);
+    const npcState = await fetchActorStateByIdForMarketContext(npcId);
 
     // Combine static and dynamic data
     const npc = {
@@ -432,24 +393,7 @@ export class MarketContextService {
     const availableBalance = Number.parseFloat(npc.tradingBalance.toString());
 
     // Fetch positions for this NPC (poolId = actorId for backward compatibility)
-    const npcPositions = await db
-      .select({
-        id: poolPositions.id,
-        marketType: poolPositions.marketType,
-        ticker: poolPositions.ticker,
-        marketId: poolPositions.marketId,
-        side: poolPositions.side,
-        entryPrice: poolPositions.entryPrice,
-        currentPrice: poolPositions.currentPrice,
-        size: poolPositions.size,
-        shares: poolPositions.shares,
-        unrealizedPnL: poolPositions.unrealizedPnL,
-        openedAt: poolPositions.openedAt,
-      })
-      .from(poolPositions)
-      .where(
-        and(eq(poolPositions.poolId, npcId), isNull(poolPositions.closedAt))
-      );
+    const npcPositions = await listOpenPoolPositionsForNpc(npcId);
 
     const currentPositions: NPCPosition[] = npcPositions.map((pos) => ({
       id: pos.id,
@@ -494,15 +438,7 @@ export class MarketContextService {
   private async getRelationshipsForNPC(
     npcId: string
   ): Promise<RelationshipContext[]> {
-    const relationshipsList = await db
-      .select()
-      .from(actorRelationships)
-      .where(
-        or(
-          eq(actorRelationships.actor1Id, npcId),
-          eq(actorRelationships.actor2Id, npcId)
-        )
-      );
+    const relationshipsList = await listActorRelationshipsForSingleNpc(npcId);
 
     return relationshipsList.map((rel) => {
       const isActor1 = rel.actor1Id === npcId;
@@ -535,10 +471,8 @@ export class MarketContextService {
    */
   private async getInsiderInfo(npcId: string): Promise<GroupChatContext[]> {
     // Get chats where NPC is a participant
-    const participantRecords = await db
-      .select({ chatId: chatParticipants.chatId })
-      .from(chatParticipants)
-      .where(eq(chatParticipants.userId, npcId));
+    const participantRecords =
+      await listInsiderParticipantChatIdsForUser(npcId);
 
     const participantChatIds = participantRecords.map((p) => p.chatId);
 
@@ -546,22 +480,16 @@ export class MarketContextService {
       return [];
     }
 
-    const groupChats = await db
-      .select()
-      .from(chats)
-      .where(
-        and(eq(chats.isGroup, true), inArray(chats.id, participantChatIds))
-      );
+    const insiderGroupChats =
+      await listGroupChatsByIdsForInsider(participantChatIds);
 
     const result: GroupChatContext[] = [];
 
-    for (const chat of groupChats) {
-      const chatMessages = await db
-        .select()
-        .from(messages)
-        .where(eq(messages.chatId, chat.id))
-        .orderBy(desc(messages.createdAt))
-        .limit(20);
+    for (const chat of insiderGroupChats) {
+      const chatMessages = await listMessagesForChatOrderedDescLimit({
+        chatId: chat.id,
+        limit: 20,
+      });
 
       for (const msg of chatMessages.slice(0, 15)) {
         // Truncate long messages
@@ -600,12 +528,10 @@ export class MarketContextService {
    */
   private async getRecentFeed(): Promise<FeedPostContext[]> {
     const now = new Date();
-    const postList = await db
-      .select()
-      .from(posts)
-      .where(and(isNull(posts.deletedAt), lte(posts.timestamp, now)))
-      .orderBy(desc(posts.timestamp))
-      .limit(50);
+    const postList = await listRecentFeedPostsForMarketContext({
+      now,
+      limit: 50,
+    });
 
     return postList.map((post) => {
       // Truncate long posts to save tokens
@@ -646,12 +572,10 @@ export class MarketContextService {
    */
   private async getRecentEvents(): Promise<EventContext[]> {
     const now = new Date();
-    const eventList = await db
-      .select()
-      .from(worldEvents)
-      .where(lte(worldEvents.timestamp, now))
-      .orderBy(desc(worldEvents.timestamp))
-      .limit(30);
+    const eventList = await listRecentWorldEventsForMarketContext({
+      now,
+      limit: 30,
+    });
 
     return eventList.map((event) => {
       // Truncate long descriptions
@@ -697,17 +621,11 @@ export class MarketContextService {
     const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
 
     // Get all recent events and filter by NPC involvement
-    const eventList = await db
-      .select()
-      .from(worldEvents)
-      .where(
-        and(
-          lte(worldEvents.timestamp, now),
-          gte(worldEvents.timestamp, threeDaysAgo)
-        )
-      )
-      .orderBy(desc(worldEvents.timestamp))
-      .limit(100);
+    const eventList = await listWorldEventsForNpcPersonalContext({
+      now,
+      sinceInclusive: threeDaysAgo,
+      limit: 100,
+    });
 
     // Filter events where NPC is in the actors array or mentioned in description
     const npcEvents = eventList.filter((event) => {
@@ -764,19 +682,12 @@ export class MarketContextService {
     const now = new Date();
     const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
 
-    const npcPosts = await db
-      .select()
-      .from(posts)
-      .where(
-        and(
-          eq(posts.authorId, npcId),
-          gte(posts.timestamp, threeDaysAgo),
-          lte(posts.timestamp, now),
-          isNull(posts.deletedAt)
-        )
-      )
-      .orderBy(desc(posts.timestamp))
-      .limit(10);
+    const npcPosts = await listRecentPostsByNpcForMarketContext({
+      npcId,
+      now,
+      sinceInclusive: threeDaysAgo,
+      limit: 10,
+    });
 
     return npcPosts.map((post) => {
       const maxContentLength = 200;
@@ -828,7 +739,7 @@ export class MarketContextService {
   private async getPerpMarketSnapshots(): Promise<PerpMarketSnapshot[]> {
     // Get static organization data and dynamic prices
     const staticOrgs = StaticDataRegistry.getAllOrganizations();
-    const orgStates = await getDbInstance().getAllOrganizationStates();
+    const orgStates = await listAllOrganizationStatesForMarketContext();
     const priceMap = new Map<string, number | null>(
       orgStates.map((s): [string, number | null] => [s.id, s.currentPrice])
     );
@@ -857,16 +768,12 @@ export class MarketContextService {
 
         // Get 24h price history
         const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-        const priceHistory = await db
-          .select()
-          .from(stockPrices)
-          .where(
-            and(
-              eq(stockPrices.organizationId, company.id),
-              gte(stockPrices.timestamp, oneDayAgo)
-            )
-          )
-          .orderBy(asc(stockPrices.timestamp));
+        const { priceHistory, openPositions: positions } =
+          await fetchPerpPriceHistoryAndOpenPositionsForOrg({
+            organizationId: company.id,
+            poolTickerEq: company.id,
+            sinceInclusive: oneDayAgo,
+          });
 
         let change24h = 0;
         let changePercent24h = 0;
@@ -882,17 +789,6 @@ export class MarketContextService {
           high24h = Math.max(...priceHistory.map((p) => p.price), currentPrice);
           low24h = Math.min(...priceHistory.map((p) => p.price), currentPrice);
         }
-
-        // Get open interest from pool positions
-        const positions = await db
-          .select({ size: poolPositions.size })
-          .from(poolPositions)
-          .where(
-            and(
-              eq(poolPositions.ticker, company.id),
-              isNull(poolPositions.closedAt)
-            )
-          );
 
         const openInterest = positions.reduce(
           (sum, pos) => sum + Number(pos.size),
@@ -939,12 +835,12 @@ export class MarketContextService {
   private async getPredictionMarketSnapshots(): Promise<
     PredictionMarketSnapshot[]
   > {
-    const marketList = await db
-      .select()
-      .from(markets)
-      .where(and(eq(markets.resolved, false), gte(markets.endDate, new Date())))
-      .orderBy(desc(markets.yesShares))
-      .limit(15);
+    const marketList = await listTopUnresolvedPredictionMarketsForMarketContext(
+      {
+        now: new Date(),
+        limit: 15,
+      }
+    );
 
     return marketList.map((market) => {
       const yesShares = Number.parseFloat(market.yesShares.toString());
@@ -1009,11 +905,9 @@ export class MarketContextService {
     for (const market of marketsToAnalyze) {
       // Get question number from market ID for signal extraction
       // Market IDs are snowflake strings, need to lookup question number
-      const questionResult = await db
-        .select({ questionNumber: markets.id })
-        .from(markets)
-        .where(eq(markets.id, market.id))
-        .limit(1);
+      const questionResult = await fetchMarketQuestionNumberAliasByMarketId(
+        market.id
+      );
 
       if (questionResult.length === 0) continue;
 

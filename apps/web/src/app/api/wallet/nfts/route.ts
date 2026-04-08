@@ -20,8 +20,11 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { eq, inArray } from '@babylon/db';
-import { db, nftCollection, nftOwnership } from '@babylon/db/runtime';
+import {
+  selectNftCollectionPortfolioRowsByTokenIds,
+  selectNftOwnershipTokenIdsByOwnerAddress,
+} from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -84,10 +87,9 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       );
 
       // DB fallback: query nftOwnership by address
-      const ownershipRows = await db
-        .select({ tokenId: nftOwnership.tokenId })
-        .from(nftOwnership)
-        .where(eq(nftOwnership.ownerAddress, walletAddress));
+      const ownershipRows = await asUser(user, async (db) =>
+        selectNftOwnershipTokenIdsByOwnerAddress(db, walletAddress)
+      );
       tokenIds = ownershipRows.map((r) => r.tokenId);
     } else {
       throw error;
@@ -101,16 +103,9 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const uniqueTokenIds = Array.from(new Set(tokenIds)).sort((a, b) => a - b);
 
   // Fetch metadata from nftCollection table
-  const rows = await db
-    .select({
-      tokenId: nftCollection.tokenId,
-      name: nftCollection.name,
-      imageUrl: nftCollection.imageUrl,
-      thumbnailUrl: nftCollection.thumbnailUrl,
-      contractAddress: nftCollection.contractAddress,
-    })
-    .from(nftCollection)
-    .where(inArray(nftCollection.tokenId, uniqueTokenIds));
+  const rows = await asUser(user, async (db) =>
+    selectNftCollectionPortfolioRowsByTokenIds(db, uniqueTokenIds)
+  );
 
   const items = rows.map((row) => ({
     contractAddress: row.contractAddress,

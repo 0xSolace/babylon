@@ -8,7 +8,7 @@
  */
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { asSystem } from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 
 import { executeGameTick } from '@babylon/engine';
 import { generateSnowflakeId } from '@babylon/shared';

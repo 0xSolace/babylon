@@ -62,15 +62,14 @@ import {
   PredictionDbAdapter as CorePredictionDbAdapter,
   PredictionMarketService as CorePredictionMarketService,
 } from '@babylon/core/markets/prediction';
-import { and, desc, eq, gte } from '@babylon/db';
 import {
-  db,
-  questions,
-  tags,
-  trendingTags,
-  worldEvents,
-} from '@babylon/db/runtime';
-
+  fetchLatestQuestionNumberForQuestionManager,
+  insertQuestionRowForQuestionManager,
+  listActiveQuestionsForQuestionManager,
+  listPublicWorldEventsSinceForQuestionManager,
+  listResolvedQuestionOutcomesForQuestionManager,
+  listTrendingTagsWithNamesForQuestionManager,
+} from '@babylon/db';
 import {
   generateSnowflakeId,
   logger,
@@ -108,7 +107,6 @@ import type {
   SelectedActor,
   WorldEvent,
 } from './types/shared';
-import { firstOrThrow } from './utils/array-utils';
 import { toDateString } from './utils/date-utils';
 import { formatError } from './utils/error-utils';
 import { clamp } from './utils/math-utils';
@@ -1025,47 +1023,15 @@ ${s.involvedOrganizations?.length ? `Organizations: ${s.involvedOrganizations.jo
         includeTrades: true,
         includeWorldFacts: true,
       }),
-      // Get recent events from last 7 days
-      db
-        .select()
-        .from(worldEvents)
-        .where(
-          and(
-            gte(
-              worldEvents.timestamp,
-              new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-            ),
-            eq(worldEvents.visibility, 'public')
-          )
-        )
-        .orderBy(desc(worldEvents.timestamp))
-        .limit(20),
-      // Get active questions
-      db
-        .select()
-        .from(questions)
-        .where(eq(questions.status, 'active'))
-        .orderBy(desc(questions.createdAt))
-        .limit(20),
-      // Get recently resolved questions (last 7 days) with outcomes
-      db
-        .select({
-          text: questions.text,
-          resolvedOutcome: questions.resolvedOutcome,
-          resolutionDate: questions.resolutionDate,
-        })
-        .from(questions)
-        .where(
-          and(
-            eq(questions.status, 'resolved'),
-            gte(
-              questions.updatedAt,
-              new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-            )
-          )
-        )
-        .orderBy(desc(questions.updatedAt))
-        .limit(10),
+      listPublicWorldEventsSinceForQuestionManager(
+        new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+        20
+      ),
+      listActiveQuestionsForQuestionManager(20),
+      listResolvedQuestionOutcomesForQuestionManager(
+        new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+        10
+      ),
       // Get actors (main and supporting roles, with tier fallback) from static registry
       Promise.resolve(
         StaticDataRegistry.getAllActors()
@@ -1093,20 +1059,7 @@ ${s.involvedOrganizations?.length ? `Organizations: ${s.involvedOrganizations.jo
             type: o.type,
           }))
       ),
-      // Get trending topics for context (with manual join for tags)
-      db
-        .select({
-          id: trendingTags.id,
-          tagId: trendingTags.tagId,
-          score: trendingTags.score,
-          tagName: tags.name,
-          tagDisplayName: tags.displayName,
-          tagCategory: tags.category,
-        })
-        .from(trendingTags)
-        .leftJoin(tags, eq(trendingTags.tagId, tags.id))
-        .orderBy(desc(trendingTags.score))
-        .limit(10),
+      listTrendingTagsWithNamesForQuestionManager(10),
       // Get market metrics for metrics-based question generation (BAB-5)
       MarketMetricsService.gatherMetrics(24),
     ]);
@@ -1343,13 +1296,8 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
       return questionsCreated;
     }
 
-    // Get next question number
-    const [lastQuestion] = await db
-      .select({ questionNumber: questions.questionNumber })
-      .from(questions)
-      .orderBy(desc(questions.questionNumber))
-      .limit(1);
-    let nextQuestionNumber = (lastQuestion?.questionNumber ?? 0) + 1;
+    const lastNum = await fetchLatestQuestionNumberForQuestionManager();
+    let nextQuestionNumber = (lastNum ?? 0) + 1;
 
     // Using default scenario ID until dynamic scenario selection is implemented
     const scenarioId = 1;
@@ -1439,27 +1387,20 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
         'QuestionManager'
       );
 
-      const questionResults = await db
-        .insert(questions)
-        .values({
-          id: await generateSnowflakeId(),
-          questionNumber: nextQuestionNumber++,
-          text: questionData.text,
-          scenarioId,
-          outcome: expectedOutcome,
-          rank: 1,
-          resolutionDate,
-          status: 'active',
-          topicKey: currentTopic?.topicKey,
-          topicLabel: currentTopic?.topicLabel,
-          topicDate: currentTopic?.date,
-          updatedAt: now,
-        })
-        .returning();
-      const question = firstOrThrow(
-        questionResults,
-        'Question insert returned empty'
-      );
+      const question = await insertQuestionRowForQuestionManager({
+        id: await generateSnowflakeId(),
+        questionNumber: nextQuestionNumber++,
+        text: questionData.text,
+        scenarioId,
+        outcome: expectedOutcome,
+        rank: 1,
+        resolutionDate,
+        status: 'active',
+        topicKey: currentTopic?.topicKey,
+        topicLabel: currentTopic?.topicLabel,
+        topicDate: currentTopic?.date,
+        updatedAt: now,
+      });
 
       // Ensure market exists via core service (keeps creation logic portable)
       const market = await marketService.ensureMarketExists({
@@ -1640,28 +1581,11 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
       trendingTagsList,
     ] = await Promise.all([
       worldFactsService.generatePromptContext(),
-      // Get recent events - more recent for shorter timeframes
-      db
-        .select()
-        .from(worldEvents)
-        .where(
-          and(
-            gte(
-              worldEvents.timestamp,
-              new Date(Date.now() - this.getLookbackMs(category))
-            ),
-            eq(worldEvents.visibility, 'public')
-          )
-        )
-        .orderBy(desc(worldEvents.timestamp))
-        .limit(category === 'short' ? 10 : 20),
-      // Get active questions to avoid duplication
-      db
-        .select()
-        .from(questions)
-        .where(eq(questions.status, 'active'))
-        .orderBy(desc(questions.createdAt))
-        .limit(20),
+      listPublicWorldEventsSinceForQuestionManager(
+        new Date(Date.now() - this.getLookbackMs(category)),
+        category === 'short' ? 10 : 20
+      ),
+      listActiveQuestionsForQuestionManager(20),
       // Get actors (with tier fallback since many actors don't have role defined)
       Promise.resolve(
         StaticDataRegistry.getAllActors()
@@ -1685,16 +1609,7 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
             description: o.description,
           }))
       ),
-      // Get trending topics
-      db
-        .select({
-          tagName: tags.name,
-          tagDisplayName: tags.displayName,
-        })
-        .from(trendingTags)
-        .leftJoin(tags, eq(trendingTags.tagId, tags.id))
-        .orderBy(desc(trendingTags.score))
-        .limit(8),
+      listTrendingTagsWithNamesForQuestionManager(8),
     ]);
 
     // Build context strings

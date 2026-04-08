@@ -5,7 +5,7 @@
  * Handles database initialization, database readiness checks, and test isolation.
  */
 
-import { db } from '@babylon/db/runtime';
+import { db } from '@babylon/db/engine-storage';
 
 /**
  * Check if database is available and properly configured

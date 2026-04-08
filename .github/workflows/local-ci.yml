@@ -146,6 +146,11 @@ jobs:
           echo "✨ Running linter..."
           bun run lint
 
+      - name: DB query boundary
+        run: |
+          echo "🧱 Checking @babylon/db/runtime import boundary..."
+          bun run enforce:db-boundary
+
       - name: Build
         if: ${{ env.ACT != 'true' }}
         env:

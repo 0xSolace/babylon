@@ -18,7 +18,7 @@ import {
   challengeDefinitions,
   closeDatabase,
   db,
-} from '@babylon/db/runtime';
+} from '@babylon/db/engine-storage';
 
 import {
   ACHIEVEMENT_DEFINITIONS,

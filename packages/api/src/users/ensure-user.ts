@@ -6,15 +6,19 @@
  * information.
  */
 
-import { eq, type User } from '@babylon/db';
-import { db, users } from '@babylon/db/runtime';
+import {
+  insertUserReturningCanonical,
+  type NewUser,
+  selectEnsureUserCanonicalByPrivyId,
+  type User,
+  updateUserReturningCanonical,
+} from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import type { AuthenticatedUser } from '../auth-middleware';
 import { cachedDb } from '../cache/cached-database-service';
 
 /**
  * Options for ensuring user exists
- *
- * @description Configuration options for user creation/update.
  */
 export interface EnsureUserOptions {
   displayName?: string;
@@ -35,22 +39,6 @@ export type CanonicalUser = Pick<
 
 /**
  * Ensure user exists in database for authenticated user
- *
- * @description Creates or updates a user record based on authenticated user
- * information. Uses upsert to handle both new and existing users. Updates
- * dbUserId on the authenticated user object.
- *
- * @param {AuthenticatedUser} user - Authenticated user information
- * @param {EnsureUserOptions} [options={}] - Options for user creation/update
- * @returns {Promise<{user: CanonicalUser}>} Canonical user object
- *
- * @example
- * ```typescript
- * const { user } = await ensureUserForAuth(authUser, {
- *   username: 'alice',
- *   displayName: 'Alice'
- * });
- * ```
  */
 export async function ensureUserForAuth(
   user: AuthenticatedUser,
@@ -58,25 +46,13 @@ export async function ensureUserForAuth(
 ): Promise<{ user: CanonicalUser }> {
   const privyId = user.privyId ?? user.userId;
 
-  // Check if user exists
-  const existing = await db
-    .select({
-      id: users.id,
-      privyId: users.privyId,
-      username: users.username,
-      displayName: users.displayName,
-      walletAddress: users.walletAddress,
-      isActor: users.isActor,
-      profileImageUrl: users.profileImageUrl,
-    })
-    .from(users)
-    .where(eq(users.privyId, privyId))
-    .limit(1);
+  const existingUser = await asSystem(
+    async (c) => selectEnsureUserCanonicalByPrivyId(c, privyId),
+    'ensure-user-select-by-privy'
+  );
 
-  if (existing.length > 0 && existing[0]) {
-    // User exists - update if needed
-    const existingUser = existing[0];
-    const updateData: Partial<typeof users.$inferInsert> = {};
+  if (existingUser) {
+    const updateData: Partial<NewUser> = {};
 
     if (
       user.walletAddress &&
@@ -104,25 +80,18 @@ export async function ensureUserForAuth(
       const oldUsername = existingUser.username;
       const oldPrivyId = existingUser.privyId;
 
-      const updated = await db
-        .update(users)
-        .set(updateData)
-        .where(eq(users.id, existingUser.id))
-        .returning({
-          id: users.id,
-          privyId: users.privyId,
-          username: users.username,
-          displayName: users.displayName,
-          walletAddress: users.walletAddress,
-          isActor: users.isActor,
-          profileImageUrl: users.profileImageUrl,
-        });
+      const updatedUser = await asSystem(
+        async (c) =>
+          updateUserReturningCanonical(c, existingUser.id, updateData),
+        'ensure-user-update'
+      );
 
-      const updatedUser = updated[0]!;
+      if (!updatedUser) {
+        throw new Error('ensureUserForAuth: update returned no row');
+      }
+
       user.dbUserId = updatedUser.id;
 
-      // Refresh identifier caches after any successful user update because lookups
-      // now cache the full user row under identifier-based keys.
       const usernameChanged =
         options.username !== undefined && oldUsername !== updatedUser.username;
       const privyIdChanged = oldPrivyId !== updatedUser.privyId;
@@ -139,20 +108,17 @@ export async function ensureUserForAuth(
         }
       );
 
-      return { user: updatedUser };
+      return { user: updatedUser as CanonicalUser };
     }
 
     user.dbUserId = existingUser.id;
-    return { user: existingUser };
+    return { user: existingUser as CanonicalUser };
   }
 
-  // Create new user
-  const createData: typeof users.$inferInsert = {
+  const createData: NewUser = {
     id: user.dbUserId ?? user.userId,
     privyId,
     isActor: options.isActor ?? false,
-    // New users start with 1000 virtual balance + 1000 base reputation (see db schema defaults).
-    // totalPoints = wallet + rep; keep consistent so leaderboard doesn't show 0 until the cron recompute runs.
     totalPoints: '2000',
     totalPointsDirtyAt: new Date(),
     updatedAt: new Date(),
@@ -168,43 +134,28 @@ export async function ensureUserForAuth(
     createData.displayName = options.displayName;
   }
 
-  const created = await db.insert(users).values(createData).returning({
-    id: users.id,
-    privyId: users.privyId,
-    username: users.username,
-    displayName: users.displayName,
-    walletAddress: users.walletAddress,
-    isActor: users.isActor,
-    profileImageUrl: users.profileImageUrl,
-  });
+  const createdUser = await asSystem(
+    async (c) => insertUserReturningCanonical(c, createData),
+    'ensure-user-insert'
+  );
 
-  const createdUser = created[0]!;
+  if (!createdUser) {
+    throw new Error('ensureUserForAuth: insert returned no row');
+  }
+
   user.dbUserId = createdUser.id;
 
-  // Invalidate identifier caches for the new user (clears negative cache)
   await cachedDb.invalidateUserIdentifierCaches({
     id: createdUser.id,
     privyId: createdUser.privyId,
     username: createdUser.username,
   });
 
-  return { user: createdUser };
+  return { user: createdUser as CanonicalUser };
 }
 
 /**
  * Get canonical user ID
- *
- * @description Returns the database user ID if available, otherwise falls
- * back to the authentication user ID. Ensures a consistent user ID format.
- *
- * @param {Pick<AuthenticatedUser, 'userId' | 'dbUserId'>} user - User object with IDs
- * @returns {string} Canonical user ID
- *
- * @example
- * ```typescript
- * const userId = getCanonicalUserId(authUser);
- * // Returns dbUserId if set, otherwise userId
- * ```
  */
 export function getCanonicalUserId(
   user: Pick<AuthenticatedUser, 'userId' | 'dbUserId'>

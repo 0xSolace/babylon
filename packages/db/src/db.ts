@@ -1103,14 +1103,24 @@ export async function withTransaction<T>(
 // ============================================================================
 // RLS Context Support
 // ============================================================================
+//
+// Postgres RLS policies read session vars (e.g. app.current_user_id). Poolers reuse
+// connections across requests and background jobs, so the principal MUST be set
+// inside a short transaction and cleared when the transaction ends — otherwise
+// the next leasee of the connection could see the wrong rows.
+//
+// asUser / asSystem / asPublic each open a transaction, set_config(..., true) for
+// transaction-local scope, run the callback, then commit. That is why these are
+// async wrappers rather than one-shot connection setup.
 
 /** User identifier - can be a string ID or an object with userId property */
 export type UserIdOrUser = string | { userId: string };
 
 /**
- * Execute as a specific user (with RLS)
- * @param userIdOrUser - A string userId or an object with userId property (e.g., AuthenticatedUser)
- * @param operation - The database operation to execute
+ * Run `operation` with RLS evaluating as the given user.
+ *
+ * Why a transaction: `set_config('app.current_user_id', …, true)` is local to the
+ * current transaction; without wrapping, pooled connections could keep a stale user.
  */
 export async function asUser<T>(
   userIdOrUser: UserIdOrUser,
@@ -1150,7 +1160,12 @@ export async function asUser<T>(
 }
 
 /**
- * Execute as system (bypass RLS)
+ * Run `operation` with RLS evaluating as the **system** principal (elevated).
+ *
+ * Use for cron, engine ticks, and other jobs with **no** end-user session — not for
+ * request handlers that should see only the caller's rows.
+ *
+ * `operationName` is logged for observability (slow system queries, audit trails).
  */
 export async function asSystem<T>(
   operation: (database: DrizzleClient) => Promise<T>,
@@ -1189,7 +1204,10 @@ export async function asSystem<T>(
 }
 
 /**
- * Execute as public (unauthenticated)
+ * Run `operation` with RLS evaluating as **public** / unauthenticated (empty id).
+ *
+ * Prefer when anonymous policies differ from "system"; do not use as a shortcut
+ * for bypassing RLS — use `asSystem` only where product/security explicitly allows.
  */
 export async function asPublic<T>(
   operation: (database: DrizzleClient) => Promise<T>
@@ -1222,54 +1240,6 @@ export async function checkDatabaseHealth(): Promise<boolean> {
 // ============================================================================
 // Read Replica Support
 // ============================================================================
-
-/**
- * Execute read-only query on read replica
- *
- * @deprecated Use `dbRead` or `db` (which auto-routes reads) instead.
- * This function is redundant with the automatic routing in the main `db` client.
- *
- * @example
- * ```typescript
- * // Instead of: await onReadReplica(async (db) => db.select()...)
- * // Just use: await db.select()... (automatically routes to replica)
- * // Or explicitly: await dbRead.select()...
- * ```
- */
-export async function onReadReplica<T>(
-  operation: (database: Database) => Promise<T>
-): Promise<T> {
-  const replica = getReadReplicaDrizzle();
-  if (!replica) {
-    throw new Error('Database not initialized');
-  }
-
-  return withRetryInternal(() => operation(replica));
-}
-
-/**
- * Execute read-only query on read replica using DrizzleClient (ORM-style API)
- *
- * @deprecated Use `dbRead` or `db` (which auto-routes reads) instead.
- * This function is redundant with the automatic routing in the main `db` client.
- *
- * @example
- * ```typescript
- * // Instead of: await onReadReplicaClient(async (db) => db.user.findMany(...))
- * // Just use: await db.user.findMany(...) (automatically routes to replica)
- * // Or explicitly: await dbRead.user.findMany(...)
- * ```
- */
-export async function onReadReplicaClient<T>(
-  operation: (database: DrizzleClient) => Promise<T>
-): Promise<T> {
-  const replicaClient = getReadReplicaDbClient();
-  if (!replicaClient) {
-    throw new Error('Database not initialized');
-  }
-
-  return withRetryInternal(() => operation(replicaClient));
-}
 
 /**
  * Check if a read replica is configured and available

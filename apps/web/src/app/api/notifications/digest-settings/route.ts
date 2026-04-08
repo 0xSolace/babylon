@@ -1,7 +1,6 @@
 import { authenticate, successResponse, withErrorHandling } from '@babylon/api';
-import { eq } from '@babylon/db';
-import { db, users } from '@babylon/db/runtime';
-
+import * as BabylonDb from '@babylon/db';
+import * as engineStorage from '@babylon/db/engine-storage';
 import {
   DEFAULT_NOTIFICATION_DIGEST_SETTINGS,
   logger,
@@ -35,16 +34,12 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const authUser = await authenticate(request);
 
   try {
-    const [user] = await db
-      .select({
-        notificationDigestEnabled: users.notificationDigestEnabled,
-        notificationDigestFrequency: users.notificationDigestFrequency,
-        notificationDigestDeliveryChannel:
-          users.notificationDigestDeliveryChannel,
-      })
-      .from(users)
-      .where(eq(users.id, authUser.userId))
-      .limit(1);
+    const user = await engineStorage.asUser(authUser, async (db) =>
+      BabylonDb.selectUserNotificationDigestSettingsByUserId(
+        db,
+        authUser.userId
+      )
+    );
 
     return successResponse({
       success: true,
@@ -74,22 +69,18 @@ export const PUT = withErrorHandling(async (request: NextRequest) => {
   const authUser = await authenticate(request);
   const payload = DigestSettingsSchema.parse(await request.json());
 
-  const [updated] = await db
-    .update(users)
-    .set({
-      notificationDigestEnabled: payload.digestEnabled,
-      notificationDigestFrequency: payload.frequency,
-      notificationDigestDeliveryChannel: payload.deliveryChannel,
-      notificationDigestLastSentAt: null,
-      updatedAt: new Date(),
-    })
-    .where(eq(users.id, authUser.userId))
-    .returning({
-      notificationDigestEnabled: users.notificationDigestEnabled,
-      notificationDigestFrequency: users.notificationDigestFrequency,
-      notificationDigestDeliveryChannel:
-        users.notificationDigestDeliveryChannel,
-    });
+  const updated = await engineStorage.asUser(authUser, async (db) =>
+    BabylonDb.updateUserNotificationDigestSettingsByUserId(
+      db,
+      authUser.userId,
+      {
+        digestEnabled: payload.digestEnabled,
+        frequency: payload.frequency,
+        deliveryChannel: payload.deliveryChannel,
+      },
+      new Date()
+    )
+  );
 
   return successResponse({
     success: true,

@@ -108,9 +108,11 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, desc, eq } from '@babylon/db';
-import { db, shareActions } from '@babylon/db/runtime';
-
+import {
+  insertPendingShareActionReturning,
+  selectVerifiedEarnedShareActionsByUserId,
+} from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import {
   generateSnowflakeId,
   logger,
@@ -155,29 +157,13 @@ export const GET = withErrorHandling(
     const { searchParams } = new URL(request.url);
     const contentType = searchParams.get('contentType');
 
-    // Query for verified and earned shares
-    const whereConditions = [
-      eq(shareActions.userId, canonicalUserId),
-      eq(shareActions.verified, true),
-      eq(shareActions.pointsAwarded, true),
-    ];
-
-    if (contentType) {
-      whereConditions.push(eq(shareActions.contentType, contentType));
-    }
-
-    const sharesData = await db
-      .select({
-        id: shareActions.id,
-        platform: shareActions.platform,
-        contentType: shareActions.contentType,
-        contentId: shareActions.contentId,
-        createdAt: shareActions.createdAt,
-        verifiedAt: shareActions.verifiedAt,
-      })
-      .from(shareActions)
-      .where(and(...whereConditions))
-      .orderBy(desc(shareActions.verifiedAt));
+    const sharesData = await asUser(authUser, async (db) =>
+      selectVerifiedEarnedShareActionsByUserId(
+        db,
+        canonicalUserId,
+        contentType ?? undefined
+      )
+    );
 
     logger.info(
       `Retrieved ${sharesData.length} verified shares for user ${canonicalUserId}`,
@@ -224,19 +210,16 @@ export const POST = withErrorHandling(
 
     // Create share action record (points will be awarded after verification)
     const shareActionId = await generateSnowflakeId();
-    const [shareAction] = await db
-      .insert(shareActions)
-      .values({
+    const [shareAction] = await asUser(authUser, async (db) =>
+      insertPendingShareActionReturning(db, {
         id: shareActionId,
         userId: canonicalUserId,
         platform,
         contentType,
         contentId,
         url,
-        pointsAwarded: false,
-        verified: false, // Must be verified before points are awarded
       })
-      .returning();
+    );
 
     logger.info(
       `User ${canonicalUserId} initiated share for ${contentType} on ${platform} (pending verification)`,

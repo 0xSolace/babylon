@@ -7,14 +7,16 @@
  * - Manages tag statistics and trending calculations
  */
 
-import { and, asc, count, desc, eq, gte, inArray, ne } from '@babylon/db';
 import {
-  db,
-  postTags,
-  tags,
-  trendingTags,
+  fetchCurrentTrendingTagsWithRelations,
+  fetchPostsByTagPage,
+  fetchRelatedTagDisplayNames,
+  fetchTagsForPostWithRelations,
+  insertTrendingTagRows,
+  listPostTagsInWindowForStatistics,
+  storeTagsForPostBundle,
   withTransaction,
-} from '@babylon/db/runtime';
+} from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import OpenAI from 'openai';
 import { isPromptLoggingEnabled, logPrompt } from '../utils/prompt-logger';
@@ -349,84 +351,7 @@ export async function storeTagsForPost(
     return;
   }
 
-  const tagNames = generatedTags.map((t) => t.name);
-  const existingTagsList = await db
-    .select()
-    .from(tags)
-    .where(inArray(tags.name, tagNames));
-
-  const existingTagMap = new Map(existingTagsList.map((t) => [t.name, t]));
-
-  const tagsToCreate = generatedTags.filter((t) => !existingTagMap.has(t.name));
-
-  if (tagsToCreate.length > 0) {
-    const tagIds = await Promise.all(
-      tagsToCreate.map(() => generateSnowflakeId())
-    );
-
-    for (let index = 0; index < tagsToCreate.length; index++) {
-      const tag = tagsToCreate[index];
-      if (!tag) continue;
-      const tagId = tagIds[index];
-      if (!tagId) {
-        throw new Error(`Failed to generate tag ID for index ${index}`);
-      }
-
-      await db
-        .insert(tags)
-        .values({
-          id: tagId,
-          name: tag.name,
-          displayName: tag.displayName,
-          category: tag.category || null,
-          updatedAt: new Date(),
-        })
-        .onConflictDoNothing();
-    }
-
-    const createdTags = await db
-      .select()
-      .from(tags)
-      .where(
-        inArray(
-          tags.name,
-          tagsToCreate.map((t) => t.name)
-        )
-      );
-
-    createdTags.forEach((t) => existingTagMap.set(t.name, t));
-    logger.debug(
-      'Created/fetched new tags',
-      { count: createdTags.length },
-      'TagService'
-    );
-  }
-
-  const postTagIds = await Promise.all(
-    generatedTags.map(() => generateSnowflakeId())
-  );
-
-  for (let idx = 0; idx < generatedTags.length; idx++) {
-    const tag = generatedTags[idx];
-    if (!tag) continue;
-    const dbTag = existingTagMap.get(tag.name);
-    if (!dbTag) {
-      throw new Error(`Tag ${tag.name} not found in existing tags`);
-    }
-    const postTagId = postTagIds[idx];
-    if (!postTagId) {
-      throw new Error(`Failed to generate post tag ID for index ${idx}`);
-    }
-
-    await db
-      .insert(postTags)
-      .values({
-        id: postTagId,
-        postId,
-        tagId: dbTag.id,
-      })
-      .onConflictDoNothing();
-  }
+  await storeTagsForPostBundle(postId, generatedTags);
 
   logger.debug(
     'Stored tags for post',
@@ -439,13 +364,7 @@ export async function storeTagsForPost(
  * Get tags for a post
  */
 export async function getTagsForPost(postId: string) {
-  return db.query.postTags.findMany({
-    where: eq(postTags.postId, postId),
-    with: {
-      tag: true,
-    },
-    orderBy: asc(postTags.createdAt),
-  });
+  return fetchTagsForPostWithRelations(postId);
 }
 
 /**
@@ -456,40 +375,7 @@ export async function getPostsByTag(
   options: { limit?: number; offset?: number } = {}
 ) {
   const { limit = 20, offset = 0 } = options;
-
-  const [tag] = await db
-    .select()
-    .from(tags)
-    .where(eq(tags.name, tagName.toLowerCase()))
-    .limit(1);
-
-  if (!tag) {
-    return { tag: null, posts: [], total: 0 };
-  }
-
-  const [postTagsList, totalResult] = await Promise.all([
-    db.query.postTags.findMany({
-      where: eq(postTags.tagId, tag.id),
-      with: { post: true },
-      orderBy: desc(postTags.createdAt),
-      offset,
-      limit,
-    }),
-    db
-      .select({ count: count() })
-      .from(postTags)
-      .where(eq(postTags.tagId, tag.id)),
-  ]);
-
-  const total = totalResult[0]?.count ?? 0;
-
-  return {
-    tag,
-    posts: postTagsList
-      .map((pt) => pt.post)
-      .filter((post): post is NonNullable<typeof post> => post !== null),
-    total,
-  };
+  return fetchPostsByTagPage(tagName, { limit, offset });
 }
 
 /**
@@ -512,22 +398,12 @@ export async function getTagStatistics(
 > {
   const last24Hours = new Date(windowEnd.getTime() - 24 * 60 * 60 * 1000);
 
-  // Query postTags within time window, then filter out deleted posts
-  const allPostTags = await db.query.postTags.findMany({
-    where: (pt, { and: andOp, gte: whereGte, lte: whereLte }) =>
-      andOp(
-        whereGte(pt.createdAt, windowStart),
-        whereLte(pt.createdAt, windowEnd)
-      ),
-    with: {
-      tag: true,
-      post: true,
-    },
-    orderBy: asc(postTags.createdAt),
-  });
+  const allRows = await listPostTagsInWindowForStatistics(
+    windowStart,
+    windowEnd
+  );
 
-  // Filter out postTags where the post is deleted
-  const postTagsList = allPostTags.filter((pt) => !pt.post.deletedAt);
+  const postTagsList = allRows.filter((pt) => !pt.postDeletedAt);
 
   const tagStats = new Map<
     string,
@@ -558,7 +434,12 @@ export async function getTagStatistics(
         existing.newestPostDate = pt.createdAt;
     } else {
       tagStats.set(pt.tagId, {
-        tag: pt.tag,
+        tag: {
+          id: pt.tag.id,
+          name: pt.tag.name,
+          displayName: pt.tag.displayName,
+          category: pt.tag.category,
+        },
         postCount: 1,
         recentPostCount: isRecent ? 1 : 0,
         oldestPostDate: pt.createdAt,
@@ -600,25 +481,28 @@ export async function storeTrendingTags(
     tagsList.map(() => generateSnowflakeId())
   );
 
-  await withTransaction(async (tx) => {
-    for (let idx = 0; idx < tagsList.length; idx++) {
-      const tag = tagsList[idx];
-      if (!tag) continue;
-      const trendingTagId = trendingTagIds[idx];
-      if (!trendingTagId) {
-        throw new Error(`Failed to generate trending tag ID for index ${idx}`);
-      }
-      await tx.insert(trendingTags).values({
-        id: trendingTagId,
-        tagId: tag.tagId,
-        score: tag.score,
-        postCount: tag.postCount,
-        rank: tag.rank,
-        windowStart,
-        windowEnd,
-        relatedContext: tag.relatedContext || null,
-      });
+  const rows: Parameters<typeof insertTrendingTagRows>[1] = [];
+  for (let idx = 0; idx < tagsList.length; idx++) {
+    const tag = tagsList[idx];
+    if (!tag) continue;
+    const trendingTagId = trendingTagIds[idx];
+    if (!trendingTagId) {
+      throw new Error(`Failed to generate trending tag ID for index ${idx}`);
     }
+    rows.push({
+      id: trendingTagId,
+      tagId: tag.tagId,
+      score: tag.score,
+      postCount: tag.postCount,
+      rank: tag.rank,
+      windowStart,
+      windowEnd,
+      relatedContext: tag.relatedContext || null,
+    });
+  }
+
+  await withTransaction(async (tx) => {
+    await insertTrendingTagRows(tx, rows);
   });
 
   logger.info(
@@ -634,24 +518,9 @@ export async function storeTrendingTags(
 export async function getCurrentTrendingTags(
   limit = 10
 ): Promise<TrendingTagWithTag[]> {
-  const [latestCalculation] = await db
-    .select({ calculatedAt: trendingTags.calculatedAt })
-    .from(trendingTags)
-    .orderBy(desc(trendingTags.calculatedAt))
-    .limit(1);
-
-  if (!latestCalculation) {
-    return [];
-  }
-
-  const cutoffTime = new Date(latestCalculation.calculatedAt.getTime() - 1000);
-
-  return (await db.query.trendingTags.findMany({
-    where: gte(trendingTags.calculatedAt, cutoffTime),
-    with: { tag: true },
-    orderBy: asc(trendingTags.rank),
-    limit,
-  })) as TrendingTagWithTag[];
+  return (await fetchCurrentTrendingTagsWithRelations(
+    limit
+  )) as TrendingTagWithTag[];
 }
 
 /**
@@ -661,45 +530,5 @@ export async function getRelatedTags(
   tagId: string,
   limit = 3
 ): Promise<string[]> {
-  const postsWithTagResult = await db
-    .select({ postId: postTags.postId })
-    .from(postTags)
-    .where(eq(postTags.tagId, tagId))
-    .orderBy(desc(postTags.createdAt))
-    .limit(100);
-
-  const postIds = postsWithTagResult.map((pt) => pt.postId);
-
-  if (postIds.length === 0) {
-    return [];
-  }
-
-  const coOccurringPostTags = await db
-    .select({ tagId: postTags.tagId })
-    .from(postTags)
-    .where(and(inArray(postTags.postId, postIds), ne(postTags.tagId, tagId)));
-
-  const tagCounts = new Map<string, number>();
-  coOccurringPostTags.forEach((pt) => {
-    tagCounts.set(pt.tagId, (tagCounts.get(pt.tagId) || 0) + 1);
-  });
-
-  const sortedTagIds = Array.from(tagCounts.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, limit)
-    .map(([id]) => id);
-
-  if (sortedTagIds.length === 0) {
-    return [];
-  }
-
-  const tagsList = await db
-    .select({ id: tags.id, displayName: tags.displayName })
-    .from(tags)
-    .where(inArray(tags.id, sortedTagIds));
-
-  const tagMap = new Map(tagsList.map((t) => [t.id, t.displayName]));
-  return sortedTagIds
-    .map((id) => tagMap.get(id))
-    .filter((name): name is string => name !== undefined);
+  return fetchRelatedTagDisplayNames(tagId, limit);
 }

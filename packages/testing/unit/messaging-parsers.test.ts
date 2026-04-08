@@ -15,6 +15,7 @@
  */
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import * as babylonDb from '@babylon/db';
 import type { HandlerCallback, IAgentRuntime, Memory } from '@elizaos/core';
 
 // ─── Mock DB for context-gatherers ───────────────────────────────────────────
@@ -48,7 +49,9 @@ const mockExecuteDirectMessage = mock(
 );
 
 mock.module('@babylon/db', () => ({
+  ...babylonDb,
   listAgentGroupChatsWithMemberCounts: mock(async () => []),
+  listOrganizationStatesByPriceDescForWorldContext: mock(async () => []),
   listTeamGroupIds: mock(async () => []),
   eq: (a: unknown, b: unknown) => ({ op: 'eq', a, b }),
   and: (...args: unknown[]) => ({ op: 'and', args }),
@@ -63,7 +66,7 @@ mock.module('@babylon/db', () => ({
   sql: Object.assign((...args: unknown[]) => args, { raw: (s: string) => s }),
 }));
 
-mock.module('@babylon/db/runtime', () => ({
+mock.module('@babylon/db/engine-storage', () => ({
   db: {
     get select() {
       return mockDbSelect;

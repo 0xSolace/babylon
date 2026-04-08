@@ -7,8 +7,11 @@
  * - Combined and sorted by time
  */
 
-import { desc, eq } from '@babylon/db';
-import { agentTrades, db, npcTrades, users } from '@babylon/db/runtime';
+import {
+  selectRecentAgentTradesWithTraderNames,
+  selectRecentNpcTradesForFeed,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import { StaticDataRegistry } from '@babylon/engine';
 import type {
   Action,
@@ -95,40 +98,12 @@ export const checkRecentMarketTradesAction: Action = {
     const integerLimit = Math.floor(validLimit);
     const limit = Math.min(Math.max(integerLimit, 1), 30);
 
-    // Fail-fast: let DB errors propagate to the action executor
-    // Get recent NPC trades
-    const rawNpcTrades = await db
-      .select({
-        action: npcTrades.action,
-        side: npcTrades.side,
-        amount: npcTrades.amount,
-        price: npcTrades.price,
-        marketType: npcTrades.marketType,
-        ticker: npcTrades.ticker,
-        executedAt: npcTrades.executedAt,
-        npcActorId: npcTrades.npcActorId,
-      })
-      .from(npcTrades)
-      .orderBy(desc(npcTrades.executedAt))
-      .limit(limit);
+    const rawNpcTrades = await selectRecentNpcTradesForFeed(db, limit);
 
-    // Get recent agent trades with user info
-    const agentTradeResults = await db
-      .select({
-        action: agentTrades.action,
-        side: agentTrades.side,
-        amount: agentTrades.amount,
-        price: agentTrades.price,
-        marketType: agentTrades.marketType,
-        ticker: agentTrades.ticker,
-        executedAt: agentTrades.executedAt,
-        displayName: users.displayName,
-        username: users.username,
-      })
-      .from(agentTrades)
-      .leftJoin(users, eq(agentTrades.agentUserId, users.id))
-      .orderBy(desc(agentTrades.executedAt))
-      .limit(limit);
+    const agentTradeResults = await selectRecentAgentTradesWithTraderNames(
+      db,
+      limit
+    );
 
     // Combine and format trades
     const allTrades = [

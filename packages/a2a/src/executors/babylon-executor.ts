@@ -28,7 +28,7 @@ import {
   getPerpMarketSnapshotPriceRowByTickerIgnoreCase,
   listPerpMarketSnapshotsForA2a,
 } from '@babylon/db';
-import { db } from '@babylon/db/runtime';
+import { db } from '@babylon/db/engine-storage';
 
 import { createPerpPriceImpactPort, WalletService } from '@babylon/engine';
 import type { JsonValue } from '@babylon/shared';

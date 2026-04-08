@@ -9,8 +9,13 @@
  * @packageDocumentation
  */
 
-import { eq, type User } from '@babylon/db';
-import { db, trajectories, userAgentConfigs, users } from '@babylon/db/runtime';
+import {
+  deleteUserById,
+  selectTrajectoryRowByTrajectoryId,
+  type User,
+  updateUserAgentConfigArchetypeTrainingFlagsByUserId,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import type { IAgentRuntime } from '@elizaos/core';
 import { ArchetypeConfigService } from '../archetypes/ArchetypeConfigService';
 import {
@@ -114,9 +119,10 @@ export class TrajectoryGenerator {
 
         // Update autonomous settings in agent config based on archetype
         // Disable A2A to allow offline training without localhost server
-        await db
-          .update(userAgentConfigs)
-          .set({
+        await updateUserAgentConfigArchetypeTrainingFlagsByUserId(
+          db,
+          agent.id,
+          {
             autonomousTrading: archetypeConfig.actionWeights.trade > 0.3,
             autonomousPosting: archetypeConfig.postFrequency !== 'low',
             autonomousCommenting:
@@ -125,10 +131,9 @@ export class TrajectoryGenerator {
             autonomousDMs: archetypeConfig.dmActivity,
             autonomousGroupChats: archetypeConfig.groupChatActivity,
             maxActionsPerTick: 5,
-            a2aEnabled: false, // Disable A2A for training
-            updatedAt: new Date(),
-          })
-          .where(eq(userAgentConfigs.userId, agent.id));
+            a2aEnabled: false,
+          }
+        );
 
         this.agents.set(agent.id, { user: agent, archetype });
 
@@ -322,12 +327,7 @@ export class TrajectoryGenerator {
     // Calculate stats
     for (const trajId of result.trajectoryIds) {
       // Get trajectory to determine archetype
-      const trajectoryResult = await db
-        .select()
-        .from(trajectories)
-        .where(eq(trajectories.trajectoryId, trajId))
-        .limit(1);
-      const trajectory = trajectoryResult[0];
+      const trajectory = await selectTrajectoryRowByTrajectoryId(db, trajId);
 
       if (trajectory) {
         const agentInfo = this.agents.get(trajectory.agentId);
@@ -375,7 +375,7 @@ export class TrajectoryGenerator {
     );
 
     for (const [agentId] of this.agents) {
-      await db.delete(users).where(eq(users.id, agentId));
+      await deleteUserById(db, agentId);
     }
 
     logger.info('Cleanup complete', {}, 'TrajectoryGenerator');

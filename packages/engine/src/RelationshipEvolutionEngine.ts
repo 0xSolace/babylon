@@ -11,9 +11,18 @@
  * - No complex matrices or calculations
  */
 
-import { and, desc, eq, gte, or } from '@babylon/db';
-import { actorRelationships, db, npcInteractions } from '@babylon/db/runtime';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+import {
+  fetchActorRelationshipBidirectional,
+  fetchActorRelationshipOrdered,
+  insertActorRelationshipEvolved,
+  insertActorRelationshipIfMissing,
+  insertRelationshipEvolutionNpcInteraction,
+  listActorRelationshipsForActor,
+  listActorRelationshipsTopByStrengthForPrompt,
+  listRecentNpcInteractionsSince,
+  updateActorRelationshipEvolved,
+} from '@babylon/db';
+import { logger } from '@babylon/shared';
 import type { BabylonLLMClient } from './llm/openai-client';
 import { StaticDataRegistry } from './services/static-data-registry';
 import { isSimulationMode } from './storage-bridge';
@@ -109,23 +118,11 @@ export class RelationshipEvolutionEngine {
             const org = orgMap.get(first(sharedOrgs)!);
             const context = `both affiliated with ${org?.name || 'same organization'}`;
 
-            // Check if relationship already exists
-            const [existing] = await db
-              .select()
-              .from(actorRelationships)
-              .where(
-                or(
-                  and(
-                    eq(actorRelationships.actor1Id, actor1.id),
-                    eq(actorRelationships.actor2Id, actor2.id)
-                  ),
-                  and(
-                    eq(actorRelationships.actor1Id, actor2.id),
-                    eq(actorRelationships.actor2Id, actor1.id)
-                  )
-                )
-              )
-              .limit(1);
+            const existing = await fetchActorRelationshipBidirectional(
+              actor1.id,
+              actor2.id,
+              'relationship-engine-llm-path-existing'
+            );
 
             const llmResult = await this.generateInitialRelationshipDescription(
               actor1.name,
@@ -157,40 +154,14 @@ export class RelationshipEvolutionEngine {
             sentiment = 0;
           }
 
-          // Create relationship (use insert with conflict handling to avoid duplicates)
-          // Check if relationship already exists first
-          const [existingRel] = await db
-            .select({ id: actorRelationships.id })
-            .from(actorRelationships)
-            .where(
-              or(
-                and(
-                  eq(actorRelationships.actor1Id, actor1.id),
-                  eq(actorRelationships.actor2Id, actor2.id)
-                ),
-                and(
-                  eq(actorRelationships.actor1Id, actor2.id),
-                  eq(actorRelationships.actor2Id, actor1.id)
-                )
-              )
-            )
-            .limit(1);
-
-          if (!existingRel) {
-            await db.insert(actorRelationships).values({
-              id: await generateSnowflakeId(),
-              actor1Id: actor1.id,
-              actor2Id: actor2.id,
-              relationshipType: type,
-              strength: 0.3 + Math.random() * 0.5,
-              sentiment,
-              history,
-              isPublic: true,
-              updatedAt: new Date(),
-              interactionCount: 0,
-              evolutionCount: 0,
-            });
-          }
+          await insertActorRelationshipIfMissing({
+            actor1Id: actor1.id,
+            actor2Id: actor2.id,
+            relationshipType: type,
+            strength: 0.3 + Math.random() * 0.5,
+            sentiment,
+            history,
+          });
 
           created++;
           relationshipCount++;
@@ -278,18 +249,12 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`;
       return;
     }
 
-    // Sort IDs to ensure consistency
-    const sorted = [interaction.actor1Id, interaction.actor2Id].sort();
-    const [id1, id2] = sorted as [string, string];
-
-    await db.insert(npcInteractions).values({
-      id: await generateSnowflakeId(),
-      actor1Id: id1,
-      actor2Id: id2,
+    await insertRelationshipEvolutionNpcInteraction({
+      actor1Id: interaction.actor1Id,
+      actor2Id: interaction.actor2Id,
       interactionType: interaction.type,
       sentiment: interaction.sentiment,
       context: interaction.context,
-      timestamp: new Date(),
     });
   }
 
@@ -314,12 +279,10 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`;
 
     // Get recent interactions (last 7 days)
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    const recentInteractions = await db
-      .select()
-      .from(npcInteractions)
-      .where(gte(npcInteractions.timestamp, sevenDaysAgo))
-      .orderBy(desc(npcInteractions.timestamp))
-      .limit(100); // Limit to prevent token overflow
+    const recentInteractions = await listRecentNpcInteractionsSince(
+      sevenDaysAgo,
+      100
+    );
 
     if (recentInteractions.length === 0) {
       logger.info(
@@ -360,17 +323,7 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`;
       const [actor1Id, actor2Id] = pairKey.split('_');
       if (!actor1Id || !actor2Id) continue;
 
-      // Get existing relationship
-      const [existing] = await db
-        .select()
-        .from(actorRelationships)
-        .where(
-          and(
-            eq(actorRelationships.actor1Id, actor1Id),
-            eq(actorRelationships.actor2Id, actor2Id)
-          )
-        )
-        .limit(1);
+      const existing = await fetchActorRelationshipOrdered(actor1Id, actor2Id);
 
       // Get actor names from static registry
       const actor1 = StaticDataRegistry.getActor(actor1Id);
@@ -465,41 +418,31 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`;
         }
       }
 
-      // Update or create relationship
       if (existing) {
-        // Update existing
-        await db
-          .update(actorRelationships)
-          .set({
-            history: newHistory,
-            relationshipType: newType,
-            sentiment: newSentiment,
-            strength: Math.min(
-              1.0,
-              (existing.strength || 0.5) + interactions.length * 0.05
-            ),
-            lastInteraction: new Date(),
-            interactionCount:
-              (existing.interactionCount || 0) + interactions.length,
-            evolutionCount: (existing.evolutionCount || 0) + 1,
-            updatedAt: new Date(),
-          })
-          .where(eq(actorRelationships.id, existing.id));
+        await updateActorRelationshipEvolved({
+          id: existing.id,
+          history: newHistory,
+          relationshipType: newType,
+          sentiment: newSentiment,
+          strength: Math.min(
+            1.0,
+            (existing.strength || 0.5) + interactions.length * 0.05
+          ),
+          lastInteraction: new Date(),
+          interactionCount:
+            (existing.interactionCount || 0) + interactions.length,
+          evolutionCount: (existing.evolutionCount || 0) + 1,
+        });
       } else {
-        // Create new
-        await db.insert(actorRelationships).values({
-          id: await generateSnowflakeId(),
+        await insertActorRelationshipEvolved({
           actor1Id,
           actor2Id,
           relationshipType: newType,
           strength: Math.min(0.7, interactions.length * 0.1),
           sentiment: newSentiment,
           history: newHistory,
-          isPublic: true,
           lastInteraction: new Date(),
           interactionCount: interactions.length,
-          evolutionCount: 0,
-          updatedAt: new Date(),
         });
       }
 
@@ -535,18 +478,10 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`;
       return '';
     }
 
-    // Get relationships for this actor
-    const relationships = await db
-      .select()
-      .from(actorRelationships)
-      .where(
-        or(
-          eq(actorRelationships.actor1Id, actorId),
-          eq(actorRelationships.actor2Id, actorId)
-        )
-      )
-      .orderBy(desc(actorRelationships.strength))
-      .limit(5); // Top 5 strongest only (keep it short)
+    const relationships = await listActorRelationshipsTopByStrengthForPrompt(
+      actorId,
+      5
+    );
 
     if (relationships.length === 0) {
       return '';
@@ -593,15 +528,7 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`;
       return [];
     }
 
-    const relationships = await db
-      .select()
-      .from(actorRelationships)
-      .where(
-        or(
-          eq(actorRelationships.actor1Id, actorId),
-          eq(actorRelationships.actor2Id, actorId)
-        )
-      );
+    const relationships = await listActorRelationshipsForActor(actorId);
 
     return relationships.map((rel) => ({
       id: rel.id,
@@ -631,22 +558,11 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`;
       return null;
     }
 
-    const [relationship] = await db
-      .select()
-      .from(actorRelationships)
-      .where(
-        or(
-          and(
-            eq(actorRelationships.actor1Id, actor1Id),
-            eq(actorRelationships.actor2Id, actor2Id)
-          ),
-          and(
-            eq(actorRelationships.actor1Id, actor2Id),
-            eq(actorRelationships.actor2Id, actor1Id)
-          )
-        )
-      )
-      .limit(1);
+    const relationship = await fetchActorRelationshipBidirectional(
+      actor1Id,
+      actor2Id,
+      'relationship-engine-get-relationship'
+    );
 
     if (!relationship) return null;
 

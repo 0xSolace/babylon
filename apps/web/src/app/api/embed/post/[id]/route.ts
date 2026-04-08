@@ -77,11 +77,11 @@
  */
 
 import { withErrorHandling } from '@babylon/api';
-import { db } from '@babylon/db/runtime';
 
 import { StaticDataRegistry } from '@babylon/engine';
 import { PostIdParamSchema, toISO } from '@babylon/shared';
 import { type NextRequest, NextResponse } from 'next/server';
+import { runWithOptionalUserRls } from '@/lib/db/run-with-optional-user-rls';
 
 export const GET = withErrorHandling(async function GET(
   _request: NextRequest,
@@ -89,91 +89,94 @@ export const GET = withErrorHandling(async function GET(
 ) {
   const { id: postId } = PostIdParamSchema.parse(await context.params);
 
-  // Fetch post data
-  const post = await db.post.findUnique({
-    where: { id: postId },
-    select: {
-      id: true,
-      content: true,
-      type: true,
-      articleTitle: true,
-      authorId: true,
-      timestamp: true,
-      deletedAt: true,
-    },
-  });
+  return runWithOptionalUserRls(null, async (db) => {
+    // Fetch post data
+    const post = await db.post.findUnique({
+      where: { id: postId },
+      select: {
+        id: true,
+        content: true,
+        type: true,
+        articleTitle: true,
+        authorId: true,
+        timestamp: true,
+        deletedAt: true,
+      },
+    });
 
-  if (!post || post.deletedAt) {
-    return NextResponse.json({ error: 'Post not found' }, { status: 404 });
-  }
+    if (!post || post.deletedAt) {
+      return NextResponse.json({ error: 'Post not found' }, { status: 404 });
+    }
 
-  // Get interaction counts
-  const [likeCount, commentCount, shareCount] = await Promise.all([
-    db.reaction.count({ where: { postId, type: 'like' } }),
-    db.comment.count({ where: { postId } }),
-    db.share.count({ where: { postId } }),
-  ]);
+    // Get interaction counts
+    const [likeCount, commentCount, shareCount] = await Promise.all([
+      db.reaction.count({ where: { postId, type: 'like' } }),
+      db.comment.count({ where: { postId } }),
+      db.share.count({ where: { postId } }),
+    ]);
 
-  // Get author info - could be User, Actor, or Organization
-  let authorName = 'Unknown';
-  let authorUsername: string | null = null;
+    // Get author info - could be User, Actor, or Organization
+    let authorName = 'Unknown';
+    let authorUsername: string | null = null;
 
-  // Try to find user author
-  const userAuthor = await db.user.findUnique({
-    where: { id: post.authorId },
-    select: { displayName: true, username: true },
-  });
+    // Try to find user author
+    const userAuthor = await db.user.findUnique({
+      where: { id: post.authorId },
+      select: { displayName: true, username: true },
+    });
 
-  if (userAuthor) {
-    authorName = userAuthor.displayName || 'Unknown';
-    authorUsername = userAuthor.username || null;
-  } else {
-    // Check for actor in static registry
-    const actor = StaticDataRegistry.getActor(post.authorId);
-
-    if (actor) {
-      authorName = actor.name;
+    if (userAuthor) {
+      authorName = userAuthor.displayName || 'Unknown';
+      authorUsername = userAuthor.username || null;
     } else {
-      // Check for organization in static registry
-      const org = StaticDataRegistry.getOrganization(post.authorId);
+      // Check for actor in static registry
+      const actor = StaticDataRegistry.getActor(post.authorId);
 
-      if (org) {
-        authorName = org.name;
+      if (actor) {
+        authorName = actor.name;
+      } else {
+        // Check for organization in static registry
+        const org = StaticDataRegistry.getOrganization(post.authorId);
+
+        if (org) {
+          authorName = org.name;
+        }
       }
     }
-  }
 
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://babylon.market';
-  const postUrl = `${baseUrl}/post/${postId}`;
+    const baseUrl =
+      process.env.NEXT_PUBLIC_BASE_URL || 'https://babylon.market';
+    const postUrl = `${baseUrl}/post/${postId}`;
 
-  // Truncate content for preview
-  const previewText =
-    post.content.length > 200
-      ? post.content.substring(0, 200) + '...'
-      : post.content;
+    // Truncate content for preview
+    const previewText =
+      post.content.length > 200
+        ? post.content.substring(0, 200) + '...'
+        : post.content;
 
-  const title =
-    post.type === 'article' && post.articleTitle
-      ? post.articleTitle
-      : `${authorName} on Babylon`;
+    const title =
+      post.type === 'article' && post.articleTitle
+        ? post.articleTitle
+        : `${authorName} on Babylon`;
 
-  // Return Farcaster embed metadata
-  return NextResponse.json({
-    type: 'post',
-    version: '1',
-    url: postUrl,
-    title,
-    description: previewText,
-    author: {
-      name: authorName,
-      username: authorUsername,
-    },
-    metadata: {
-      likeCount,
-      commentCount,
-      shareCount,
-      timestamp: toISO(post.timestamp),
-    },
-    image: `${baseUrl}/assets/images/og-image.png`,
+    // Return Farcaster embed metadata
+    return NextResponse.json({
+      type: 'post',
+      version: '1',
+      url: postUrl,
+      title,
+      description: previewText,
+      author: {
+        name: authorName,
+        username: authorUsername,
+      },
+      metadata: {
+        likeCount,
+        commentCount,
+        shareCount,
+        timestamp: toISO(post.timestamp),
+      },
+      image: `${baseUrl}/assets/images/og-image.png`,
+    });
   });
 });

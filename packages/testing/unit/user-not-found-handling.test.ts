@@ -181,7 +181,7 @@ mock.module('@babylon/db', () => ({
   sql: () => ({}),
 }));
 
-mock.module('@babylon/db/runtime', () => ({
+mock.module('@babylon/db/engine-storage', () => ({
   db: {
     select: mockSelect,
     user: {

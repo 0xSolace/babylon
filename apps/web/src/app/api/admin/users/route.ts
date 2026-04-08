@@ -91,29 +91,10 @@
 
 import { requireAdmin, successResponse, withErrorHandling } from '@babylon/api';
 import {
-  and,
-  asc,
-  count,
-  desc,
-  eq,
-  inArray,
-  isNull,
-  type SQL,
-  sql,
+  type AdminUsersListParams,
+  fetchAdminUsersListBundle,
 } from '@babylon/db';
-import {
-  comments,
-  db,
-  follows,
-  positions,
-  reactions,
-  reports,
-  userBlocks,
-  userMutes,
-  users,
-  whitelist,
-} from '@babylon/db/runtime';
-
+import { asSystem } from '@babylon/db/engine-storage';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
@@ -157,98 +138,18 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   logger.info('Admin users list requested', { params }, 'GET /api/admin/users');
 
-  // Build where conditions
-  const conditions: SQL[] = [];
+  const listParams: AdminUsersListParams = {
+    limit: params.limit,
+    offset: params.offset,
+    search: params.search,
+    filter: params.filter,
+    sortBy: params.sortBy,
+    sortOrder: params.sortOrder,
+  };
 
-  if (params.filter === 'actors') {
-    conditions.push(eq(users.isActor, true));
-  } else if (params.filter === 'users') {
-    conditions.push(eq(users.isActor, false));
-  } else if (params.filter === 'banned') {
-    conditions.push(eq(users.isBanned, true));
-  } else if (params.filter === 'admins') {
-    conditions.push(eq(users.isAdmin, true));
-  }
-
-  if (params.search) {
-    // Escape special LIKE/ILIKE characters to prevent pattern injection
-    // Using backslash as escape character, which is specified in raw SQL
-    const escapedSearch = params.search
-      .replace(/\\/g, '\\\\') // Escape backslashes first
-      .replace(/%/g, '\\%') // Escape percent
-      .replace(/_/g, '\\_'); // Escape underscore
-
-    // Use raw SQL with ESCAPE clause to properly handle escaped wildcards
-    const searchPattern = `%${escapedSearch}%`;
-    const searchCondition = sql`(
-      ${users.username} ILIKE ${searchPattern} ESCAPE '\\' OR
-      ${users.displayName} ILIKE ${searchPattern} ESCAPE '\\' OR
-      ${users.walletAddress} ILIKE ${searchPattern} ESCAPE '\\'
-    )`;
-    conditions.push(searchCondition);
-  }
-
-  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
-
-  // Determine sort order
-  const sortFn = params.sortOrder === 'asc' ? asc : desc;
-  let orderByClause: SQL | undefined;
-
-  if (params.sortBy === 'created') {
-    orderByClause = sortFn(users.createdAt);
-  } else if (params.sortBy === 'balance') {
-    orderByClause = sortFn(users.virtualBalance);
-  } else if (params.sortBy === 'reputation') {
-    orderByClause = sortFn(users.reputationPoints);
-  } else if (params.sortBy === 'username') {
-    orderByClause = sortFn(users.username);
-  }
-
-  // Get users
-  const usersResult = await db
-    .select({
-      id: users.id,
-      username: users.username,
-      displayName: users.displayName,
-      walletAddress: users.walletAddress,
-      profileImageUrl: users.profileImageUrl,
-      isActor: users.isActor,
-      isAdmin: users.isAdmin,
-      isBanned: users.isBanned,
-      bannedAt: users.bannedAt,
-      bannedReason: users.bannedReason,
-      bannedBy: users.bannedBy,
-      virtualBalance: users.virtualBalance,
-      totalDeposited: users.totalDeposited,
-      totalWithdrawn: users.totalWithdrawn,
-      lifetimePnL: users.lifetimePnL,
-      reputationPoints: users.reputationPoints,
-      referralCount: users.referralCount,
-      onChainRegistered: users.onChainRegistered,
-      nftTokenId: users.nftTokenId,
-      hasFarcaster: users.hasFarcaster,
-      hasTwitter: users.hasTwitter,
-      createdAt: users.createdAt,
-      updatedAt: users.updatedAt,
-    })
-    .from(users)
-    .where(whereClause)
-    .orderBy(orderByClause ?? desc(users.createdAt))
-    .limit(params.limit)
-    .offset(params.offset);
-
-  // Get total count
-  const [totalResult] = await db
-    .select({ count: count() })
-    .from(users)
-    .where(whereClause);
-  const total = totalResult?.count ?? 0;
-
-  // Get user IDs for batched count queries (only for paginated results)
-  const userIds = usersResult.map((u) => u.id);
-
-  // Get moderation counts per user (batched queries - filtered to only fetched users)
-  const [
+  const {
+    usersResult,
+    total,
     commentCounts,
     reactionCounts,
     positionCounts,
@@ -259,77 +160,10 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     mutesReceived,
     reportsSent,
     whitelistedUsers,
-  ] =
-    userIds.length > 0
-      ? await Promise.all([
-          // Comment counts
-          db
-            .select({ userId: comments.authorId, count: count() })
-            .from(comments)
-            .where(inArray(comments.authorId, userIds))
-            .groupBy(comments.authorId),
-          // Reaction counts
-          db
-            .select({ userId: reactions.userId, count: count() })
-            .from(reactions)
-            .where(inArray(reactions.userId, userIds))
-            .groupBy(reactions.userId),
-          // Position counts
-          db
-            .select({ userId: positions.userId, count: count() })
-            .from(positions)
-            .where(inArray(positions.userId, userIds))
-            .groupBy(positions.userId),
-          // Follower counts (users following this user)
-          db
-            .select({ userId: follows.followingId, count: count() })
-            .from(follows)
-            .where(inArray(follows.followingId, userIds))
-            .groupBy(follows.followingId),
-          // Following counts (users this user follows)
-          db
-            .select({ userId: follows.followerId, count: count() })
-            .from(follows)
-            .where(inArray(follows.followerId, userIds))
-            .groupBy(follows.followerId),
-          // Reports received
-          db
-            .select({ userId: reports.reportedUserId, count: count() })
-            .from(reports)
-            .where(inArray(reports.reportedUserId, userIds))
-            .groupBy(reports.reportedUserId),
-          // Blocks received
-          db
-            .select({ userId: userBlocks.blockedId, count: count() })
-            .from(userBlocks)
-            .where(inArray(userBlocks.blockedId, userIds))
-            .groupBy(userBlocks.blockedId),
-          // Mutes received
-          db
-            .select({ userId: userMutes.mutedId, count: count() })
-            .from(userMutes)
-            .where(inArray(userMutes.mutedId, userIds))
-            .groupBy(userMutes.mutedId),
-          // Reports sent
-          db
-            .select({ userId: reports.reporterId, count: count() })
-            .from(reports)
-            .where(inArray(reports.reporterId, userIds))
-            .groupBy(reports.reporterId),
-          // Whitelist status (active entries only).
-          // Wrapped in catch so a missing Whitelist table doesn't break the admin endpoint.
-          db
-            .select({ userId: whitelist.userId })
-            .from(whitelist)
-            .where(
-              and(
-                inArray(whitelist.userId, userIds),
-                isNull(whitelist.revokedAt)
-              )
-            )
-            .catch(() => [] as { userId: string }[]),
-        ])
-      : [[], [], [], [], [], [], [], [], [], []];
+  } = await asSystem(
+    (tx) => fetchAdminUsersListBundle(tx, listParams),
+    'admin-users-list'
+  );
 
   // Build lookup maps
   const commentCountMap = new Map(

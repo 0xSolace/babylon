@@ -65,9 +65,15 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, count, eq } from '@babylon/db';
-import { db, posts, reactions } from '@babylon/db/runtime';
-
+import {
+  countPostLikesForPostId,
+  deleteReactionById,
+  insertGamePostStubReturning,
+  insertPostLikeReaction,
+  selectPostById,
+  selectPostLikeReactionIdForUser,
+} from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import { NPCInteractionTracker, parsePostId } from '@babylon/engine';
 import {
   generateSnowflakeId,
@@ -107,161 +113,140 @@ export const POST = withErrorHandling(
     const { user: dbUser } = await ensureUserForAuth(user, { displayName });
     const canonicalUserId = dbUser.id;
 
-    // Check if post exists first and is not in the future
-    const now = new Date();
-    let [post] = await db
-      .select()
-      .from(posts)
-      .where(eq(posts.id, postId))
-      .limit(1);
+    return asUser(user, async (db) => {
+      // Check if post exists first and is not in the future
+      const now = new Date();
+      let post = await selectPostById(db, postId);
 
-    // Don't allow liking future posts
-    if (post && post.timestamp > now) {
-      throw new NotFoundError('Post', postId);
-    }
+      // Don't allow liking future posts
+      if (post && post.timestamp > now) {
+        throw new NotFoundError('Post', postId);
+      }
 
-    if (!post) {
-      const parseResult = parsePostId(postId);
-      const { gameId, authorId, timestamp } = parseResult.metadata;
+      if (!post) {
+        const parseResult = parsePostId(postId);
+        const { gameId, authorId, timestamp } = parseResult.metadata;
 
-      const [newPost] = await db
-        .insert(posts)
-        .values({
+        const newPost = await insertGamePostStubReturning(db, {
           id: postId,
           content: '[Game-generated post]',
           authorId,
           gameId,
           timestamp,
-        })
-        .returning();
-      if (!newPost) {
-        throw new BusinessLogicError('Failed to create post', 'CREATE_FAILED');
+        });
+        if (!newPost) {
+          throw new BusinessLogicError(
+            'Failed to create post',
+            'CREATE_FAILED'
+          );
+        }
+        post = newPost;
       }
-      post = newPost;
-    }
 
-    // Ensure post exists
-    if (!post) {
-      throw new NotFoundError('Post', postId);
-    }
+      // Ensure post exists
+      if (!post) {
+        throw new NotFoundError('Post', postId);
+      }
 
-    // Check if post is deleted - allow likes to be removed but not added
-    if (post.deletedAt) {
-      // Allow unlike but not like
-      const [existingReaction] = await db
-        .select({ id: reactions.id })
-        .from(reactions)
-        .where(
-          and(
-            eq(reactions.postId, postId),
-            eq(reactions.userId, canonicalUserId),
-            eq(reactions.type, 'like')
-          )
-        )
-        .limit(1);
+      // Check if post is deleted - allow likes to be removed but not added
+      if (post.deletedAt) {
+        // Allow unlike but not like
+        const existingReaction = await selectPostLikeReactionIdForUser(db, {
+          postId,
+          userId: canonicalUserId,
+        });
 
-      if (!existingReaction) {
-        // Trying to add a new like to deleted post - reject
-        throw new BusinessLogicError(
-          'Cannot like deleted post',
-          'POST_DELETED'
+        if (!existingReaction) {
+          // Trying to add a new like to deleted post - reject
+          throw new BusinessLogicError(
+            'Cannot like deleted post',
+            'POST_DELETED'
+          );
+        }
+        // If reaction exists, allow the unlike action to proceed
+      }
+
+      // Check if already liked
+      const existingLike = await selectPostLikeReactionIdForUser(db, {
+        postId,
+        userId: canonicalUserId,
+      });
+
+      if (existingLike) {
+        throw new BusinessLogicError('Post already liked', 'ALREADY_LIKED');
+      }
+
+      // Create like reaction
+      await insertPostLikeReaction(db, {
+        id: await generateSnowflakeId(),
+        postId,
+        userId: canonicalUserId,
+      });
+
+      // Create notification for post author (if not self-like)
+      if (
+        post.authorId &&
+        post.authorId !== canonicalUserId &&
+        post.authorId !== 'unknown'
+      ) {
+        await notifyReactionOnPost(
+          post.authorId,
+          canonicalUserId,
+          postId,
+          'like'
         );
       }
-      // If reaction exists, allow the unlike action to proceed
-    }
 
-    // Check if already liked
-    const [existingLike] = await db
-      .select({ id: reactions.id })
-      .from(reactions)
-      .where(
-        and(
-          eq(reactions.postId, postId),
-          eq(reactions.userId, canonicalUserId),
-          eq(reactions.type, 'like')
-        )
-      )
-      .limit(1);
-
-    if (existingLike) {
-      throw new BusinessLogicError('Post already liked', 'ALREADY_LIKED');
-    }
-
-    // Create like reaction
-    await db.insert(reactions).values({
-      id: await generateSnowflakeId(),
-      postId,
-      userId: canonicalUserId,
-      type: 'like',
-    });
-
-    // Create notification for post author (if not self-like)
-    if (
-      post.authorId &&
-      post.authorId !== canonicalUserId &&
-      post.authorId !== 'unknown'
-    ) {
-      await notifyReactionOnPost(
-        post.authorId,
-        canonicalUserId,
-        postId,
-        'like'
+      // Track interaction with NPC (if post author is NPC)
+      await NPCInteractionTracker.trackLike(canonicalUserId, postId).catch(
+        (error) => {
+          logger.warn('Failed to track NPC interaction', { error });
+        }
       );
-    }
 
-    // Track interaction with NPC (if post author is NPC)
-    await NPCInteractionTracker.trackLike(canonicalUserId, postId).catch(
-      (error) => {
-        logger.warn('Failed to track NPC interaction', { error });
-      }
-    );
+      // Get updated like count
+      const likeCount = await countPostLikesForPostId(db, postId);
 
-    // Get updated like count
-    const [likeCountResult] = await db
-      .select({ count: count() })
-      .from(reactions)
-      .where(and(eq(reactions.postId, postId), eq(reactions.type, 'like')));
-    const likeCount = Number(likeCountResult?.count ?? 0);
+      // Invalidate interaction cache for this post
+      await invalidateCache(`post:${postId}:interactions:*`, {
+        namespace: CACHE_KEYS.POST,
+      });
 
-    // Invalidate interaction cache for this post
-    await invalidateCache(`post:${postId}:interactions:*`, {
-      namespace: CACHE_KEYS.POST,
-    });
+      // Bust the narrative enrichment cache so isLiked reflects immediately
+      // (without this, the user sees isLiked: false for up to 30s in Stories)
+      invalidateCache(narrativeEnrichmentKey(canonicalUserId), {
+        namespace: 'feed',
+      }).catch((err) =>
+        logger.warn(
+          'Failed to invalidate narrative enrichment cache on like',
+          { error: err, userId: canonicalUserId },
+          'POST /api/posts/[id]/like'
+        )
+      );
 
-    // Bust the narrative enrichment cache so isLiked reflects immediately
-    // (without this, the user sees isLiked: false for up to 30s in Stories)
-    invalidateCache(narrativeEnrichmentKey(canonicalUserId), {
-      namespace: 'feed',
-    }).catch((err) =>
-      logger.warn(
-        'Failed to invalidate narrative enrichment cache on like',
-        { error: err, userId: canonicalUserId },
+      logger.info(
+        'Post liked successfully',
+        { postId, userId: canonicalUserId, likeCount },
         'POST /api/posts/[id]/like'
-      )
-    );
+      );
 
-    logger.info(
-      'Post liked successfully',
-      { postId, userId: canonicalUserId, likeCount },
-      'POST /api/posts/[id]/like'
-    );
-
-    // Track post liked event
-    trackServerEvent(canonicalUserId, 'post_liked', {
-      postId,
-      authorId: post.authorId,
-      likeCount,
-    }).catch((error) => {
-      logger.warn('Failed to track post_liked event', { error });
-    });
-
-    void checkProgress(canonicalUserId, { type: 'reaction_created' });
-
-    return successResponse({
-      data: {
+      // Track post liked event
+      trackServerEvent(canonicalUserId, 'post_liked', {
+        postId,
+        authorId: post.authorId,
         likeCount,
-        isLiked: true,
-      },
+      }).catch((error) => {
+        logger.warn('Failed to track post_liked event', { error });
+      });
+
+      void checkProgress(canonicalUserId, { type: 'reaction_created' });
+
+      return successResponse({
+        data: {
+          likeCount,
+          isLiked: true,
+        },
+      });
     });
   }
 );
@@ -292,67 +277,58 @@ export const DELETE = withErrorHandling(
     const { user: dbUser } = await ensureUserForAuth(user, { displayName });
     const canonicalUserId = dbUser.id;
 
-    // Find existing like
-    const [reaction] = await db
-      .select({ id: reactions.id })
-      .from(reactions)
-      .where(
-        and(
-          eq(reactions.postId, postId),
-          eq(reactions.userId, canonicalUserId),
-          eq(reactions.type, 'like')
+    return asUser(user, async (db) => {
+      // Find existing like
+      const reaction = await selectPostLikeReactionIdForUser(db, {
+        postId,
+        userId: canonicalUserId,
+      });
+
+      if (!reaction) {
+        throw new NotFoundError('Like', `${postId}-${canonicalUserId}`);
+      }
+
+      // Delete like
+      await deleteReactionById(db, reaction.id);
+
+      // Get updated like count
+      const likeCount = await countPostLikesForPostId(db, postId);
+
+      // Invalidate interaction cache for this post
+      await invalidateCache(`post:${postId}:interactions:*`, {
+        namespace: CACHE_KEYS.POST,
+      });
+
+      invalidateCache(narrativeEnrichmentKey(canonicalUserId), {
+        namespace: 'feed',
+      }).catch((err) =>
+        logger.warn(
+          'Failed to invalidate narrative enrichment cache on unlike',
+          { error: err, userId: canonicalUserId },
+          'DELETE /api/posts/[id]/like'
         )
-      )
-      .limit(1);
+      );
 
-    if (!reaction) {
-      throw new NotFoundError('Like', `${postId}-${canonicalUserId}`);
-    }
-
-    // Delete like
-    await db.delete(reactions).where(eq(reactions.id, reaction.id));
-
-    // Get updated like count
-    const [likeCountResult] = await db
-      .select({ count: count() })
-      .from(reactions)
-      .where(and(eq(reactions.postId, postId), eq(reactions.type, 'like')));
-    const likeCount = Number(likeCountResult?.count ?? 0);
-
-    // Invalidate interaction cache for this post
-    await invalidateCache(`post:${postId}:interactions:*`, {
-      namespace: CACHE_KEYS.POST,
-    });
-
-    invalidateCache(narrativeEnrichmentKey(canonicalUserId), {
-      namespace: 'feed',
-    }).catch((err) =>
-      logger.warn(
-        'Failed to invalidate narrative enrichment cache on unlike',
-        { error: err, userId: canonicalUserId },
+      logger.info(
+        'Post unliked successfully',
+        { postId, userId: canonicalUserId, likeCount },
         'DELETE /api/posts/[id]/like'
-      )
-    );
+      );
 
-    logger.info(
-      'Post unliked successfully',
-      { postId, userId: canonicalUserId, likeCount },
-      'DELETE /api/posts/[id]/like'
-    );
-
-    // Track post unliked event
-    trackServerEvent(canonicalUserId, 'post_unliked', {
-      postId,
-      likeCount,
-    }).catch((error) => {
-      logger.warn('Failed to track post_unliked event', { error });
-    });
-
-    return successResponse({
-      data: {
+      // Track post unliked event
+      trackServerEvent(canonicalUserId, 'post_unliked', {
+        postId,
         likeCount,
-        isLiked: false,
-      },
+      }).catch((error) => {
+        logger.warn('Failed to track post_unliked event', { error });
+      });
+
+      return successResponse({
+        data: {
+          likeCount,
+          isLiked: false,
+        },
+      });
     });
   }
 );

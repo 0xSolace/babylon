@@ -23,16 +23,15 @@ import {
   PredictionDbAdapter,
   PredictionMarketService,
 } from '@babylon/core/markets/prediction';
-import { desc, eq } from '@babylon/db';
 import {
-  db,
-  markets,
-  positions,
-  questions,
-  timeframedMarkets,
-  withTransaction,
-} from '@babylon/db/runtime';
-
+  deactivateTimeframedMarketsForQuestion,
+  fetchAdminMarketDetailBundle,
+  markQuestionCancelledForAdminMarket,
+  markQuestionResolvedForAdminMarket,
+  selectMarketRowByIdForAdmin,
+  updateMarketEndDateForAdmin,
+} from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import {
   FEE_CONFIG,
   invalidateAfterPredictionTrade,
@@ -107,32 +106,14 @@ export const GET = withErrorHandling(
       'GET /api/admin/markets/[marketId]'
     );
 
-    const [market] = await db
-      .select()
-      .from(markets)
-      .where(eq(markets.id, marketId))
-      .limit(1);
+    const { market, marketPositions } = await asSystem(
+      (tx) => fetchAdminMarketDetailBundle(tx, marketId),
+      'admin-market-get'
+    );
 
     if (!market) {
       return successResponse({ error: 'Market not found' }, 404);
     }
-
-    // Get positions for this market
-    const marketPositions = await db
-      .select({
-        id: positions.id,
-        userId: positions.userId,
-        side: positions.side,
-        shares: positions.shares,
-        avgPrice: positions.avgPrice,
-        amount: positions.amount,
-        status: positions.status,
-        createdAt: positions.createdAt,
-      })
-      .from(positions)
-      .where(eq(positions.marketId, marketId))
-      .orderBy(desc(positions.createdAt))
-      .limit(100);
 
     // Calculate stats
     const yesShares = parseFloat(String(market.yesShares));
@@ -196,11 +177,10 @@ export const POST = withErrorHandling(
       'POST /api/admin/markets/[marketId]'
     );
 
-    const [market] = await db
-      .select()
-      .from(markets)
-      .where(eq(markets.id, marketId))
-      .limit(1);
+    const market = await asSystem(
+      (tx) => selectMarketRowByIdForAdmin(tx, marketId),
+      'admin-market-action-lookup'
+    );
 
     if (!market) {
       return successResponse({ error: 'Market not found' }, 404);
@@ -227,29 +207,19 @@ export const POST = withErrorHandling(
           reason || `Resolved by admin as ${resolution ? 'YES' : 'NO'}`,
       });
 
-      await withTransaction(async (tx) => {
-        await tx
-          .update(questions)
-          .set({
-            status: 'resolved',
-            resolvedOutcome: resolution,
-            resolutionReviewedAt: resolvedAt,
-            resolutionReviewedBy: admin.userId,
-            updatedAt: resolvedAt,
-          })
-          .where(eq(questions.id, marketId));
-
-        // Update timeframedMarkets linked to this question
-        await tx
-          .update(timeframedMarkets)
-          .set({
-            isActive: false,
-            isResolved: true,
-            resolvedAt,
-            updatedAt: resolvedAt,
-          })
-          .where(eq(timeframedMarkets.questionId, marketId));
-      });
+      await asSystem(async (tx) => {
+        await markQuestionResolvedForAdminMarket(tx, {
+          questionId: marketId,
+          resolvedOutcome: resolution,
+          adminUserId: admin.userId,
+          resolvedAt,
+        });
+        await deactivateTimeframedMarketsForQuestion(tx, {
+          questionId: marketId,
+          resolvedAt,
+          updatedAt: resolvedAt,
+        });
+      }, 'admin-market-resolve-metadata');
 
       let notificationsCreated = 0;
 
@@ -302,16 +272,10 @@ export const POST = withErrorHandling(
         );
       }
 
-      // Use transaction to ensure atomic update
-      await withTransaction(async (tx) => {
-        await tx
-          .update(markets)
-          .set({
-            endDate: newEnd,
-            updatedAt: new Date(),
-          })
-          .where(eq(markets.id, marketId));
-      });
+      await asSystem(
+        (tx) => updateMarketEndDateForAdmin(tx, marketId, newEnd, new Date()),
+        'admin-market-extend'
+      );
 
       await logAdminModify({
         adminId: admin.userId,
@@ -342,27 +306,17 @@ export const POST = withErrorHandling(
 
       // Also update questions and timeframedMarkets tables for consistency
       const cancelledAt = new Date();
-      await withTransaction(async (tx) => {
-        // Update the question table (market.id matches question.id)
-        await tx
-          .update(questions)
-          .set({
-            status: 'cancelled',
-            updatedAt: cancelledAt,
-          })
-          .where(eq(questions.id, marketId));
-
-        // Update timeframedMarkets linked to this question
-        await tx
-          .update(timeframedMarkets)
-          .set({
-            isActive: false,
-            isResolved: true,
-            resolvedAt: cancelledAt,
-            updatedAt: cancelledAt,
-          })
-          .where(eq(timeframedMarkets.questionId, marketId));
-      });
+      await asSystem(async (tx) => {
+        await markQuestionCancelledForAdminMarket(tx, {
+          questionId: marketId,
+          cancelledAt,
+        });
+        await deactivateTimeframedMarketsForQuestion(tx, {
+          questionId: marketId,
+          resolvedAt: cancelledAt,
+          updatedAt: cancelledAt,
+        });
+      }, 'admin-market-void-metadata');
 
       logger.info(
         'Market voided via cancel()',

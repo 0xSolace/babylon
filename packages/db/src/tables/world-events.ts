@@ -42,6 +42,8 @@ export async function createWorldEventRow(
     visibility: string;
     gameId?: string;
     dayNumber?: number;
+    /** When set, overrides DB default for `timestamp` (e.g. simulation-aligned events). */
+    timestamp?: Date;
   }
 ) {
   let descriptionString: string;
@@ -101,6 +103,7 @@ export async function createWorldEventRow(
       visibility: event.visibility,
       gameId: event.gameId,
       dayNumber: safeDayNumber,
+      ...(event.timestamp !== undefined ? { timestamp: event.timestamp } : {}),
     })
     .returning();
 

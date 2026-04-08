@@ -10,8 +10,13 @@
  * - Lightweight (no LLM calls)
  */
 
-import { type NpcMemory } from '@babylon/db';
-import { db } from '@babylon/db/runtime';
+import {
+  findActorStatesForRunningBit,
+  insertActorStateForRunningBit,
+  type NpcMemory,
+  updateActorStateRecentMemoriesOptimistic,
+  updateActorStateRecentMemoriesUnconditional,
+} from '@babylon/db';
 import { generateSnowflakeId } from '@babylon/shared';
 import { SeededRandom } from '../utils/entropy';
 import { isDegenSpeaker } from '../utils/shared-utils';
@@ -176,10 +181,7 @@ export async function ensureRunningBits(
   const periodKey = buildRunningBitKey(now, options.currentDay);
 
   // Fetch actor states in one shot; missing rows are tolerated.
-  let states = await db.actorState.findMany({
-    where: { id: { in: actorIds } },
-    select: { id: true, recentMemories: true, updatedAt: true },
-  });
+  let states = await findActorStatesForRunningBit(actorIds);
 
   // Ensure ActorState rows exist so we can persist running bits.
   // This keeps the feature robust even if bootstrap hasn't created state yet.
@@ -187,29 +189,11 @@ export async function ensureRunningBits(
   const missingIds = actorIds.filter((id) => !foundIds.has(id));
   if (missingIds.length > 0) {
     await Promise.allSettled(
-      missingIds.map((id) =>
-        db.actorState.create({
-          data: {
-            id,
-            tradingBalance: '10000',
-            reputationPoints: 10000,
-            hasPool: false,
-            postsToday: 0,
-            currentMood: '0',
-            recentMemories: [],
-            relationships: {},
-            createdAt: now,
-            updatedAt: now,
-          },
-        })
-      )
+      missingIds.map((id) => insertActorStateForRunningBit({ id, now }))
     );
 
     // Re-fetch (still bounded by actorIds) so the rest of the logic can persist bits.
-    states = await db.actorState.findMany({
-      where: { id: { in: actorIds } },
-      select: { id: true, recentMemories: true, updatedAt: true },
-    });
+    states = await findActorStatesForRunningBit(actorIds);
   }
 
   const result: Record<string, string> = {};
@@ -254,16 +238,18 @@ export async function ensureRunningBits(
     const updatedMemories = [...existingMemories, newMemory].slice(
       -maxMemories
     );
-    const updateRes = await db.actorState.updateMany({
-      where: { id: entry.actorId, updatedAt: state.updatedAt },
-      data: { recentMemories: updatedMemories, updatedAt: now },
+    const updated = await updateActorStateRecentMemoriesOptimistic({
+      actorId: entry.actorId,
+      memories: updatedMemories,
+      now,
+      expectedUpdatedAt: state.updatedAt,
     });
 
-    if (updateRes.count === 0) {
-      // Fallback: update without optimistic lock (avoid spinning; this is not mission-critical)
-      await db.actorState.updateMany({
-        where: { id: entry.actorId },
-        data: { recentMemories: updatedMemories, updatedAt: now },
+    if (updated === 0) {
+      await updateActorStateRecentMemoriesUnconditional({
+        actorId: entry.actorId,
+        memories: updatedMemories,
+        now,
       });
     }
   }

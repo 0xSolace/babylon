@@ -87,16 +87,10 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, count, desc, eq, inArray, isNull, lte } from '@babylon/db';
 import {
-  comments,
-  db,
-  posts,
-  reactions,
-  shares,
-  users,
-} from '@babylon/db/runtime';
-
+  fetchUserPostsFeedDbPayload,
+  fetchUserRepliesFeedDbPayload,
+} from '@babylon/db';
 import { StaticDataRegistry } from '@babylon/engine';
 import {
   logger,
@@ -105,6 +99,7 @@ import {
   UserPostsQuerySchema,
 } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+import { runWithOptionalUserRls } from '@/lib/db/run-with-optional-user-rls';
 
 /**
  * GET /api/users/[userId]/posts
@@ -149,796 +144,419 @@ export const GET = withErrorHandling(
     };
     const { type } = UserPostsQuerySchema.parse(queryParams);
 
-    if (type === 'replies') {
-      // Get user's comments (replies)
-      const userComments = await db
-        .select()
-        .from(comments)
-        .where(
-          and(
-            eq(comments.authorId, canonicalUserId),
-            isNull(comments.deletedAt)
-          )
-        )
-        .orderBy(desc(comments.createdAt))
-        .limit(100);
-
-      if (userComments.length === 0) {
-        return successResponse({
-          type: 'replies',
-          items: [],
-          total: 0,
-        });
-      }
-
-      const commentIds = userComments.map((c) => c.id);
-      const postIds = [...new Set(userComments.map((c) => c.postId))];
-      const parentCommentIds = [
-        ...new Set(
-          userComments
-            .map((c) => c.parentCommentId)
-            .filter((id): id is string => id !== null)
-        ),
-      ];
-
-      // Fetch posts for these comments
-      const postsData = await db
-        .select({
-          id: posts.id,
-          content: posts.content,
-          authorId: posts.authorId,
-          timestamp: posts.timestamp,
-        })
-        .from(posts)
-        .where(inArray(posts.id, postIds));
-
-      const postsMap = new Map(postsData.map((p) => [p.id, p]));
-
-      // Fetch parent comments (for replies to comments)
-      let parentCommentsMap = new Map<
-        string,
-        {
-          id: string;
-          content: string;
-          authorId: string;
-          createdAt: Date;
-        }
-      >();
-      if (parentCommentIds.length > 0) {
-        const parentCommentsData = await db
-          .select({
-            id: comments.id,
-            content: comments.content,
-            authorId: comments.authorId,
-            createdAt: comments.createdAt,
-          })
-          .from(comments)
-          .where(
-            and(
-              inArray(comments.id, parentCommentIds),
-              isNull(comments.deletedAt)
-            )
-          );
-
-        parentCommentsMap = new Map(parentCommentsData.map((c) => [c.id, c]));
-      }
-
-      // Fetch like counts for comments
-      const likeCountsResult = await db
-        .select({
-          commentId: reactions.commentId,
-          count: count(),
-        })
-        .from(reactions)
-        .where(
-          and(
-            inArray(reactions.commentId, commentIds),
-            eq(reactions.type, 'like')
-          )
-        )
-        .groupBy(reactions.commentId);
-
-      const likeCountsMap = new Map(
-        likeCountsResult.map((r) => [r.commentId, Number(r.count)])
-      );
-
-      // Fetch reply counts for comments
-      const replyCountsResult = await db
-        .select({
-          parentCommentId: comments.parentCommentId,
-          count: count(),
-        })
-        .from(comments)
-        .where(
-          and(
-            inArray(comments.parentCommentId, commentIds),
-            isNull(comments.deletedAt)
-          )
-        )
-        .groupBy(comments.parentCommentId);
-
-      const replyCountsMap = new Map(
-        replyCountsResult.map((r) => [r.parentCommentId, Number(r.count)])
-      );
-
-      // Check if user has liked comments
-      let userLikesSet = new Set<string>();
-      if (user) {
-        const userLikes = await db
-          .select({ commentId: reactions.commentId })
-          .from(reactions)
-          .where(
-            and(
-              inArray(reactions.commentId, commentIds),
-              eq(reactions.userId, user.userId),
-              eq(reactions.type, 'like')
-            )
-          );
-        userLikesSet = new Set(
-          userLikes
-            .map((l) => l.commentId)
-            .filter((id): id is string => id !== null)
+    return runWithOptionalUserRls(user, async (db) => {
+      if (type === 'replies') {
+        const payload = await fetchUserRepliesFeedDbPayload(
+          db,
+          canonicalUserId,
+          user?.userId
         );
-      }
+        const { userComments } = payload;
+        if (userComments.length === 0) {
+          return successResponse({
+            type: 'replies',
+            items: [],
+            total: 0,
+          });
+        }
 
-      // Fetch interaction counts for parent posts
-      const [postLikeCounts, postCommentCounts, postShareCounts] =
-        postIds.length > 0
-          ? await Promise.all([
-              db
-                .select({
-                  postId: reactions.postId,
-                  count: count(),
-                })
-                .from(reactions)
-                .where(
-                  and(
-                    inArray(reactions.postId, postIds),
-                    eq(reactions.type, 'like')
-                  )
-                )
-                .groupBy(reactions.postId),
-              db
-                .select({
-                  postId: comments.postId,
-                  count: count(),
-                })
-                .from(comments)
-                .where(
-                  and(
-                    inArray(comments.postId, postIds),
-                    isNull(comments.deletedAt)
-                  )
-                )
-                .groupBy(comments.postId),
-              db
-                .select({
-                  postId: shares.postId,
-                  count: count(),
-                })
-                .from(shares)
-                .where(inArray(shares.postId, postIds))
-                .groupBy(shares.postId),
-            ])
-          : [[], [], []];
+        const postsMap = new Map(payload.postsData.map((p) => [p.id, p]));
+        const parentCommentsMap = new Map(
+          payload.parentCommentsData.map((c) => [c.id, c])
+        );
 
-      const postLikeCountsMap = new Map(
-        postLikeCounts.map((r) => [r.postId, Number(r.count)])
-      );
-      const postCommentCountsMap = new Map(
-        postCommentCounts.map((r) => [r.postId, Number(r.count)])
-      );
-      const postShareCountsMap = new Map(
-        postShareCounts.map((r) => [r.postId, Number(r.count)])
-      );
+        const likeCountsMap = new Map(
+          payload.likeCountsResult.map((r) => [r.commentId, Number(r.count)])
+        );
+        const replyCountsMap = new Map(
+          payload.replyCountsResult.map((r) => [
+            r.parentCommentId,
+            Number(r.count),
+          ])
+        );
+        const userLikesSet = new Set(payload.userLikesCommentIds);
 
-      // Fetch interaction counts for parent comments
-      let parentCommentLikeCountsMap = new Map<string, number>();
-      let parentCommentReplyCountsMap = new Map<string, number>();
-      if (parentCommentIds.length > 0) {
-        const [parentCommentLikeCounts, parentCommentReplyCounts] =
-          await Promise.all([
-            db
-              .select({
-                commentId: reactions.commentId,
-                count: count(),
-              })
-              .from(reactions)
-              .where(
-                and(
-                  inArray(reactions.commentId, parentCommentIds),
-                  eq(reactions.type, 'like')
-                )
-              )
-              .groupBy(reactions.commentId),
-            db
-              .select({
-                parentCommentId: comments.parentCommentId,
-                count: count(),
-              })
-              .from(comments)
-              .where(
-                and(
-                  inArray(comments.parentCommentId, parentCommentIds),
-                  isNull(comments.deletedAt)
-                )
-              )
-              .groupBy(comments.parentCommentId),
-          ]);
+        const postLikeCountsMap = new Map(
+          payload.postLikeCounts.map((r) => [r.postId, Number(r.count)])
+        );
+        const postCommentCountsMap = new Map(
+          payload.postCommentCounts.map((r) => [r.postId, Number(r.count)])
+        );
+        const postShareCountsMap = new Map(
+          payload.postShareCounts.map((r) => [r.postId, Number(r.count)])
+        );
 
-        parentCommentLikeCountsMap = new Map(
-          parentCommentLikeCounts
+        const parentCommentLikeCountsMap = new Map(
+          payload.parentCommentLikeCounts
             .filter(
               (r): r is typeof r & { commentId: string } => r.commentId !== null
             )
             .map((r) => [r.commentId, Number(r.count)])
         );
-        parentCommentReplyCountsMap = new Map(
-          parentCommentReplyCounts
+        const parentCommentReplyCountsMap = new Map(
+          payload.parentCommentReplyCounts
             .filter(
               (r): r is typeof r & { parentCommentId: string } =>
                 r.parentCommentId !== null
             )
             .map((r) => [r.parentCommentId, Number(r.count)])
         );
+
+        const userPostLikesSet = new Set(payload.userPostLikes);
+        const userPostSharesSet = new Set(payload.userPostShares);
+        const userParentCommentLikesSet = new Set(
+          payload.userParentCommentLikes
+        );
+
+        const userAuthorsMap = new Map(
+          payload.authorsUsers.map((u) => [u.id, u])
+        );
+
+        // Helper function to get author info (same pattern as comment API)
+        // Check StaticDataRegistry first (for actors/orgs), then database
+        const getAuthorInfo = (
+          authorId: string
+        ): {
+          id: string;
+          displayName: string;
+          username: string | null;
+          profileImageUrl: string | null;
+        } | null => {
+          // Check if it's an actor (NPC/agent) - check FIRST like comment API
+          const actor = StaticDataRegistry.getActor(authorId);
+          if (actor) {
+            return {
+              id: actor.id,
+              displayName: actor.name,
+              username: null,
+              profileImageUrl:
+                actor.profileImageUrl || `/images/actors/${actor.id}.jpg`,
+            };
+          }
+          // Check if it's an organization
+          const org = StaticDataRegistry.getOrganization(authorId);
+          if (org) {
+            return {
+              id: org.id,
+              displayName: org.name,
+              username: null,
+              profileImageUrl:
+                org.imageUrl || `/images/organizations/${org.id}.jpg`,
+            };
+          }
+          // Fall back to database user lookup
+          const dbUser = userAuthorsMap.get(authorId);
+          if (dbUser) {
+            return {
+              id: dbUser.id,
+              displayName: dbUser.displayName ?? dbUser.username ?? authorId,
+              username: dbUser.username,
+              profileImageUrl: dbUser.profileImageUrl,
+            };
+          }
+          return null;
+        };
+
+        // Format comments as replies
+        const replies = userComments.map((comment) => {
+          const post = postsMap.get(comment.postId);
+
+          // Get parent comment if this is a reply to a comment
+          const parentComment = comment.parentCommentId
+            ? parentCommentsMap.get(comment.parentCommentId)
+            : null;
+
+          return {
+            id: comment.id,
+            content: comment.content,
+            postId: comment.postId,
+            parentCommentId: comment.parentCommentId,
+            createdAt: toISO(comment.createdAt),
+            updatedAt: toISO(comment.updatedAt),
+            likeCount: likeCountsMap.get(comment.id) ?? 0,
+            replyCount: replyCountsMap.get(comment.id) ?? 0,
+            isLiked: userLikesSet.has(comment.id),
+            // Parent comment (if replying to a comment)
+            parentComment: parentComment
+              ? {
+                  id: parentComment.id,
+                  content: parentComment.content,
+                  authorId: parentComment.authorId,
+                  createdAt: toISO(parentComment.createdAt),
+                  author: getAuthorInfo(parentComment.authorId),
+                  likeCount:
+                    parentCommentLikeCountsMap.get(parentComment.id) ?? 0,
+                  replyCount:
+                    parentCommentReplyCountsMap.get(parentComment.id) ?? 0,
+                  isLiked: userParentCommentLikesSet.has(parentComment.id),
+                }
+              : null,
+            // Original post (always included for context)
+            post: post
+              ? {
+                  id: post.id,
+                  content: post.content,
+                  authorId: post.authorId,
+                  timestamp: toISO(post.timestamp),
+                  author: getAuthorInfo(post.authorId),
+                  likeCount: postLikeCountsMap.get(post.id) ?? 0,
+                  commentCount: postCommentCountsMap.get(post.id) ?? 0,
+                  shareCount: postShareCountsMap.get(post.id) ?? 0,
+                  isLiked: userPostLikesSet.has(post.id),
+                  isShared: userPostSharesSet.has(post.id),
+                }
+              : null,
+          };
+        });
+
+        logger.info(
+          'User replies fetched successfully',
+          { userId: canonicalUserId, total: replies.length },
+          'GET /api/users/[userId]/posts'
+        );
+
+        return successResponse({
+          type: 'replies',
+          items: replies,
+          total: replies.length,
+        });
+      }
+      // Get user's posts - filter out future posts
+      const now = new Date();
+      const postsPayload = await fetchUserPostsFeedDbPayload(
+        db,
+        canonicalUserId,
+        user?.userId,
+        now
+      );
+      const { userPosts } = postsPayload;
+      if (userPosts.length === 0) {
+        return successResponse({
+          type: 'posts',
+          items: [],
+          total: 0,
+        });
       }
 
-      // Fetch user's likes/shares on parent posts and parent comments
-      let userPostLikesSet = new Set<string>();
-      let userPostSharesSet = new Set<string>();
-      let userParentCommentLikesSet = new Set<string>();
-      if (user) {
-        const [userPostLikes, userPostShares, userParentCommentLikes] =
-          await Promise.all([
-            postIds.length > 0
-              ? db
-                  .select({ postId: reactions.postId })
-                  .from(reactions)
-                  .where(
-                    and(
-                      inArray(reactions.postId, postIds),
-                      eq(reactions.userId, user.userId),
-                      eq(reactions.type, 'like')
-                    )
-                  )
-              : Promise.resolve([] as Array<{ postId: string | null }>),
-            postIds.length > 0
-              ? db
-                  .select({ postId: shares.postId })
-                  .from(shares)
-                  .where(
-                    and(
-                      inArray(shares.postId, postIds),
-                      eq(shares.userId, user.userId)
-                    )
-                  )
-              : Promise.resolve([] as Array<{ postId: string }>),
-            parentCommentIds.length > 0
-              ? db
-                  .select({ commentId: reactions.commentId })
-                  .from(reactions)
-                  .where(
-                    and(
-                      inArray(reactions.commentId, parentCommentIds),
-                      eq(reactions.userId, user.userId),
-                      eq(reactions.type, 'like')
-                    )
-                  )
-              : Promise.resolve([] as Array<{ commentId: string | null }>),
-          ]);
+      const likeCountsMap = new Map(
+        postsPayload.likeCountsResult.map((r) => [r.postId, Number(r.count)])
+      );
+      const commentCountsMap = new Map(
+        postsPayload.commentCountsResult.map((r) => [r.postId, Number(r.count)])
+      );
+      const shareCountsMap = new Map(
+        postsPayload.shareCountsResult.map((r) => [r.postId, Number(r.count)])
+      );
+      const userLikesSet = new Set(postsPayload.userLikedPostIds);
+      const userSharesSet = new Set(postsPayload.userSharedPostIds);
+      const postAuthor = postsPayload.postAuthor;
 
-        userPostLikesSet = new Set(
-          userPostLikes
-            .map((l) => l.postId)
-            .filter((id): id is string => id !== null)
-        );
-        userPostSharesSet = new Set(userPostShares.map((s) => s.postId));
-        userParentCommentLikesSet = new Set(
-          userParentCommentLikes
-            .map((l) => l.commentId)
-            .filter((id): id is string => id !== null)
-        );
-      }
+      const originalPostsMap = new Map(
+        postsPayload.originalPosts.map((op) => [op.id, op])
+      );
 
-      // Fetch author info for posts and parent comments
-      const parentCommentAuthorIds = [
+      const originalPostAuthorIds = [
         ...new Set(
-          Array.from(parentCommentsMap.values()).map((c) => c.authorId)
+          Array.from(originalPostsMap.values()).map((p) => p.authorId)
         ),
       ];
-      const allAuthorIds = [
-        ...new Set([
-          ...postsData.map((p) => p.authorId),
-          ...parentCommentAuthorIds,
-        ]),
-      ];
-      const authorsUsers = await db
-        .select({
-          id: users.id,
-          displayName: users.displayName,
-          username: users.username,
-          profileImageUrl: users.profileImageUrl,
-        })
-        .from(users)
-        .where(inArray(users.id, allAuthorIds));
 
-      const userAuthorsMap = new Map(authorsUsers.map((u) => [u.id, u]));
-
-      // Helper function to get author info (same pattern as comment API)
-      // Check StaticDataRegistry first (for actors/orgs), then database
-      const getAuthorInfo = (
-        authorId: string
-      ): {
-        id: string;
-        displayName: string;
-        username: string | null;
-        profileImageUrl: string | null;
-      } | null => {
-        // Check if it's an actor (NPC/agent) - check FIRST like comment API
-        const actor = StaticDataRegistry.getActor(authorId);
-        if (actor) {
-          return {
-            id: actor.id,
-            displayName: actor.name,
-            username: null,
-            profileImageUrl:
-              actor.profileImageUrl || `/images/actors/${actor.id}.jpg`,
-          };
+      let originalUserAuthorsMap = new Map<
+        string,
+        {
+          id: string;
+          displayName: string | null;
+          username: string | null;
+          profileImageUrl: string | null;
         }
-        // Check if it's an organization
-        const org = StaticDataRegistry.getOrganization(authorId);
-        if (org) {
-          return {
-            id: org.id,
-            displayName: org.name,
-            username: null,
-            profileImageUrl:
-              org.imageUrl || `/images/organizations/${org.id}.jpg`,
-          };
+      >();
+      let originalActorAuthorsMap = new Map<
+        string,
+        { id: string; name: string; profileImageUrl: string | null }
+      >();
+      let originalOrgAuthorsMap = new Map<
+        string,
+        { id: string; name: string; imageUrl: string | null }
+      >();
+
+      if (originalPostAuthorIds.length > 0) {
+        originalUserAuthorsMap = new Map(
+          postsPayload.originalAuthorsUsers.map((u) => [u.id, u])
+        );
+        originalActorAuthorsMap = new Map(
+          originalPostAuthorIds
+            .map((id) => StaticDataRegistry.getActor(id))
+            .filter((a): a is NonNullable<typeof a> => a !== null)
+            .map((a) => [
+              a.id,
+              {
+                id: a.id,
+                name: a.name,
+                profileImageUrl: a.profileImageUrl ?? null,
+              },
+            ])
+        );
+        originalOrgAuthorsMap = new Map(
+          originalPostAuthorIds
+            .map((id) => StaticDataRegistry.getOrganization(id))
+            .filter((o): o is NonNullable<typeof o> => o !== null)
+            .map((o) => [
+              o.id,
+              { id: o.id, name: o.name, imageUrl: o.imageUrl ?? null },
+            ])
+        );
+      }
+
+      const originalReactionMap = new Map(
+        postsPayload.originalPostReactions.map((r) => [
+          r.postId!,
+          Number(r.count),
+        ])
+      );
+      const originalCommentMap = new Map(
+        postsPayload.originalPostComments.map((c) => [
+          c.postId,
+          Number(c.count),
+        ])
+      );
+      const originalShareMap = new Map(
+        postsPayload.originalPostShares.map((s) => [s.postId, Number(s.count)])
+      );
+
+      // Filter out reposts where the original post is deleted
+      const validPosts = userPosts.filter((post) => {
+        if (post.originalPostId) {
+          const originalPost = originalPostsMap.get(post.originalPostId);
+          const hasOriginalPost = originalPost && !originalPost.deletedAt;
+          const isQuote = post.content && post.content.length > 0;
+
+          // For quote posts, keep them even if original is deleted (user has commentary)
+          // For simple reposts, filter out if original is deleted
+          if (isQuote) {
+            return true;
+          }
+          return hasOriginalPost;
         }
-        // Fall back to database user lookup
-        const dbUser = userAuthorsMap.get(authorId);
-        if (dbUser) {
-          return {
-            id: dbUser.id,
-            displayName: dbUser.displayName ?? dbUser.username ?? authorId,
-            username: dbUser.username,
-            profileImageUrl: dbUser.profileImageUrl,
-          };
-        }
-        return null;
-      };
+        return true;
+      });
 
-      // Format comments as replies
-      const replies = userComments.map((comment) => {
-        const post = postsMap.get(comment.postId);
-
-        // Get parent comment if this is a reply to a comment
-        const parentComment = comment.parentCommentId
-          ? parentCommentsMap.get(comment.parentCommentId)
-          : null;
-
-        return {
-          id: comment.id,
-          content: comment.content,
-          postId: comment.postId,
-          parentCommentId: comment.parentCommentId,
-          createdAt: toISO(comment.createdAt),
-          updatedAt: toISO(comment.updatedAt),
-          likeCount: likeCountsMap.get(comment.id) ?? 0,
-          replyCount: replyCountsMap.get(comment.id) ?? 0,
-          isLiked: userLikesSet.has(comment.id),
-          // Parent comment (if replying to a comment)
-          parentComment: parentComment
+      // Format posts (includes both regular posts and reposts/quotes)
+      const formattedPosts = validPosts.map((post) => {
+        const basePost = {
+          id: post.id,
+          content: post.content,
+          authorId: post.authorId,
+          timestamp: toISO(post.timestamp),
+          createdAt: toISO(post.createdAt),
+          likeCount: likeCountsMap.get(post.id) ?? 0,
+          commentCount: commentCountsMap.get(post.id) ?? 0,
+          shareCount: shareCountsMap.get(post.id) ?? 0,
+          isLiked: userLikesSet.has(post.id),
+          isShared: userSharesSet.has(post.id),
+          author: postAuthor
             ? {
-                id: parentComment.id,
-                content: parentComment.content,
-                authorId: parentComment.authorId,
-                createdAt: toISO(parentComment.createdAt),
-                author: getAuthorInfo(parentComment.authorId),
-                likeCount:
-                  parentCommentLikeCountsMap.get(parentComment.id) ?? 0,
-                replyCount:
-                  parentCommentReplyCountsMap.get(parentComment.id) ?? 0,
-                isLiked: userParentCommentLikesSet.has(parentComment.id),
-              }
-            : null,
-          // Original post (always included for context)
-          post: post
-            ? {
-                id: post.id,
-                content: post.content,
-                authorId: post.authorId,
-                timestamp: toISO(post.timestamp),
-                author: getAuthorInfo(post.authorId),
-                likeCount: postLikeCountsMap.get(post.id) ?? 0,
-                commentCount: postCommentCountsMap.get(post.id) ?? 0,
-                shareCount: postShareCountsMap.get(post.id) ?? 0,
-                isLiked: userPostLikesSet.has(post.id),
-                isShared: userPostSharesSet.has(post.id),
+                id: postAuthor.id,
+                displayName: postAuthor.displayName,
+                username: postAuthor.username,
+                profileImageUrl: postAuthor.profileImageUrl,
               }
             : null,
         };
+
+        // Check if this is a repost/quote
+        if (post.originalPostId) {
+          const isQuote = post.content && post.content.length > 0;
+          const originalPost = originalPostsMap.get(post.originalPostId);
+
+          // If original post exists and is not deleted
+          if (originalPost && !originalPost.deletedAt) {
+            // Get original post author info
+            const originalUser = originalUserAuthorsMap.get(
+              originalPost.authorId
+            );
+            const originalActor = originalActorAuthorsMap.get(
+              originalPost.authorId
+            );
+            const originalOrg = originalOrgAuthorsMap.get(
+              originalPost.authorId
+            );
+
+            // For simple reposts (not quotes), use the original post's interaction counts
+            // For quote posts, keep the quote post's interaction counts
+            const interactionCounts = !isQuote
+              ? {
+                  likeCount: originalReactionMap.get(originalPost.id) ?? 0,
+                  commentCount: originalCommentMap.get(originalPost.id) ?? 0,
+                  shareCount: originalShareMap.get(originalPost.id) ?? 0,
+                }
+              : {
+                  likeCount: basePost.likeCount,
+                  commentCount: basePost.commentCount,
+                  shareCount: basePost.shareCount,
+                };
+
+            return {
+              ...basePost,
+              ...interactionCounts,
+              isRepost: true,
+              isQuote,
+              quoteComment: isQuote ? post.content : null,
+              originalPostId: originalPost.id,
+              originalPost: {
+                id: originalPost.id,
+                content: originalPost.content,
+                authorId: originalPost.authorId,
+                authorName:
+                  originalUser?.displayName ||
+                  originalActor?.name ||
+                  originalOrg?.name ||
+                  originalPost.authorId,
+                authorUsername: originalUser?.username || null,
+                authorProfileImageUrl:
+                  originalUser?.profileImageUrl ||
+                  originalActor?.profileImageUrl ||
+                  originalOrg?.imageUrl ||
+                  null,
+                timestamp: toISO(originalPost.timestamp),
+              },
+            };
+          }
+
+          // If original post is deleted but this is a quote post, return with null originalPost
+          if (isQuote) {
+            return {
+              ...basePost,
+              isRepost: true,
+              isQuote: true,
+              quoteComment: post.content,
+              originalPostId: post.originalPostId,
+              originalPost: null,
+            };
+          }
+        }
+
+        return basePost;
       });
 
+      // Sort by timestamp (posts already include reposts/quotes)
+      const allItems = formattedPosts.sort(
+        (a, b) =>
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      );
+
       logger.info(
-        'User replies fetched successfully',
-        { userId: canonicalUserId, total: replies.length },
+        'User posts fetched successfully',
+        { userId: canonicalUserId, total: allItems.length },
         'GET /api/users/[userId]/posts'
       );
 
-      return successResponse({
-        type: 'replies',
-        items: replies,
-        total: replies.length,
-      });
-    }
-    // Get user's posts - filter out future posts
-    const now = new Date();
-    const userPosts = await db
-      .select()
-      .from(posts)
-      .where(
-        and(
-          eq(posts.authorId, canonicalUserId),
-          isNull(posts.deletedAt),
-          lte(posts.timestamp, now)
-        )
-      )
-      .orderBy(desc(posts.timestamp))
-      .limit(100);
-
-    if (userPosts.length === 0) {
-      return successResponse({
+      const res = successResponse({
         type: 'posts',
-        items: [],
-        total: 0,
+        items: allItems,
+        total: allItems.length,
       });
-    }
-
-    const postIds = userPosts.map((p) => p.id);
-
-    // Fetch like counts
-    const likeCountsResult = await db
-      .select({
-        postId: reactions.postId,
-        count: count(),
-      })
-      .from(reactions)
-      .where(
-        and(inArray(reactions.postId, postIds), eq(reactions.type, 'like'))
-      )
-      .groupBy(reactions.postId);
-
-    const likeCountsMap = new Map(
-      likeCountsResult.map((r) => [r.postId, Number(r.count)])
-    );
-
-    // Fetch comment counts
-    const commentCountsResult = await db
-      .select({
-        postId: comments.postId,
-        count: count(),
-      })
-      .from(comments)
-      .where(and(inArray(comments.postId, postIds), isNull(comments.deletedAt)))
-      .groupBy(comments.postId);
-
-    const commentCountsMap = new Map(
-      commentCountsResult.map((r) => [r.postId, Number(r.count)])
-    );
-
-    // Fetch share counts
-    const shareCountsResult = await db
-      .select({
-        postId: shares.postId,
-        count: count(),
-      })
-      .from(shares)
-      .where(inArray(shares.postId, postIds))
-      .groupBy(shares.postId);
-
-    const shareCountsMap = new Map(
-      shareCountsResult.map((r) => [r.postId, Number(r.count)])
-    );
-
-    // Check if user has liked/shared posts
-    let userLikesSet = new Set<string>();
-    let userSharesSet = new Set<string>();
-    if (user) {
-      const [userLikes, userShares] = await Promise.all([
-        db
-          .select({ postId: reactions.postId })
-          .from(reactions)
-          .where(
-            and(
-              inArray(reactions.postId, postIds),
-              eq(reactions.userId, user.userId),
-              eq(reactions.type, 'like')
-            )
-          ),
-        db
-          .select({ postId: shares.postId })
-          .from(shares)
-          .where(
-            and(inArray(shares.postId, postIds), eq(shares.userId, user.userId))
-          ),
-      ]);
-      userLikesSet = new Set(
-        userLikes.map((l) => l.postId).filter((id): id is string => id !== null)
-      );
-      userSharesSet = new Set(userShares.map((s) => s.postId));
-    }
-
-    // Fetch author info for the user (posts are all from userId)
-    const [postAuthor] = await db
-      .select({
-        id: users.id,
-        displayName: users.displayName,
-        username: users.username,
-        profileImageUrl: users.profileImageUrl,
-      })
-      .from(users)
-      .where(eq(users.id, canonicalUserId))
-      .limit(1);
-
-    // Get original posts for reposts/quotes
-    const originalPostIds = userPosts
-      .filter((p) => p.originalPostId !== null)
-      .map((p) => p.originalPostId)
-      .filter((id): id is string => id !== null);
-
-    let originalPostsMap = new Map<string, typeof posts.$inferSelect>();
-    if (originalPostIds.length > 0) {
-      const originalPosts = await db
-        .select()
-        .from(posts)
-        .where(inArray(posts.id, originalPostIds));
-      originalPostsMap = new Map(originalPosts.map((p) => [p.id, p]));
-    }
-
-    // Fetch author info for original posts
-    const originalPostAuthorIds = [
-      ...new Set(Array.from(originalPostsMap.values()).map((p) => p.authorId)),
-    ];
-
-    let originalUserAuthorsMap = new Map<
-      string,
-      {
-        id: string;
-        displayName: string | null;
-        username: string | null;
-        profileImageUrl: string | null;
-      }
-    >();
-    let originalActorAuthorsMap = new Map<
-      string,
-      { id: string; name: string; profileImageUrl: string | null }
-    >();
-    let originalOrgAuthorsMap = new Map<
-      string,
-      { id: string; name: string; imageUrl: string | null }
-    >();
-
-    if (originalPostAuthorIds.length > 0) {
-      const originalAuthorsUsers = await db
-        .select({
-          id: users.id,
-          displayName: users.displayName,
-          username: users.username,
-          profileImageUrl: users.profileImageUrl,
-        })
-        .from(users)
-        .where(inArray(users.id, originalPostAuthorIds));
-
-      originalUserAuthorsMap = new Map(
-        originalAuthorsUsers.map((u) => [u.id, u])
-      );
-      originalActorAuthorsMap = new Map(
-        originalPostAuthorIds
-          .map((id) => StaticDataRegistry.getActor(id))
-          .filter((a): a is NonNullable<typeof a> => a !== null)
-          .map((a) => [
-            a.id,
-            {
-              id: a.id,
-              name: a.name,
-              profileImageUrl: a.profileImageUrl ?? null,
-            },
-          ])
-      );
-      originalOrgAuthorsMap = new Map(
-        originalPostAuthorIds
-          .map((id) => StaticDataRegistry.getOrganization(id))
-          .filter((o): o is NonNullable<typeof o> => o !== null)
-          .map((o) => [
-            o.id,
-            { id: o.id, name: o.name, imageUrl: o.imageUrl ?? null },
-          ])
-      );
-    }
-
-    // Get interaction counts for original posts (for reposts)
-    let originalReactionMap = new Map<string, number>();
-    let originalCommentMap = new Map<string, number>();
-    let originalShareMap = new Map<string, number>();
-
-    if (originalPostIds.length > 0) {
-      const [originalPostReactions, originalPostComments, originalPostShares] =
-        await Promise.all([
-          db
-            .select({
-              postId: reactions.postId,
-              count: count(),
-            })
-            .from(reactions)
-            .where(
-              and(
-                inArray(reactions.postId, originalPostIds),
-                eq(reactions.type, 'like')
-              )
-            )
-            .groupBy(reactions.postId),
-          db
-            .select({
-              postId: comments.postId,
-              count: count(),
-            })
-            .from(comments)
-            .where(inArray(comments.postId, originalPostIds))
-            .groupBy(comments.postId),
-          db
-            .select({
-              postId: shares.postId,
-              count: count(),
-            })
-            .from(shares)
-            .where(inArray(shares.postId, originalPostIds))
-            .groupBy(shares.postId),
-        ]);
-
-      originalReactionMap = new Map(
-        originalPostReactions.map((r) => [r.postId!, Number(r.count)])
-      );
-      originalCommentMap = new Map(
-        originalPostComments.map((c) => [c.postId, Number(c.count)])
-      );
-      originalShareMap = new Map(
-        originalPostShares.map((s) => [s.postId, Number(s.count)])
-      );
-    }
-
-    // Filter out reposts where the original post is deleted
-    const validPosts = userPosts.filter((post) => {
-      if (post.originalPostId) {
-        const originalPost = originalPostsMap.get(post.originalPostId);
-        const hasOriginalPost = originalPost && !originalPost.deletedAt;
-        const isQuote = post.content && post.content.length > 0;
-
-        // For quote posts, keep them even if original is deleted (user has commentary)
-        // For simple reposts, filter out if original is deleted
-        if (isQuote) {
-          return true;
-        }
-        return hasOriginalPost;
-      }
-      return true;
+      if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
+      return res;
     });
-
-    // Format posts (includes both regular posts and reposts/quotes)
-    const formattedPosts = validPosts.map((post) => {
-      const basePost = {
-        id: post.id,
-        content: post.content,
-        authorId: post.authorId,
-        timestamp: toISO(post.timestamp),
-        createdAt: toISO(post.createdAt),
-        likeCount: likeCountsMap.get(post.id) ?? 0,
-        commentCount: commentCountsMap.get(post.id) ?? 0,
-        shareCount: shareCountsMap.get(post.id) ?? 0,
-        isLiked: userLikesSet.has(post.id),
-        isShared: userSharesSet.has(post.id),
-        author: postAuthor
-          ? {
-              id: postAuthor.id,
-              displayName: postAuthor.displayName,
-              username: postAuthor.username,
-              profileImageUrl: postAuthor.profileImageUrl,
-            }
-          : null,
-      };
-
-      // Check if this is a repost/quote
-      if (post.originalPostId) {
-        const isQuote = post.content && post.content.length > 0;
-        const originalPost = originalPostsMap.get(post.originalPostId);
-
-        // If original post exists and is not deleted
-        if (originalPost && !originalPost.deletedAt) {
-          // Get original post author info
-          const originalUser = originalUserAuthorsMap.get(
-            originalPost.authorId
-          );
-          const originalActor = originalActorAuthorsMap.get(
-            originalPost.authorId
-          );
-          const originalOrg = originalOrgAuthorsMap.get(originalPost.authorId);
-
-          // For simple reposts (not quotes), use the original post's interaction counts
-          // For quote posts, keep the quote post's interaction counts
-          const interactionCounts = !isQuote
-            ? {
-                likeCount: originalReactionMap.get(originalPost.id) ?? 0,
-                commentCount: originalCommentMap.get(originalPost.id) ?? 0,
-                shareCount: originalShareMap.get(originalPost.id) ?? 0,
-              }
-            : {
-                likeCount: basePost.likeCount,
-                commentCount: basePost.commentCount,
-                shareCount: basePost.shareCount,
-              };
-
-          return {
-            ...basePost,
-            ...interactionCounts,
-            isRepost: true,
-            isQuote,
-            quoteComment: isQuote ? post.content : null,
-            originalPostId: originalPost.id,
-            originalPost: {
-              id: originalPost.id,
-              content: originalPost.content,
-              authorId: originalPost.authorId,
-              authorName:
-                originalUser?.displayName ||
-                originalActor?.name ||
-                originalOrg?.name ||
-                originalPost.authorId,
-              authorUsername: originalUser?.username || null,
-              authorProfileImageUrl:
-                originalUser?.profileImageUrl ||
-                originalActor?.profileImageUrl ||
-                originalOrg?.imageUrl ||
-                null,
-              timestamp: toISO(originalPost.timestamp),
-            },
-          };
-        }
-
-        // If original post is deleted but this is a quote post, return with null originalPost
-        if (isQuote) {
-          return {
-            ...basePost,
-            isRepost: true,
-            isQuote: true,
-            quoteComment: post.content,
-            originalPostId: post.originalPostId,
-            originalPost: null,
-          };
-        }
-      }
-
-      return basePost;
-    });
-
-    // Sort by timestamp (posts already include reposts/quotes)
-    const allItems = formattedPosts.sort(
-      (a, b) =>
-        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-    );
-
-    logger.info(
-      'User posts fetched successfully',
-      { userId: canonicalUserId, total: allItems.length },
-      'GET /api/users/[userId]/posts'
-    );
-
-    const res = successResponse({
-      type: 'posts',
-      items: allItems,
-      total: allItems.length,
-    });
-    if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
-    return res;
   }
 );

@@ -6,8 +6,14 @@
  * on report evaluation outcomes and ensures fair distribution among valid reporters.
  */
 
-import { and, asc, eq, gte } from '@babylon/db';
-import { db, pointsTransactions, reports, users } from '@babylon/db/runtime';
+import {
+  insertPointsForfeitTransaction,
+  loadPointsDistributionContext,
+  selectUserForPointsForfeit,
+  selectUserForShouldDistributePoints,
+  updateUserAfterPointsForfeit,
+} from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 
 /**
@@ -64,20 +70,20 @@ export async function distributePointsToReporters(
     'PointsDistribution'
   );
 
-  // Get the reported user's point balance
-  const [reportedUser] = await db
-    .select({
-      id: users.id,
-      reputationPoints: users.reputationPoints,
-      earnedPoints: users.earnedPoints,
-      invitePoints: users.invitePoints,
-      bonusPoints: users.bonusPoints,
-    })
-    .from(users)
-    .where(eq(users.id, reportedUserId))
-    .limit(1);
+  const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+  const reportCategory = reason === 'scammer' ? 'spam' : 'inappropriate';
 
-  if (!reportedUser) {
+  const load = await asSystem(
+    (c) =>
+      loadPointsDistributionContext(c, {
+        reportedUserId,
+        ninetyDaysAgo,
+        reportCategory,
+      }),
+    'points-distribution-load'
+  );
+
+  if (load.kind === 'missing_user') {
     logger.warn(
       'Reported user not found',
       { reportedUserId },
@@ -86,38 +92,16 @@ export async function distributePointsToReporters(
     return;
   }
 
-  // Calculate forfeited points (all points except earned points)
-  // We only forfeit bonus/invite points, not earned points
-  const forfeitedPoints = reportedUser.invitePoints + reportedUser.bonusPoints;
-
-  if (forfeitedPoints <= 0) {
+  if (load.kind === 'no_forfeit') {
     logger.info(
       'No points to distribute',
-      { reportedUserId, forfeitedPoints },
+      { reportedUserId, forfeitedPoints: load.forfeitedPoints },
       'PointsDistribution'
     );
     return;
   }
 
-  // Find all successful reports for this user
-  const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
-
-  const successfulReports = await db
-    .select({
-      id: reports.id,
-      reporterId: reports.reporterId,
-      createdAt: reports.createdAt,
-    })
-    .from(reports)
-    .where(
-      and(
-        eq(reports.reportedUserId, reportedUserId),
-        eq(reports.status, 'resolved'),
-        eq(reports.category, reason === 'scammer' ? 'spam' : 'inappropriate'),
-        gte(reports.createdAt, ninetyDaysAgo)
-      )
-    )
-    .orderBy(asc(reports.createdAt));
+  const { forfeitedPoints, successfulReports } = load;
 
   if (successfulReports.length === 0) {
     logger.info(
@@ -221,87 +205,65 @@ async function forfeitUserPoints(
   userId: string,
   amount: number
 ): Promise<void> {
-  const [user] = await db
-    .select({
-      reputationPoints: users.reputationPoints,
-      invitePoints: users.invitePoints,
-      bonusPoints: users.bonusPoints,
-    })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
+  await asSystem(async (c) => {
+    const user = await selectUserForPointsForfeit(c, userId);
 
-  if (!user) {
-    return;
-  }
+    if (!user) {
+      return;
+    }
 
-  // Calculate how much to remove from each category
-  const totalForfeitable = user.invitePoints + user.bonusPoints;
-  if (totalForfeitable === 0) {
-    return;
-  }
+    const totalForfeitable = user.invitePoints + user.bonusPoints;
+    if (totalForfeitable === 0) {
+      return;
+    }
 
-  // Remove proportionally from invite and bonus points
-  // Avoid division by zero
-  const inviteRatio =
-    totalForfeitable > 0 ? user.invitePoints / totalForfeitable : 0;
-  const bonusRatio =
-    totalForfeitable > 0 ? user.bonusPoints / totalForfeitable : 0;
+    const inviteRatio =
+      totalForfeitable > 0 ? user.invitePoints / totalForfeitable : 0;
+    const bonusRatio =
+      totalForfeitable > 0 ? user.bonusPoints / totalForfeitable : 0;
 
-  const inviteToRemove = Math.floor(amount * inviteRatio);
-  const bonusToRemove = Math.floor(amount * bonusRatio);
+    const inviteToRemove = Math.floor(amount * inviteRatio);
+    const bonusToRemove = Math.floor(amount * bonusRatio);
 
-  // Update user
-  await db
-    .update(users)
-    .set({
+    await updateUserAfterPointsForfeit(c, userId, {
       invitePoints: Math.max(0, user.invitePoints - inviteToRemove),
       bonusPoints: Math.max(0, user.bonusPoints - bonusToRemove),
       reputationPoints: Math.max(0, user.reputationPoints - amount),
-    })
-    .where(eq(users.id, userId));
+    });
 
-  // Create transaction record
-  await db.insert(pointsTransactions).values({
-    id: await generateSnowflakeId(),
-    userId,
-    amount: -amount,
-    pointsBefore: user.reputationPoints,
-    pointsAfter: user.reputationPoints - amount,
-    reason: 'forfeited',
-    metadata: JSON.stringify({
-      reason: 'csam_or_scammer_confirmed',
-      forfeitedAmount: amount,
-    }),
-  });
-
-  logger.info(
-    'Forfeited points from user',
-    {
+    await insertPointsForfeitTransaction(c, {
+      id: await generateSnowflakeId(),
       userId,
-      amount,
-      inviteRemoved: inviteToRemove,
-      bonusRemoved: bonusToRemove,
-    },
-    'PointsDistribution'
-  );
+      amount: -amount,
+      pointsBefore: user.reputationPoints,
+      pointsAfter: user.reputationPoints - amount,
+      metadataJson: JSON.stringify({
+        reason: 'csam_or_scammer_confirmed',
+        forfeitedAmount: amount,
+      }),
+    });
+
+    logger.info(
+      'Forfeited points from user',
+      {
+        userId,
+        amount,
+        inviteRemoved: inviteToRemove,
+        bonusRemoved: bonusToRemove,
+      },
+      'PointsDistribution'
+    );
+  }, 'points-distribution-forfeit');
 }
 
 /**
  * Check if a user should have points distributed (CSAM/scammer confirmed)
  */
 export async function shouldDistributePoints(userId: string): Promise<boolean> {
-  const [user] = await db
-    .select({
-      isBanned: users.isBanned,
-      isScammer: users.isScammer,
-      isCSAM: users.isCSAM,
-      invitePoints: users.invitePoints,
-      bonusPoints: users.bonusPoints,
-    })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
+  const user = await asSystem(
+    (c) => selectUserForShouldDistributePoints(c, userId),
+    'points-distribution-should'
+  );
 
   if (!user) {
     return false;

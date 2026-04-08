@@ -8,6 +8,7 @@ import {
 import type { NarrativeStory } from '@babylon/shared';
 import { toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+import { runWithOptionalUserRls } from '@/lib/db/run-with-optional-user-rls';
 import { decodeCursor, encodeCursor, findCursorIndex } from '../feed-cursor';
 import { buildForYouFeed } from './pipeline';
 
@@ -45,7 +46,11 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const fullResult = await getCacheOrFetch<{
     stories: NarrativeStory[];
     generatedAt: string;
-  }>(cacheKey, () => buildForYouFeed(userId), { ttl: RANKED_CACHE_TTL_S });
+  }>(
+    cacheKey,
+    () => runWithOptionalUserRls(user, (db) => buildForYouFeed(userId, db)),
+    { ttl: RANKED_CACHE_TTL_S }
+  );
 
   const decoded = cursorParam ? decodeCursor(cursorParam) : null;
   const startIndex = decoded ? findCursorIndex(fullResult.stories, decoded) : 0;

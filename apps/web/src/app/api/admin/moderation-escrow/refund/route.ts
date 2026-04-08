@@ -60,7 +60,7 @@
  */
 
 import { requireAdmin, withErrorHandling } from '@babylon/api';
-import { db } from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 
 import { logger, toISOOrNull } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
@@ -91,20 +91,23 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
 
   const { escrowId, refundTxHash, reason } = validation.data;
 
-  // Get escrow record
-  const escrow = await db.moderationEscrow.findUnique({
-    where: { id: escrowId },
-    include: {
-      User: {
-        select: {
-          id: true,
-          username: true,
-          displayName: true,
-          walletAddress: true,
+  const escrow = await asSystem(
+    (tx) =>
+      tx.moderationEscrow.findUnique({
+        where: { id: escrowId },
+        include: {
+          User: {
+            select: {
+              id: true,
+              username: true,
+              displayName: true,
+              walletAddress: true,
+            },
+          },
         },
-      },
-    },
-  });
+      }),
+    'mod-escrow-refund-load'
+  );
 
   if (!escrow) {
     return NextResponse.json(
@@ -144,9 +147,7 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
     );
   }
 
-  // Use transaction to prevent race conditions
-  const updatedEscrow = await db.$transaction(async (tx) => {
-    // Re-fetch to ensure still refundable
+  const updatedEscrow = await asSystem(async (tx) => {
     const currentEscrow = await tx.moderationEscrow.findUnique({
       where: { id: escrowId },
     });
@@ -161,8 +162,7 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
       throw new Error('Escrow payment has already been refunded');
     }
 
-    // Update escrow status to refunded
-    return await tx.moderationEscrow.update({
+    return tx.moderationEscrow.update({
       where: { id: escrowId },
       data: {
         status: 'refunded',
@@ -175,7 +175,7 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
         },
       },
     });
-  });
+  }, 'mod-escrow-refund-commit');
 
   logger.info(
     `Admin ${adminId} refunded escrow payment ${escrowId}`,

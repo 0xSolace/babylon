@@ -58,7 +58,7 @@
 import { X402Manager } from '@babylon/a2a';
 import { requireAdmin, withErrorHandling } from '@babylon/api';
 
-import { db } from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
@@ -99,25 +99,28 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
   const escrowId = validationData.escrowId;
   const { txHash, fromAddress, toAddress, amount } = validationData;
 
-  // Get escrow record
-  const escrow = await db.moderationEscrow.findUnique({
-    where: { id: validationData.escrowId },
-    include: {
-      User: {
-        select: {
-          id: true,
-          username: true,
-          displayName: true,
+  const escrow = await asSystem(
+    (tx) =>
+      tx.moderationEscrow.findUnique({
+        where: { id: validationData.escrowId },
+        include: {
+          User: {
+            select: {
+              id: true,
+              username: true,
+              displayName: true,
+            },
+          },
+          admin: {
+            select: {
+              id: true,
+              walletAddress: true,
+            },
+          },
         },
-      },
-      admin: {
-        select: {
-          id: true,
-          walletAddress: true,
-        },
-      },
-    },
-  });
+      }),
+    'mod-escrow-verify-load'
+  );
 
   if (!escrow) {
     return NextResponse.json(
@@ -128,11 +131,14 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
 
   // Check if expired
   if (new Date() > escrow.expiresAt) {
-    // Auto-expire if expired
-    await db.moderationEscrow.update({
-      where: { id: escrowId },
-      data: { status: 'expired' },
-    });
+    await asSystem(
+      (tx) =>
+        tx.moderationEscrow.update({
+          where: { id: escrowId },
+          data: { status: 'expired' },
+        }),
+      'mod-escrow-verify-expire'
+    );
     return NextResponse.json(
       { error: 'Escrow payment has expired' },
       { status: 400 }
@@ -186,9 +192,7 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
     );
   }
 
-  // Use database transaction to prevent race conditions
-  const verificationResult = await db.$transaction(async (tx) => {
-    // Re-fetch escrow within transaction to get latest state
+  const verificationResult = await asSystem(async (tx) => {
     const currentEscrow = await tx.moderationEscrow.findUnique({
       where: { id: escrowId },
     });
@@ -203,7 +207,6 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
       throw new Error('Escrow payment request ID not found');
     }
 
-    // Verify payment via X402
     const x402Result = await x402Manager.verifyPayment({
       requestId: currentEscrow.paymentRequestId,
       txHash,
@@ -218,7 +221,6 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
       throw new Error(x402Result.error || 'Payment verification failed');
     }
 
-    // Update escrow status atomically
     const updatedEscrow = await tx.moderationEscrow.update({
       where: { id: escrowId },
       data: {
@@ -228,7 +230,7 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
     });
 
     return { verified: true, escrow: updatedEscrow };
-  });
+  }, 'mod-escrow-verify-commit');
 
   logger.info(
     `Escrow payment verified successfully for ${escrowId}`,

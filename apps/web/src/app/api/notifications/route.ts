@@ -189,17 +189,8 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import {
-  and,
-  count,
-  desc,
-  eq,
-  getBlockedByUserIds,
-  getBlockedUserIds,
-  getMutedUserIds,
-  inArray,
-} from '@babylon/db';
-import { db, notifications, users } from '@babylon/db/runtime';
+import * as BabylonDb from '@babylon/db';
+import * as engineStorage from '@babylon/db/engine-storage';
 import {
   logger,
   MarkNotificationsReadSchema,
@@ -259,25 +250,14 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     type: validatedType,
   } = validated;
 
-  // Build where conditions
-  const conditions = [eq(notifications.userId, authUser.userId)];
-
-  if (validatedUnreadOnly) {
-    conditions.push(eq(notifications.read, false));
-  }
-
-  if (validatedType) {
-    conditions.push(eq(notifications.type, validatedType));
-  }
-
   // OPTIMIZED: Cache notifications with short TTL (high-frequency polling endpoint)
   const cacheKey = `notifications:${authUser.userId}:${validatedUnreadOnly}:${validatedType}:${validatedLimit}`;
 
   // Keep moderation failures visible; only the notification-schema reads degrade.
   const [blockedIds, mutedIds, blockedByIds] = await Promise.all([
-    getBlockedUserIds(authUser.userId),
-    getMutedUserIds(authUser.userId),
-    getBlockedByUserIds(authUser.userId),
+    BabylonDb.getBlockedUserIds(authUser.userId),
+    BabylonDb.getMutedUserIds(authUser.userId),
+    BabylonDb.getBlockedByUserIds(authUser.userId),
   ]);
 
   const excludedUserIds = new Set([
@@ -289,94 +269,87 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const { notificationsList, unreadCount, degraded } =
     await getCacheOrFetch<NotificationReadPayload>(
       cacheKey,
-      async () => {
-        let allNotifications:
-          | Array<Record<string, unknown> & { actorId?: string | null }>
-          | undefined;
-        let unreadCount = 0;
+      async () =>
+        engineStorage.asUser(authUser, async (db) => {
+          let allNotifications:
+            | Array<Record<string, unknown> & { actorId?: string | null }>
+            | undefined;
+          let unreadCount = 0;
 
-        try {
-          // Fetch notifications
-          allNotifications = await db
-            .select()
-            .from(notifications)
-            .where(and(...conditions))
-            .orderBy(desc(notifications.createdAt))
-            .limit(validatedLimit * 2); // Fetch more to account for filtering
-
-          // Get unread count
-          const [unreadCountResult] = await db
-            .select({ count: count() })
-            .from(notifications)
-            .where(
-              and(
-                eq(notifications.userId, authUser.userId),
-                eq(notifications.read, false)
-              )
+          try {
+            allNotifications = await BabylonDb.selectNotificationsListForUser(
+              db,
+              {
+                userId: authUser.userId,
+                unreadOnly: Boolean(validatedUnreadOnly),
+                type: validatedType,
+                fetchLimit: validatedLimit * 2,
+              }
             );
 
-          unreadCount = Number(unreadCountResult?.count ?? 0);
-        } catch (error) {
-          const missingSchemaCode =
-            getMissingNotificationSchemaErrorCode(error);
-          if (!missingSchemaCode) {
-            throw error;
+            unreadCount = await BabylonDb.countUnreadNotificationsForUser(
+              db,
+              authUser.userId
+            );
+          } catch (error) {
+            const missingSchemaCode =
+              getMissingNotificationSchemaErrorCode(error);
+            if (!missingSchemaCode) {
+              throw error;
+            }
+
+            const errorMessage =
+              error instanceof Error ? error.message : String(error);
+            logger.warn(
+              'Notifications unavailable because the database schema is pending',
+              {
+                userId: authUser.userId,
+                code: missingSchemaCode,
+                errorMessage,
+              },
+              'GET /api/notifications'
+            );
+
+            return {
+              notificationsList: [],
+              unreadCount: 0,
+              degraded: true,
+            };
           }
 
-          const errorMessage =
-            error instanceof Error ? error.message : String(error);
-          logger.warn(
-            'Notifications unavailable because the database schema is pending',
-            { userId: authUser.userId, code: missingSchemaCode, errorMessage },
-            'GET /api/notifications'
-          );
+          const rows = allNotifications ?? [];
+
+          const actorIds = [
+            ...new Set(
+              rows
+                .map((n) => n.actorId)
+                .filter((id): id is string => id !== null)
+            ),
+          ];
+
+          const actorsResult =
+            actorIds.length > 0
+              ? await BabylonDb.selectUsersCommentAuthorSlicesByIds(
+                  db,
+                  actorIds
+                )
+              : [];
+
+          const actorMap = new Map(actorsResult.map((a) => [a.id, a]));
+
+          const notificationsList = rows
+            .filter((n) => !n.actorId || !excludedUserIds.has(n.actorId))
+            .slice(0, validatedLimit)
+            .map((n) => ({
+              ...n,
+              actor: n.actorId ? actorMap.get(n.actorId) || null : null,
+            }));
 
           return {
-            notificationsList: [],
-            unreadCount: 0,
-            degraded: true,
+            notificationsList,
+            unreadCount,
           };
-        }
-
-        const rows = allNotifications ?? [];
-
-        // Get actor IDs to fetch user info
-        const actorIds = [
-          ...new Set(
-            rows.map((n) => n.actorId).filter((id): id is string => id !== null)
-          ),
-        ];
-
-        // Fetch actor info
-        const actorsResult =
-          actorIds.length > 0
-            ? await db
-                .select({
-                  id: users.id,
-                  displayName: users.displayName,
-                  username: users.username,
-                  profileImageUrl: users.profileImageUrl,
-                })
-                .from(users)
-                .where(inArray(users.id, actorIds))
-            : [];
-
-        const actorMap = new Map(actorsResult.map((a) => [a.id, a]));
-
-        // Filter out notifications from blocked/muted users and add actor info
-        const notificationsList = rows
-          .filter((n) => !n.actorId || !excludedUserIds.has(n.actorId))
-          .slice(0, validatedLimit) // Limit to requested amount after filtering
-          .map((n) => ({
-            ...n,
-            actor: n.actorId ? actorMap.get(n.actorId) || null : null,
-          }));
-
-        return {
-          notificationsList,
-          unreadCount,
-        };
-      },
+        }),
       {
         namespace: CACHE_KEYS.USER,
         ttl: 10, // 10 second cache (high-frequency endpoint, needs to be fresh)
@@ -412,16 +385,9 @@ export const PATCH = withErrorHandling(async (request: NextRequest) => {
     MarkNotificationsReadSchema.parse(body);
 
   if (markAllAsRead) {
-    // Mark all notifications as read
-    await db
-      .update(notifications)
-      .set({ read: true })
-      .where(
-        and(
-          eq(notifications.userId, authUser.userId),
-          eq(notifications.read, false)
-        )
-      );
+    await engineStorage.asUser(authUser, async (db) =>
+      BabylonDb.markAllUnreadNotificationsReadForUser(db, authUser.userId)
+    );
 
     // Invalidate notification cache after update
     await invalidateCachePattern(`notifications:${authUser.userId}:*`, {
@@ -440,16 +406,13 @@ export const PATCH = withErrorHandling(async (request: NextRequest) => {
   }
 
   if (notificationIds && notificationIds.length > 0) {
-    // Mark specific notifications as read
-    await db
-      .update(notifications)
-      .set({ read: true })
-      .where(
-        and(
-          inArray(notifications.id, notificationIds),
-          eq(notifications.userId, authUser.userId) // Ensure user owns these notifications
-        )
-      );
+    await engineStorage.asUser(authUser, async (db) =>
+      BabylonDb.markNotificationsReadByIdsForUser(
+        db,
+        authUser.userId,
+        notificationIds
+      )
+    );
 
     // Invalidate notification cache after update
     await invalidateCachePattern(`notifications:${authUser.userId}:*`, {
@@ -490,9 +453,9 @@ export const DELETE = withErrorHandling(async (request: NextRequest) => {
   const { notificationIds, clearAll } = ClearNotificationsSchema.parse(body);
 
   if (clearAll) {
-    await db
-      .delete(notifications)
-      .where(eq(notifications.userId, authUser.userId));
+    await engineStorage.asUser(authUser, async (db) =>
+      BabylonDb.deleteAllNotificationsForUser(db, authUser.userId)
+    );
 
     await invalidateCachePattern(`notifications:${authUser.userId}:*`, {
       namespace: CACHE_KEYS.USER,
@@ -512,14 +475,9 @@ export const DELETE = withErrorHandling(async (request: NextRequest) => {
 
   const idsToDelete = notificationIds ?? [];
 
-  await db
-    .delete(notifications)
-    .where(
-      and(
-        inArray(notifications.id, idsToDelete),
-        eq(notifications.userId, authUser.userId)
-      )
-    );
+  await engineStorage.asUser(authUser, async (db) =>
+    BabylonDb.deleteNotificationsByIdsForUser(db, authUser.userId, idsToDelete)
+  );
 
   await invalidateCachePattern(`notifications:${authUser.userId}:*`, {
     namespace: CACHE_KEYS.USER,

@@ -98,7 +98,7 @@
  */
 
 import { PointsService, withErrorHandling } from '@babylon/api';
-import { db } from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 
 import { logger } from '@babylon/shared';
 import { createAppClient, viemConnector } from '@farcaster/auth-client';
@@ -174,22 +174,30 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   }
 
   // Check if user exists
-  const user = await db.user.findUnique({
-    where: { id: userId },
-    select: { id: true },
-  });
+  const user = await asSystem(
+    async (db) =>
+      db.user.findUnique({
+        where: { id: userId },
+        select: { id: true },
+      }),
+    'auth-farcaster-user-lookup'
+  );
 
   if (!user) {
     return NextResponse.json({ error: 'User not found' }, { status: 404 });
   }
 
   // Check if Farcaster account is already linked to another user
-  const existingLink = await db.user.findFirst({
-    where: {
-      farcasterFid: fid.toString(),
-      id: { not: userId },
-    },
-  });
+  const existingLink = await asSystem(
+    async (db) =>
+      db.user.findFirst({
+        where: {
+          farcasterFid: fid.toString(),
+          id: { not: userId },
+        },
+      }),
+    'auth-farcaster-dedupe'
+  );
 
   if (existingLink) {
     return NextResponse.json(
@@ -199,17 +207,21 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   }
 
   // Update user with Farcaster info
-  await db.user.update({
-    where: { id: userId },
-    data: {
-      farcasterFid: fid.toString(),
-      farcasterUsername: username,
-      hasFarcaster: true,
-      farcasterDisplayName: displayName,
-      farcasterPfpUrl: pfpUrl,
-      farcasterVerifiedAt: new Date(),
-    },
-  });
+  await asSystem(
+    async (db) =>
+      db.user.update({
+        where: { id: userId },
+        data: {
+          farcasterFid: fid.toString(),
+          farcasterUsername: username,
+          hasFarcaster: true,
+          farcasterDisplayName: displayName,
+          farcasterPfpUrl: pfpUrl,
+          farcasterVerifiedAt: new Date(),
+        },
+      }),
+    'auth-farcaster-link'
+  );
 
   // Award points if this is the first time linking Farcaster
   const pointsResult = await PointsService.awardFarcasterLink(userId, username);

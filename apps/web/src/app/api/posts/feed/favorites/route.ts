@@ -88,16 +88,17 @@
  */
 
 import { optionalAuth, successResponse, withErrorHandling } from '@babylon/api';
-import { and, count, desc, eq, inArray, isNull, lte } from '@babylon/db';
 import {
-  asUser,
-  comments,
-  favorites,
-  posts,
-  reactions,
-  shares,
-} from '@babylon/db/runtime';
-
+  countCommentsGroupedByPostIds,
+  countFavoritesFeedPostsTotal,
+  countPostLikesGroupedByPostIds,
+  countSharesGroupedByPostIds,
+  selectFavoritesFeedPostPage,
+  selectFavoriteTargetUserIdsByFavoriter,
+  selectLikedPostIdsForUserInPostIds,
+  selectSharedPostIdsForUserInPostIds,
+} from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import { logger, PostFeedQuerySchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
@@ -138,122 +139,67 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   // Get favorites feed with RLS
   const result = await asUser(user, async (dbClient) => {
-    // Get favorited profile IDs
-    const favList = await dbClient
-      .select({
-        targetUserId: favorites.targetUserId,
-      })
-      .from(favorites)
-      .where(eq(favorites.userId, user.userId));
-
-    const favoritedUserIds = favList.map((f) => f.targetUserId);
+    const favoritedUserIds = await selectFavoriteTargetUserIdsByFavoriter(
+      dbClient,
+      user.userId
+    );
 
     // If no favorites, return empty array
     if (favoritedUserIds.length === 0) {
       return { posts: [], totalCount: 0, hasMore: false };
     }
 
-    // Get posts from favorited profiles
-    // Only show posts up to current time (prevent future access)
     const now = new Date();
-    const postList = await dbClient
-      .select()
-      .from(posts)
-      .where(
-        and(
-          inArray(posts.authorId, favoritedUserIds),
-          isNull(posts.deletedAt),
-          lte(posts.timestamp, now)
-        )
-      )
-      .orderBy(desc(posts.createdAt))
-      .offset(offset)
-      .limit(limit + 1);
+    const postList = await selectFavoritesFeedPostPage(dbClient, {
+      authorIds: favoritedUserIds,
+      now,
+      offset,
+      fetchLimit: limit + 1,
+    });
 
-    // Check if there are more posts
     const hasMore = postList.length > limit;
     const postsToReturn = hasMore ? postList.slice(0, limit) : postList;
 
-    // Get total count (only count posts up to current time)
-    const countResult = await dbClient
-      .select({
-        value: count(posts.id),
-      })
-      .from(posts)
-      .where(
-        and(
-          inArray(posts.authorId, favoritedUserIds),
-          lte(posts.timestamp, now)
-        )
-      );
-    const totalCount = countResult[0]?.value ?? 0;
+    const totalCount = await countFavoritesFeedPostsTotal(dbClient, {
+      authorIds: favoritedUserIds,
+      now,
+    });
 
-    // Get interaction counts and user states - OPTIMIZED: Batch queries instead of N+1
     const postIds = postsToReturn.map((p) => p.id);
 
-    // Execute all queries in parallel (5 queries total instead of 5N)
-    const [allReactions, allComments, allShares, userReactions, userShares] =
+    const [allReactions, allComments, allShares, likedIds, sharedIds] =
       await Promise.all([
-        dbClient
-          .select({
-            postId: reactions.postId,
-            count: count(reactions.id),
-          })
-          .from(reactions)
-          .where(
-            and(inArray(reactions.postId, postIds), eq(reactions.type, 'like'))
-          )
-          .groupBy(reactions.postId),
-        dbClient
-          .select({
-            postId: comments.postId,
-            count: count(comments.id),
-          })
-          .from(comments)
-          .where(inArray(comments.postId, postIds))
-          .groupBy(comments.postId),
-        dbClient
-          .select({
-            postId: shares.postId,
-            count: count(shares.id),
-          })
-          .from(shares)
-          .where(inArray(shares.postId, postIds))
-          .groupBy(shares.postId),
-        dbClient
-          .select({
-            postId: reactions.postId,
-          })
-          .from(reactions)
-          .where(
-            and(
-              inArray(reactions.postId, postIds),
-              eq(reactions.userId, user.userId),
-              eq(reactions.type, 'like')
-            )
-          ),
-        dbClient
-          .select({
-            postId: shares.postId,
-          })
-          .from(shares)
-          .where(
-            and(inArray(shares.postId, postIds), eq(shares.userId, user.userId))
-          ),
+        countPostLikesGroupedByPostIds(dbClient, postIds),
+        countCommentsGroupedByPostIds(dbClient, postIds),
+        countSharesGroupedByPostIds(dbClient, postIds),
+        selectLikedPostIdsForUserInPostIds(dbClient, {
+          postIds,
+          userId: user.userId,
+        }),
+        selectSharedPostIdsForUserInPostIds(dbClient, {
+          postIds,
+          userId: user.userId,
+        }),
       ]);
 
-    // Create lookup maps for O(1) access
     const reactionMap = new Map(
-      allReactions.map((r) => [r.postId, Number(r.count)])
+      allReactions.flatMap((r) =>
+        r.postId ? ([[r.postId, r.count]] as const) : []
+      )
     );
     const commentMap = new Map(
-      allComments.map((c) => [c.postId, Number(c.count)])
+      allComments.flatMap((c) =>
+        c.postId ? ([[c.postId, c.count]] as const) : []
+      )
     );
-    const shareMap = new Map(allShares.map((s) => [s.postId, Number(s.count)]));
-    const userReactionSet = new Set(userReactions.map((r) => r.postId));
-    const userShareSet = new Set(userShares.map((s) => s.postId));
+    const shareMap = new Map(
+      allShares.flatMap((s) =>
+        s.postId ? ([[s.postId, s.count]] as const) : []
+      )
+    );
+    const userReactionSet = new Set(likedIds);
+    const userShareSet = new Set(sharedIds);
 
-    // Transform posts synchronously using lookup maps
     const transformedPosts = postsToReturn.map((post) => ({
       id: post.id,
       content: post.content,

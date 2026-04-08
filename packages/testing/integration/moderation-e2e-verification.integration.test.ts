@@ -20,7 +20,7 @@ import {
   hasBlocked,
   hasMuted,
 } from '@babylon/db';
-import { db } from '@babylon/db/runtime';
+import { db } from '@babylon/db/engine-storage';
 import { nanoid } from 'nanoid';
 
 let testUser1: User;

@@ -19,14 +19,11 @@ import {
   verifyCronAuth,
   withErrorHandling,
 } from '@babylon/api';
-import { and, asc, eq, inArray, sql } from '@babylon/db';
 import {
-  asSystem,
-  chatParticipants,
-  chats,
-  db,
-  users,
-} from '@babylon/db/runtime';
+  selectActiveChatParticipantsWithWalletForNftRevalidate,
+  selectNftGatedChatsForRevalidateCron,
+  updateChatNftRevalidateTimestamps,
+} from '@babylon/db';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -67,21 +64,8 @@ export const POST = withErrorHandling(async function POST(
     // Get NFT-gated chats ordered by lastNftRevalidatedAt for true round-robin processing.
     // NULLS FIRST ensures newly created chats (never revalidated) are processed first.
     // Falls back to createdAt for deterministic ordering when timestamps are equal.
-    const nftGatedChats = await db
-      .select({
-        id: chats.id,
-        groupId: chats.groupId,
-        requiredNftContractAddress: chats.requiredNftContractAddress,
-        requiredNftTokenId: chats.requiredNftTokenId,
-        requiredNftChainId: chats.requiredNftChainId,
-      })
-      .from(chats)
-      .where(eq(chats.nftGated, true))
-      .orderBy(
-        sql`${chats.lastNftRevalidatedAt} ASC NULLS FIRST`,
-        asc(chats.createdAt)
-      )
-      .limit(MAX_CHATS_PER_RUN);
+    const nftGatedChats =
+      await selectNftGatedChatsForRevalidateCron(MAX_CHATS_PER_RUN);
 
     if (nftGatedChats.length === 0) {
       logger.info('No NFT-gated chats found', {}, 'nft-revalidate');
@@ -126,10 +110,7 @@ export const POST = withErrorHandling(async function POST(
         // This ensures round-robin processing across all NFT-gated chats
         // Also update updatedAt for consistent audit/cache semantics
         const now = new Date();
-        await db
-          .update(chats)
-          .set({ lastNftRevalidatedAt: now, updatedAt: now })
-          .where(eq(chats.id, chat.id));
+        await updateChatNftRevalidateTimestamps(chat.id, now);
 
         results.chatsProcessed++;
         results.usersChecked += chatResult.checked;
@@ -190,39 +171,11 @@ async function revalidateChatAccess(
   const results = { checked: 0, removed: 0, errors: 0 };
 
   // Get participants with wallet addresses
-  const participants = await asSystem(async (database) => {
-    const participantList = await database
-      .select({
-        participantId: chatParticipants.id,
-        userId: chatParticipants.userId,
-      })
-      .from(chatParticipants)
-      .where(
-        and(
-          eq(chatParticipants.chatId, chatId),
-          eq(chatParticipants.isActive, true)
-        )
-      )
-      .limit(MAX_USERS_PER_CHAT);
-
-    if (participantList.length === 0) return [];
-
-    const userIds = participantList.map((p) => p.userId);
-    const usersList = await database
-      .select({
-        id: users.id,
-        walletAddress: users.walletAddress,
-      })
-      .from(users)
-      .where(inArray(users.id, userIds));
-
-    const usersMap = new Map(usersList.map((u) => [u.id, u]));
-
-    return participantList.map((p) => ({
-      userId: p.userId,
-      walletAddress: usersMap.get(p.userId)?.walletAddress ?? null,
-    }));
-  }, 'nft-revalidate-cron');
+  const participants =
+    await selectActiveChatParticipantsWithWalletForNftRevalidate(
+      chatId,
+      MAX_USERS_PER_CHAT
+    );
 
   for (const participant of participants) {
     results.checked++;

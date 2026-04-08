@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import * as babylonDb from '@babylon/db';
 import { NextRequest } from 'next/server';
-import * as actualDbModule from '../../../db/src/index';
 
 /**
  * Mock game state type
@@ -41,13 +41,6 @@ interface MockDb {
   ) => Promise<T | T[]>;
 }
 
-/**
- * Drizzle SQL condition result
- */
-interface SqlCondition {
-  sql?: string;
-}
-
 // Mock db with a mutable state we can control in tests
 let mockGame: MockGame | null = null;
 
@@ -64,8 +57,6 @@ const createModelMock = (overrides: Partial<MockModel> = {}): MockModel => ({
   deleteMany: mock(async () => ({ count: 0 })),
   ...overrides,
 });
-
-const mockTable: Record<string, never> = {};
 
 const createQueryBuilder = () => {
   const builder = {
@@ -104,52 +95,35 @@ const mockDb = {
   select: mock(() => createQueryBuilder()),
 };
 
-mock.module('@babylon/db', () => ({
-  ...actualDbModule,
-  schema: {},
-  users: mockTable,
-  actors: mockTable,
-  posts: mockTable,
-  comments: mockTable,
-  games: mockTable,
-  organizations: mockTable,
-  balanceTransactions: mockTable,
-  pointsTransactions: mockTable,
-  perpPositions: mockTable,
-  poolPositions: mockTable,
-  markets: mockTable,
-  questions: mockTable,
-  generationLocks: mockTable,
-  eq: (): SqlCondition => ({}),
-  ne: (): SqlCondition => ({}),
-  gt: (): SqlCondition => ({}),
-  gte: (): SqlCondition => ({}),
-  lt: (): SqlCondition => ({}),
-  lte: (): SqlCondition => ({}),
-  and: (): SqlCondition => ({}),
-  or: (): SqlCondition => ({}),
-  not: (): SqlCondition => ({}),
-  inArray: (): SqlCondition => ({}),
-  isNull: (): SqlCondition => ({}),
-  sql: (): SqlCondition => ({}),
-  desc: (): SqlCondition => ({}),
-  asc: (): SqlCondition => ({}),
-  withTransaction: async <T>(fn: (tx: MockDb) => Promise<T>): Promise<T> =>
-    fn({} as MockDb),
+const realDbRuntime = await import('@babylon/db/engine-storage');
+mock.module('@babylon/db/engine-storage', () => ({
+  ...realDbRuntime,
+  db: mockDb,
+  asSystem: async <T>(
+    fn: (db: typeof mockDb) => Promise<T>,
+    _operationName?: string
+  ): Promise<T> => fn(mockDb),
   asUser: async <T>(
     _userId: string,
-    fn: (db: MockDb) => Promise<T>
-  ): Promise<T> => fn({} as MockDb),
-  asSystem: async <T>(fn: (db: MockDb) => Promise<T>): Promise<T> =>
-    fn({} as MockDb),
-  asPublic: async <T>(fn: (db: MockDb) => Promise<T>): Promise<T> =>
-    fn({} as MockDb),
+    fn: (db: typeof mockDb) => Promise<T>
+  ): Promise<T> => fn(mockDb),
+  asPublic: async <T>(fn: (db: typeof mockDb) => Promise<T>): Promise<T> =>
+    fn(mockDb),
 }));
 
-const actualDbRuntime = await import('@babylon/db/runtime');
-mock.module('@babylon/db/runtime', () => ({
-  ...actualDbRuntime,
-  db: mockDb,
+mock.module('@babylon/db', () => ({
+  ...babylonDb,
+  selectContinuousGameStateForCron: mock(async () => {
+    if (!mockGame) {
+      return null;
+    }
+    return {
+      id: mockGame.id,
+      isRunning: mockGame.isRunning,
+      isContinuous: mockGame.isContinuous,
+      currentDay: null,
+    };
+  }),
 }));
 
 mock.module('@babylon/agents/services/agent-registry.service', () => ({

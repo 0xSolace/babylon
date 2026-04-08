@@ -14,31 +14,22 @@
  */
 
 import {
-  and,
-  asc,
-  count,
-  desc,
-  eq,
-  inArray,
-  isNull,
-  lt,
-  lte,
+  type DrizzleClient,
+  fetchActorStateRowAsSystem,
+  fetchCachedUserProfileStats,
+  fetchOrganizationStateRowAsSystem,
+  fetchPostsByActorForGameService,
+  fetchRecentPostsForGameService,
   type Post,
+  selectActiveUnresolvedMarkets,
+  selectPostsForFollowingFeed,
+  selectTestUserIdsAmongFollowed,
+  selectTrendingTagsWithTag,
+  selectUserBalanceRow,
+  selectUserRowById,
+  selectUserRowsByIds,
 } from '@babylon/db';
-import {
-  comments,
-  db,
-  follows,
-  getDbInstance,
-  markets,
-  positions,
-  posts,
-  reactions,
-  tags,
-  trendingTags,
-  userActorFollows,
-  users,
-} from '@babylon/db/runtime';
+import { db } from '@babylon/db/engine-storage';
 import { StaticDataRegistry } from '@babylon/engine';
 import { logger, resolveUserIdentifierKind } from '@babylon/shared';
 import {
@@ -80,7 +71,7 @@ class CachedDatabaseService {
 
     return getCacheOrFetch(
       cacheKey,
-      () => getDbInstance().getRecentPosts(limit, cursorOrOffset),
+      () => fetchRecentPostsForGameService(limit, cursorOrOffset),
       {
         namespace: CACHE_KEYS.POSTS_LIST,
         ttl: DEFAULT_TTLS.POSTS_LIST,
@@ -103,7 +94,7 @@ class CachedDatabaseService {
 
     return getCacheOrFetch(
       cacheKey,
-      () => getDbInstance().getPostsByActor(authorId, limit, cursorOrOffset),
+      () => fetchPostsByActorForGameService(authorId, limit, cursorOrOffset),
       {
         namespace: CACHE_KEYS.POSTS_BY_ACTOR,
         ttl: DEFAULT_TTLS.POSTS_BY_ACTOR,
@@ -129,23 +120,17 @@ class CachedDatabaseService {
     return getCacheOrFetch(
       cacheKey,
       async () => {
-        // First, filter out test users from followedIds
-        const testUsers = await db
-          .select({ id: users.id })
-          .from(users)
-          .where(and(inArray(users.id, followedIds), eq(users.isTest, true)));
+        const testUserIds = await selectTestUserIdsAmongFollowed(
+          db,
+          followedIds
+        );
 
-        // Get test actors from static registry
         const testActorIds = StaticDataRegistry.getAllActors()
           .filter((a) => a.isTest && followedIds.includes(a.id))
           .map((a) => a.id);
 
-        const testAuthorIds = new Set([
-          ...testUsers.map((u) => u.id),
-          ...testActorIds,
-        ]);
+        const testAuthorIds = new Set([...testUserIds, ...testActorIds]);
 
-        // Remove test users from followedIds
         const nonTestFollowedIds = followedIds.filter(
           (id) => !testAuthorIds.has(id)
         );
@@ -154,31 +139,13 @@ class CachedDatabaseService {
         const offset =
           !isCursor && typeof cursorOrOffset === 'number' ? cursorOrOffset : 0;
 
-        const now = new Date();
-
-        // Build conditions
-        const conditions = [
-          inArray(posts.authorId, nonTestFollowedIds),
-          isNull(posts.deletedAt),
-        ];
-
-        if (cursor) {
-          conditions.push(lt(posts.timestamp, new Date(cursor)));
-          conditions.push(lte(posts.timestamp, now));
-        } else {
-          conditions.push(lte(posts.timestamp, now));
-        }
-
-        // Query posts from database (only from non-test users)
-        const result = await db
-          .select()
-          .from(posts)
-          .where(and(...conditions))
-          .orderBy(desc(posts.timestamp))
-          .limit(limit)
-          .offset(cursor ? 0 : offset);
-
-        return result;
+        return selectPostsForFollowingFeed(db, {
+          nonTestFollowedIds,
+          limit,
+          cursor,
+          offset,
+          now: new Date(),
+        });
       },
       {
         namespace: CACHE_KEYS.POSTS_FOLLOWING,
@@ -196,12 +163,8 @@ class CachedDatabaseService {
     return getCacheOrFetch(
       cacheKey,
       async () => {
-        const result = await db
-          .select()
-          .from(users)
-          .where(eq(users.id, userId))
-          .limit(1);
-        return result[0] ?? null;
+        const row = await selectUserRowById(db, userId);
+        return row ?? null;
       },
       {
         namespace: CACHE_KEYS.USER,
@@ -220,16 +183,10 @@ class CachedDatabaseService {
   async getUsersByIds(userIds: string[]) {
     if (userIds.length === 0) return [];
 
-    // Use batch cache operation instead of N individual lookups
     const usersMap = await getCacheBatchOrFetch(
       userIds,
       async (missingIds) => {
-        // Single database query for all missing users
-        const rows = await db
-          .select()
-          .from(users)
-          .where(inArray(users.id, missingIds));
-
+        const rows = await selectUserRowsByIds(db, missingIds);
         return new Map(rows.map((user) => [user.id, user]));
       },
       {
@@ -238,7 +195,6 @@ class CachedDatabaseService {
       }
     );
 
-    // Return users in the same order as requested, filtering nulls
     return userIds
       .map((id) => usersMap.get(id))
       .filter((u): u is NonNullable<typeof u> => u != null);
@@ -253,17 +209,8 @@ class CachedDatabaseService {
     return getCacheOrFetch(
       cacheKey,
       async () => {
-        const result = await db
-          .select({
-            virtualBalance: users.virtualBalance,
-            totalDeposited: users.totalDeposited,
-            totalWithdrawn: users.totalWithdrawn,
-            lifetimePnL: users.lifetimePnL,
-          })
-          .from(users)
-          .where(eq(users.id, userId))
-          .limit(1);
-        return result[0] ?? null;
+        const row = await selectUserBalanceRow(db, userId);
+        return row ?? null;
       },
       {
         namespace: CACHE_KEYS.USER_BALANCE,
@@ -278,8 +225,15 @@ class CachedDatabaseService {
    * PERFORMANCE OPTIMIZATION: Uses parallel Promise.all to execute all
    * count queries simultaneously, reducing latency by ~70% compared to
    * sequential execution. Combined with 1-minute caching.
+   *
+   * When `scopedClient` is passed (e.g. from `asUser` / `asPublic`), queries
+   * run on that client and results are not cached — RLS-visible rows can
+   * differ per viewer, so a shared cache key would be unsafe.
    */
-  async getUserProfileStats(userId: string): Promise<{
+  async getUserProfileStats(
+    userId: string,
+    scopedClient?: DrizzleClient
+  ): Promise<{
     followers: number;
     following: number;
     positions: number;
@@ -287,80 +241,18 @@ class CachedDatabaseService {
     reactions: number;
     posts: number;
   }> {
+    if (scopedClient) {
+      return fetchCachedUserProfileStats(scopedClient, userId);
+    }
+
     const cacheKey = userId;
 
     return getCacheOrFetch(
       cacheKey,
-      async () => {
-        // Execute all count queries in parallel for minimum latency
-        const [
-          followersResult,
-          followingResult,
-          actorFollowsResult,
-          positionsResult,
-          commentsResult,
-          reactionsResult,
-          postCountResult,
-        ] = await Promise.all([
-          // Count followers (users following this user)
-          db
-            .select({ count: count() })
-            .from(follows)
-            .where(eq(follows.followingId, userId)),
-
-          // Count following (users this user follows)
-          db
-            .select({ count: count() })
-            .from(follows)
-            .where(eq(follows.followerId, userId)),
-
-          // Count actor follows
-          db
-            .select({ count: count() })
-            .from(userActorFollows)
-            .where(eq(userActorFollows.userId, userId)),
-
-          // Count positions
-          db
-            .select({ count: count() })
-            .from(positions)
-            .where(eq(positions.userId, userId)),
-
-          // Count comments
-          db
-            .select({ count: count() })
-            .from(comments)
-            .where(eq(comments.authorId, userId)),
-
-          // Count reactions
-          db
-            .select({ count: count() })
-            .from(reactions)
-            .where(eq(reactions.userId, userId)),
-
-          // Count posts
-          db
-            .select({ count: count() })
-            .from(posts)
-            .where(eq(posts.authorId, userId)),
-        ]);
-
-        const followers = Number(followersResult[0]?.count ?? 0);
-        const following = Number(followingResult[0]?.count ?? 0);
-        const actorFollows = Number(actorFollowsResult[0]?.count ?? 0);
-
-        return {
-          followers,
-          following: following + actorFollows,
-          positions: Number(positionsResult[0]?.count ?? 0),
-          comments: Number(commentsResult[0]?.count ?? 0),
-          reactions: Number(reactionsResult[0]?.count ?? 0),
-          posts: Number(postCountResult[0]?.count ?? 0),
-        };
-      },
+      async () => fetchCachedUserProfileStats(db, userId),
       {
         namespace: 'user:profile:stats',
-        ttl: 60, // Cache for 1 minute
+        ttl: 60,
       }
     );
   }
@@ -369,12 +261,10 @@ class CachedDatabaseService {
    * Get actor by ID with caching
    */
   async getActorById(actorId: string) {
-    // Static data from registry - no caching needed (already in memory)
     const staticActor = StaticDataRegistry.getActor(actorId);
     if (!staticActor) return null;
 
-    // Optionally combine with dynamic state
-    const state = await getDbInstance().getActorState(actorId);
+    const state = await fetchActorStateRowAsSystem(actorId);
     return {
       ...staticActor,
       tradingBalance: state?.tradingBalance ?? '10000',
@@ -398,12 +288,10 @@ class CachedDatabaseService {
    * Get organization by ID with caching
    */
   async getOrganizationById(orgId: string) {
-    // Static data from registry - no caching needed (already in memory)
     const staticOrg = StaticDataRegistry.getOrganization(orgId);
     if (!staticOrg) return null;
 
-    // Optionally combine with dynamic state
-    const state = await getDbInstance().getOrganizationState(orgId);
+    const state = await fetchOrganizationStateRowAsSystem(orgId);
     return {
       ...staticOrg,
       currentPrice: state?.currentPrice ?? staticOrg.initialPrice,
@@ -416,21 +304,10 @@ class CachedDatabaseService {
   async getActiveMarkets() {
     const cacheKey = 'active';
 
-    return getCacheOrFetch(
-      cacheKey,
-      async () => {
-        const result = await db
-          .select()
-          .from(markets)
-          .where(eq(markets.resolved, false))
-          .orderBy(desc(markets.createdAt));
-        return result;
-      },
-      {
-        namespace: CACHE_KEYS.MARKETS_LIST,
-        ttl: DEFAULT_TTLS.MARKETS_LIST,
-      }
-    );
+    return getCacheOrFetch(cacheKey, () => selectActiveUnresolvedMarkets(db), {
+      namespace: CACHE_KEYS.MARKETS_LIST,
+      ttl: DEFAULT_TTLS.MARKETS_LIST,
+    });
   }
 
   /**
@@ -441,28 +318,7 @@ class CachedDatabaseService {
 
     return getCacheOrFetch(
       cacheKey,
-      async () => {
-        const result = await db
-          .select({
-            id: trendingTags.id,
-            tagId: trendingTags.tagId,
-            rank: trendingTags.rank,
-            score: trendingTags.score,
-            postCount: trendingTags.postCount,
-            calculatedAt: trendingTags.calculatedAt,
-            tag: {
-              id: tags.id,
-              name: tags.name,
-              createdAt: tags.createdAt,
-              updatedAt: tags.updatedAt,
-            },
-          })
-          .from(trendingTags)
-          .leftJoin(tags, eq(trendingTags.tagId, tags.id))
-          .limit(limit)
-          .orderBy(asc(trendingTags.rank));
-        return result;
-      },
+      () => selectTrendingTagsWithTag(db, limit),
       {
         namespace: CACHE_KEYS.TRENDING_TAGS,
         ttl: DEFAULT_TTLS.TRENDING_TAGS,
@@ -507,7 +363,7 @@ class CachedDatabaseService {
       invalidateCachePattern(`${userId}:*`, {
         namespace: CACHE_KEYS.POSTS_FOLLOWING,
       }),
-      invalidateCachePattern('*', { namespace: 'user:follows' }), // Invalidate follows cache
+      invalidateCachePattern('*', { namespace: 'user:follows' }),
     ]);
   }
 
@@ -559,53 +415,34 @@ class CachedDatabaseService {
     user: { id: string; privyId?: string | null; username?: string | null },
     oldValues?: { privyId?: string | null; username?: string | null }
   ) {
-    // WHY unified namespace? Single namespace for all identifier caches reduces desync risk
-    // If we used separate namespaces (user:id, user:privyId, user:username), we'd need to
-    // remember to invalidate in all three places. With unified namespace, one helper call
-    // invalidates everything, making it harder to miss an invalidation
     const namespace = CACHE_KEYS.USER_IDENTIFIER;
 
-    // WHY always invalidate by ID? ID never changes, but we invalidate to ensure fresh data
-    // after user updates (e.g., profile changes that affect cached user object)
     await invalidateCache(`id:${user.id}`, { namespace });
 
-    // Some users have their did:privy:… value stored as users.id rather than
-    // users.privyId. Lookups for those users cache under privy:${user.id}, so
-    // we must invalidate that key too — otherwise stale/negative entries persist.
     if (resolveUserIdentifierKind(user.id) === 'privyId') {
       await invalidateCache(`privy:${user.id}`, { namespace });
     }
 
-    // WHY check oldValues?.privyId? Only invalidate old privyId if it actually changed
-    // This avoids unnecessary cache operations when privyId hasn't changed
     if (oldValues?.privyId && oldValues.privyId !== user.privyId) {
       await invalidateCache(`privy:${oldValues.privyId}`, { namespace });
     }
 
-    // WHY invalidate new privyId even if it didn't change? Ensures fresh data on next lookup
-    // If privyId didn't change but other user fields did, we want to refresh the cache
     if (user.privyId) {
       await invalidateCache(`privy:${user.privyId}`, { namespace });
     }
 
-    // WHY lowercase old username? Cache keys use lowercase for usernames (matches query normalization)
-    // Must match the cache key format used in getUserIdentifierCacheKey()
     if (oldValues?.username && oldValues.username !== user.username) {
       await invalidateCache(`username:${oldValues.username.toLowerCase()}`, {
         namespace,
       });
     }
 
-    // WHY invalidate new username? Same reason as privyId - ensures fresh data
     if (user.username) {
       await invalidateCache(`username:${user.username.toLowerCase()}`, {
         namespace,
       });
     }
 
-    // WHY also invalidate user data cache? User data cache (CACHE_KEYS.USER namespace) is separate
-    // from identifier cache, but both contain user data. When identifiers change, we should
-    // refresh both to maintain consistency
     await this.invalidateUserCache(user.id);
   }
 

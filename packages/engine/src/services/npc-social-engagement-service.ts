@@ -8,7 +8,20 @@
  * - Natural randomness with jitter
  */
 
-import { db } from '@babylon/db/runtime';
+import {
+  createNpcShareAndRepostInTransaction,
+  fetchActorRelationshipBidirectional,
+  fetchNpcEngagementStats,
+  insertNpcEngagementComment,
+  insertNpcEngagementNpcInteraction,
+  insertNpcEngagementReaction,
+  listPostAuthorsByIdsForNpcEngagement,
+  listQuotePostCommentPairsForNpcEngagement,
+  listReactionsForNpcEngagementPostIds,
+  listRecentCommentsForNpcEngagementThreads,
+  listRecentPostsForNpcEngagement,
+  listSharesForNpcEngagementPostIds,
+} from '@babylon/db';
 
 import type { JsonValue } from '@babylon/shared';
 import { generateSnowflakeId, isPureRepost, logger } from '@babylon/shared';
@@ -191,21 +204,9 @@ export async function processNPCSocialEngagements(
     // Get recent posts (last 6 hours)
     // Use baseNow for time window calculations, getStaggeredTimestamp() for action timestamps
     const sixHoursAgo = new Date(baseNow.getTime() - 6 * 60 * 60 * 1000);
-    const recentPostsRaw = await db.post.findMany({
-      where: {
-        deletedAt: null,
-        timestamp: { gte: sixHoursAgo },
-      },
-      orderBy: { timestamp: 'desc' },
+    const recentPostsRaw = await listRecentPostsForNpcEngagement({
+      since: sixHoursAgo,
       take: NPC_ENGAGEMENT_CONFIG.postsToConsider,
-      select: {
-        id: true,
-        authorId: true,
-        content: true,
-        type: true,
-        originalPostId: true,
-        relatedQuestion: true,
-      },
     });
 
     if (recentPostsRaw.length === 0) return result;
@@ -225,12 +226,7 @@ export async function processNPCSocialEngagements(
     );
 
     const quotedOriginalPosts =
-      quoteOriginalPostIds.length > 0
-        ? await db.post.findMany({
-            where: { id: { in: quoteOriginalPostIds } },
-            select: { id: true, authorId: true },
-          })
-        : [];
+      await listPostAuthorsByIdsForNpcEngagement(quoteOriginalPostIds);
 
     const quotedAuthorByOriginalPostId = new Map<string, string>(
       quotedOriginalPosts.map((p) => [p.id, p.authorId])
@@ -325,14 +321,8 @@ export async function processNPCSocialEngagements(
       }
     }
     const [existingReactions, existingShares] = await Promise.all([
-      db.reaction.findMany({
-        where: { postId: { in: postIds } },
-        select: { postId: true, userId: true },
-      }),
-      db.share.findMany({
-        where: { postId: { in: Array.from(shareTargetPostIds) } },
-        select: { postId: true, userId: true },
-      }),
+      listReactionsForNpcEngagementPostIds(postIds),
+      listSharesForNpcEngagementPostIds(Array.from(shareTargetPostIds)),
     ]);
 
     const reactionSet = new Set(
@@ -361,11 +351,8 @@ export async function processNPCSocialEngagements(
 
       if (quotePosts.length > 0) {
         const quotePostIds = quotePosts.map((p) => p.id);
-        const existingQuoteComments = await db.comment.findMany({
-          where: { postId: { in: quotePostIds }, deletedAt: null },
-          select: { postId: true, authorId: true },
-          take: 200,
-        });
+        const existingQuoteComments =
+          await listQuotePostCommentPairsForNpcEngagement(quotePostIds, 200);
         const alreadyCommented = new Set(
           existingQuoteComments.map((c) => `${c.postId}-${c.authorId}`)
         );
@@ -394,14 +381,12 @@ export async function processNPCSocialEngagements(
 
           try {
             const commentId = await generateSnowflakeId();
-            await db.comment.create({
-              data: {
-                id: commentId,
-                postId: quotePost.id,
-                authorId: actor.id,
-                content: comment,
-                updatedAt: new Date(),
-              },
+            await insertNpcEngagementComment({
+              id: commentId,
+              postId: quotePost.id,
+              authorId: actor.id,
+              content: comment,
+              updatedAt: new Date(),
             });
             topLevelCommentsCreated++;
             result.commentsCreated++;
@@ -412,22 +397,20 @@ export async function processNPCSocialEngagements(
               actor.id,
               quotePost.authorId
             );
-            await db.npcInteraction.create({
-              data: {
-                id: await generateSnowflakeId(),
-                actor1Id: actor.id,
-                actor2Id: quotePost.authorId,
-                interactionType: 'comment',
-                sentiment: interactionSentiment,
-                context: comment.slice(0, 280),
-                metadata: {
-                  postId: quotePost.id,
-                  commentId,
-                  relatedQuestion: quotePost.relatedQuestion ?? null,
-                  quoteOriginalPostId: quotePost.originalPostId ?? null,
-                },
-                timestamp: baseNow,
-              },
+            await insertNpcEngagementNpcInteraction({
+              id: await generateSnowflakeId(),
+              actor1Id: actor.id,
+              actor2Id: quotePost.authorId,
+              interactionType: 'comment',
+              sentiment: interactionSentiment,
+              context: comment.slice(0, 280),
+              metadata: {
+                postId: quotePost.id,
+                commentId,
+                relatedQuestion: quotePost.relatedQuestion ?? null,
+                quoteOriginalPostId: quotePost.originalPostId ?? null,
+              } satisfies JsonValue,
+              timestamp: baseNow,
             });
           } catch (_error) {
             logger.debug(
@@ -479,13 +462,11 @@ export async function processNPCSocialEngagements(
           random() < probs.like
         ) {
           try {
-            await db.reaction.create({
-              data: {
-                id: await generateSnowflakeId(),
-                postId: post.id,
-                userId: actor.id,
-                type: 'like',
-              },
+            await insertNpcEngagementReaction({
+              id: await generateSnowflakeId(),
+              postId: post.id,
+              userId: actor.id,
+              type: 'like',
             });
             result.likesCreated++;
             engagedActors.add(actor.id);
@@ -516,28 +497,14 @@ export async function processNPCSocialEngagements(
           if (random() < probs.share) {
             try {
               // Wrap in transaction for atomicity - both succeed or both fail
-              await db.$transaction(async (tx) => {
-                await tx.share.create({
-                  data: {
-                    id: await generateSnowflakeId(),
-                    postId: shareTargetPostId,
-                    userId: actor.id,
-                  },
-                });
-
-                // Create visible repost Post (empty content = simple repost)
-                // Use staggered timestamp for organic feed pacing
-                const repostId = await generateSnowflakeId();
-                await tx.post.create({
-                  data: {
-                    id: repostId,
-                    content: '',
-                    authorId: actor.id,
-                    timestamp: getStaggeredTimestamp(), // Staggered for organic feel
-                    originalPostId: shareTargetPostId,
-                    type: 'repost', // Explicit type for query filtering
-                  },
-                });
+              const shareId = await generateSnowflakeId();
+              const repostId = await generateSnowflakeId();
+              await createNpcShareAndRepostInTransaction({
+                shareId,
+                sharePostId: shareTargetPostId,
+                userId: actor.id,
+                repostId,
+                repostTimestamp: getStaggeredTimestamp(),
               });
 
               result.sharesCreated++;
@@ -579,14 +546,12 @@ export async function processNPCSocialEngagements(
             if (comment) {
               try {
                 const commentId = await generateSnowflakeId();
-                await db.comment.create({
-                  data: {
-                    id: commentId,
-                    postId: post.id,
-                    authorId: actor.id,
-                    content: comment,
-                    updatedAt: new Date(),
-                  },
+                await insertNpcEngagementComment({
+                  id: commentId,
+                  postId: post.id,
+                  authorId: actor.id,
+                  content: comment,
+                  updatedAt: new Date(),
                 });
                 topLevelCommentsCreated++;
                 result.commentsCreated++;
@@ -600,21 +565,19 @@ export async function processNPCSocialEngagements(
                   actor.id,
                   post.authorId
                 );
-                await db.npcInteraction.create({
-                  data: {
-                    id: await generateSnowflakeId(),
-                    actor1Id: actor.id,
-                    actor2Id: post.authorId,
-                    interactionType: 'comment',
-                    sentiment: interactionSentiment,
-                    context: comment.slice(0, 280),
-                    metadata: {
-                      postId: post.id,
-                      commentId,
-                      relatedQuestion: post.relatedQuestion ?? null,
-                    },
-                    timestamp: baseNow,
-                  },
+                await insertNpcEngagementNpcInteraction({
+                  id: await generateSnowflakeId(),
+                  actor1Id: actor.id,
+                  actor2Id: post.authorId,
+                  interactionType: 'comment',
+                  sentiment: interactionSentiment,
+                  context: comment.slice(0, 280),
+                  metadata: {
+                    postId: post.id,
+                    commentId,
+                    relatedQuestion: post.relatedQuestion ?? null,
+                  } satisfies JsonValue,
+                  timestamp: baseNow,
                 });
               } catch (commentError) {
                 // Log error but continue processing other actors
@@ -653,27 +616,15 @@ export async function processNPCSocialEngagements(
 
       const commentReplySet = new Set<string>(); // `${parentCommentId}-${authorId}`
 
-      const recentComments = await db.comment.findMany({
-        where: {
-          deletedAt: null,
-          postId: { in: postIds },
-          createdAt: { gte: sixHoursAgo },
-        },
-        orderBy: { createdAt: 'desc' },
+      const recentComments = await listRecentCommentsForNpcEngagementThreads({
+        postIds,
+        since: sixHoursAgo,
         take: 250,
-        select: {
-          id: true,
-          postId: true,
-          authorId: true,
-          content: true,
-          parentCommentId: true,
-          createdAt: true,
-        },
       });
 
       const commentsByPostId = new Map<string, CommentRow[]>();
       const commentById = new Map<string, CommentRow>();
-      for (const c of recentComments as CommentRow[]) {
+      for (const c of recentComments) {
         commentById.set(c.id, c);
         const list = commentsByPostId.get(c.postId) ?? [];
         list.push(c);
@@ -684,15 +635,11 @@ export async function processNPCSocialEngagements(
         a: string,
         b: string
       ): Promise<number> => {
-        const relationship = await db.actorRelationship.findFirst({
-          where: {
-            OR: [
-              { actor1Id: a, actor2Id: b },
-              { actor1Id: b, actor2Id: a },
-            ],
-          },
-          select: { sentiment: true },
-        });
+        const relationship = await fetchActorRelationshipBidirectional(
+          a,
+          b,
+          'npc-social-pair-sentiment'
+        );
         return relationship?.sentiment ?? 0;
       };
 
@@ -747,15 +694,13 @@ export async function processNPCSocialEngagements(
 
           try {
             const commentId = await generateSnowflakeId();
-            await db.comment.create({
-              data: {
-                id: commentId,
-                postId: post.id,
-                authorId: author.id,
-                parentCommentId: root.id,
-                content: authorReply,
-                updatedAt: new Date(),
-              },
+            await insertNpcEngagementComment({
+              id: commentId,
+              postId: post.id,
+              authorId: author.id,
+              parentCommentId: root.id,
+              content: authorReply,
+              updatedAt: new Date(),
             });
             replyCommentsCreated++;
             result.commentsCreated++;
@@ -765,22 +710,20 @@ export async function processNPCSocialEngagements(
               author.id,
               root.authorId
             );
-            await db.npcInteraction.create({
-              data: {
-                id: await generateSnowflakeId(),
-                actor1Id: author.id,
-                actor2Id: root.authorId,
-                interactionType: 'comment',
-                sentiment: interactionSentiment,
-                context: authorReply.slice(0, 280),
-                metadata: {
-                  postId: post.id,
-                  commentId,
-                  parentCommentId: root.id,
-                  relatedQuestion: post.relatedQuestion ?? null,
-                },
-                timestamp: baseNow,
-              },
+            await insertNpcEngagementNpcInteraction({
+              id: await generateSnowflakeId(),
+              actor1Id: author.id,
+              actor2Id: root.authorId,
+              interactionType: 'comment',
+              sentiment: interactionSentiment,
+              context: authorReply.slice(0, 280),
+              metadata: {
+                postId: post.id,
+                commentId,
+                parentCommentId: root.id,
+                relatedQuestion: post.relatedQuestion ?? null,
+              } satisfies JsonValue,
+              timestamp: baseNow,
             });
 
             // Update local caches so follow-up replies can reference the new comment
@@ -831,15 +774,13 @@ export async function processNPCSocialEngagements(
               if (!replyText) break;
 
               const replyId = await generateSnowflakeId();
-              await db.comment.create({
-                data: {
-                  id: replyId,
-                  postId: post.id,
-                  authorId: speaker.id,
-                  parentCommentId: parent.id,
-                  content: replyText,
-                  updatedAt: new Date(),
-                },
+              await insertNpcEngagementComment({
+                id: replyId,
+                postId: post.id,
+                authorId: speaker.id,
+                parentCommentId: parent.id,
+                content: replyText,
+                updatedAt: new Date(),
               });
               replyCommentsCreated++;
               result.commentsCreated++;
@@ -849,22 +790,20 @@ export async function processNPCSocialEngagements(
                 speaker.id,
                 parent.authorId
               );
-              await db.npcInteraction.create({
-                data: {
-                  id: await generateSnowflakeId(),
-                  actor1Id: speaker.id,
-                  actor2Id: parent.authorId,
-                  interactionType: 'comment',
-                  sentiment: interactionSentiment2,
-                  context: replyText.slice(0, 280),
-                  metadata: {
-                    postId: post.id,
-                    commentId: replyId,
-                    parentCommentId: parent.id,
-                    relatedQuestion: post.relatedQuestion ?? null,
-                  },
-                  timestamp: baseNow,
-                },
+              await insertNpcEngagementNpcInteraction({
+                id: await generateSnowflakeId(),
+                actor1Id: speaker.id,
+                actor2Id: parent.authorId,
+                interactionType: 'comment',
+                sentiment: interactionSentiment2,
+                context: replyText.slice(0, 280),
+                metadata: {
+                  postId: post.id,
+                  commentId: replyId,
+                  parentCommentId: parent.id,
+                  relatedQuestion: post.relatedQuestion ?? null,
+                } satisfies JsonValue,
+                timestamp: baseNow,
               });
 
               const createdReply: CommentRow = {
@@ -1056,20 +995,11 @@ async function getPairRelationshipPromptContext(
   otherActorId: string,
   otherActorName: string
 ): Promise<string> {
-  const relationship = await db.actorRelationship.findFirst({
-    where: {
-      OR: [
-        { actor1Id: actorId, actor2Id: otherActorId },
-        { actor1Id: otherActorId, actor2Id: actorId },
-      ],
-    },
-    select: {
-      relationshipType: true,
-      strength: true,
-      sentiment: true,
-      history: true,
-    },
-  });
+  const relationship = await fetchActorRelationshipBidirectional(
+    actorId,
+    otherActorId,
+    'npc-social-relationship-prompt'
+  );
 
   if (!relationship) {
     return `=== YOUR HISTORY WITH ${otherActorName} ===
@@ -1101,15 +1031,11 @@ async function inferInteractionSentiment(
   actorId: string,
   otherActorId: string
 ): Promise<number> {
-  const relationship = await db.actorRelationship.findFirst({
-    where: {
-      OR: [
-        { actor1Id: actorId, actor2Id: otherActorId },
-        { actor1Id: otherActorId, actor2Id: actorId },
-      ],
-    },
-    select: { sentiment: true },
-  });
+  const relationship = await fetchActorRelationshipBidirectional(
+    actorId,
+    otherActorId,
+    'npc-social-infer-sentiment'
+  );
 
   if (!relationship) return 0;
   if (relationship.sentiment > 0.3) return 0.4;
@@ -1397,31 +1323,5 @@ export interface EngagementStats {
  */
 export async function getEngagementStats(): Promise<EngagementStats> {
   const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-
-  const [
-    totalLikes,
-    totalShares,
-    totalComments,
-    last24hLikes,
-    last24hShares,
-    last24hComments,
-  ] = await Promise.all([
-    db.reaction.count(),
-    db.share.count(),
-    db.comment.count({ where: { deletedAt: null } }),
-    db.reaction.count({ where: { createdAt: { gte: oneDayAgo } } }),
-    db.share.count({ where: { createdAt: { gte: oneDayAgo } } }),
-    db.comment.count({
-      where: { deletedAt: null, createdAt: { gte: oneDayAgo } },
-    }),
-  ]);
-
-  return {
-    totalLikes,
-    totalShares,
-    totalComments,
-    last24hLikes,
-    last24hShares,
-    last24hComments,
-  };
+  return fetchNpcEngagementStats(oneDayAgo);
 }

@@ -13,14 +13,11 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, desc, eq, gte, lt, sql } from '@babylon/db';
-import { arcStates, db, markets, questions } from '@babylon/db/runtime';
-
+import { selectNewMarketsFeedRows } from '@babylon/db';
 import type { ArcStateType } from '@babylon/shared';
 import { toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
-
-const NEW_MARKET_WINDOW_MS = 24 * 60 * 60 * 1000;
+import { runWithOptionalUserRls } from '@/lib/db/run-with-optional-user-rls';
 
 export interface NewMarketEntry {
   questionNumber: number;
@@ -52,59 +49,20 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   const result = await getCacheOrFetch<NewMarketEntry[]>(
     cacheKey,
-    async () => {
-      const now = new Date();
-      const cutoff = new Date(now.getTime() - NEW_MARKET_WINDOW_MS);
-
-      // Join questions → arcStates → markets (on matching question text).
-      // The markets table has no direct FK to questions; they are linked by
-      // the question text field. LEFT JOIN so questions without a market
-      // are still returned (isNewMarket card falls back to the predictions list).
-      const rows = await db
-        .select({
-          questionNumber: questions.questionNumber,
-          text: questions.text,
-          resolutionDate: questions.resolutionDate,
-          createdAt: questions.createdAt,
-          arcState: arcStates.currentState,
-          marketId: markets.id,
-          yesShares: markets.yesShares,
-          noShares: markets.noShares,
-        })
-        .from(questions)
-        .leftJoin(arcStates, eq(arcStates.questionId, questions.id))
-        // Match on normalized text (trim + lower) to survive minor whitespace
-        // or casing differences. A proper questions.marketId FK would be better
-        // and is tracked as a follow-up schema migration.
-        .leftJoin(
-          markets,
-          sql`lower(trim(${markets.question})) = lower(trim(${questions.text}))`
-        )
-        .where(
-          and(
-            eq(questions.status, 'active'),
-            gte(questions.createdAt, cutoff),
-            // Only markets resolving within 30 days
-            lt(
-              questions.resolutionDate,
-              new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
-            )
-          )
-        )
-        .orderBy(desc(questions.createdAt))
-        .limit(5);
-
-      return rows.map((r) => ({
-        questionNumber: r.questionNumber,
-        text: r.text,
-        resolutionDate: toISO(r.resolutionDate),
-        createdAt: toISO(r.createdAt),
-        arcState: (r.arcState as ArcStateType | null) ?? null,
-        marketId: r.marketId ?? null,
-        yesShares: Number(r.yesShares ?? 0),
-        noShares: Number(r.noShares ?? 0),
-      }));
-    },
+    async () =>
+      runWithOptionalUserRls(null, async (db) => {
+        const rows = await selectNewMarketsFeedRows(db);
+        return rows.map((r) => ({
+          questionNumber: r.questionNumber,
+          text: r.text,
+          resolutionDate: toISO(r.resolutionDate),
+          createdAt: toISO(r.createdAt),
+          arcState: (r.arcState as ArcStateType | null) ?? null,
+          marketId: r.marketId ?? null,
+          yesShares: Number(r.yesShares ?? 0),
+          noShares: Number(r.noShares ?? 0),
+        }));
+      }),
     { namespace: 'feed', ttl: 60 } // shorter TTL since odds can change
   );
 

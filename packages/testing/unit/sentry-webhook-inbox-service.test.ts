@@ -39,14 +39,18 @@ describe('ingestSentryWebhook signature compatibility', () => {
       generateSnowflakeId: generateSnowflakeIdMock,
     }));
 
-    mock.module('@babylon/db/runtime', () => ({
-      db: {
-        insert: insertMock,
-      },
+    const sentryDrizzleLike = {
+      insert: insertMock,
+    };
+
+    mock.module('@babylon/db/engine-storage', () => ({
+      db: sentryDrizzleLike,
       sentryWebhookInboxes: {
         dedupeKey: 'dedupeKey',
         id: 'id',
       },
+      asSystem: async <T>(op: (c: typeof sentryDrizzleLike) => Promise<T>) =>
+        op(sentryDrizzleLike),
     }));
 
     const actualShared = await import('@babylon/shared');

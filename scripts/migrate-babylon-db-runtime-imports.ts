@@ -145,7 +145,7 @@ function transformImportFromMain(matchFull: string): string {
   }
   const lines: string[] = [];
   if (pub.length > 0) {
-    lines.push(`import { ${pub.join(', ')} } from '@babylon/db'`);
+    lines.push(`import { ${pub.join(', ')} } from '@babylon/db';`);
   }
   if (run.length > 0) {
     lines.push(`import { ${run.join(', ')} } from '@babylon/db/runtime'`);

@@ -8,8 +8,14 @@
  * This eliminates double LLM calls and makes execution faster.
  */
 
-import { and, desc, eq } from '@babylon/db';
-import { actorState, agentLogs, chats, db, users } from '@babylon/db/runtime';
+import {
+  selectAgentLogSystemCreatedAtMetadataRecent,
+  selectChatIsGroupRowByChatId,
+  selectNpcActorTradingBalance,
+  selectUserRowById,
+  type User,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import { StaticDataRegistry, WalletService } from '@babylon/engine';
 import type { IAgentRuntime } from '@elizaos/core';
 import { callGroqDirect } from '../llm/direct-groq';
@@ -105,13 +111,9 @@ export class MultiStepExecutor {
     );
 
     // Get agent info (for USER_CONTROLLED agents)
-    let agent: typeof users.$inferSelect | undefined;
+    let agent: User | undefined;
     if (!isNpc) {
-      const [userAgent] = await db
-        .select()
-        .from(users)
-        .where(eq(users.id, agentUserId))
-        .limit(1);
+      const userAgent = await selectUserRowById(db, agentUserId);
 
       if (!userAgent) {
         throw new Error('Agent not found');
@@ -381,11 +383,7 @@ export class MultiStepExecutor {
 
     const balanceStart = Date.now();
     if (isNpc) {
-      const [actor] = await db
-        .select({ tradingBalance: actorState.tradingBalance })
-        .from(actorState)
-        .where(eq(actorState.id, agentUserId))
-        .limit(1);
+      const actor = await selectNpcActorTradingBalance(db, agentUserId);
 
       if (!actor) {
         throw new Error(
@@ -401,21 +399,10 @@ export class MultiStepExecutor {
       pnl = walletBalance.lifetimePnL;
 
       // Fetch creator info for user-controlled agents
-      const [agentUser] = await db
-        .select({ managedBy: users.managedBy })
-        .from(users)
-        .where(eq(users.id, agentUserId))
-        .limit(1);
+      const agentUser = await selectUserRowById(db, agentUserId);
 
       if (agentUser?.managedBy) {
-        const [creatorUser] = await db
-          .select({
-            displayName: users.displayName,
-            username: users.username,
-          })
-          .from(users)
-          .where(eq(users.id, agentUser.managedBy))
-          .limit(1);
+        const creatorUser = await selectUserRowById(db, agentUser.managedBy);
 
         if (creatorUser) {
           creator = {
@@ -575,20 +562,11 @@ export class MultiStepExecutor {
   private async getLatestContextRefreshSummary(
     agentUserId: string
   ): Promise<string | undefined> {
-    const recentSystemLogs = await db
-      .select({
-        createdAt: agentLogs.createdAt,
-        metadata: agentLogs.metadata,
-      })
-      .from(agentLogs)
-      .where(
-        and(
-          eq(agentLogs.agentUserId, agentUserId),
-          eq(agentLogs.type, 'system')
-        )
-      )
-      .orderBy(desc(agentLogs.createdAt))
-      .limit(10);
+    const recentSystemLogs = await selectAgentLogSystemCreatedAtMetadataRecent(
+      db,
+      agentUserId,
+      10
+    );
 
     for (const log of recentSystemLogs) {
       const metadata =
@@ -1334,11 +1312,7 @@ export class MultiStepExecutor {
     }
 
     // Look up the chat to determine if it's a group chat or DM
-    const [chat] = await db
-      .select({ isGroup: chats.isGroup })
-      .from(chats)
-      .where(eq(chats.id, chatId))
-      .limit(1);
+    const chat = await selectChatIsGroupRowByChatId(db, chatId);
 
     if (!chat) {
       return {
@@ -1496,11 +1470,7 @@ export class MultiStepExecutor {
     }
 
     // Validate that the chat is actually a group chat
-    const [chat] = await db
-      .select({ isGroup: chats.isGroup })
-      .from(chats)
-      .where(eq(chats.id, chatId))
-      .limit(1);
+    const chat = await selectChatIsGroupRowByChatId(db, chatId);
 
     if (!chat) {
       return {

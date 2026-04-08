@@ -139,6 +139,12 @@ mock.module('@babylon/api', () => ({
 mock.module('@babylon/db', () => ({
   and: (...conditions: unknown[]) => ({ op: 'and', conditions }),
   count: () => ({ op: 'count' }),
+  countUnreadNotificationsForUser: mock(async () => {
+    if (notificationSelectError) {
+      throw notificationSelectError;
+    }
+    return Number(unreadCountRows[0]?.count ?? 0);
+  }),
   desc: (value: unknown) => ({ op: 'desc', value }),
   eq: (left: unknown, right: unknown) => ({ op: 'eq', left, right }),
   getBlockedByUserIds: mockGetBlockedByUserIds,
@@ -149,14 +155,34 @@ mock.module('@babylon/db', () => ({
     column,
     values,
   }),
+  selectNotificationsListForUser: mock(async () => {
+    if (notificationSelectError) {
+      throw notificationSelectError;
+    }
+    return notificationRows;
+  }),
+  selectUserNotificationDigestSettingsByUserId: mock(async () => {
+    if (digestSelectError) {
+      throw digestSelectError;
+    }
+    return digestRows[0] ?? null;
+  }),
+  selectUsersCommentAuthorSlicesByIds: mock(async () => actorRows),
+  updateUserNotificationDigestSettingsByUserId: mock(async () => digestRows[0]),
 }));
 
-mock.module('@babylon/db/runtime', () => ({
-  db: {
-    select: mockDbSelect,
-  },
+const notificationsMockDb = {
+  select: mockDbSelect,
+};
+
+mock.module('@babylon/db/engine-storage', () => ({
+  db: notificationsMockDb,
   notifications: notificationsTable,
   users: usersTable,
+  asUser: async <T>(
+    _user: unknown,
+    op: (c: typeof notificationsMockDb) => Promise<T>
+  ) => op(notificationsMockDb),
 }));
 
 mock.module('@babylon/shared', () => ({

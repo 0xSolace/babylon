@@ -6,8 +6,12 @@
  * each user has a unique referral code for tracking referrals.
  */
 
-import { and, eq, ne } from '@babylon/db';
-import { db, users } from '@babylon/db/runtime';
+import {
+  existsOtherUserWithReferralCode,
+  selectReferralUserCodeRow,
+  updateUserReferralCode,
+} from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import { logger } from '@babylon/shared';
 import { BadRequestError, ConflictError, NotFoundError } from '../errors';
 
@@ -15,82 +19,52 @@ export async function isReferralCodeAvailableForUser(
   userId: string,
   referralCode: string
 ): Promise<boolean> {
-  const existingUserWithCode = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(and(eq(users.referralCode, referralCode), ne(users.id, userId)))
-    .limit(1);
-
-  return existingUserWithCode.length === 0;
+  const taken = await asSystem(
+    async (c) => existsOtherUserWithReferralCode(c, referralCode, userId),
+    'referral-code-availability'
+  );
+  return !taken;
 }
 
 /**
  * Get or create a referral code for a user
- *
- * @description Gets existing referral code or sets it to the user's username.
- * Since username is required during signup, we always use username as the referral code.
- * Ensures uniqueness by checking database and throwing error if username is taken as referral code.
- *
- * @param {string} userId - The user ID
- * @returns {Promise<string>} The user's referral code (their username)
- * @throws {Error} If user not found or username is missing
- *
- * @example
- * ```typescript
- * const code = await getOrCreateReferralCode(userId);
- * // Returns: "cidsociety"
- * ```
  */
 export async function getOrCreateReferralCode(userId: string): Promise<string> {
-  // Get user with username and referral code
-  const result = await db
-    .select({
-      id: users.id,
-      username: users.username,
-      referralCode: users.referralCode,
-    })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
+  return asSystem(async (c) => {
+    const user = await selectReferralUserCodeRow(c, userId);
 
-  const user = result[0];
+    if (!user) {
+      throw new NotFoundError(`User not found: ${userId}`);
+    }
 
-  if (!user) {
-    throw new NotFoundError(`User not found: ${userId}`);
-  }
+    if (!user.username) {
+      throw new BadRequestError(
+        `User ${userId} does not have a username. Username is required for referral codes.`
+      );
+    }
 
-  // Username is required during signup, so it should always exist
-  if (!user.username) {
-    throw new BadRequestError(
-      `User ${userId} does not have a username. Username is required for referral codes.`
+    const conflict = await existsOtherUserWithReferralCode(
+      c,
+      user.username,
+      userId
     );
-  }
 
-  // Check if username is already used as a referral code by another user
-  const isReferralCodeAvailable = await isReferralCodeAvailableForUser(
-    userId,
-    user.username
-  );
+    if (conflict) {
+      throw new ConflictError(
+        `Username "${user.username}" is already used as a referral code by another user`
+      );
+    }
 
-  if (!isReferralCodeAvailable) {
-    throw new ConflictError(
-      `Username "${user.username}" is already used as a referral code by another user`
-    );
-  }
+    if (user.referralCode !== user.username) {
+      await updateUserReferralCode(c, userId, user.username);
 
-  // Update referral code to username if it's different
-  if (user.referralCode !== user.username) {
-    await db
-      .update(users)
-      .set({ referralCode: user.username })
-      .where(eq(users.id, userId));
+      logger.info(
+        `Updated referral code to username for user ${userId}: ${user.username}`,
+        { userId, code: user.username },
+        'ReferralService'
+      );
+    }
 
-    logger.info(
-      `Updated referral code to username for user ${userId}: ${user.username}`,
-      { userId, code: user.username },
-      'ReferralService'
-    );
-  }
-
-  return user.username;
+    return user.username;
+  }, 'referral-get-or-create-code');
 }

@@ -4,16 +4,8 @@
 
 import { isOpenPerpPositionStateValid } from '@babylon/core/markets/perps';
 import { PredictionPricing } from '@babylon/core/markets/prediction';
-import { and, eq, inArray, isNull, sql } from '@babylon/db';
-import {
-  db,
-  markets,
-  perpPositions,
-  pointsTransactions,
-  positions,
-  users,
-} from '@babylon/db/runtime';
-import { logger, resolveUserIdentifierKind } from '@babylon/shared';
+import { fetchPortfolioBreakdownReadModel } from '@babylon/db';
+import { logger } from '@babylon/shared';
 import { FEE_CONFIG } from '../config/fees';
 import {
   calculatePerpPositionMarketValue,
@@ -102,122 +94,20 @@ export async function calculatePortfolioBreakdown(
     return null;
   }
 
-  // User IDs may come in as either the canonical `users.id` or `users.privyId`.
-  // To keep portfolio totals stable across migrations, we treat both as aliases
-  // for the same user when present.
-  // Classify identifier to determine optimal query route
-  // WHY: Eliminates OR condition that prevents optimal index usage.
-  // Same optimization pattern as markDirty and recomputeTotalPoints.
-  const kind = resolveUserIdentifierKind(normalizedUserId);
+  const readModel = await fetchPortfolioBreakdownReadModel(normalizedUserId);
+  if (!readModel) return null;
 
-  // Route to single WHERE condition based on classification
-  // WHY sql template for username? Username matching must be case-insensitive to use
-  // the functional index idx_users_username_lower. Using eq() would be case-sensitive.
-  const portfolioSelect = {
-    id: users.id,
-    privyId: users.privyId,
-    displayName: users.displayName,
-    username: users.username,
-    virtualBalance: users.virtualBalance,
-    totalDeposited: users.totalDeposited,
-    totalWithdrawn: users.totalWithdrawn,
-    reputationPoints: users.reputationPoints,
-  };
-
-  const whereClause =
-    kind === 'id'
-      ? eq(users.id, normalizedUserId)
-      : kind === 'privyId'
-        ? eq(users.privyId, normalizedUserId)
-        : sql`lower(${users.username}) = lower(${normalizedUserId})`; // Case-insensitive for functional index
-
-  const userResult = await db
-    .select(portfolioSelect)
-    .from(users)
-    .where(whereClause)
-    .limit(1);
-
-  type PortfolioUserRow = {
-    id: string;
-    privyId: string | null;
-    displayName: string | null;
-    username: string | null;
-    virtualBalance: unknown;
-    totalDeposited: unknown;
-    totalWithdrawn: unknown;
-    reputationPoints: number;
-  };
-
-  let user = userResult[0] as PortfolioUserRow | undefined;
-
-  // Fallback: did:privy: identifiers may be stored as the primary key
-  // instead of in the privyId column. PK lookup is O(1).
-  if (!user && kind === 'privyId') {
-    const fallbackResult = await db
-      .select(portfolioSelect)
-      .from(users)
-      .where(eq(users.id, normalizedUserId))
-      .limit(1);
-    user = fallbackResult[0] as PortfolioUserRow | undefined;
-  }
-
-  if (!user) return null;
+  const { user, agentRows, perpRows, predictionRows, netTransfersRaw } =
+    readModel;
 
   const canonicalUserId = user.id;
-  const positionUserIds = Array.from(
-    new Set([canonicalUserId, user.privyId].filter(Boolean))
-  ) as string[];
-
-  const agentRows = await db
-    .select({
-      id: users.id,
-      displayName: users.displayName,
-      username: users.username,
-      virtualBalance: users.virtualBalance,
-    })
-    .from(users)
-    .where(and(eq(users.managedBy, canonicalUserId), eq(users.isAgent, true)));
-
-  const agentIds = agentRows.map((a) => a.id);
-  const agentCount = agentIds.length;
+  const agentCount = agentRows.length;
 
   const wallet = toNumber(user.virtualBalance);
   const agents = agentRows.reduce(
     (sum, agent) => sum + toNumber(agent.virtualBalance),
     0
   );
-
-  const [perpRows, predictionRows] = await Promise.all([
-    db
-      .select({
-        size: perpPositions.size,
-        leverage: perpPositions.leverage,
-        unrealizedPnL: perpPositions.unrealizedPnL,
-      })
-      .from(perpPositions)
-      .where(
-        and(
-          inArray(perpPositions.userId, positionUserIds),
-          isNull(perpPositions.closedAt)
-        )
-      ),
-    db
-      .select({
-        shares: positions.shares,
-        avgPrice: positions.avgPrice,
-        side: positions.side,
-        marketYesShares: markets.yesShares,
-        marketNoShares: markets.noShares,
-      })
-      .from(positions)
-      .innerJoin(markets, eq(positions.marketId, markets.id))
-      .where(
-        and(
-          inArray(positions.userId, positionUserIds),
-          eq(markets.resolved, false)
-        )
-      ),
-  ]);
 
   const invalidPerpRows = perpRows.filter(
     (position) => !isOpenPerpPositionStateValid(position)
@@ -256,24 +146,7 @@ export async function calculatePortfolioBreakdown(
   const totalDeposited = toNumber(user.totalDeposited);
   const totalWithdrawn = toNumber(user.totalWithdrawn);
 
-  // Exclude peer-to-peer point transfers from PnL baseline.
-  const transferResult = await db
-    .select({
-      netTransfers: sql<number>`COALESCE(SUM(${pointsTransactions.amount}), 0)`,
-    })
-    .from(pointsTransactions)
-    .where(
-      and(
-        inArray(pointsTransactions.userId, positionUserIds),
-        inArray(pointsTransactions.reason, [
-          'transfer_sent',
-          'transfer_received',
-        ])
-      )
-    )
-    .limit(1);
-
-  const netTransfers = toNumber(transferResult[0]?.netTransfers);
+  const netTransfers = toNumber(netTransfersRaw);
   const originalAmount = totalDeposited - totalWithdrawn + netTransfers;
 
   const available = wallet + agents;

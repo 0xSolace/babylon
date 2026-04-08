@@ -19,7 +19,6 @@ import {
   expect,
   test,
 } from 'bun:test';
-import { eq, inArray } from '@babylon/db';
 import {
   db,
   nftClaims,
@@ -27,9 +26,9 @@ import {
   nftOwnership,
   nftSnapshot,
   users,
-} from '@babylon/db/runtime';
-
+} from '@babylon/db/engine-storage';
 import { generateSnowflakeId } from '@babylon/shared';
+import { eq, inArray } from 'drizzle-orm';
 
 const BASE_URL =
   process.env.TEST_API_URL ||

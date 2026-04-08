@@ -10,8 +10,7 @@
  * Uses provider pattern for Redis services (injected from API layer).
  */
 
-import { desc, gte } from '@babylon/db';
-import { db, worldEvents } from '@babylon/db/runtime';
+import { getRecentWorldEvents } from '@babylon/db';
 import { logger } from '@babylon/shared';
 import { npcMemoryService } from './npc-memory-service';
 import { StaticDataRegistry } from './static-data-registry';
@@ -282,12 +281,7 @@ export class EventReactionService {
     lookbackHours: number
   ): Promise<CachedEvent[]> {
     const cutoff = new Date(Date.now() - lookbackHours * 60 * 60 * 1000);
-    const rows = await db
-      .select()
-      .from(worldEvents)
-      .where(gte(worldEvents.timestamp, cutoff))
-      .orderBy(desc(worldEvents.timestamp))
-      .limit(100);
+    const rows = await getRecentWorldEvents(cutoff, 100);
 
     return rows.map((row) => ({
       id: row.id,

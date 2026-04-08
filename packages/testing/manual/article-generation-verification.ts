@@ -9,7 +9,7 @@
  * 5. Article detail pages display fullContent correctly
  */
 
-import { db } from '@babylon/db/runtime';
+import { db } from '@babylon/db/engine-storage';
 
 import { StaticDataRegistry } from '@babylon/engine';
 

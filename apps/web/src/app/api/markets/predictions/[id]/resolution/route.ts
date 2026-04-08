@@ -5,6 +5,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import type { NextRequest } from 'next/server';
+import { runWithOptionalUserRls } from '@/lib/db/run-with-optional-user-rls';
 import { getPublicResolutionAudit } from '../../_resolution-audit';
 
 export const GET = withErrorHandling(
@@ -12,23 +13,26 @@ export const GET = withErrorHandling(
     request: NextRequest,
     context: { params: Promise<{ id: string }> }
   ) => {
-    const { error, rateLimitInfo } = await publicRateLimit(request);
+    const { error, rateLimitInfo, user } = await publicRateLimit(request);
     if (error) return error;
 
     const { id: marketId } = await context.params;
-    const audit = await getPublicResolutionAudit(marketId);
 
-    if (!audit) {
-      return successResponse({ error: 'Market not found' }, 404);
-    }
+    return runWithOptionalUserRls(user, async (db) => {
+      const audit = await getPublicResolutionAudit(marketId, db);
 
-    const response = successResponse({
-      success: true,
-      marketId,
-      resolutionAudit: audit,
+      if (!audit) {
+        return successResponse({ error: 'Market not found' }, 404);
+      }
+
+      const response = successResponse({
+        success: true,
+        marketId,
+        resolutionAudit: audit,
+      });
+
+      if (rateLimitInfo) addPublicReadHeaders(response, rateLimitInfo);
+      return response;
     });
-
-    if (rateLimitInfo) addPublicReadHeaders(response, rateLimitInfo);
-    return response;
   }
 );

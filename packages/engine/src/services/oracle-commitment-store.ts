@@ -9,8 +9,12 @@
  * - ORACLE_ENCRYPTION_KEY must be set in environment (no default)
  */
 
-import { asc, eq } from '@babylon/db';
-import { db, oracleCommitments } from '@babylon/db/runtime';
+import {
+  deleteOracleCommitmentByQuestionId,
+  fetchOracleCommitmentRowByQuestionId,
+  listOracleCommitmentRowsByCreatedAsc,
+  upsertOracleCommitmentRow,
+} from '@babylon/db';
 import { logger } from '@babylon/shared';
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 import { first } from '../utils/array-utils';
@@ -106,69 +110,23 @@ export class CommitmentStore {
   ): Promise<{ id: string; questionId: string }> {
     const encryptedSalt = CommitmentStore.encryptSalt(commitment.salt);
 
-    // Check if exists
-    const existing = await db
-      .select({ id: oracleCommitments.id })
-      .from(oracleCommitments)
-      .where(eq(oracleCommitments.questionId, commitment.questionId))
-      .limit(1);
+    const { id, questionId, wasCreated } = await upsertOracleCommitmentRow({
+      newRowId: `commitment-${commitment.questionId}-${Date.now()}`,
+      questionId: commitment.questionId,
+      sessionId: commitment.sessionId,
+      saltEncrypted: encryptedSalt,
+      commitment: commitment.commitment,
+      createdAt: commitment.createdAt,
+    });
 
-    let result: { id: string; questionId: string };
-
-    if (existing.length > 0) {
-      // Update existing
-      const updated = await db
-        .update(oracleCommitments)
-        .set({
-          sessionId: commitment.sessionId,
-          saltEncrypted: encryptedSalt,
-          commitment: commitment.commitment,
-        })
-        .where(eq(oracleCommitments.questionId, commitment.questionId))
-        .returning({
-          id: oracleCommitments.id,
-          questionId: oracleCommitments.questionId,
-        });
-
-      const updatedRecord = first(updated);
-      if (!updatedRecord) {
-        throw new Error(
-          `Failed to update commitment for question ${commitment.questionId}`
-        );
-      }
-      result = updatedRecord;
-    } else {
-      // Create new
-      const created = await db
-        .insert(oracleCommitments)
-        .values({
-          id: `commitment-${commitment.questionId}-${Date.now()}`,
-          questionId: commitment.questionId,
-          sessionId: commitment.sessionId,
-          saltEncrypted: encryptedSalt,
-          commitment: commitment.commitment,
-          createdAt: commitment.createdAt,
-        })
-        .returning({
-          id: oracleCommitments.id,
-          questionId: oracleCommitments.questionId,
-        });
-
-      const createdRecord = first(created);
-      if (!createdRecord) {
-        throw new Error(
-          `Failed to create commitment for question ${commitment.questionId}`
-        );
-      }
-      result = createdRecord;
-    }
+    const result = { id, questionId };
 
     logger.info(
       `Stored commitment for question ${commitment.questionId}`,
       {
         sessionId: commitment.sessionId,
         recordId: result.id,
-        wasCreated: existing.length === 0,
+        wasCreated,
         operation: 'upsert',
       },
       'CommitmentStore'
@@ -187,13 +145,7 @@ export class CommitmentStore {
       'CommitmentStore'
     );
 
-    const result = await db
-      .select()
-      .from(oracleCommitments)
-      .where(eq(oracleCommitments.questionId, questionId))
-      .limit(1);
-
-    const stored = result[0];
+    const stored = await fetchOracleCommitmentRowByQuestionId(questionId);
 
     if (!stored) {
       logger.warn(
@@ -231,10 +183,7 @@ export class CommitmentStore {
    * Idempotent - won't fail if commitment already deleted
    */
   static async delete(questionId: string): Promise<void> {
-    const result = await db
-      .delete(oracleCommitments)
-      .where(eq(oracleCommitments.questionId, questionId))
-      .returning({ id: oracleCommitments.id });
+    const result = await deleteOracleCommitmentByQuestionId(questionId);
 
     if (result.length > 0) {
       logger.info(
@@ -255,10 +204,7 @@ export class CommitmentStore {
    * List all pending commitments for recovery and monitoring
    */
   static async listPending(): Promise<StoredCommitment[]> {
-    const stored = await db
-      .select()
-      .from(oracleCommitments)
-      .orderBy(asc(oracleCommitments.createdAt));
+    const stored = await listOracleCommitmentRowsByCreatedAsc();
 
     return stored.map((s) => ({
       questionId: s.questionId,

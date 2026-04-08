@@ -93,6 +93,9 @@ jobs:
       
       - name: Lint
         run: bun run lint
+
+      - name: DB query boundary
+        run: bun run enforce:db-boundary
       
       - name: Build Production
         env:

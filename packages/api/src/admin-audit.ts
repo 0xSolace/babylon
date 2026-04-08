@@ -7,7 +7,7 @@
  * the AdminAuditLog database table (for persistence and reporting).
  */
 
-import { adminAuditLogs, db } from '@babylon/db/runtime';
+import { adminAuditLogs, asSystem } from '@babylon/db/engine-storage';
 
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import type { JsonValue } from './types';
@@ -69,28 +69,31 @@ async function persistAuditLog(
 ): Promise<void> {
   const id = await generateSnowflakeId();
 
-  await db
-    .insert(adminAuditLogs)
-    .values({
-      id,
-      adminId: context.adminId,
-      action,
-      resourceType: context.resourceType,
-      resourceId: context.resourceId ?? null,
-      previousValue: context.previousValue ?? null,
-      newValue: context.newValue ?? null,
-      ipAddress: context.ipAddress ?? null,
-      userAgent: context.userAgent ?? null,
-      metadata: context.metadata ?? null,
-    })
-    .catch((err: Error) => {
-      // Log but don't throw - table might not exist yet (migration not applied)
-      logger.warn(
-        `Failed to persist audit log: ${err.message}`,
-        { action, resourceType: context.resourceType },
-        'AdminAudit'
-      );
-    });
+  try {
+    await asSystem(
+      async (c) =>
+        c.insert(adminAuditLogs).values({
+          id,
+          adminId: context.adminId,
+          action,
+          resourceType: context.resourceType,
+          resourceId: context.resourceId ?? null,
+          previousValue: context.previousValue ?? null,
+          newValue: context.newValue ?? null,
+          ipAddress: context.ipAddress ?? null,
+          userAgent: context.userAgent ?? null,
+          metadata: context.metadata ?? null,
+        }),
+      'admin-audit-persist'
+    );
+  } catch (err) {
+    // Log but don't throw - table might not exist yet (migration not applied)
+    logger.warn(
+      `Failed to persist audit log: ${err instanceof Error ? err.message : String(err)}`,
+      { action, resourceType: context.resourceType },
+      'AdminAudit'
+    );
+  }
 }
 
 /**

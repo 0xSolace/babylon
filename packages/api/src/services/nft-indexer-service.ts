@@ -1,5 +1,8 @@
-import { eq, inArray } from '@babylon/db';
-import { db, nftOwnership, users } from '@babylon/db/runtime';
+import {
+  selectNftOwnershipTokenIdsByUserId,
+  selectUsersByWalletAddressesForNftIndexer,
+} from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import { ValidationError } from '@babylon/shared';
 import { getNftChainId } from './nft/nft-chain';
 
@@ -358,11 +361,10 @@ export async function getOwnedTokenIdsFromIndexer(
 export async function getOwnedTokenIdsFromDbFallback(
   dbUserId: string
 ): Promise<number[]> {
-  const rows = await db
-    .select({ tokenId: nftOwnership.tokenId })
-    .from(nftOwnership)
-    .where(eq(nftOwnership.userId, dbUserId));
-  return rows.map((r) => r.tokenId);
+  return asSystem(
+    (c) => selectNftOwnershipTokenIdsByUserId(c, dbUserId),
+    'nft-indexer-owned-tokens-fallback'
+  );
 }
 
 export async function getOwnerUsersByWalletAddresses(
@@ -383,16 +385,10 @@ export async function getOwnerUsersByWalletAddresses(
   const normalized = Array.from(
     new Set(ownerAddresses.map(normalizeHexAddress))
   );
-  const rows = await db
-    .select({
-      id: users.id,
-      walletAddress: users.walletAddress,
-      username: users.username,
-      displayName: users.displayName,
-      profileImageUrl: users.profileImageUrl,
-    })
-    .from(users)
-    .where(inArray(users.walletAddress, normalized));
+  const rows = await asSystem(
+    (c) => selectUsersByWalletAddressesForNftIndexer(c, normalized),
+    'nft-indexer-owner-users-by-wallet'
+  );
 
   const map = new Map<
     string,

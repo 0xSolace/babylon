@@ -6,8 +6,7 @@
  * than those in "setup" phase.
  */
 
-import { inArray, type LongTermArcState } from '@babylon/db';
-import { arcStates, db, questions } from '@babylon/db/runtime';
+import { fetchArcContextNpcRead, type LongTermArcState } from '@babylon/db';
 import { logger } from '@babylon/shared';
 import { formatError } from '../utils/error-utils';
 import { StaticDataRegistry } from './static-data-registry';
@@ -52,29 +51,11 @@ export class ArcContextService {
     }
 
     try {
-      // Get active arc states
-      const activeArcs = await db
-        .select({
-          id: arcStates.id,
-          questionId: arcStates.questionId,
-          currentState: arcStates.currentState,
-        })
-        .from(arcStates)
-        .limit(50);
+      const { activeArcs, questionRows } = await fetchArcContextNpcRead();
 
       if (activeArcs.length === 0) {
         return [];
       }
-
-      // Get question texts for these arcs
-      const questionIds = activeArcs.map((a) => a.questionId);
-      const questionRows = await db
-        .select({
-          id: questions.id,
-          text: questions.text,
-        })
-        .from(questions)
-        .where(inArray(questions.id, questionIds));
 
       const questionTextMap = new Map(questionRows.map((q) => [q.id, q.text]));
 

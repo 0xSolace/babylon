@@ -76,15 +76,17 @@
  */
 
 import {
+  addPublicReadHeaders,
   BusinessLogicError,
+  publicRateLimit,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
 
-import { db } from '@babylon/db/runtime';
 import { StaticDataRegistry } from '@babylon/engine';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+import { runWithOptionalUserRls } from '@/lib/db/run-with-optional-user-rls';
 
 /**
  * GET /api/actors/[actorId]/stats
@@ -98,9 +100,12 @@ import type { NextRequest } from 'next/server';
  */
 export const GET = withErrorHandling(
   async (
-    _request: NextRequest,
+    request: NextRequest,
     context: { params: Promise<{ actorId: string }> }
   ) => {
+    const { error, user, rateLimitInfo } = await publicRateLimit(request);
+    if (error) return error;
+
     const params = await context.params;
     const { actorId } = params;
 
@@ -121,56 +126,55 @@ export const GET = withErrorHandling(
 
     const actualActorId = actor.id;
 
-    // Get follower counts (both from ActorFollow and UserActorFollow)
-    const [
-      actorFollowerCount,
-      userActorFollowerCount,
-      followingCount,
-      postCount,
-    ] = await Promise.all([
-      // NPCs following this actor (ActorFollow)
-      db.actorFollow.count({
-        where: { followingId: actualActorId },
-      }),
-      // Users following this actor (UserActorFollow)
-      db.userActorFollow.count({
-        where: {
-          actorId: actualActorId,
-        },
-      }),
-      // This actor following others (only NPC-to-NPC follows via ActorFollow)
-      db.actorFollow.count({
-        where: { followerId: actualActorId },
-      }),
-      // Posts by this actor
-      db.post.count({
-        where: { authorId: actualActorId },
-      }),
-    ]);
-
-    const totalFollowers = actorFollowerCount + userActorFollowerCount;
-
-    logger.info(
-      'Actor stats fetched successfully',
-      {
-        actorId,
-        actualActorId,
-        totalFollowers,
+    return runWithOptionalUserRls(user, async (scopedDb) => {
+      const [
         actorFollowerCount,
         userActorFollowerCount,
         followingCount,
-      },
-      'GET /api/actors/[actorId]/stats'
-    );
+        postCount,
+      ] = await Promise.all([
+        scopedDb.actorFollow.count({
+          where: { followingId: actualActorId },
+        }),
+        scopedDb.userActorFollow.count({
+          where: {
+            actorId: actualActorId,
+          },
+        }),
+        scopedDb.actorFollow.count({
+          where: { followerId: actualActorId },
+        }),
+        scopedDb.post.count({
+          where: { authorId: actualActorId },
+        }),
+      ]);
 
-    return successResponse({
-      stats: {
-        followers: totalFollowers,
-        following: followingCount,
-        posts: postCount,
-        actorFollowers: actorFollowerCount,
-        userFollowers: userActorFollowerCount,
-      },
+      const totalFollowers = actorFollowerCount + userActorFollowerCount;
+
+      logger.info(
+        'Actor stats fetched successfully',
+        {
+          actorId,
+          actualActorId,
+          totalFollowers,
+          actorFollowerCount,
+          userActorFollowerCount,
+          followingCount,
+        },
+        'GET /api/actors/[actorId]/stats'
+      );
+
+      const res = successResponse({
+        stats: {
+          followers: totalFollowers,
+          following: followingCount,
+          posts: postCount,
+          actorFollowers: actorFollowerCount,
+          userFollowers: userActorFollowerCount,
+        },
+      });
+      if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
+      return res;
     });
   }
 );

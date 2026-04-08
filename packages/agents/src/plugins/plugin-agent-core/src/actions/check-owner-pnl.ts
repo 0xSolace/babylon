@@ -5,14 +5,12 @@
  * This shows the owner's trading performance, not the agent's.
  */
 
-import { and, eq, isNull } from '@babylon/db';
 import {
-  db,
-  markets,
-  perpPositions,
-  positions,
-  users,
-} from '@babylon/db/runtime';
+  selectActivePredictionPositionsWithMarketForUser,
+  selectOpenPerpPositionsForUser,
+  selectOwnerHeaderForPnl,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import { calculatePortfolioBreakdown, WalletService } from '@babylon/engine';
 import type { MessageTag } from '@babylon/shared';
 import type {
@@ -108,16 +106,7 @@ export const checkOwnerPnlAction: Action = {
     }
 
     try {
-      // Get owner info
-      const [owner] = await db
-        .select({
-          displayName: users.displayName,
-          username: users.username,
-          lifetimePnL: users.lifetimePnL,
-        })
-        .from(users)
-        .where(eq(users.id, ownerId))
-        .limit(1);
+      const owner = await selectOwnerHeaderForPnl(db, ownerId);
 
       if (!owner) {
         return {
@@ -149,32 +138,13 @@ export const checkOwnerPnlAction: Action = {
       const positionsValue = portfolio?.positions ?? 0;
       const available = portfolio?.available ?? balance;
 
-      // Get active prediction positions with market details
-      const predictionPositions = await db
-        .select({
-          id: positions.id,
-          marketId: positions.marketId,
-          side: positions.side,
-          shares: positions.shares,
-          avgPrice: positions.avgPrice,
-          amount: positions.amount,
-          question: markets.question,
-          yesShares: markets.yesShares,
-          noShares: markets.noShares,
-        })
-        .from(positions)
-        .leftJoin(markets, eq(positions.marketId, markets.id))
-        .where(
-          and(eq(positions.userId, ownerId), eq(positions.status, 'active'))
-        );
+      const predictionPositions =
+        await selectActivePredictionPositionsWithMarketForUser(db, ownerId);
 
-      // Get active perp positions
-      const perpPositionsList = await db
-        .select()
-        .from(perpPositions)
-        .where(
-          and(eq(perpPositions.userId, ownerId), isNull(perpPositions.closedAt))
-        );
+      const perpPositionsList = await selectOpenPerpPositionsForUser(
+        db,
+        ownerId
+      );
 
       const totalPositions =
         predictionPositions.length + perpPositionsList.length;

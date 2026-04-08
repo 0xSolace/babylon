@@ -4,7 +4,7 @@
  * Core service for collecting agent interaction trajectories for RL training
  */
 
-import { db, llmCallLogs, trajectories } from '@babylon/db/runtime';
+import { db, llmCallLogs, trajectories } from '@babylon/db/engine-storage';
 
 import type { JsonValue } from '@babylon/shared';
 import type { UUID } from '@elizaos/core';

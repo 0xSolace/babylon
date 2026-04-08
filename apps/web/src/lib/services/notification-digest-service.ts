@@ -1,7 +1,10 @@
 import { createNotification, sendNotificationEmail } from '@babylon/api';
-import { and, eq, gt, gte, isNotNull, lt, or } from '@babylon/db';
-import { db, markets, positions, users } from '@babylon/db/runtime';
-
+import {
+  selectDigestPositionOutcomesForUserWindow,
+  selectUsersWithNotificationDigestEnabled,
+  updateUserNotificationDigestLastSentAt,
+} from '@babylon/db';
+import { asSystem, asUser } from '@babylon/db/engine-storage';
 import {
   isValidDeliveryChannel,
   isValidDigestFrequency,
@@ -104,18 +107,10 @@ function formatSignedPoints(points: number): string {
 }
 
 export async function listDigestCandidates(): Promise<DigestCandidateUser[]> {
-  const rows = await db
-    .select({
-      id: users.id,
-      email: users.email,
-      emailVerified: users.emailVerified,
-      digestEnabled: users.notificationDigestEnabled,
-      digestFrequency: users.notificationDigestFrequency,
-      deliveryChannel: users.notificationDigestDeliveryChannel,
-      lastSentAt: users.notificationDigestLastSentAt,
-    })
-    .from(users)
-    .where(eq(users.notificationDigestEnabled, true));
+  const rows = await asSystem(
+    async (db) => selectUsersWithNotificationDigestEnabled(db),
+    'notification-digest-candidates'
+  );
 
   return rows.filter(isValidDigestCandidateRow);
 }
@@ -127,41 +122,20 @@ export async function buildDigestForUser(params: {
 }): Promise<DigestComputationResult | null> {
   const windowStart = getDigestWindowStart(params.now, params.frequency);
 
-  const rows = await db
-    .select({
-      holderId: positions.userId,
-      managedBy: users.managedBy,
-      isAgent: users.isAgent,
-      agentName: users.displayName,
-      marketId: positions.marketId,
-      marketName: markets.question,
-      pnl: positions.pnl,
+  const rows = await asUser(params.userId, async (db) =>
+    selectDigestPositionOutcomesForUserWindow(db, {
+      userId: params.userId,
+      windowStart,
+      now: params.now,
     })
-    .from(positions)
-    .innerJoin(markets, eq(markets.id, positions.marketId))
-    .leftJoin(users, eq(users.id, positions.userId))
-    .where(
-      and(
-        eq(positions.status, 'resolved'),
-        isNotNull(positions.outcome),
-        isNotNull(positions.pnl),
-        isNotNull(positions.resolvedAt),
-        gt(positions.shares, '0'),
-        gte(positions.resolvedAt, windowStart),
-        lt(positions.resolvedAt, params.now),
-        or(
-          eq(positions.userId, params.userId),
-          eq(users.managedBy, params.userId)
-        )
-      )
-    );
+  );
 
   const groupedOutcomes = groupResolvedMarketOutcomes(
     rows.map((row) => ({
       holderId: row.holderId,
       ownerUserId: row.isAgent && row.managedBy ? row.managedBy : row.holderId,
       marketId: row.marketId,
-      marketName: row.marketName,
+      marketName: row.marketName ?? '',
       points: Number(row.pnl),
       agentName: row.isAgent ? row.agentName : null,
     }))
@@ -244,13 +218,13 @@ export async function deliverDigestForUser(params: {
   });
 
   if (!digest) {
-    await db
-      .update(users)
-      .set({
-        notificationDigestLastSentAt: params.now,
-        updatedAt: params.now,
-      })
-      .where(eq(users.id, params.candidate.id));
+    await asUser(params.candidate.id, async (db) =>
+      updateUserNotificationDigestLastSentAt(
+        db,
+        params.candidate.id,
+        params.now
+      )
+    );
 
     return { delivered: false, hadContent: false };
   }
@@ -315,13 +289,9 @@ export async function deliverDigestForUser(params: {
     return { delivered: false, hadContent: true };
   }
 
-  await db
-    .update(users)
-    .set({
-      notificationDigestLastSentAt: params.now,
-      updatedAt: params.now,
-    })
-    .where(eq(users.id, params.candidate.id));
+  await asUser(params.candidate.id, async (db) =>
+    updateUserNotificationDigestLastSentAt(db, params.candidate.id, params.now)
+  );
 
   return { delivered: true, hadContent: true };
 }

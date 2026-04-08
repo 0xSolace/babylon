@@ -16,7 +16,7 @@ import {
   autonomousCoordinator,
   createTestAgent,
 } from '@babylon/agents';
-import { db } from '@babylon/db/runtime';
+import { db } from '@babylon/db/engine-storage';
 
 import { WalletService } from '@babylon/engine';
 import { generateSnowflakeId } from '@babylon/shared';

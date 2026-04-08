@@ -16,8 +16,8 @@ import {
   requireAdmin,
   withErrorHandling,
 } from '@babylon/api';
-import { eq, gte, inArray, sql } from '@babylon/db';
-import { db, userAgentConfigs, users } from '@babylon/db/runtime';
+import { resumeAutonomousAgentsWithVirtualBalanceGteOne } from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -33,14 +33,10 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
     metadata: { action: 'resume_all' },
   });
 
-  // Find agents with sufficient virtualBalance (>= 1)
-  const eligibleAgents = await db
-    .select({ userId: userAgentConfigs.userId })
-    .from(userAgentConfigs)
-    .innerJoin(users, eq(userAgentConfigs.userId, users.id))
-    .where(gte(sql`CAST(${users.virtualBalance} AS NUMERIC)`, 1));
-
-  const eligibleUserIds = eligibleAgents.map((a) => a.userId);
+  const eligibleUserIds = await asSystem(
+    (tx) => resumeAutonomousAgentsWithVirtualBalanceGteOne(tx),
+    'admin-agents-resume-all'
+  );
 
   if (eligibleUserIds.length === 0) {
     return NextResponse.json({
@@ -49,18 +45,6 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
       data: { resumed: 0 },
     });
   }
-
-  // Resume all eligible agents
-  await db
-    .update(userAgentConfigs)
-    .set({
-      autonomousTrading: true,
-      autonomousPosting: true,
-      autonomousCommenting: true,
-      status: 'running',
-      updatedAt: new Date(),
-    })
-    .where(inArray(userAgentConfigs.userId, eligibleUserIds));
 
   logger.info(
     `Resumed ${eligibleUserIds.length} autonomous agents with balance >= 1`,

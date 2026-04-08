@@ -13,8 +13,7 @@
  * @module services/market-correlation-service
  */
 
-import { inArray } from '@babylon/db';
-import { db, organizationState } from '@babylon/db/runtime';
+import { fetchOrganizationStatePriceSlicesByIds } from '@babylon/db';
 import { type JsonValue, logger, PERP_MARKET_CONFIG } from '@babylon/shared';
 import {
   correlations,
@@ -64,14 +63,7 @@ export async function applyCascadeEffects(
 
   // Get current prices for affected orgs
   const orgIds = affectedOrgs.map((a) => a.orgId);
-  const states = await db
-    .select({
-      id: organizationState.id,
-      currentPrice: organizationState.currentPrice,
-      basePrice: organizationState.basePrice,
-    })
-    .from(organizationState)
-    .where(inArray(organizationState.id, orgIds));
+  const states = await fetchOrganizationStatePriceSlicesByIds(orgIds);
 
   const stateByOrgId = new Map(states.map((s) => [s.id, s]));
 

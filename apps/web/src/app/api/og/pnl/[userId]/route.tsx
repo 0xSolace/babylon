@@ -41,7 +41,7 @@
  */
 
 import { withErrorHandling } from '@babylon/api';
-import { db } from '@babylon/db/runtime';
+import { asPublic } from '@babylon/db/engine-storage';
 import { calculatePortfolioBreakdown } from '@babylon/engine';
 import { ImageResponse } from 'next/og';
 import type { NextRequest } from 'next/server';
@@ -61,14 +61,16 @@ export const GET = withErrorHandling(async function GET(
   const { userId } = await context.params;
 
   const [user, pnlData] = await Promise.all([
-    db.user.findUnique({
-      where: { id: userId },
-      select: {
-        username: true,
-        displayName: true,
-        profileImageUrl: true,
-      },
-    }),
+    asPublic(async (db) =>
+      db.user.findUnique({
+        where: { id: userId },
+        select: {
+          username: true,
+          displayName: true,
+          profileImageUrl: true,
+        },
+      })
+    ),
     calculatePortfolioBreakdown(userId),
   ]);
 

@@ -14,27 +14,45 @@
  */
 
 import {
-  and,
+  batchUpsertChatParticipantsActive,
+  batchUpsertGroupMembersAsTeamAgents,
   type Chat,
-  desc,
-  eq,
+  countUserMessagesInChat,
+  deactivateChatParticipantInChat,
+  deactivateGroupMemberInTeam,
+  deleteChatById,
+  deleteChatParticipantsByChatId,
+  deleteMessagesByChatId,
   type Group,
   generateSnowflakeId,
-  isNull,
-  ne,
-  sql,
+  insertChatParticipantRow,
+  insertChatParticipantsOnConflictDoNothing,
+  insertChatReturningRow,
+  insertTeamChatBootstrapBundle,
+  insertTeamChatSystemMessage,
+  selectActiveChatParticipantId,
+  selectActiveGroupMemberId,
+  selectActiveGroupMemberUserIds,
+  selectAgentUserIdsManagedBy,
+  selectChatGroupIdByChatId,
+  selectChatNameByIdAndGroupId,
+  selectChatRowByIdAndGroupId,
+  selectChatsForGroupOrderByUpdatedDesc,
+  selectNewestChatIdInGroupExcluding,
+  selectTeamChatAgentUsersForOwner,
+  selectTeamGroupRowByOwnerId,
+  selectUserRowById,
   type User,
-} from '@babylon/db';
-import {
-  chatParticipants,
-  chats,
-  db,
-  groupMembers,
-  groups,
-  messages,
-  users,
+  updateChatNameById,
+  updateChatNameIfNullForGroupReturningIds,
+  updateGroupActiveChatId,
+  updateGroupUpdatedAt,
+  upsertChatParticipantActive,
+  upsertGroupMemberAsTeamAgent,
+  upsertTeamGroupOwnerMember,
   withTransaction,
-} from '@babylon/db/runtime';
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import { logger } from '../shared/logger';
 
 /** Constants for Agents */
@@ -120,15 +138,9 @@ export class TeamChatService {
 
     try {
       result = await withTransaction(async (tx) => {
-        // Re-check inside transaction to avoid creating orphaned records on race condition
-        const [existingInTx] = await tx
-          .select()
-          .from(groups)
-          .where(and(eq(groups.type, 'team'), eq(groups.ownerId, userId)))
-          .limit(1);
+        const existingInTx = await selectTeamGroupRowByOwnerId(tx, userId);
 
         if (existingInTx) {
-          // Another transaction won the race - return null to signal we should fetch existing
           return null;
         }
 
@@ -140,63 +152,16 @@ export class TeamChatService {
           generateSnowflakeId(),
         ]);
 
-        // 1. Create the Group (type='team' for Agents)
-        // activeChatId will be set after creating the first Chat
-        await tx.insert(groups).values({
-          id: groupId,
-          name: TEAM_CHAT_NAME,
-          description: TEAM_CHAT_DESCRIPTION,
-          type: 'team',
-          ownerId: userId,
-          createdById: userId,
-          activeChatId: chatId, // Point to initial chat
-          createdAt: now,
-          updatedAt: now,
-        });
-
-        // 2. Create the initial Chat linked to the group
-        // name is null to indicate it needs LLM-generated title after first message
-        await tx.insert(chats).values({
-          id: chatId,
-          name: null,
-          description: null,
-          isGroup: true,
-          groupId,
-          createdBy: userId,
-          createdAt: now,
-          updatedAt: now,
-        });
-
-        // 3. Add user as owner of the group
-        await tx.insert(groupMembers).values({
-          id: memberId,
-          groupId,
-          userId,
-          role: 'owner',
-          addedBy: userId,
-          joinedAt: now,
-          isActive: true,
-          messageCount: 0,
-          qualityScore: 1.0,
-        });
-
-        // 4. Add user as chat participant
-        await tx.insert(chatParticipants).values({
-          id: participantId,
-          chatId,
-          userId,
-          joinedAt: now,
-          isActive: true,
-        });
-
-        return {
-          id: groupId,
+        return await insertTeamChatBootstrapBundle(tx, {
           groupId,
           chatId,
-          ownerId: userId,
-          createdAt: now,
-          updatedAt: now,
-        };
+          memberId,
+          participantId,
+          userId,
+          now,
+          groupName: TEAM_CHAT_NAME,
+          groupDescription: TEAM_CHAT_DESCRIPTION,
+        });
       });
     } catch (error) {
       // Handle unique constraint violation (race condition - another transaction won)
@@ -267,29 +232,9 @@ export class TeamChatService {
     teamChat: TeamChatInfo
   ): Promise<void> {
     // Check if user is already a participant AND group member
-    const [[existingParticipant], [existingGroupMember]] = await Promise.all([
-      db
-        .select({ id: chatParticipants.id })
-        .from(chatParticipants)
-        .where(
-          and(
-            eq(chatParticipants.chatId, teamChat.chatId),
-            eq(chatParticipants.userId, userId),
-            eq(chatParticipants.isActive, true)
-          )
-        )
-        .limit(1),
-      db
-        .select({ id: groupMembers.id })
-        .from(groupMembers)
-        .where(
-          and(
-            eq(groupMembers.groupId, teamChat.groupId),
-            eq(groupMembers.userId, userId),
-            eq(groupMembers.isActive, true)
-          )
-        )
-        .limit(1),
+    const [existingParticipant, existingGroupMember] = await Promise.all([
+      selectActiveChatParticipantId(db, teamChat.chatId, userId),
+      selectActiveGroupMemberId(db, teamChat.groupId, userId),
     ]);
 
     if (existingParticipant && existingGroupMember) {
@@ -317,46 +262,20 @@ export class TeamChatService {
         generateSnowflakeId(),
       ]);
 
-      // Upsert chat participant (in case there's an inactive record)
-      await tx
-        .insert(chatParticipants)
-        .values({
-          id: participantId,
-          chatId: teamChat.chatId,
-          userId,
-          joinedAt: now,
-          isActive: true,
-        })
-        .onConflictDoUpdate({
-          target: [chatParticipants.chatId, chatParticipants.userId],
-          set: {
-            isActive: true,
-            joinedAt: now,
-          },
-        });
+      await upsertChatParticipantActive(tx, {
+        id: participantId,
+        chatId: teamChat.chatId,
+        userId,
+        joinedAt: now,
+      });
 
-      // Also ensure user is in groupMembers (in case that's missing too)
-      await tx
-        .insert(groupMembers)
-        .values({
-          id: memberId,
-          groupId: teamChat.groupId,
-          userId,
-          role: 'owner',
-          addedBy: userId,
-          joinedAt: now,
-          isActive: true,
-          messageCount: 0,
-          qualityScore: 1.0,
-        })
-        .onConflictDoUpdate({
-          target: [groupMembers.groupId, groupMembers.userId],
-          set: {
-            isActive: true,
-            role: 'owner',
-            joinedAt: now,
-          },
-        });
+      await upsertTeamGroupOwnerMember(tx, {
+        id: memberId,
+        groupId: teamChat.groupId,
+        userId,
+        joinedAt: now,
+        addedBy: userId,
+      });
     });
 
     logger.info(
@@ -374,11 +293,7 @@ export class TeamChatService {
    * @returns Team chat info or null if not found
    */
   async getTeamChat(userId: string): Promise<TeamChatInfo | null> {
-    const [group] = await db
-      .select()
-      .from(groups)
-      .where(and(eq(groups.type, 'team'), eq(groups.ownerId, userId)))
-      .limit(1);
+    const group = await selectTeamGroupRowByOwnerId(db, userId);
 
     if (!group || !group.activeChatId) {
       return null;
@@ -421,14 +336,9 @@ export class TeamChatService {
       return false;
     }
 
-    // Check if chatId belongs to the team's group
-    const [chat] = await db
-      .select({ groupId: chats.groupId })
-      .from(chats)
-      .where(eq(chats.id, chatId))
-      .limit(1);
+    const groupId = await selectChatGroupIdByChatId(db, chatId);
 
-    return chat?.groupId === teamChat.groupId;
+    return groupId === teamChat.groupId;
   }
 
   /**
@@ -463,23 +373,7 @@ export class TeamChatService {
       return [];
     }
 
-    // Get all active group members who are agents owned by this user
-    // Filtering in SQL for better performance and defense-in-depth
-    const memberRows = await db
-      .select({ user: users })
-      .from(groupMembers)
-      .innerJoin(users, eq(groupMembers.userId, users.id))
-      .where(
-        and(
-          eq(groupMembers.groupId, gid),
-          eq(groupMembers.isActive, true),
-          eq(users.isAgent, true),
-          eq(users.managedBy, userId)
-        )
-      )
-      .orderBy(users.createdAt);
-
-    return memberRows.map((row) => row.user);
+    return selectTeamChatAgentUsersForOwner(db, gid, userId);
   }
 
   /**
@@ -492,12 +386,7 @@ export class TeamChatService {
     // Ensure team chat exists
     const teamChat = await this.ensureTeamChat(userId);
 
-    // Get agent info for the system message
-    const [agent] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
+    const agent = await selectUserRowById(db, agentUserId);
 
     if (!agent) {
       throw new Error(`Agent not found: ${agentUserId}`);
@@ -518,55 +407,22 @@ export class TeamChatService {
         generateSnowflakeId(),
       ]);
 
-      // 1. Add agent to group members (upsert in case of re-add)
-      await tx
-        .insert(groupMembers)
-        .values({
-          id: memberId,
-          groupId: teamChat.groupId,
-          userId: agentUserId,
-          role: 'member',
-          addedBy: userId,
-          joinedAt: now,
-          isActive: true,
-          messageCount: 0,
-          qualityScore: 1.0,
-        })
-        .onConflictDoUpdate({
-          target: [groupMembers.groupId, groupMembers.userId],
-          set: {
-            isActive: true,
-            joinedAt: now,
-            addedBy: userId,
-            role: 'member',
-            kickedAt: null,
-            kickReason: null,
-          },
-        });
+      await upsertGroupMemberAsTeamAgent(tx, {
+        id: memberId,
+        groupId: teamChat.groupId,
+        agentUserId,
+        ownerUserId: userId,
+        joinedAt: now,
+      });
 
-      // 2. Add agent to chat participants (upsert)
-      await tx
-        .insert(chatParticipants)
-        .values({
-          id: participantId,
-          chatId: teamChat.chatId,
-          userId: agentUserId,
-          joinedAt: now,
-          isActive: true,
-        })
-        .onConflictDoUpdate({
-          target: [chatParticipants.chatId, chatParticipants.userId],
-          set: {
-            isActive: true,
-            joinedAt: now,
-          },
-        });
+      await upsertChatParticipantActive(tx, {
+        id: participantId,
+        chatId: teamChat.chatId,
+        userId: agentUserId,
+        joinedAt: now,
+      });
 
-      // 3. Update group timestamp
-      await tx
-        .update(groups)
-        .set({ updatedAt: now })
-        .where(eq(groups.id, teamChat.groupId));
+      await updateGroupUpdatedAt(tx, teamChat.groupId, now);
     });
 
     logger.info(
@@ -592,12 +448,7 @@ export class TeamChatService {
       return;
     }
 
-    // Get agent info for the system message (might be getting deleted, so fetch first)
-    const [agent] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
+    const agent = await selectUserRowById(db, agentUserId);
 
     // Ownership validation (defense in depth - caller should validate too)
     if (agent && agent.isAgent && agent.managedBy !== userId) {
@@ -615,47 +466,23 @@ export class TeamChatService {
       const now = new Date();
       const messageId = await generateSnowflakeId();
 
-      // 1. Soft-delete from group members (set isActive=false)
-      await tx
-        .update(groupMembers)
-        .set({
-          isActive: false,
-          kickedAt: now,
-          kickReason: 'Agent deleted',
-        })
-        .where(
-          and(
-            eq(groupMembers.groupId, teamChat.groupId),
-            eq(groupMembers.userId, agentUserId)
-          )
-        );
+      await deactivateGroupMemberInTeam(tx, {
+        groupId: teamChat.groupId,
+        userId: agentUserId,
+        kickedAt: now,
+        kickReason: 'Agent deleted',
+      });
 
-      // 2. Soft-delete from chat participants
-      await tx
-        .update(chatParticipants)
-        .set({ isActive: false })
-        .where(
-          and(
-            eq(chatParticipants.chatId, teamChat.chatId),
-            eq(chatParticipants.userId, agentUserId)
-          )
-        );
+      await deactivateChatParticipantInChat(tx, teamChat.chatId, agentUserId);
 
-      // 3. Create system message announcing the agent left
-      await tx.insert(messages).values({
+      await insertTeamChatSystemMessage(tx, {
         id: messageId,
         chatId: teamChat.chatId,
-        senderId: 'system',
-        type: 'system',
         content: `🤖 ${agentName} left the team`,
         createdAt: now,
       });
 
-      // 4. Update group timestamp
-      await tx
-        .update(groups)
-        .set({ updatedAt: now })
-        .where(eq(groups.id, teamChat.groupId));
+      await updateGroupUpdatedAt(tx, teamChat.groupId, now);
     });
 
     logger.info(
@@ -678,26 +505,16 @@ export class TeamChatService {
     // Ensure team chat exists
     const teamChat = await this.ensureTeamChat(userId);
 
-    // Get all agents owned by this user
-    const allUserAgents = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(and(eq(users.managedBy, userId), eq(users.isAgent, true)));
+    const allUserAgents = await selectAgentUserIdsManagedBy(db, userId);
 
     if (allUserAgents.length === 0) {
       return 0;
     }
 
-    // Get agents already in the team chat
-    const existingMembers = await db
-      .select({ userId: groupMembers.userId })
-      .from(groupMembers)
-      .where(
-        and(
-          eq(groupMembers.groupId, teamChat.groupId),
-          eq(groupMembers.isActive, true)
-        )
-      );
+    const existingMembers = await selectActiveGroupMemberUserIds(
+      db,
+      teamChat.groupId
+    );
 
     const existingMemberIds = new Set(existingMembers.map((m) => m.userId));
 
@@ -741,7 +558,6 @@ export class TeamChatService {
     await withTransaction(async (tx) => {
       const now = new Date();
 
-      // Generate all IDs upfront
       const memberIds = await Promise.all(
         agentUserIds.map(() => generateSnowflakeId())
       );
@@ -749,53 +565,24 @@ export class TeamChatService {
         agentUserIds.map(() => generateSnowflakeId())
       );
 
-      // Batch insert group members (with upsert)
-      const memberValues = agentUserIds.map((agentUserId, i) => ({
-        id: memberIds[i] as string,
-        groupId: teamChat.groupId,
-        userId: agentUserId,
-        role: 'member' as const,
-        addedBy: userId,
+      await batchUpsertGroupMembersAsTeamAgents(tx, {
+        ownerUserId: userId,
         joinedAt: now,
-        isActive: true,
-        messageCount: 0,
-        qualityScore: 1.0,
-      }));
+        rows: agentUserIds.map((agentUserId, i) => ({
+          id: memberIds[i] as string,
+          groupId: teamChat.groupId,
+          userId: agentUserId,
+        })),
+      });
 
-      await tx
-        .insert(groupMembers)
-        .values(memberValues)
-        .onConflictDoUpdate({
-          target: [groupMembers.groupId, groupMembers.userId],
-          set: {
-            isActive: true,
-            joinedAt: now,
-            addedBy: userId,
-            role: 'member',
-            kickedAt: null,
-            kickReason: null,
-          },
-        });
-
-      // Batch insert chat participants (with upsert)
-      const participantValues = agentUserIds.map((agentUserId, i) => ({
-        id: participantIds[i] as string,
-        chatId: teamChat.chatId,
-        userId: agentUserId,
+      await batchUpsertChatParticipantsActive(tx, {
         joinedAt: now,
-        isActive: true,
-      }));
-
-      await tx
-        .insert(chatParticipants)
-        .values(participantValues)
-        .onConflictDoUpdate({
-          target: [chatParticipants.chatId, chatParticipants.userId],
-          set: {
-            isActive: true,
-            joinedAt: now,
-          },
-        });
+        rows: agentUserIds.map((agentUserId, i) => ({
+          id: participantIds[i] as string,
+          chatId: teamChat.chatId,
+          userId: agentUserId,
+        })),
+      });
     });
   }
 
@@ -816,13 +603,7 @@ export class TeamChatService {
       return [];
     }
 
-    const conversations = await db
-      .select()
-      .from(chats)
-      .where(eq(chats.groupId, teamChat.groupId))
-      .orderBy(desc(chats.updatedAt));
-
-    return conversations;
+    return selectChatsForGroupOrderByUpdatedDesc(db, teamChat.groupId);
   }
 
   /**
@@ -846,26 +627,20 @@ export class TeamChatService {
         generateSnowflakeId(),
       ]);
 
-      // Use provided title, or null to indicate LLM should generate after first message
       const chatTitle = title || null;
 
-      // 1. Create new Chat linked to the same Group
-      const [newChat] = await tx
-        .insert(chats)
-        .values({
-          id: chatId,
-          name: chatTitle,
-          description: null,
-          isGroup: true,
-          groupId: teamChat.groupId,
-          createdBy: userId,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .returning();
+      const newChat = await insertChatReturningRow(tx, {
+        id: chatId,
+        name: chatTitle,
+        description: null,
+        isGroup: true,
+        groupId: teamChat.groupId,
+        createdBy: userId,
+        createdAt: now,
+        updatedAt: now,
+      });
 
-      // 2. Add user as participant
-      await tx.insert(chatParticipants).values({
+      await insertChatParticipantRow(tx, {
         id: participantId,
         chatId,
         userId,
@@ -873,8 +648,11 @@ export class TeamChatService {
         isActive: true,
       });
 
-      // 3. Add all agents as participants
-      const agents = await this.getTeamChatAgents(userId, teamChat.groupId);
+      const agents = await selectTeamChatAgentUsersForOwner(
+        tx,
+        teamChat.groupId,
+        userId
+      );
       if (agents.length > 0) {
         const agentParticipantIds = await Promise.all(
           agents.map(() => generateSnowflakeId())
@@ -886,17 +664,13 @@ export class TeamChatService {
           joinedAt: now,
           isActive: true,
         }));
-        await tx
-          .insert(chatParticipants)
-          .values(agentParticipantValues)
-          .onConflictDoNothing();
+        await insertChatParticipantsOnConflictDoNothing(
+          tx,
+          agentParticipantValues
+        );
       }
 
-      // 4. Update group to point to new conversation
-      await tx
-        .update(groups)
-        .set({ activeChatId: chatId, updatedAt: now })
-        .where(eq(groups.id, teamChat.groupId));
+      await updateGroupActiveChatId(tx, teamChat.groupId, chatId, now);
 
       return newChat;
     });
@@ -932,23 +706,18 @@ export class TeamChatService {
       throw new Error('Team chat not found');
     }
 
-    // Verify the chat belongs to this team's group
-    const [chat] = await db
-      .select()
-      .from(chats)
-      .where(and(eq(chats.id, chatId), eq(chats.groupId, teamChat.groupId)))
-      .limit(1);
+    const chat = await selectChatRowByIdAndGroupId(
+      db,
+      chatId,
+      teamChat.groupId
+    );
 
     if (!chat) {
       throw new Error('Conversation not found or does not belong to this team');
     }
 
-    // Update active conversation in Group
     const now = new Date();
-    await db
-      .update(groups)
-      .set({ activeChatId: chatId, updatedAt: now })
-      .where(eq(groups.id, teamChat.groupId));
+    await updateGroupActiveChatId(db, teamChat.groupId, chatId, now);
 
     logger.info(
       `Switched conversation for user ${userId}`,
@@ -976,21 +745,17 @@ export class TeamChatService {
       throw new Error('Team chat not found');
     }
 
-    // Verify the chat belongs to this team's group
-    const [chat] = await db
-      .select()
-      .from(chats)
-      .where(and(eq(chats.id, chatId), eq(chats.groupId, teamChat.groupId)))
-      .limit(1);
+    const chat = await selectChatRowByIdAndGroupId(
+      db,
+      chatId,
+      teamChat.groupId
+    );
 
     if (!chat) {
       throw new Error('Conversation not found or does not belong to this team');
     }
 
-    await db
-      .update(chats)
-      .set({ name: newTitle, updatedAt: new Date() })
-      .where(eq(chats.id, chatId));
+    await updateChatNameById(db, chatId, newTitle, new Date());
 
     logger.info(
       `Renamed conversation ${chatId}`,
@@ -1020,12 +785,11 @@ export class TeamChatService {
       return false;
     }
 
-    // Query with ownership validation
-    const [chat] = await db
-      .select({ name: chats.name })
-      .from(chats)
-      .where(and(eq(chats.id, chatId), eq(chats.groupId, teamChat.groupId)))
-      .limit(1);
+    const chat = await selectChatNameByIdAndGroupId(
+      db,
+      chatId,
+      teamChat.groupId
+    );
 
     if (!chat) {
       logger.warn(
@@ -1058,21 +822,17 @@ export class TeamChatService {
       throw new Error('Team chat not found for user');
     }
 
-    // Verify the chat belongs to this team's group
-    const [chat] = await db
-      .select()
-      .from(chats)
-      .where(and(eq(chats.id, chatId), eq(chats.groupId, teamChat.groupId)))
-      .limit(1);
+    const chat = await selectChatRowByIdAndGroupId(
+      db,
+      chatId,
+      teamChat.groupId
+    );
 
     if (!chat) {
       throw new Error('Chat not found or does not belong to this team');
     }
 
-    await db
-      .update(chats)
-      .set({ name: title, updatedAt: new Date() })
-      .where(eq(chats.id, chatId));
+    await updateChatNameById(db, chatId, title, new Date());
 
     logger.info(
       `Updated chat title via LLM generation`,
@@ -1107,19 +867,13 @@ export class TeamChatService {
       return false;
     }
 
-    // Atomic update with ownership check included in WHERE clause
-    // Use .returning() to check if any rows were updated
-    const result = await db
-      .update(chats)
-      .set({ name: title, updatedAt: new Date() })
-      .where(
-        and(
-          eq(chats.id, chatId),
-          isNull(chats.name),
-          eq(chats.groupId, teamChat.groupId)
-        )
-      )
-      .returning({ id: chats.id });
+    const updatedAt = new Date();
+    const result = await updateChatNameIfNullForGroupReturningIds(db, {
+      chatId,
+      groupId: teamChat.groupId,
+      name: title,
+      updatedAt,
+    });
 
     const updated = result.length > 0;
 
@@ -1153,16 +907,7 @@ export class TeamChatService {
       }
     }
 
-    const result = await db
-      .select({ count: sql<string>`count(*)` })
-      .from(messages)
-      .where(and(eq(messages.chatId, chatId), eq(messages.type, 'user')));
-
-    // COUNT may be returned as string at runtime; convert to number
-    const countValue = result[0]?.count;
-    return typeof countValue === 'string'
-      ? parseInt(countValue, 10)
-      : (countValue ?? 0);
+    return countUserMessagesInChat(db, chatId);
   }
 
   /**
@@ -1199,33 +944,27 @@ export class TeamChatService {
     let newActiveChatId: string | null = null;
 
     await withTransaction(async (tx) => {
-      // 1. Delete all messages in this chat
-      await tx.delete(messages).where(eq(messages.chatId, chatId));
+      await deleteMessagesByChatId(tx, chatId);
 
-      // 2. Delete chat participants
-      await tx
-        .delete(chatParticipants)
-        .where(eq(chatParticipants.chatId, chatId));
+      await deleteChatParticipantsByChatId(tx, chatId);
 
-      // 3. Delete the chat itself
-      await tx.delete(chats).where(eq(chats.id, chatId));
+      await deleteChatById(tx, chatId);
 
-      // 4. If this was the active conversation, switch to another
-      // Query inside transaction to avoid TOCTOU race condition
       if (wasActive) {
-        const [fallbackChat] = await tx
-          .select({ id: chats.id })
-          .from(chats)
-          .where(and(eq(chats.groupId, teamChat.groupId), ne(chats.id, chatId)))
-          .orderBy(desc(chats.createdAt))
-          .limit(1);
+        const fallbackId = await selectNewestChatIdInGroupExcluding(
+          tx,
+          teamChat.groupId,
+          chatId
+        );
 
-        if (fallbackChat) {
-          newActiveChatId = fallbackChat.id;
-          await tx
-            .update(groups)
-            .set({ activeChatId: fallbackChat.id, updatedAt: new Date() })
-            .where(eq(groups.id, teamChat.groupId));
+        if (fallbackId) {
+          newActiveChatId = fallbackId;
+          await updateGroupActiveChatId(
+            tx,
+            teamChat.groupId,
+            fallbackId,
+            new Date()
+          );
         }
       }
     });

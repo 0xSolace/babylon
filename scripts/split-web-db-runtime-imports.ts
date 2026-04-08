@@ -1,5 +1,5 @@
 /**
- * 1) Split `import { ... } from '@babylon/db'` when specifiers include runtime-only
+ * 1) Split `import { ... } from '@babylon/db';` when specifiers include runtime-only
  *    symbols (`db`, tables, `asUser`, …). Keeps `type` specifiers on `@babylon/db`.
  * 2) Split `import { ... } from '@babylon/db/runtime'` when specifiers include
  *    non-runtime symbols (e.g. Drizzle `eq`, `and`) → `@babylon/db`.

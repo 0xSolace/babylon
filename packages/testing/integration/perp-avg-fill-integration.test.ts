@@ -28,18 +28,17 @@ import {
   type PerpServiceDeps,
   type PriceImpactPort,
 } from '@babylon/core/markets/perps';
-import { and, eq, isNull } from '@babylon/db';
 import {
   db,
   organizationState,
   perpMarketSnapshots,
   perpPositions,
-} from '@babylon/db/runtime';
-
+} from '@babylon/db/engine-storage';
 import {
   calculatePriceFromHoldings,
   PERP_MARKET_CONFIG,
 } from '@babylon/shared';
+import { and, eq, isNull } from 'drizzle-orm';
 
 // ---------------------------------------------------------------------------
 // Test-local wallet (in-memory, no real wallet service needed)

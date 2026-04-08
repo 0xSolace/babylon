@@ -17,9 +17,8 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, count, eq, gte } from '@babylon/db';
-import { db, groupInvites, groupMembers, groups } from '@babylon/db/runtime';
-
+import { fetchAdminAlphaGroupStatsCountTuple } from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import {
   ALPHA_GROUP_CONFIG,
   AlphaGroupInviteService,
@@ -62,146 +61,35 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
   // Run all queries in parallel
+  const [globalAnalytics, inviteStats, countTuple] = await Promise.all([
+    TieredGroupService.getGlobalAnalytics(),
+    AlphaGroupInviteService.getInviteStats(),
+    asSystem(
+      (tx) =>
+        fetchAdminAlphaGroupStatsCountTuple(tx, {
+          oneDayAgo,
+          oneWeekAgo,
+          inviteDecayMaxDeclines: ALPHA_GROUP_CONFIG.inviteDecayMaxDeclines,
+        }),
+      'admin-alpha-stats'
+    ),
+  ]);
+
   const [
-    // Get global tier analytics from TieredGroupService
-    globalAnalytics,
-    // Invite stats from AlphaGroupInviteService
-    inviteStats,
-    // Invite status counts
     pendingInvites,
     acceptedInvites,
     declinedInvites,
-    // Grandfathered counts
     grandfatheredMembers,
-    // Invite decay stats
     usersWithDeclines,
     usersAtMaxDeclines,
-    // Active memberships by tier
     tier1Members,
     tier2Members,
     tier3Members,
-    // Recent activity
     invitesLast24h,
     invitesLastWeek,
     joinsLast24h,
     joinsLastWeek,
-  ] = await Promise.all([
-    TieredGroupService.getGlobalAnalytics(),
-    AlphaGroupInviteService.getInviteStats(),
-    // Pending invites
-    db
-      .select({ count: count() })
-      .from(groupInvites)
-      .where(eq(groupInvites.status, 'pending'))
-      .then((r) => r[0]?.count ?? 0),
-    // Accepted invites
-    db
-      .select({ count: count() })
-      .from(groupInvites)
-      .where(eq(groupInvites.status, 'accepted'))
-      .then((r) => r[0]?.count ?? 0),
-    // Declined invites
-    db
-      .select({ count: count() })
-      .from(groupInvites)
-      .where(eq(groupInvites.status, 'declined'))
-      .then((r) => r[0]?.count ?? 0),
-    // Grandfathered members
-    db
-      .select({ count: count() })
-      .from(groupMembers)
-      .where(
-        and(
-          eq(groupMembers.isActive, true),
-          eq(groupMembers.isGrandfathered, true)
-        )
-      )
-      .then((r) => r[0]?.count ?? 0),
-    // Users with declines
-    db
-      .select({ count: count() })
-      .from(groupInvites)
-      .where(gte(groupInvites.declineCount, 1))
-      .then((r) => r[0]?.count ?? 0),
-    // Users at max declines
-    db
-      .select({ count: count() })
-      .from(groupInvites)
-      .where(
-        gte(
-          groupInvites.declineCount,
-          ALPHA_GROUP_CONFIG.inviteDecayMaxDeclines
-        )
-      )
-      .then((r) => r[0]?.count ?? 0),
-    // Tier 1 members
-    db
-      .select({ count: count() })
-      .from(groupMembers)
-      .innerJoin(groups, eq(groupMembers.groupId, groups.id))
-      .where(
-        and(
-          eq(groupMembers.isActive, true),
-          eq(groups.type, 'npc'),
-          eq(groupMembers.tier, 1)
-        )
-      )
-      .then((r) => r[0]?.count ?? 0),
-    // Tier 2 members
-    db
-      .select({ count: count() })
-      .from(groupMembers)
-      .innerJoin(groups, eq(groupMembers.groupId, groups.id))
-      .where(
-        and(
-          eq(groupMembers.isActive, true),
-          eq(groups.type, 'npc'),
-          eq(groupMembers.tier, 2)
-        )
-      )
-      .then((r) => r[0]?.count ?? 0),
-    // Tier 3 members
-    db
-      .select({ count: count() })
-      .from(groupMembers)
-      .innerJoin(groups, eq(groupMembers.groupId, groups.id))
-      .where(
-        and(
-          eq(groupMembers.isActive, true),
-          eq(groups.type, 'npc'),
-          eq(groupMembers.tier, 3)
-        )
-      )
-      .then((r) => r[0]?.count ?? 0),
-    // Invites in last 24h
-    db
-      .select({ count: count() })
-      .from(groupInvites)
-      .where(gte(groupInvites.invitedAt, oneDayAgo))
-      .then((r) => r[0]?.count ?? 0),
-    // Invites in last week
-    db
-      .select({ count: count() })
-      .from(groupInvites)
-      .where(gte(groupInvites.invitedAt, oneWeekAgo))
-      .then((r) => r[0]?.count ?? 0),
-    // Joins in last 24h
-    db
-      .select({ count: count() })
-      .from(groupMembers)
-      .innerJoin(groups, eq(groupMembers.groupId, groups.id))
-      .where(and(eq(groups.type, 'npc'), gte(groupMembers.joinedAt, oneDayAgo)))
-      .then((r) => r[0]?.count ?? 0),
-    // Joins in last week
-    db
-      .select({ count: count() })
-      .from(groupMembers)
-      .innerJoin(groups, eq(groupMembers.groupId, groups.id))
-      .where(
-        and(eq(groups.type, 'npc'), gte(groupMembers.joinedAt, oneWeekAgo))
-      )
-      .then((r) => r[0]?.count ?? 0),
-  ]);
+  ] = countTuple;
 
   // Calculate acceptance rate
   const totalResponded = acceptedInvites + declinedInvites;

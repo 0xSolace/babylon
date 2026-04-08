@@ -9,8 +9,11 @@
  * In regular DM mode: Queries the `agentMessages` table (legacy behavior).
  */
 
-import { and, desc, eq, or, sql } from '@babylon/db';
-import { db, messages } from '@babylon/db/runtime';
+import {
+  type Message,
+  selectTeamChatMessagesForParticipantContext,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import type {
   IAgentRuntime,
   Memory,
@@ -70,34 +73,19 @@ export const recentMessagesProvider: Provider = {
 
     let formattedMessages: string;
     let messageCount: number;
-    // DrizzleMessageRow shape from messages table; AgentMessage from Prisma
-    type DrizzleMessageRow = typeof messages.$inferSelect;
     type AgentMessage = { role: string; content: string; createdAt: Date };
-    let rawMessages: Array<DrizzleMessageRow | AgentMessage>;
+    let rawMessages: Array<Message | AgentMessage>;
 
     if (isTeamChatMode) {
       // Team chat mode: Query messages that target this agent
       // 1. User messages where targetIds contains this agent's ID
       // 2. This agent's own responses
-      const recentMsgs = await db
-        .select()
-        .from(messages)
-        .where(
-          and(
-            eq(messages.chatId, teamChatId),
-            or(
-              // Agent's own messages
-              eq(messages.senderId, agentUserId),
-              // User messages targeting this agent (use @> for GIN index efficiency)
-              and(
-                eq(messages.senderId, ownerId),
-                sql`${messages.targetIds} @> ARRAY[${agentUserId}]`
-              )
-            )
-          )
-        )
-        .orderBy(desc(messages.createdAt))
-        .limit(10);
+      const recentMsgs = await selectTeamChatMessagesForParticipantContext(db, {
+        teamChatId,
+        participantId: agentUserId,
+        ownerId,
+        limit: 10,
+      });
 
       rawMessages = recentMsgs;
       messageCount = recentMsgs.length;

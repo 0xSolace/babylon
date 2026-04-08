@@ -15,16 +15,15 @@ import {
   expect,
   test,
 } from 'bun:test';
-import { eq } from '@babylon/db';
 import {
   actorState,
   db,
   perpPositions,
   poolPositions,
-} from '@babylon/db/runtime';
-
+} from '@babylon/db/engine-storage';
 import { NPCInvestmentManager } from '@babylon/engine';
 import { generateSnowflakeId } from '@babylon/shared';
+import { eq } from 'drizzle-orm';
 
 describe('NPCInvestmentManager - Realized PnL Calculation', () => {
   const TEST_ACTOR_ID = 'test-actor-pnl-' + Date.now();

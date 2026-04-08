@@ -1,12 +1,16 @@
-import { and, eq, type JsonValue, lt, or, sql } from '@babylon/db';
-import { db, realtimeOutboxes } from '@babylon/db/runtime';
+import {
+  insertRealtimeOutboxRow,
+  type JsonValue,
+  selectRealtimeOutboxDrainBatch,
+  updateRealtimeOutboxMarkSent,
+} from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import { logger } from '@babylon/shared';
 import { randomUUID } from 'crypto';
 import { streamAdd } from '../redis';
 import type { RealtimeChannel, RealtimeEventEnvelope } from './index';
 import { toStreamKey } from './index';
 
-const MAX_ATTEMPTS = 5;
 const BATCH_SIZE = 100;
 
 /**
@@ -15,7 +19,6 @@ const BATCH_SIZE = 100;
 export async function enqueueOutbox(
   event: RealtimeEventEnvelope
 ): Promise<void> {
-  // RealtimeEventEnvelope is compatible with JsonValue - it's a plain object with JsonValue fields
   const payload: JsonValue = {
     channel: event.channel,
     type: event.type,
@@ -23,14 +26,18 @@ export async function enqueueOutbox(
     data: event.data,
     timestamp: event.timestamp,
   };
-  await db.insert(realtimeOutboxes).values({
-    id: randomUUID(),
-    channel: event.channel,
-    type: event.type,
-    version: event.version ?? 'v1',
-    payload,
-    updatedAt: new Date(),
-  });
+  await asSystem(
+    async (c) =>
+      insertRealtimeOutboxRow(c, {
+        id: randomUUID(),
+        channel: event.channel,
+        type: event.type,
+        version: event.version ?? 'v1',
+        payload,
+        updatedAt: new Date(),
+      }),
+    'realtime-outbox-enqueue'
+  );
 }
 
 /**
@@ -41,26 +48,15 @@ export async function drainOutboxBatch(limit: number = BATCH_SIZE): Promise<{
   sent: number;
   failed: number;
 }> {
-  const rows = await db
-    .select()
-    .from(realtimeOutboxes)
-    .where(
-      or(
-        eq(realtimeOutboxes.status, 'pending'),
-        and(
-          eq(realtimeOutboxes.status, 'failed'),
-          lt(realtimeOutboxes.attempts, MAX_ATTEMPTS)
-        )
-      )
-    )
-    .orderBy(realtimeOutboxes.createdAt)
-    .limit(limit);
+  const rows = await asSystem(
+    async (c) => selectRealtimeOutboxDrainBatch(c, limit),
+    'realtime-outbox-drain-select'
+  );
 
   let sent = 0;
   let failed = 0;
 
   for (const row of rows) {
-    // Validate and parse payload from database
     const payload = row.payload;
     if (
       !payload ||
@@ -90,7 +86,6 @@ export async function drainOutboxBatch(limit: number = BATCH_SIZE): Promise<{
           : Number(payload.timestamp),
     };
 
-    // Convert envelope to Record<string, JsonValue> for streamAdd
     const envelopeRecord: Record<string, JsonValue> = {
       channel: envelope.channel,
       type: envelope.type,
@@ -101,14 +96,10 @@ export async function drainOutboxBatch(limit: number = BATCH_SIZE): Promise<{
     await streamAdd(toStreamKey(envelope.channel), envelopeRecord, {
       maxlen: 10_000,
     });
-    await db
-      .update(realtimeOutboxes)
-      .set({
-        status: 'sent',
-        attempts: sql`${realtimeOutboxes.attempts} + 1`,
-        lastError: null,
-      })
-      .where(eq(realtimeOutboxes.id, row.id));
+    await asSystem(
+      async (c) => updateRealtimeOutboxMarkSent(c, row.id),
+      'realtime-outbox-drain-mark-sent'
+    );
     sent++;
   }
 

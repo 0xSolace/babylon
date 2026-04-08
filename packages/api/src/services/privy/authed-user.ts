@@ -1,5 +1,5 @@
-import { eq } from '@babylon/db';
-import { db, users } from '@babylon/db/runtime';
+import { selectUserByPrivyIdForAuth } from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import { getPrivyClient } from '../../auth-middleware';
 import { AuthenticationError } from '../../errors';
 import { safeDecodeJwtPayload } from './evm-send-transaction';
@@ -20,7 +20,6 @@ type PrivyTokenBundle = {
 function isInvalidPrivyAuthTokenError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   const msg = error.message.toLowerCase();
-  // Keep this conservative: only retry on token-shaped failures.
   return (
     msg.includes('invalid jwt token provided') ||
     msg.includes('jwt expired') ||
@@ -39,16 +38,10 @@ export async function getAuthedUserContextFromPrivyToken(
   const privy = getPrivyClient();
   const claims = await privy.verifyAuthToken(privyToken);
 
-  const [dbUser] = await db
-    .select({
-      id: users.id,
-      privyWalletId: users.privyWalletId,
-      walletAddress: users.walletAddress,
-      isAdmin: users.isAdmin,
-    })
-    .from(users)
-    .where(eq(users.privyId, claims.userId))
-    .limit(1);
+  const dbUser = await asSystem(
+    async (c) => selectUserByPrivyIdForAuth(c, claims.userId),
+    'privy-authed-user-lookup'
+  );
 
   if (!dbUser) {
     throw new AuthenticationError('User not found');

@@ -30,9 +30,7 @@ import {
   verifyCronAuth,
   withErrorHandling,
 } from '@babylon/api';
-import { eq } from '@babylon/db';
-
-import { db, games } from '@babylon/db/runtime';
+import { selectContinuousGameStateForCron } from '@babylon/db';
 import {
   type Article,
   ArticleGenerator,
@@ -295,19 +293,8 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
     // Check Game status from database
     const gameState = await getCacheOrFetch<GameState | null>(
       'continuous-game',
-      async () => {
-        const [game] = await db
-          .select({
-            id: games.id,
-            isRunning: games.isRunning,
-            isContinuous: games.isContinuous,
-            currentDay: games.currentDay,
-          })
-          .from(games)
-          .where(eq(games.isContinuous, true))
-          .limit(1);
-        return game ?? null;
-      },
+      async () =>
+        selectContinuousGameStateForCron('article-tick-continuous-game'),
       { namespace: 'article-tick', ttl: 60 }
     );
 

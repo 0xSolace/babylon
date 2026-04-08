@@ -13,7 +13,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 
-import { db } from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
@@ -65,15 +65,18 @@ export const POST = withErrorHandling(
       );
     }
 
-    // Fetch feedback to verify it exists and get user info
-    const feedback = await db.feedback.findUnique({
-      where: { id: feedbackId },
-      select: {
-        id: true,
-        fromUserId: true,
-        metadata: true,
-      },
-    });
+    const feedback = await asSystem(
+      (tx) =>
+        tx.feedback.findUnique({
+          where: { id: feedbackId },
+          select: {
+            id: true,
+            fromUserId: true,
+            metadata: true,
+          },
+        }),
+      'admin-feedback-retry-sync-load'
+    );
 
     if (!feedback) {
       return errorResponse('Feedback not found', 'FEEDBACK_NOT_FOUND', 404);
@@ -103,10 +106,14 @@ export const POST = withErrorHandling(
       );
     }
 
-    const user = await db.user.findUnique({
-      where: { id: feedback.fromUserId },
-      select: { id: true, email: true },
-    });
+    const user = await asSystem(
+      (tx) =>
+        tx.user.findUnique({
+          where: { id: feedback.fromUserId },
+          select: { id: true, email: true },
+        }),
+      'admin-feedback-retry-sync-user'
+    );
 
     if (!user) {
       return errorResponse(
@@ -122,10 +129,14 @@ export const POST = withErrorHandling(
     await syncFeedbackToLinear(linearConfig, feedbackId, user);
 
     // Refetch to get canonical metadata after sync (avoids returning stale data)
-    const updatedFeedback = await db.feedback.findUnique({
-      where: { id: feedbackId },
-      select: { metadata: true },
-    });
+    const updatedFeedback = await asSystem(
+      (tx) =>
+        tx.feedback.findUnique({
+          where: { id: feedbackId },
+          select: { metadata: true },
+        }),
+      'admin-feedback-retry-sync-refetch'
+    );
 
     // Validate updated metadata at runtime
     const updatedMetadata = parseLinearSyncedMetadata(

@@ -13,16 +13,12 @@
  * and prevent outdated or incorrect references.
  */
 
-import { desc, eq } from '@babylon/db';
 import {
-  agentTrades,
-  db,
-  getDbInstance,
-  markets,
-  npcTrades,
-  questions,
-  users,
-} from '@babylon/db/runtime';
+  fetchWorldContextRecentTradeSlices,
+  listActiveQuestionsByCreatedDesc,
+  listOrganizationStatesByPriceDescForWorldContext,
+  listUnresolvedMarketsTopByYesShares,
+} from '@babylon/db';
 import { loadActorsData } from '../actors-loader';
 import {
   formatSimulationActiveMarkets,
@@ -157,16 +153,10 @@ export async function generateCurrentMarkets(): Promise<string> {
     return formatSimulationActiveMarkets();
   }
 
-  // Get active prediction markets
-  const predictionMarkets = await db
-    .select()
-    .from(markets)
-    .where(eq(markets.resolved, false))
-    .orderBy(desc(markets.yesShares))
-    .limit(5);
+  const predictionMarkets = await listUnresolvedMarketsTopByYesShares(5);
 
   // Get top perpetual markets (companies with recent activity)
-  const orgStates = await getDbInstance().getOrganizationsByPrice();
+  const orgStates = await listOrganizationStatesByPriceDescForWorldContext();
   const companies = orgStates
     .slice(0, 5)
     .map((state) => {
@@ -237,13 +227,7 @@ export async function generateActivePredictions(): Promise<string> {
     return `Active Questions: ${formatSimulationPredictionMarkets().replace(/\n/g, ' | ').replace(/- /g, '')}`;
   }
 
-  // Get active questions from the Question table
-  const activeQuestions = await db
-    .select()
-    .from(questions)
-    .where(eq(questions.status, 'active'))
-    .orderBy(desc(questions.createdAt))
-    .limit(10);
+  const activeQuestions = await listActiveQuestionsByCreatedDesc(10);
 
   if (activeQuestions.length === 0) {
     return 'Active Questions: None currently active';
@@ -289,45 +273,13 @@ export async function generateRecentTrades(): Promise<string> {
     return `Recent Trades: ${mockTrades.join(' | ')}`;
   }
 
-  // Get recent NPC trades with actor names from static registry
-  const rawNpcTrades = await db
-    .select({
-      action: npcTrades.action,
-      side: npcTrades.side,
-      amount: npcTrades.amount,
-      price: npcTrades.price,
-      marketType: npcTrades.marketType,
-      ticker: npcTrades.ticker,
-      executedAt: npcTrades.executedAt,
-      npcActorId: npcTrades.npcActorId,
-    })
-    .from(npcTrades)
-    .orderBy(desc(npcTrades.executedAt))
-    .limit(15);
+  const { rawNpcTrades, agentTradeResults } =
+    await fetchWorldContextRecentTradeSlices();
 
-  // Map actor IDs to names from static registry
   const npcTradeResults = rawNpcTrades.map((trade) => ({
     ...trade,
     actorName: StaticDataRegistry.getActor(trade.npcActorId)?.name ?? 'Unknown',
   }));
-
-  // Get recent agent trades with user names
-  const agentTradeResults = await db
-    .select({
-      action: agentTrades.action,
-      side: agentTrades.side,
-      amount: agentTrades.amount,
-      price: agentTrades.price,
-      marketType: agentTrades.marketType,
-      ticker: agentTrades.ticker,
-      executedAt: agentTrades.executedAt,
-      displayName: users.displayName,
-      username: users.username,
-    })
-    .from(agentTrades)
-    .leftJoin(users, eq(agentTrades.agentUserId, users.id))
-    .orderBy(desc(agentTrades.executedAt))
-    .limit(15);
 
   // Combine and sort by time
   const allTrades = [

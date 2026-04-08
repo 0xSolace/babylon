@@ -27,6 +27,11 @@ mock.module('@babylon/core/markets/prediction', () => ({
   PredictionPricing: predictionCoreActual.PredictionPricing,
 }));
 
+mock.module('@babylon/db/engine-storage', () => ({
+  asUser: async <T>(_auth: unknown, fn: (db: unknown) => Promise<T>) => fn({}),
+  asPublic: async <T>(fn: (db: unknown) => Promise<T>) => fn({}),
+}));
+
 const { GET } = await import(
   '../../../apps/web/src/app/api/markets/predictions/route'
 );
@@ -40,9 +45,9 @@ describe('GET /api/markets/predictions', () => {
     mockPublicRateLimit.mockResolvedValue({
       error: null,
       user: {
-        userId: 'user-1',
-        dbUserId: 'db-user-1',
-        privyId: 'did:privy:user-1',
+        userId: '1234567890123456789',
+        dbUserId: '1234567890123456789',
+        privyId: 'did:privy:abc123',
       },
       rateLimitInfo: null,
     });
@@ -67,7 +72,7 @@ describe('GET /api/markets/predictions', () => {
 
     const result = (await GET(
       new Request(
-        'https://example.com/api/markets/predictions?userId=user-1'
+        'https://example.com/api/markets/predictions?userId=1234567890123456789'
       ) as unknown as import('next/server').NextRequest
     )) as unknown as {
       success: boolean;

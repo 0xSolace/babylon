@@ -30,25 +30,19 @@ import {
   PredictionDbAdapter as CorePredictionDbAdapter,
   PredictionMarketService as CorePredictionMarketService,
 } from '@babylon/core/markets/prediction';
-import type { WalletPort } from '@babylon/core/markets/shared';
 import {
-  and,
-  eq,
-  gte,
-  isNull,
+  fetchActorStateRowAsSystem,
+  fetchOrganizationCurrentPriceForNpcTrade,
+  insertNpcTradeRowTradeExecution,
   type JsonValue,
-  sql,
-  type Transaction,
+  runTransactionCloseLegacyPoolPositionSettle,
+  runTransactionClosePredictionPoolPositionCas,
+  runTransactionClosePredictionPoolPositionLegacy,
+  runTransactionUpsertPoolPositionAfterPredictionBuy,
+  selectOpenNpcPredictionPoolPosition,
+  selectPerpPositionByIdForNpcTrade,
+  selectPoolPositionByIdForNpcTrade,
 } from '@babylon/db';
-import {
-  actorState,
-  db,
-  npcTrades,
-  organizationState,
-  perpPositions,
-  poolPositions,
-} from '@babylon/db/runtime';
-
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import { FEE_CONFIG } from '../config/fees';
 import { isSimulationMode } from '../storage-bridge';
@@ -316,12 +310,7 @@ export class TradeExecutionService {
       throw new Error(`Invalid amount: ${decision.amount}`);
     }
 
-    // Get NPC actor
-    const [actor] = await db
-      .select()
-      .from(actorState)
-      .where(eq(actorState.id, normalizedNpcId))
-      .limit(1);
+    const actor = await fetchActorStateRowAsSystem(normalizedNpcId);
 
     if (!actor) {
       throw new Error(`Actor not found: ${decision.npcId}`);
@@ -452,12 +441,10 @@ export class TradeExecutionService {
     // Get price from organizationState
     let currentPrice: number | null = null;
     if (staticOrg) {
-      const [state] = await db
-        .select({ currentPrice: organizationState.currentPrice })
-        .from(organizationState)
-        .where(eq(organizationState.id, staticOrg.id))
-        .limit(1);
-      currentPrice = state?.currentPrice ?? staticOrg.initialPrice ?? null;
+      const price = await fetchOrganizationCurrentPriceForNpcTrade(
+        staticOrg.id
+      );
+      currentPrice = price ?? staticOrg.initialPrice ?? null;
     }
 
     if (!staticOrg || !currentPrice) {
@@ -515,8 +502,7 @@ export class TradeExecutionService {
       leverage,
     });
 
-    // Record NPC trade for analytics/tracking (separate from position)
-    await db.insert(npcTrades).values({
+    await insertNpcTradeRowTradeExecution({
       id: await generateSnowflakeId(),
       npcActorId: decision.npcId,
       poolId: null,
@@ -577,7 +563,7 @@ export class TradeExecutionService {
 
     const service = new CorePredictionMarketService({
       db: new CorePredictionDbAdapter(),
-      wallet: this.buildActorWallet(actorId),
+      wallet: createNpcWalletAdapter(actorId),
       broadcast,
       cache: {
         invalidate: () => invalidateAfterPredictionTrade(validatedMarketId),
@@ -601,45 +587,32 @@ export class TradeExecutionService {
 
     const entryPrice = result.avgPrice * 100;
     const now = new Date();
+    const marketIdStr = validatedMarketId.toString();
 
-    // Back-compat: store poolPositions/npcTrades for NPC analytics
-    // Use onConflictDoUpdate to handle re-runs where position already exists
-    await db.transaction(async (tx: Transaction) => {
-      // Validate marketId before database operations
-      if (decision.marketId === null || decision.marketId === undefined) {
-        throw new Error('marketId is required for prediction position');
-      }
-      const marketIdStr = decision.marketId.toString();
-
-      await tx
-        .insert(poolPositions)
-        .values({
-          id: result.positionId,
-          poolId: actorId,
-          marketType: 'prediction',
-          marketId: marketIdStr,
-          side: sideLabel === 'yes' ? 'YES' : 'NO',
-          entryPrice,
-          currentPrice:
-            result.market[sideLabel === 'yes' ? 'yesPrice' : 'noPrice'] * 100,
-          size: result.totalCost ?? decision.amount,
-          shares: result.shares,
-          unrealizedPnL: 0,
-          openedAt: now,
-          updatedAt: now,
-        })
-        .onConflictDoUpdate({
-          target: poolPositions.id,
-          set: {
-            currentPrice:
-              result.market[sideLabel === 'yes' ? 'yesPrice' : 'noPrice'] * 100,
-            size: result.totalCost ?? decision.amount,
-            shares: result.shares,
-            updatedAt: now,
-          },
-        });
-
-      await tx.insert(npcTrades).values({
+    await runTransactionUpsertPoolPositionAfterPredictionBuy({
+      positionRow: {
+        id: result.positionId,
+        poolId: actorId,
+        marketType: 'prediction',
+        marketId: marketIdStr,
+        side: sideLabel === 'yes' ? 'YES' : 'NO',
+        entryPrice,
+        currentPrice:
+          result.market[sideLabel === 'yes' ? 'yesPrice' : 'noPrice'] * 100,
+        size: result.totalCost ?? decision.amount,
+        shares: result.shares,
+        unrealizedPnL: 0,
+        openedAt: now,
+        updatedAt: now,
+      },
+      onConflict: {
+        currentPrice:
+          result.market[sideLabel === 'yes' ? 'yesPrice' : 'noPrice'] * 100,
+        size: result.totalCost ?? decision.amount,
+        shares: result.shares,
+        updatedAt: now,
+      },
+      npcTradeRow: {
         id: await generateSnowflakeId(),
         npcActorId: decision.npcId,
         poolId: null,
@@ -651,7 +624,7 @@ export class TradeExecutionService {
         price: entryPrice,
         sentiment: decision.confidence * (sideLabel === 'yes' ? 1 : -1),
         reason: decision.reasoning,
-      });
+      },
     });
 
     await invalidateAfterPredictionTrade(validatedMarketId).catch((error) => {
@@ -708,19 +681,11 @@ export class TradeExecutionService {
     // Find the actor's open position in this market
     const sideToClose = decision.action === 'sell_yes' ? 'YES' : 'NO';
 
-    const [position] = await db
-      .select()
-      .from(poolPositions)
-      .where(
-        and(
-          eq(poolPositions.poolId, actorId),
-          eq(poolPositions.marketId, marketIdStr),
-          eq(poolPositions.side, sideToClose),
-          eq(poolPositions.marketType, 'prediction'),
-          isNull(poolPositions.closedAt)
-        )
-      )
-      .limit(1);
+    const position = await selectOpenNpcPredictionPoolPosition(
+      actorId,
+      marketIdStr,
+      sideToClose
+    );
 
     if (!position) {
       throw new Error(
@@ -742,7 +707,7 @@ export class TradeExecutionService {
 
     const service = new CorePredictionMarketService({
       db: new CorePredictionDbAdapter(),
-      wallet: this.buildActorWallet(actorId),
+      wallet: createNpcWalletAdapter(actorId),
       broadcast,
       cache: {
         invalidate: () => invalidateAfterPredictionTrade(validatedMarketId),
@@ -764,35 +729,13 @@ export class TradeExecutionService {
       positionId: position.id,
     });
 
-    // Update the position record with a CAS guard to prevent race conditions
-    // The WHERE clause includes isNull(poolPositions.closedAt) to ensure we only
-    // update if the position is still open (optimistic locking pattern)
-    await db.transaction(async (tx: Transaction) => {
-      const updateResult = await tx
-        .update(poolPositions)
-        .set({
-          closedAt: now,
-          currentPrice:
-            sellResult.market[sideLabel === 'yes' ? 'yesPrice' : 'noPrice'] *
-            100,
-          shares: 0,
-          unrealizedPnL: 0,
-          realizedPnL: sellResult.pnl ?? 0,
-          updatedAt: now,
-        })
-        .where(
-          and(eq(poolPositions.id, position.id), isNull(poolPositions.closedAt))
-        )
-        .returning({ id: poolPositions.id });
-
-      // Check if the update succeeded (position was still open)
-      if (updateResult.length === 0) {
-        throw new Error(
-          `Position already closed: race condition detected for position ${position.id}`
-        );
-      }
-
-      await tx.insert(npcTrades).values({
+    await runTransactionClosePredictionPoolPositionCas({
+      positionId: position.id,
+      now,
+      currentPrice:
+        sellResult.market[sideLabel === 'yes' ? 'yesPrice' : 'noPrice'] * 100,
+      realizedPnL: sellResult.pnl ?? 0,
+      npcTradeRow: {
         id: await generateSnowflakeId(),
         npcActorId: decision.npcId,
         poolId: null,
@@ -804,7 +747,7 @@ export class TradeExecutionService {
         price: (sellResult.avgPrice ?? 0) * 100,
         sentiment: 0,
         reason: decision.reasoning,
-      });
+      },
     });
 
     await invalidateAfterPredictionTrade(validatedMarketId).catch((error) => {
@@ -857,24 +800,18 @@ export class TradeExecutionService {
       throw new Error('PositionId required to close position');
     }
 
-    // Try perpPositions first (new system for perp trades)
-    const [perpPosition] = await db
-      .select()
-      .from(perpPositions)
-      .where(eq(perpPositions.id, decision.positionId))
-      .limit(1);
+    const perpPosition = await selectPerpPositionByIdForNpcTrade(
+      decision.positionId
+    );
 
     if (perpPosition && !perpPosition.closedAt) {
       // Use PerpMarketService to close perp position
       return this.closePerpPositionViaService(decision, actorId, perpPosition);
     }
 
-    // Fall back to poolPositions (legacy perp or prediction positions)
-    const [position] = await db
-      .select()
-      .from(poolPositions)
-      .where(eq(poolPositions.id, decision.positionId))
-      .limit(1);
+    const position = await selectPoolPositionByIdForNpcTrade(
+      decision.positionId
+    );
 
     if (!position) {
       throw new Error(`Position not found: ${decision.positionId}`);
@@ -910,7 +847,7 @@ export class TradeExecutionService {
 
       const service = new CorePredictionMarketService({
         db: new CorePredictionDbAdapter(),
-        wallet: this.buildActorWallet(actorId),
+        wallet: createNpcWalletAdapter(actorId),
         broadcast,
         cache: {
           invalidate: () => invalidateAfterPredictionTrade(position.marketId!),
@@ -930,23 +867,15 @@ export class TradeExecutionService {
         positionId: position.id,
       });
 
-      // Back-compat storage updates
-      await db.transaction(async (tx: Transaction) => {
-        await tx
-          .update(poolPositions)
-          .set({
-            closedAt: now,
-            currentPrice:
-              sellResult.market[
-                sellResult.side === 'yes' ? 'yesPrice' : 'noPrice'
-              ] * 100,
-            unrealizedPnL: 0,
-            realizedPnL: sellResult.pnl ?? 0,
-            updatedAt: now,
-          })
-          .where(eq(poolPositions.id, position.id));
-
-        await tx.insert(npcTrades).values({
+      await runTransactionClosePredictionPoolPositionLegacy({
+        positionId: position.id,
+        now,
+        currentPrice:
+          sellResult.market[
+            sellResult.side === 'yes' ? 'yesPrice' : 'noPrice'
+          ] * 100,
+        realizedPnL: sellResult.pnl ?? 0,
+        npcTradeRow: {
           id: await generateSnowflakeId(),
           npcActorId: decision.npcId,
           poolId: null,
@@ -958,7 +887,7 @@ export class TradeExecutionService {
           price: (sellResult.avgPrice ?? 0) * 100,
           sentiment: 0,
           reason: decision.reasoning,
-        });
+        },
       });
 
       await invalidateAfterPredictionTrade(position.marketId).catch((error) => {
@@ -1014,13 +943,11 @@ export class TradeExecutionService {
       );
 
       if (staticOrg) {
-        const [state] = await db
-          .select({ price: organizationState.currentPrice })
-          .from(organizationState)
-          .where(eq(organizationState.id, staticOrg.id))
-          .limit(1);
-        if (state?.price) {
-          currentPrice = state.price;
+        const price = await fetchOrganizationCurrentPriceForNpcTrade(
+          staticOrg.id
+        );
+        if (price !== null) {
+          currentPrice = price;
         }
       }
     }
@@ -1044,45 +971,17 @@ export class TradeExecutionService {
     const grossReturn = position.size + realizedPnL;
     const netReturn = Math.max(0, grossReturn - feeCalc.feeAmount);
 
-    // Execute in transaction
-    await db.transaction(async (tx: Transaction) => {
-      // Close position
-      await tx
-        .update(poolPositions)
-        .set({
-          closedAt: now,
-          currentPrice,
-          unrealizedPnL: 0,
-          realizedPnL,
-          updatedAt: now,
-        })
-        .where(eq(poolPositions.id, decision.positionId!));
-
-      // Return capital + P&L to actor's trading balance (after fee deduction)
-      const [actor] = await tx
-        .select()
-        .from(actorState)
-        .where(eq(actorState.id, actorId))
-        .limit(1);
-
-      if (actor) {
-        const currentBalance = Number.parseFloat(
-          actor.tradingBalance.toString()
-        );
-        await tx
-          .update(actorState)
-          .set({
-            tradingBalance: String(currentBalance + netReturn),
-            updatedAt: new Date(),
-          })
-          .where(eq(actorState.id, actorId));
-      }
-
-      // Record trade (poolId is optional now)
-      await tx.insert(npcTrades).values({
+    await runTransactionCloseLegacyPoolPositionSettle({
+      positionId: decision.positionId,
+      now,
+      currentPrice,
+      realizedPnL,
+      actorId,
+      netReturn,
+      npcTradeRow: {
         id: await generateSnowflakeId(),
         npcActorId: decision.npcId,
-        poolId: null, // No longer using pools
+        poolId: null,
         marketType: position.marketType,
         ticker: position.ticker,
         marketId: position.marketId,
@@ -1092,7 +991,7 @@ export class TradeExecutionService {
         price: currentPrice,
         sentiment: 0,
         reason: decision.reasoning,
-      });
+      },
     });
 
     // Fire-and-forget: recompute totalPoints after position close
@@ -1156,8 +1055,7 @@ export class TradeExecutionService {
       positionId: position.id,
     });
 
-    // Record NPC trade for analytics/tracking
-    await db.insert(npcTrades).values({
+    await insertNpcTradeRowTradeExecution({
       id: await generateSnowflakeId(),
       npcActorId: decision.npcId,
       poolId: null,
@@ -1215,55 +1113,5 @@ export class TradeExecutionService {
     );
 
     return aggregateTradeImpacts(inputs);
-  }
-
-  private buildActorWallet(actorId: string): WalletPort {
-    const getBalance = async () => {
-      const [actor] = await db
-        .select()
-        .from(actorState)
-        .where(eq(actorState.id, actorId))
-        .limit(1);
-      if (!actor) throw new Error(`Actor not found: ${actorId}`);
-      return Number(actor.tradingBalance);
-    };
-
-    return {
-      getBalance: async () => ({ balance: await getBalance() }),
-      debit: async ({ amount }: { amount: number }) => {
-        // Atomic debit with balance check to prevent negative balance
-        const result = await db
-          .update(actorState)
-          .set({
-            tradingBalance: sql`${actorState.tradingBalance} - ${amount}`,
-            updatedAt: new Date(),
-          })
-          .where(
-            and(
-              eq(actorState.id, actorId),
-              gte(sql<number>`${actorState.tradingBalance}::numeric`, amount)
-            )
-          )
-          .returning({ id: actorState.id });
-
-        if (result.length === 0) {
-          throw new Error(
-            `Insufficient NPC funds: actor ${actorId}, amount $${amount}`
-          );
-        }
-      },
-      credit: async ({ amount }: { amount: number }) => {
-        await db
-          .update(actorState)
-          .set({
-            tradingBalance: sql`${actorState.tradingBalance} + ${amount}`,
-            updatedAt: new Date(),
-          })
-          .where(eq(actorState.id, actorId));
-      },
-      recordPnL: async () => {
-        // No-op for NPC wallets
-      },
-    };
   }
 }

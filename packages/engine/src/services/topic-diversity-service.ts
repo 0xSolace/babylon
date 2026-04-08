@@ -32,8 +32,7 @@
  * ```
  */
 
-import { and, desc, eq, gte, isNull } from '@babylon/db';
-import { db, posts } from '@babylon/db/runtime';
+import { listRecentArticlePostsForTopicDiversity } from '@babylon/db';
 import { logger } from '@babylon/shared';
 
 /**
@@ -513,21 +512,8 @@ export class TopicDiversityService {
     );
 
     // Get recent articles and extract topics from titles/content
-    const recentArticles = await db
-      .select({
-        articleTitle: posts.articleTitle,
-        content: posts.content,
-        timestamp: posts.timestamp,
-      })
-      .from(posts)
-      .where(
-        and(
-          eq(posts.type, 'article'),
-          gte(posts.timestamp, windowStart),
-          isNull(posts.deletedAt)
-        )
-      )
-      .orderBy(desc(posts.timestamp));
+    const recentArticles =
+      await listRecentArticlePostsForTopicDiversity(windowStart);
 
     // Extract and count topics
     this.topicCache.clear();

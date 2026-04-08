@@ -14,7 +14,6 @@
  */
 
 import { PointsService } from '@babylon/api';
-import { count, eq } from '@babylon/db';
 import {
   closeDatabase,
   db,
@@ -22,9 +21,9 @@ import {
   nftCollection,
   nftOwnership,
   nftSnapshot,
-} from '@babylon/db/runtime';
-
+} from '@babylon/db/engine-storage';
 import { logger } from '@babylon/shared';
+import { count, eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 
 const TOTAL_NFTS = 100;

@@ -1,5 +1,5 @@
 import { findUserByIdentifierWithSelect } from '@babylon/api';
-import { users } from '@babylon/db/runtime';
+import { users } from '@babylon/db/engine-storage';
 
 import { loadActorsData } from '@babylon/engine';
 import { extractUsername } from '@babylon/shared';

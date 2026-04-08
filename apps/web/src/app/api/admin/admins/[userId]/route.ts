@@ -68,7 +68,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 
-import { db } from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
@@ -102,77 +102,76 @@ export const POST = withErrorHandling(
       'POST /api/admin/admins/[userId]'
     );
 
-    // Get target user
-    const targetUser = await db.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        username: true,
-        displayName: true,
-        isActor: true,
-        isAdmin: true,
-        isBanned: true,
-      },
-    });
+    const updatedUser = await asSystem(async (tx) => {
+      const targetUser = await tx.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          username: true,
+          displayName: true,
+          isActor: true,
+          isAdmin: true,
+          isBanned: true,
+        },
+      });
 
-    if (!targetUser) {
-      throw new NotFoundError('User', userId);
-    }
+      if (!targetUser) {
+        throw new NotFoundError('User', userId);
+      }
 
-    // Prevent modifying NPC/actors
-    if (targetUser.isActor) {
-      throw new BusinessLogicError(
-        'Cannot modify admin status of game actors',
-        'CANNOT_MODIFY_ACTOR'
-      );
-    }
+      if (targetUser.isActor) {
+        throw new BusinessLogicError(
+          'Cannot modify admin status of game actors',
+          'CANNOT_MODIFY_ACTOR'
+        );
+      }
 
-    // Prevent modifying banned users
-    if (targetUser.isBanned) {
-      throw new BusinessLogicError(
-        'Cannot modify admin status of banned users',
-        'USER_BANNED'
-      );
-    }
+      if (targetUser.isBanned) {
+        throw new BusinessLogicError(
+          'Cannot modify admin status of banned users',
+          'USER_BANNED'
+        );
+      }
 
-    // Validate action makes sense
-    if (action === 'promote' && targetUser.isAdmin) {
-      throw new BusinessLogicError('User is already an admin', 'ALREADY_ADMIN');
-    }
+      if (action === 'promote' && targetUser.isAdmin) {
+        throw new BusinessLogicError(
+          'User is already an admin',
+          'ALREADY_ADMIN'
+        );
+      }
 
-    if (action === 'demote' && !targetUser.isAdmin) {
-      throw new BusinessLogicError('User is not an admin', 'NOT_ADMIN');
-    }
+      if (action === 'demote' && !targetUser.isAdmin) {
+        throw new BusinessLogicError('User is not an admin', 'NOT_ADMIN');
+      }
 
-    // Prevent demoting yourself
-    if (action === 'demote' && targetUser.id === adminUser.userId) {
-      throw new BusinessLogicError(
-        'Cannot demote yourself',
-        'CANNOT_DEMOTE_SELF'
-      );
-    }
+      if (action === 'demote' && targetUser.id === adminUser.userId) {
+        throw new BusinessLogicError(
+          'Cannot demote yourself',
+          'CANNOT_DEMOTE_SELF'
+        );
+      }
 
-    // Update user admin status
-    const updatedUser = await db.user.update({
-      where: { id: userId },
-      data: {
-        isAdmin: action === 'promote',
-        updatedAt: new Date(),
-      },
-      select: {
-        id: true,
-        username: true,
-        displayName: true,
-        walletAddress: true,
-        profileImageUrl: true,
-        isAdmin: true,
-        onChainRegistered: true,
-        hasFarcaster: true,
-        hasTwitter: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
+      return tx.user.update({
+        where: { id: userId },
+        data: {
+          isAdmin: action === 'promote',
+          updatedAt: new Date(),
+        },
+        select: {
+          id: true,
+          username: true,
+          displayName: true,
+          walletAddress: true,
+          profileImageUrl: true,
+          isAdmin: true,
+          onChainRegistered: true,
+          hasFarcaster: true,
+          hasTwitter: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+    }, 'admin-promote-demote');
 
     logger.info(
       `User ${action}d successfully`,
@@ -193,10 +192,10 @@ export const POST = withErrorHandling(
       resourceType: 'user',
       resourceId: userId,
       previousValue: {
-        isAdmin: targetUser.isAdmin,
+        isAdmin: action === 'demote',
       },
       newValue: {
-        isAdmin: action === 'promote',
+        isAdmin: updatedUser.isAdmin,
       },
       metadata: {
         targetUsername: updatedUser.username,

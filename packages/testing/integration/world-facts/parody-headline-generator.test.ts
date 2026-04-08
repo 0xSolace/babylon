@@ -16,7 +16,7 @@ import {
   mock,
   test,
 } from 'bun:test';
-import { db, rssFeedSources } from '@babylon/db/runtime';
+import { db, rssFeedSources } from '@babylon/db/engine-storage';
 
 import type { BabylonLLMClient } from '@babylon/engine';
 import { ParodyHeadlineGenerator } from '@babylon/engine';

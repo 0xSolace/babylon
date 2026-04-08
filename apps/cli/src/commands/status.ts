@@ -11,7 +11,6 @@
  */
 
 import { getAgentLLMStatus } from '@babylon/agents/llm';
-import { count as drizzleCount, eq, gte, isNotNull } from '@babylon/db';
 import {
   actorState,
   checkDatabaseHealth,
@@ -24,9 +23,9 @@ import {
   questions,
   worldEvents,
 } from '@babylon/db/runtime';
-
 import { StaticDataRegistry } from '@babylon/engine';
 import { execSync } from 'child_process';
+import { count as drizzleCount, eq, gte, isNotNull } from 'drizzle-orm';
 import { ethers } from 'ethers';
 import { parseArgs, wantsHelp } from '../lib/args.js';
 import { logger } from '../lib/logger.js';

@@ -103,21 +103,30 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import {
-  and,
-  eq,
+  incrementUserVirtualBalanceWelcomeBonus,
+  insertReferralSignupRowReturningId,
+  insertUserFollowReturning,
+  insertWebSignupBalanceTransactionRow,
+  insertWebSignupUserReturningFull,
   isRetryableError,
-  sql,
+  selectFollowIdByFollowerAndFollowing,
+  selectReferralIdByCodeAndReferredUserId,
+  selectUserFullById,
+  selectUserIdByUsernameCaseInsensitive,
+  selectUserIdByWalletAddress,
+  selectUserReferredByById,
+  selectWebSignupUserIdByReferralCode,
+  selectWelcomeBonusBalanceTransactionExists,
   toDatabaseErrorType,
+  type User,
+  type UserProfileUpdatePatch,
+  updateReferralCompletedBySignupId,
+  updateReferralRejectedBySignupId,
+  updateReferralStatusPendingById,
+  updateUserByIdReturningFull,
   withRetry,
 } from '@babylon/db';
-import {
-  balanceTransactions,
-  db,
-  follows,
-  referrals,
-  users,
-  withTransaction,
-} from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 import { UserAlphaGroupAssignmentService } from '@babylon/engine';
 import type { OnboardingProfilePayload } from '@babylon/shared';
 import {
@@ -224,27 +233,21 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   // Wrap transaction with retry logic for connection errors
   const result = await withRetry(
     async () => {
-      return await withTransaction(async (tx) => {
-        // Check if username is already taken by another user (case-insensitive)
-        const [existingUsername] = await tx
-          .select({ id: users.id })
-          .from(users)
-          .where(
-            sql`lower(${users.username}) = lower(${parsedProfile.username})`
-          )
-          .limit(1);
+      return await asSystem(async (tx) => {
+        const existingUsername = await selectUserIdByUsernameCaseInsensitive(
+          tx,
+          parsedProfile.username
+        );
 
         if (existingUsername && existingUsername.id !== canonicalUserId) {
           throw new ConflictError('Username is already taken', 'User.username');
         }
 
-        // Check if wallet address is already linked to another user
         if (walletAddress) {
-          const [existingWallet] = await tx
-            .select({ id: users.id })
-            .from(users)
-            .where(eq(users.walletAddress, walletAddress))
-            .limit(1);
+          const existingWallet = await selectUserIdByWalletAddress(
+            tx,
+            walletAddress
+          );
 
           if (existingWallet && existingWallet.id !== canonicalUserId) {
             throw new ConflictError(
@@ -254,45 +257,32 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
           }
         }
 
-        // Resolve referral (if provided AND not already set)
         let resolvedReferrerId: string | null = null;
         let resolvedReferralRecordId: string | null = null;
         const normalizedCode = referralCode?.trim() || null;
 
-        // Check if user already has referredBy (set in /api/users/me)
-        const [existingUser] = await tx
-          .select({ referredBy: users.referredBy })
-          .from(users)
-          .where(eq(users.id, canonicalUserId))
-          .limit(1);
+        const existingUser = await selectUserReferredByById(
+          tx,
+          canonicalUserId
+        );
 
-        // Only resolve referral if not already set
         if (!existingUser?.referredBy && normalizedCode) {
-          // First, try to find referrer by username (legacy system, case-insensitive)
-          const [referrerByUsername] = await tx
-            .select({ id: users.id })
-            .from(users)
-            .where(sql`lower(${users.username}) = lower(${normalizedCode})`)
-            .limit(1);
+          const referrerByUsername =
+            await selectUserIdByUsernameCaseInsensitive(tx, normalizedCode);
 
           if (referrerByUsername && referrerByUsername.id !== canonicalUserId) {
             resolvedReferrerId = referrerByUsername.id;
           } else {
-            // If not found by username, look up who owns this referral code
-            const [referralOwner] = await tx
-              .select({ id: users.id })
-              .from(users)
-              .where(eq(users.referralCode, normalizedCode))
-              .limit(1);
+            const referralOwner = await selectWebSignupUserIdByReferralCode(
+              tx,
+              normalizedCode
+            );
 
             if (referralOwner && referralOwner.id !== canonicalUserId) {
               resolvedReferrerId = referralOwner.id;
             }
           }
-
-          // Note: Referral record will be created AFTER user upsert to satisfy FK constraint
         } else if (existingUser?.referredBy) {
-          // User already has referredBy (set in /api/users/me)
           resolvedReferrerId = existingUser.referredBy;
           logger.info(
             'Using existing referredBy from user record',
@@ -313,7 +303,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
             )
           : false;
 
-        const baseUserData: Partial<typeof users.$inferInsert> = {
+        const baseUserData: UserProfileUpdatePatch = {
           username: parsedProfile.username,
           referralCode: parsedProfile.username,
           displayName: parsedProfile.displayName,
@@ -387,18 +377,13 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
           }
         }
 
-        // Upsert user (insert or update)
-        let user: typeof users.$inferSelect;
-        const [existingUserRecord] = await tx
-          .select()
-          .from(users)
-          .where(eq(users.id, canonicalUserId))
-          .limit(1);
+        let user: User;
+        const existingUserRecord = await selectUserFullById(
+          tx,
+          canonicalUserId
+        );
 
         if (existingUserRecord) {
-          // Update existing user
-          // Also check if user should be auto-promoted to admin (for existing users with new verified email)
-          // Check ALL linked emails, not just the primary one
           const { adminEmail, allVerifiedEmails } = adminEmailResult;
           const shouldPromoteToAdmin =
             !existingUserRecord.isAdmin && adminEmail !== null;
@@ -415,26 +400,21 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
             );
           }
 
-          const [updatedUser] = await tx
-            .update(users)
-            .set({
+          const updatedUser = await updateUserByIdReturningFull(
+            tx,
+            canonicalUserId,
+            {
               ...baseUserData,
               referredBy: resolvedReferrerId ?? existingUserRecord.referredBy,
               isAdmin: shouldPromoteToAdmin ? true : existingUserRecord.isAdmin,
               updatedAt: new Date(),
-            })
-            .where(eq(users.id, canonicalUserId))
-            .returning();
+            }
+          );
           if (!updatedUser) {
             throw new InternalServerError('Failed to update user record');
           }
           user = updatedUser;
         } else {
-          // Create new user
-          // Check if user should be auto-promoted to admin based on email domain
-          // SECURITY: Use Privy-verified email, not user-supplied email from parsedProfile
-          // This prevents attackers from submitting fake admin emails in the request body
-          // Check ALL linked emails, not just the primary one
           const { adminEmail: newUserAdminEmail, allVerifiedEmails } =
             adminEmailResult;
           const shouldBeAdmin = newUserAdminEmail !== null;
@@ -451,57 +431,43 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
             );
           }
 
-          const [newUser] = await tx
-            .insert(users)
-            .values({
-              id: canonicalUserId,
-              privyId,
-              ...baseUserData,
-              referredBy: resolvedReferrerId,
-              isAdmin: shouldBeAdmin,
-              updatedAt: new Date(),
-            })
-            .returning();
+          const newUser = await insertWebSignupUserReturningFull(tx, {
+            id: canonicalUserId,
+            privyId,
+            ...baseUserData,
+            referredBy: resolvedReferrerId,
+            isAdmin: shouldBeAdmin,
+            updatedAt: new Date(),
+          });
           if (!newUser) {
             throw new InternalServerError('Failed to create user record');
           }
           user = newUser;
         }
 
-        // Create referral record AFTER user exists (to satisfy FK constraint)
         if (resolvedReferrerId && normalizedCode) {
-          // Check if referral record already exists
-          const [existingReferral] = await tx
-            .select({ id: referrals.id })
-            .from(referrals)
-            .where(
-              and(
-                eq(referrals.referralCode, normalizedCode),
-                eq(referrals.referredUserId, user.id)
-              )
-            )
-            .limit(1);
+          const existingReferral =
+            await selectReferralIdByCodeAndReferredUserId(
+              tx,
+              normalizedCode,
+              user.id
+            );
 
           if (existingReferral) {
-            // Update existing record
-            await tx
-              .update(referrals)
-              .set({ status: 'pending' })
-              .where(eq(referrals.id, existingReferral.id));
+            await updateReferralStatusPendingById(tx, existingReferral.id);
             resolvedReferralRecordId = existingReferral.id;
           } else {
-            // Create new referral record
             const referralId = await generateSnowflakeId();
-            const [referralRecord] = await tx
-              .insert(referrals)
-              .values({
+            const referralRecord = await insertReferralSignupRowReturningId(
+              tx,
+              {
                 id: referralId,
                 referrerId: resolvedReferrerId,
                 referralCode: normalizedCode,
                 referredUserId: user.id,
                 status: 'pending',
-              })
-              .returning({ id: referrals.id });
+              }
+            );
             if (!referralRecord) {
               throw new InternalServerError('Failed to create referral record');
             }
@@ -514,7 +480,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
           referrerId: resolvedReferrerId,
           referralRecordId: resolvedReferralRecordId,
         };
-      });
+      }, 'users-signup');
     },
     3, // maxRetries
     200 // delayMs
@@ -546,33 +512,23 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   // Award welcome bonus at profile completion (idempotent, transaction-safe)
   const userId = result.user.id;
   const welcomeBonus = POINTS.INITIAL_SIGNUP;
-  await withTransaction(async (tx) => {
-    const [hasWelcomeBonus] = await tx
-      .select({ id: balanceTransactions.id })
-      .from(balanceTransactions)
-      .where(
-        and(
-          eq(balanceTransactions.userId, userId),
-          eq(balanceTransactions.description, 'Welcome bonus - initial signup')
-        )
-      )
-      .limit(1);
-
+  await asSystem(async (tx) => {
+    const hasWelcomeBonus = await selectWelcomeBonusBalanceTransactionExists(
+      tx,
+      userId
+    );
     if (hasWelcomeBonus) return;
 
-    const [updated] = await tx
-      .update(users)
-      .set({
-        virtualBalance: sql`(${users.virtualBalance})::numeric + ${welcomeBonus}`,
-        totalDeposited: sql`(${users.totalDeposited})::numeric + ${welcomeBonus}`,
-      })
-      .where(eq(users.id, userId))
-      .returning({ virtualBalance: users.virtualBalance });
+    const updated = await incrementUserVirtualBalanceWelcomeBonus(
+      tx,
+      userId,
+      welcomeBonus
+    );
 
     const balAfter = Number(updated?.virtualBalance ?? String(welcomeBonus));
     const balBefore = balAfter - welcomeBonus;
 
-    await tx.insert(balanceTransactions).values({
+    await insertWebSignupBalanceTransactionRow(tx, {
       id: await generateSnowflakeId(),
       userId,
       type: 'deposit',
@@ -588,7 +544,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       { userId, amount: welcomeBonus },
       'POST /api/users/signup'
     );
-  });
+  }, 'users-signup-welcome-bonus');
 
   // Award points for social account linking
   const pointsAwarded = {
@@ -602,9 +558,10 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
   // Award referral points if user was referred
   if (result.referrerId) {
-    // Award points to REFERRER
+    const referrerId = result.referrerId;
+
     const referralResult = await PointsService.awardReferralSignup(
-      result.referrerId,
+      referrerId,
       result.user.id
     );
     pointsAwarded.referral = referralResult.pointsAwarded;
@@ -616,47 +573,41 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         result.user.id,
         POINTS.REFERRAL_BONUS,
         'referral_bonus',
-        { referrerId: result.referrerId }
+        { referrerId }
       );
       pointsAwarded.referralBonus = refereeBonus.pointsAwarded;
 
-      // Update referral status to completed
-      if (result.referralRecordId) {
-        await db
-          .update(referrals)
-          .set({
-            status: 'completed',
-            completedAt: new Date(),
-          })
-          .where(eq(referrals.id, result.referralRecordId));
-      }
+      const referralRecordId = result.referralRecordId;
 
-      // Auto-follow the referrer (new user follows the person who referred them)
-      // Check if follow already exists
-      const [existingFollow] = await db
-        .select({ id: follows.id })
-        .from(follows)
-        .where(
-          and(
-            eq(follows.followerId, result.user.id),
-            eq(follows.followingId, result.referrerId)
-          )
-        )
-        .limit(1);
+      await asSystem(async (db) => {
+        if (referralRecordId) {
+          await updateReferralCompletedBySignupId(
+            db,
+            referralRecordId,
+            new Date()
+          );
+        }
 
-      if (!existingFollow) {
-        const followId = await generateSnowflakeId();
-        await db.insert(follows).values({
-          id: followId,
-          followerId: result.user.id,
-          followingId: result.referrerId,
-        });
-      }
+        const existingFollow = await selectFollowIdByFollowerAndFollowing(
+          db,
+          result.user.id,
+          referrerId
+        );
+
+        if (!existingFollow) {
+          const followId = await generateSnowflakeId();
+          await insertUserFollowReturning(db, {
+            id: followId,
+            followerId: result.user.id,
+            followingId: referrerId,
+          });
+        }
+      }, 'users-signup-referral-follow');
 
       logger.info(
         'Awarded referral points to both referrer and referee',
         {
-          referrerId: result.referrerId,
+          referrerId,
           referredUserId: result.user.id,
           referrerPoints: referralResult.pointsAwarded,
           refereeBonus: refereeBonus.pointsAwarded,
@@ -666,17 +617,19 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     } else {
       // Referral was blocked (self-referral, weekly limit, etc.)
       // Update referral status to rejected
-      if (result.referralRecordId) {
-        await db
-          .update(referrals)
-          .set({ status: 'rejected' })
-          .where(eq(referrals.id, result.referralRecordId));
+      const rejectedReferralRecordId = result.referralRecordId;
+      if (rejectedReferralRecordId) {
+        await asSystem(
+          async (db) =>
+            updateReferralRejectedBySignupId(db, rejectedReferralRecordId),
+          'users-signup-referral-reject'
+        );
       }
 
       logger.warn(
         'Referral blocked - referrer not rewarded',
         {
-          referrerId: result.referrerId,
+          referrerId,
           referredUserId: result.user.id,
           error: referralResult.error,
         },

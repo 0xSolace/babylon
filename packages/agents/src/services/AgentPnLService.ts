@@ -11,16 +11,18 @@
  */
 
 import { broadcastAgentActivity, type TradeActivityData } from '@babylon/api';
-import { desc, eq, type JsonValue } from '@babylon/db';
 import {
-  agentLogs,
-  agentTrades,
-  db,
-  markets,
-  users,
+  type AgentTrade,
+  insertAgentLogRow,
+  insertAgentTradeRow,
+  type JsonValue,
+  selectAgentTradesByAgentUserId,
+  selectLifetimePnLRowsForUsersManagedBy,
+  selectMarketQuestionById,
+  selectUserDisplayNameLifetimePnl,
   withTransaction,
-} from '@babylon/db/runtime';
-
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import { StaticDataRegistry } from '@babylon/engine';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../shared/logger';
@@ -76,35 +78,25 @@ export class AgentPnLService {
     const tradeId = uuidv4();
 
     // Fetch agent name for broadcast (outside transaction for efficiency)
-    const agentResult = await db
-      .select({ displayName: users.displayName })
-      .from(users)
-      .where(eq(users.id, agentId))
-      .limit(1);
+    const agentRow = await selectUserDisplayNameLifetimePnl(db, agentId);
 
-    if (!agentResult[0]) {
+    if (!agentRow) {
       logger.warn(
         `Agent ${agentId} not found in database when recording trade - broadcast will use fallback name`,
         undefined,
         'AgentPnLService'
       );
     }
-    const agentName = agentResult[0]?.displayName ?? 'Agent';
+    const agentName = agentRow?.displayName ?? 'Agent';
 
     // Fetch market question for prediction trades (for SSE broadcast enrichment)
     let marketQuestion: string | undefined;
     if (marketType === 'prediction' && marketId) {
-      const marketResult = await db
-        .select({ question: markets.question })
-        .from(markets)
-        .where(eq(markets.id, marketId))
-        .limit(1);
-      marketQuestion = marketResult[0]?.question;
+      marketQuestion = await selectMarketQuestionById(db, marketId);
     }
 
     await withTransaction(async (tx) => {
-      // Create trade record
-      await tx.insert(agentTrades).values({
+      await insertAgentTradeRow(tx, {
         id: tradeId,
         agentUserId: agentId,
         marketType,
@@ -118,8 +110,7 @@ export class AgentPnLService {
         reasoning: reasoning ?? null,
       });
 
-      // Log the trade
-      await tx.insert(agentLogs).values({
+      await insertAgentLogRow(tx, {
         id: await generateSnowflakeId(),
         agentUserId: agentId,
         type: 'trade',
@@ -177,23 +168,18 @@ export class AgentPnLService {
   /**
    * Get agent trades
    */
-  async getAgentTrades(agentUserId: string, limit = 50) {
-    return db
-      .select()
-      .from(agentTrades)
-      .where(eq(agentTrades.agentUserId, agentUserId))
-      .orderBy(desc(agentTrades.executedAt))
-      .limit(limit);
+  async getAgentTrades(agentUserId: string, limit = 50): Promise<AgentTrade[]> {
+    return selectAgentTradesByAgentUserId(db, agentUserId, limit);
   }
 
   /**
    * Get total agent P&L for a user (manager) by summing their agents' lifetimePnL
    */
   async getUserAgentPnL(userId: string): Promise<number> {
-    const agentsResult = await db
-      .select({ lifetimePnL: users.lifetimePnL })
-      .from(users)
-      .where(eq(users.managedBy, userId));
+    const agentsResult = await selectLifetimePnLRowsForUsersManagedBy(
+      db,
+      userId
+    );
 
     return agentsResult.reduce((sum, agent) => {
       return (

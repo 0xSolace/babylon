@@ -6,8 +6,16 @@
  * @packageDocumentation
  */
 
-import { eq, like } from '@babylon/db';
-import { db, userAgentConfigs, users } from '@babylon/db/runtime';
+import {
+  deleteUserAgentConfigsForUserIds,
+  deleteUsersByUsernameLikeReturningIds,
+  insertTestAgentUserReturningFull,
+  insertUserAgentConfigForTestAgent,
+  listUserIdsByUsernameLike,
+  selectFirstUserFullRowByUsernameLike,
+  selectUserFullRowByUsername,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import { ethers } from 'ethers';
 import { agentRegistry } from '../services/agent-registry.service';
 import { getAgentConfig } from '../shared/agent-config';
@@ -63,51 +71,34 @@ export async function createTestAgent(
   } = config;
 
   // Try to find existing agent with same prefix
-  let agentResult;
-  if (username) {
-    agentResult = await db
-      .select()
-      .from(users)
-      .where(eq(users.username, username))
-      .limit(1);
-  } else {
-    agentResult = await db
-      .select()
-      .from(users)
-      .where(like(users.username, `${prefix}%`))
-      .limit(1);
-  }
-
-  let agent = agentResult[0];
   let created = false;
 
-  if (!agent) {
+  let resolvedAgent = username
+    ? await selectUserFullRowByUsername(db, username)
+    : await selectFirstUserFullRowByUsernameLike(db, `${prefix}%`);
+
+  if (!resolvedAgent) {
     // Create new agent
     const agentId = await generateSnowflakeId();
     const finalUsername = username || `${prefix}-${agentId.slice(-6)}`;
 
     // Insert user record
-    const newAgentResult = await db
-      .insert(users)
-      .values({
-        id: agentId,
-        privyId: `did:privy:${prefix}-${agentId}`,
-        username: finalUsername,
-        displayName,
-        walletAddress: ethers.Wallet.createRandom().address,
-        isAgent: true,
-        virtualBalance: String(virtualBalance),
-        reputationPoints: 1000,
-        isTest: true,
-        updatedAt: new Date(),
-      })
-      .returning();
-
-    agent = newAgentResult[0]!;
+    resolvedAgent = await insertTestAgentUserReturningFull(db, {
+      id: agentId,
+      privyId: `did:privy:${prefix}-${agentId}`,
+      username: finalUsername,
+      displayName,
+      walletAddress: ethers.Wallet.createRandom().address,
+      isAgent: true,
+      virtualBalance: String(virtualBalance),
+      reputationPoints: 1000,
+      isTest: true,
+      updatedAt: new Date(),
+    });
 
     // Insert agent config record
     const configId = await generateSnowflakeId();
-    await db.insert(userAgentConfigs).values({
+    await insertUserAgentConfigForTestAgent(db, {
       id: configId,
       userId: agentId,
       autonomousTrading,
@@ -123,32 +114,33 @@ export async function createTestAgent(
     created = true;
 
     logger.info('Created test agent', {
-      agentId: agent.id,
-      username: agent.username,
-      displayName: agent.displayName,
+      agentId: resolvedAgent.id,
+      username: resolvedAgent.username,
+      displayName: resolvedAgent.displayName,
     });
   } else {
     logger.info('Using existing test agent', {
-      agentId: agent.id,
-      username: agent.username,
+      agentId: resolvedAgent.id,
+      username: resolvedAgent.username,
     });
   }
 
   // Register in Agent Registry if not already registered
-  if (agent.isAgent) {
+  if (resolvedAgent.isAgent) {
     try {
       // Check if already registered
-      const existingReg = await agentRegistry.getAgentById(agent.id);
+      const existingReg = await agentRegistry.getAgentById(resolvedAgent.id);
 
       if (!existingReg) {
-        logger.info('Registering user agent...', { userId: agent.id });
+        logger.info('Registering user agent...', { userId: resolvedAgent.id });
 
         // Get agent config for system prompt
-        const agentConfig = await getAgentConfig(agent.id);
+        const agentConfig = await getAgentConfig(resolvedAgent.id);
 
         await agentRegistry.registerUserAgent({
-          userId: agent.id,
-          name: agent.displayName || agent.username || 'Test Agent',
+          userId: resolvedAgent.id,
+          name:
+            resolvedAgent.displayName || resolvedAgent.username || 'Test Agent',
           systemPrompt:
             agentConfig?.systemPrompt ||
             'You are a helpful AI agent on Babylon prediction market.',
@@ -177,7 +169,7 @@ export async function createTestAgent(
           },
         });
         logger.info('Registered test agent in registry', {
-          agentId: agent.id,
+          agentId: resolvedAgent.id,
         });
       }
     } catch (err) {
@@ -189,13 +181,13 @@ export async function createTestAgent(
   }
 
   return {
-    agentId: agent.id,
+    agentId: resolvedAgent.id,
     created,
     agent: {
-      id: agent.id,
-      username: agent.username!,
-      displayName: agent.displayName,
-      isAgent: agent.isAgent,
+      id: resolvedAgent.id,
+      username: resolvedAgent.username!,
+      displayName: resolvedAgent.displayName,
+      isAgent: resolvedAgent.isAgent,
     },
   };
 }
@@ -232,28 +224,18 @@ export async function createTestAgents(
 export async function cleanupTestAgents(
   prefix = 'test-agent'
 ): Promise<number> {
-  // Get test agents
-  const testAgents = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(like(users.username, `${prefix}%`));
+  const testAgents = await listUserIdsByUsernameLike(db, `${prefix}%`);
 
   if (testAgents.length === 0) {
     return 0;
   }
 
-  // Delete agent configs first
-  for (const agent of testAgents) {
-    await db
-      .delete(userAgentConfigs)
-      .where(eq(userAgentConfigs.userId, agent.id));
-  }
+  await deleteUserAgentConfigsForUserIds(
+    db,
+    testAgents.map((a) => a.id)
+  );
 
-  // Delete the agents
-  const result = await db
-    .delete(users)
-    .where(like(users.username, `${prefix}%`))
-    .returning({ id: users.id });
+  const result = await deleteUsersByUsernameLikeReturningIds(db, `${prefix}%`);
 
   logger.info(`Cleaned up ${result.length} test agents`);
   return result.length;

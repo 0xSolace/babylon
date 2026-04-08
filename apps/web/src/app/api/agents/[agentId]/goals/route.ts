@@ -100,7 +100,7 @@
  */
 
 import { authenticate, withErrorHandling } from '@babylon/api';
-import { db } from '@babylon/db/runtime';
+import { asUser } from '@babylon/db/engine-storage';
 
 import { generateSnowflakeId } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
@@ -117,66 +117,75 @@ export const GET = withErrorHandling(async function GET(
   const userId = authUser.userId;
   const { agentId } = await params;
 
-  // Verify agent exists and user manages it
-  const agent = await db.user.findUnique({
-    where: { id: agentId },
-    select: { isAgent: true, managedBy: true },
+  const pack = await asUser(userId, async (tx) => {
+    const agent = await tx.user.findUnique({
+      where: { id: agentId },
+      select: { isAgent: true, managedBy: true },
+    });
+
+    if (!agent || !agent.isAgent) {
+      return { kind: 'agent_not_found' as const };
+    }
+
+    if (agent.managedBy !== userId) {
+      return { kind: 'forbidden' as const };
+    }
+
+    const goals = await tx.agentGoal.findMany({
+      where: { agentUserId: agentId },
+      orderBy: [
+        { status: 'asc' }, // active first
+        { priority: 'desc' },
+        { createdAt: 'desc' },
+      ],
+    });
+
+    const goalIds = goals.map((g) => g.id);
+    const actionsByGoalId = new Map<
+      string,
+      Array<{
+        id: string;
+        goalId: string;
+        agentUserId: string;
+        actionType: string;
+        actionId: string | null;
+        impact: number;
+        metadata: unknown;
+        createdAt: Date;
+      }>
+    >();
+
+    if (goalIds.length > 0) {
+      const allActions = await tx.agentGoalAction.findMany({
+        where: { goalId: { in: goalIds } },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      const actionsByGoal = new Map<string, typeof allActions>();
+      allActions.forEach((action) => {
+        const list = actionsByGoal.get(action.goalId) || [];
+        if (list.length < 5) {
+          list.push(action);
+        }
+        actionsByGoal.set(action.goalId, list);
+      });
+
+      actionsByGoal.forEach((actions, gid) => {
+        actionsByGoalId.set(gid, actions);
+      });
+    }
+
+    return { kind: 'ok' as const, goals, actionsByGoalId };
   });
 
-  if (!agent || !agent.isAgent) {
+  if (pack.kind === 'agent_not_found') {
     return NextResponse.json({ error: 'Agent not found' }, { status: 404 });
   }
-
-  if (agent.managedBy !== userId) {
+  if (pack.kind === 'forbidden') {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
   }
 
-  // Get all goals for this agent
-  const goals = await db.agentGoal.findMany({
-    where: { agentUserId: agentId },
-    orderBy: [
-      { status: 'asc' }, // active first
-      { priority: 'desc' },
-      { createdAt: 'desc' },
-    ],
-  });
-
-  // Get recent actions for each goal separately
-  const goalIds = goals.map((g) => g.id);
-  const actionsByGoalId = new Map<
-    string,
-    Array<{
-      id: string;
-      goalId: string;
-      agentUserId: string;
-      actionType: string;
-      actionId: string | null;
-      impact: number;
-      metadata: unknown;
-      createdAt: Date;
-    }>
-  >();
-
-  if (goalIds.length > 0) {
-    const allActions = await db.agentGoalAction.findMany({
-      where: { goalId: { in: goalIds } },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    // Group actions by goalId and take top 5 per goal
-    const actionsByGoal = new Map<string, typeof allActions>();
-    allActions.forEach((action) => {
-      const list = actionsByGoal.get(action.goalId) || [];
-      if (list.length < 5) {
-        list.push(action);
-      }
-      actionsByGoal.set(action.goalId, list);
-    });
-
-    actionsByGoal.forEach((actions, goalId) => {
-      actionsByGoalId.set(goalId, actions);
-    });
-  }
+  const { goals, actionsByGoalId } = pack;
 
   return NextResponse.json({
     success: true,
@@ -198,20 +207,6 @@ export const POST = withErrorHandling(async function POST(
   const authUser = await authenticate(req);
   const userId = authUser.userId;
   const { agentId } = await params;
-
-  // Verify agent exists and user manages it
-  const agent = await db.user.findUnique({
-    where: { id: agentId },
-    select: { isAgent: true, managedBy: true },
-  });
-
-  if (!agent || !agent.isAgent) {
-    return NextResponse.json({ error: 'Agent not found' }, { status: 404 });
-  }
-
-  if (agent.managedBy !== userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
-  }
 
   // Parse request body
   const body = (await req.json()) as Record<string, unknown>;
@@ -252,22 +247,47 @@ export const POST = withErrorHandling(async function POST(
     );
   }
 
-  // Create goal
-  const goal = await db.agentGoal.create({
-    data: {
-      id: await generateSnowflakeId(),
-      agentUserId: agentId,
-      type,
-      name,
-      description,
-      target: typeof target === 'string' ? target : undefined,
-      priority: priorityValue,
-      status: 'active',
-      progress: 0,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
+  const createResult = await asUser(userId, async (tx) => {
+    const agent = await tx.user.findUnique({
+      where: { id: agentId },
+      select: { isAgent: true, managedBy: true },
+    });
+
+    if (!agent || !agent.isAgent) {
+      return { kind: 'agent_not_found' as const };
+    }
+
+    if (agent.managedBy !== userId) {
+      return { kind: 'forbidden' as const };
+    }
+
+    const goal = await tx.agentGoal.create({
+      data: {
+        id: await generateSnowflakeId(),
+        agentUserId: agentId,
+        type,
+        name,
+        description,
+        target: typeof target === 'string' ? target : undefined,
+        priority: priorityValue,
+        status: 'active',
+        progress: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    return { kind: 'ok' as const, goal };
   });
+
+  if (createResult.kind === 'agent_not_found') {
+    return NextResponse.json({ error: 'Agent not found' }, { status: 404 });
+  }
+  if (createResult.kind === 'forbidden') {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+  }
+
+  const { goal } = createResult;
 
   return NextResponse.json({
     success: true,

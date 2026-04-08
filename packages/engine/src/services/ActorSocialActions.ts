@@ -5,16 +5,13 @@
  * based on interaction history and social relationships.
  */
 
-import { and, eq, gte } from '@babylon/db';
 import {
-  chatParticipants,
-  chats,
-  db,
-  groupMembers,
-  groups,
-  messages,
-  userInteractions,
-} from '@babylon/db/runtime';
+  fetchActorSocialSampleContinuousGroupChat,
+  fetchUserActiveGroupMembershipForOwner,
+  listActorSocialNonGroupChatParticipants,
+  listActorSocialRecentInteractionPairs,
+  runActorSocialCreateDmWithMessage,
+} from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import { NPC_SOCIAL_ACTIONS_CONFIG } from '../config/npc-activity';
 import { clamp01 } from '../utils/math-utils';
@@ -38,21 +35,13 @@ export class ActorSocialActions {
   static async processRandomSocialActions(): Promise<SocialAction[]> {
     const actions: SocialAction[] = [];
 
-    // Get all actors from static registry (limit to prevent overload)
     const actorList = StaticDataRegistry.getAllActors().slice(0, 50);
 
-    // Get all active users with interactions
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    const usersWithInteractions = await db
-      .selectDistinctOn([userInteractions.userId, userInteractions.npcId], {
-        userId: userInteractions.userId,
-        npcId: userInteractions.npcId,
-        qualityScore: userInteractions.qualityScore,
-      })
-      .from(userInteractions)
-      .where(gte(userInteractions.timestamp, sevenDaysAgo));
+    const usersWithInteractions = await listActorSocialRecentInteractionPairs({
+      since: sevenDaysAgo,
+    });
 
-    // Group interactions by actor-user pairs
     const interactionMap = new Map<
       string,
       Array<{ userId: string; qualityScore: number }>
@@ -72,7 +61,6 @@ export class ActorSocialActions {
       }
     }
 
-    // Process each actor-user pair
     for (const actor of actorList) {
       const actorInteractions = Array.from(interactionMap.entries())
         .filter(([key]) => key.startsWith(`${actor.id}-`))
@@ -100,33 +88,17 @@ export class ActorSocialActions {
           continue;
         }
 
-        // Check if user is already in this NPC's group specifically
-        const [existingMembership] = await db
-          .select({ id: groupMembers.id })
-          .from(groupMembers)
-          .innerJoin(groups, eq(groups.id, groupMembers.groupId))
-          .where(
-            and(
-              eq(groupMembers.userId, userId),
-              eq(groupMembers.isActive, true),
-              eq(groups.ownerId, actor.id) // Only check groups owned by this NPC
-            )
-          )
-          .limit(1);
+        const existingMembership = await fetchUserActiveGroupMembershipForOwner(
+          {
+            userId,
+            ownerId: actor.id,
+          }
+        );
 
-        // Check if there's already a DM chat between this actor and user
         let hasExistingDM = false;
         if (userId && actor.id) {
-          const dmChats = await db
-            .select({
-              chatId: chats.id,
-              participants: chatParticipants.userId,
-            })
-            .from(chats)
-            .innerJoin(chatParticipants, eq(chatParticipants.chatId, chats.id))
-            .where(eq(chats.isGroup, false));
+          const dmChats = await listActorSocialNonGroupChatParticipants();
 
-          // Group by chat to check for DM between these two users
           const chatParticipantMap = new Map<string, string[]>();
           for (const row of dmChats) {
             if (!chatParticipantMap.has(row.chatId)) {
@@ -137,7 +109,6 @@ export class ActorSocialActions {
             }
           }
 
-          // Check if any chat has exactly these two participants
           for (const [, participants] of chatParticipantMap) {
             if (
               participants.length === 2 &&
@@ -150,8 +121,6 @@ export class ActorSocialActions {
           }
         }
 
-        // Calculate probabilities based on interaction quality and count
-        // Use safe denominators to prevent division by zero (fallback to 1 if zero)
         const qualityDenominator =
           NPC_SOCIAL_ACTIONS_CONFIG.minInteractionQuality || 1;
         const countDenominator =
@@ -175,19 +144,12 @@ export class ActorSocialActions {
 
         if (!userId) throw new Error('User ID is required');
         if (!actor.id) throw new Error('Actor ID is required');
-        // Randomly decide to invite to group chat
         if (!existingMembership && Math.random() < inviteProbability) {
-          // Try to find an existing game chat owned by this actor
           let chatId = `${actor.id}-owned-chat`;
           let chatName = `${actor.name}'s Inner Circle`;
 
-          // Look for existing game chats where this actor might be admin
-          // Group chats are stored with kebab-case names, so we search by name pattern
-          const [existingChat] = await db
-            .select()
-            .from(chats)
-            .where(and(eq(chats.isGroup, true), eq(chats.gameId, 'continuous')))
-            .limit(1);
+          const existingChat =
+            await fetchActorSocialSampleContinuousGroupChat();
 
           if (existingChat) {
             chatId = existingChat.id;
@@ -218,7 +180,6 @@ export class ActorSocialActions {
           );
         }
 
-        // Randomly decide to send DM
         if (!hasExistingDM && Math.random() < dmProbability) {
           const dmChat = await ActorSocialActions.createDMWithMessage(
             actor.id,
@@ -264,7 +225,6 @@ export class ActorSocialActions {
     actorId: string,
     userId: string
   ): Promise<{ id: string; messageContent: string }> {
-    // Generate a DM message content (simple for now, could use LLM)
     const messagesList: string[] = [
       "Hey! I've been noticing your posts. Want to chat?",
       'Thought you might find this interesting...',
@@ -274,87 +234,17 @@ export class ActorSocialActions {
     ];
     const randomIndex = Math.floor(Math.random() * messagesList.length);
     const messageContent: string =
-      messagesList[randomIndex] ?? messagesList[0] ?? ''; // Safe: randomIndex is always within bounds
+      messagesList[randomIndex] ?? messagesList[0] ?? '';
 
-    // Create or get DM chat
-    const chatId = await generateSnowflakeId();
-
-    // Check if chat exists
-    const [existingChat] = await db
-      .select()
-      .from(chats)
-      .where(eq(chats.id, `dm-${actorId}-${userId}`))
-      .limit(1);
-
-    let finalChatId = chatId;
-
-    if (existingChat) {
-      finalChatId = existingChat.id;
-    } else {
-      await db.insert(chats).values({
-        id: chatId,
-        name: null, // DMs don't have names
-        isGroup: false,
-        updatedAt: new Date(),
-      });
-    }
-
-    // Add participants
-    const participantId1 = await generateSnowflakeId();
-    const participantId2 = await generateSnowflakeId();
-
-    // Check if participant exists
-    const [existingParticipant1] = await db
-      .select()
-      .from(chatParticipants)
-      .where(
-        and(
-          eq(chatParticipants.chatId, finalChatId),
-          eq(chatParticipants.userId, actorId)
-        )
-      )
-      .limit(1);
-
-    if (!existingParticipant1) {
-      await db.insert(chatParticipants).values({
-        id: participantId1,
-        chatId: finalChatId,
-        userId: actorId,
-      });
-    }
-
-    const [existingParticipant2] = await db
-      .select()
-      .from(chatParticipants)
-      .where(
-        and(
-          eq(chatParticipants.chatId, finalChatId),
-          eq(chatParticipants.userId, userId)
-        )
-      )
-      .limit(1);
-
-    if (!existingParticipant2) {
-      await db.insert(chatParticipants).values({
-        id: participantId2,
-        chatId: finalChatId,
-        userId,
-      });
-    }
+    const newChatSnowflakeId = await generateSnowflakeId();
 
     if (!messageContent) throw new Error('Message content is required');
 
-    // Create initial message from actor
-    await db.insert(messages).values({
-      id: await generateSnowflakeId(),
-      chatId: finalChatId,
-      senderId: actorId,
-      content: messageContent,
-    });
-
-    return {
-      id: finalChatId,
+    return runActorSocialCreateDmWithMessage({
+      actorId,
+      userId,
       messageContent,
-    };
+      newChatSnowflakeId,
+    });
   }
 }

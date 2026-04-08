@@ -102,7 +102,7 @@ import {
 } from '@babylon/api';
 import type { JsonValue } from '@babylon/db';
 
-import { db } from '@babylon/db/runtime';
+import { asPublic, asSystem, asUser } from '@babylon/db/engine-storage';
 import { updateFeedbackMetrics } from '@babylon/engine';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
@@ -144,21 +144,23 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   }
 
   const now = new Date();
-  const feedback = await db.feedback.create({
-    data: {
-      id: await generateSnowflakeId(),
-      fromUserId: fromUser.id,
-      toUserId: toAgent.id,
-      score: body.score,
-      rating: body.rating,
-      comment: body.comment,
-      category: body.category,
-      interactionType: body.interactionType ?? 'user_to_agent',
-      metadata: body.metadata as JsonValue | undefined,
-      createdAt: now,
-      updatedAt: now,
-    },
-  });
+  const feedback = await asUser(authUser, async (db) =>
+    db.feedback.create({
+      data: {
+        id: await generateSnowflakeId(),
+        fromUserId: fromUser.id,
+        toUserId: toAgent.id,
+        score: body.score,
+        rating: body.rating,
+        comment: body.comment,
+        category: body.category,
+        interactionType: body.interactionType ?? 'user_to_agent',
+        metadata: body.metadata as JsonValue | undefined,
+        createdAt: now,
+        updatedAt: now,
+      },
+    })
+  );
 
   logger.info('User-to-agent feedback created', {
     feedbackId: feedback.id,
@@ -181,20 +183,24 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     });
   });
 
-  const metrics = await db.agentPerformanceMetrics.findUnique({
-    where: { userId: toAgent.id },
-    select: {
-      reputationScore: true,
-      trustLevel: true,
-      confidenceScore: true,
-      averageFeedbackScore: true,
-      averageRating: true,
-      totalFeedbackCount: true,
-      positiveCount: true,
-      neutralCount: true,
-      negativeCount: true,
-    },
-  });
+  const metrics = await asSystem(
+    async (db) =>
+      db.agentPerformanceMetrics.findUnique({
+        where: { userId: toAgent.id },
+        select: {
+          reputationScore: true,
+          trustLevel: true,
+          confidenceScore: true,
+          averageFeedbackScore: true,
+          averageRating: true,
+          totalFeedbackCount: true,
+          positiveCount: true,
+          neutralCount: true,
+          negativeCount: true,
+        },
+      }),
+    'feedback-user-to-agent-metrics'
+  );
 
   return NextResponse.json(
     {
@@ -225,47 +231,51 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   const agent = await requireUserByIdentifier(agentId);
 
-  const feedback = await db.feedback.findMany({
-    where: {
-      toUserId: agent.id,
-      interactionType: {
-        in: [
-          'user_to_agent',
-          'chat',
-          'trade_recommendation',
-          'game_assistance',
-        ],
-      },
-    },
-    include: {
-      User_Feedback_fromUserIdToUser: {
-        select: {
-          id: true,
-          username: true,
-          displayName: true,
-          profileImageUrl: true,
+  const { feedback, total } = await asPublic(async (db) => {
+    const [rows, count] = await Promise.all([
+      db.feedback.findMany({
+        where: {
+          toUserId: agent.id,
+          interactionType: {
+            in: [
+              'user_to_agent',
+              'chat',
+              'trade_recommendation',
+              'game_assistance',
+            ],
+          },
         },
-      },
-    },
-    orderBy: {
-      createdAt: 'desc',
-    },
-    take: limit,
-    skip: offset,
-  });
-
-  const total = await db.feedback.count({
-    where: {
-      toUserId: agent.id,
-      interactionType: {
-        in: [
-          'user_to_agent',
-          'chat',
-          'trade_recommendation',
-          'game_assistance',
-        ],
-      },
-    },
+        include: {
+          User_Feedback_fromUserIdToUser: {
+            select: {
+              id: true,
+              username: true,
+              displayName: true,
+              profileImageUrl: true,
+            },
+          },
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+        take: limit,
+        skip: offset,
+      }),
+      db.feedback.count({
+        where: {
+          toUserId: agent.id,
+          interactionType: {
+            in: [
+              'user_to_agent',
+              'chat',
+              'trade_recommendation',
+              'game_assistance',
+            ],
+          },
+        },
+      }),
+    ]);
+    return { feedback: rows, total: count };
   });
 
   return NextResponse.json({

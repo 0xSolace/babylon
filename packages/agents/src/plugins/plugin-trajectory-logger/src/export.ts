@@ -7,8 +7,16 @@
  * NOTE: Requires trajectory schema that's not yet in main schema
  */
 
-import { and, desc, eq, gte, inArray, isNotNull, lte, sql } from '@babylon/db';
-import { db, trajectories } from '@babylon/db/runtime';
+import {
+  executeTrajectoryScenarioCountsForGrpo,
+  selectDistinctScenarioIdsForTrajectoryExport,
+  selectTrajectoriesByScenarioForGroupedExport,
+  selectTrajectoriesForGrpoScenario,
+  selectTrajectoriesForHuggingFaceExport,
+  selectTrajectoriesForOpenPipeArt,
+  type TrajectoryExportFilters,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import { shuffleArray } from '@babylon/engine';
 import { logger } from '../../../shared/logger';
 import type { JsonValue } from '../../../types/common';
@@ -43,37 +51,33 @@ export interface ExportResult {
   error?: string;
 }
 
+function toTrajectoryExportFilters(
+  options: ExportOptions
+): TrajectoryExportFilters {
+  return {
+    startDate: options.startDate,
+    endDate: options.endDate,
+    agentIds: options.agentIds,
+    scenarioIds: options.scenarioIds,
+    minReward: options.minReward,
+    maxReward: options.maxReward,
+    includeJudged: options.includeJudged,
+  };
+}
+
 /**
  * Export trajectories to Hugging Face Dataset
  */
 export async function exportToHuggingFace(
   options: ExportOptions
 ): Promise<ExportResult> {
-  // Build where conditions
-  const conditions = buildWhereConditions(options);
+  const filters = toTrajectoryExportFilters(options);
 
-  // Fetch trajectories using Drizzle
-  const result = await db
-    .select({
-      trajectoryId: trajectories.trajectoryId,
-      agentId: trajectories.agentId,
-      episodeId: trajectories.episodeId,
-      scenarioId: trajectories.scenarioId,
-      startTime: trajectories.startTime,
-      durationMs: trajectories.durationMs,
-      stepsJson: trajectories.stepsJson,
-      metricsJson: trajectories.metricsJson,
-      metadataJson: trajectories.metadataJson,
-      totalReward: trajectories.totalReward,
-      finalStatus: trajectories.finalStatus,
-      finalPnL: trajectories.finalPnL,
-      aiJudgeReward: trajectories.aiJudgeReward,
-      aiJudgeReasoning: trajectories.aiJudgeReasoning,
-    })
-    .from(trajectories)
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
-    .orderBy(desc(trajectories.startTime))
-    .limit(options.maxTrajectories || 10000);
+  const result = await selectTrajectoriesForHuggingFaceExport(
+    db,
+    filters,
+    options.maxTrajectories || 10000
+  );
 
   logger.info(
     `Exporting ${result.length} trajectories...`,
@@ -415,27 +419,23 @@ export async function exportGroupedByScenario(
   const exportDir = path.resolve(process.cwd(), 'exports', 'scenarios');
   await fs.mkdir(exportDir, { recursive: true });
 
-  // Build conditions
-  const baseConditions = buildWhereConditions(options);
-  baseConditions.push(isNotNull(trajectories.scenarioId));
+  const filters = toTrajectoryExportFilters(options);
 
-  // Get distinct scenario IDs
-  const scenarioResults = await db
-    .selectDistinct({ scenarioId: trajectories.scenarioId })
-    .from(trajectories)
-    .where(baseConditions.length > 0 ? and(...baseConditions) : undefined);
+  const scenarioResults = await selectDistinctScenarioIdsForTrajectoryExport(
+    db,
+    filters
+  );
 
   let totalExported = 0;
 
   for (const { scenarioId } of scenarioResults) {
     if (!scenarioId) continue;
 
-    // Get all trajectories for this scenario
-    const trajResults = await db
-      .select()
-      .from(trajectories)
-      .where(and(eq(trajectories.scenarioId, scenarioId), ...baseConditions))
-      .orderBy(trajectories.startTime);
+    const trajResults = await selectTrajectoriesByScenarioForGroupedExport(
+      db,
+      scenarioId,
+      filters
+    );
 
     if (trajResults.length < 2) continue; // Need at least 2 for comparison
 
@@ -492,14 +492,11 @@ export async function exportForOpenPipeART(
 
   const { toARTTrajectory } = await import('./art-format');
 
-  const conditions = buildWhereConditions(options);
-
-  const trajResults = await db
-    .select()
-    .from(trajectories)
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
-    .limit(options.maxTrajectories || 10000)
-    .orderBy(trajectories.startTime);
+  const trajResults = await selectTrajectoriesForOpenPipeArt(
+    db,
+    toTrajectoryExportFilters(options),
+    options.maxTrajectories || 10000
+  );
 
   const artFormat = trajResults.map((traj) => {
     const steps = JSON.parse(traj.stepsJson);
@@ -568,15 +565,9 @@ export async function exportGroupedForGRPO(
   const MAX_TRAJECTORIES = options.maxTrajectories || 2000; // Default hard limit
   const MAX_TRAJECTORIES_PER_SCENARIO = 50; // Limit per scenario to prevent huge files
 
-  const baseConditions = buildWhereConditions(options);
+  const filters = toTrajectoryExportFilters(options);
 
-  // Get scenarios with counts using raw SQL for groupBy
-  const scenarioCountsRaw = await db.execute(sql`
-      SELECT "scenarioId", COUNT(*) as count 
-      FROM trajectories 
-      WHERE "scenarioId" IS NOT NULL AND "isTrainingData" = true
-      GROUP BY "scenarioId"
-    `);
+  const scenarioCountsRaw = await executeTrajectoryScenarioCountsForGrpo(db);
 
   // Type for raw SQL scenario count row with index signature for compatibility
   interface ScenarioCountRow {
@@ -625,12 +616,12 @@ export async function exportGroupedForGRPO(
       remainingQuota
     );
 
-    const trajResults = await db
-      .select()
-      .from(trajectories)
-      .where(and(eq(trajectories.scenarioId, scenarioId), ...baseConditions))
-      .orderBy(trajectories.startTime)
-      .limit(takeForScenario);
+    const trajResults = await selectTrajectoriesForGrpoScenario(
+      db,
+      scenarioId,
+      filters,
+      takeForScenario
+    );
 
     // Convert to trajectory objects
     const trajObjects = trajResults.map((traj, index) => ({
@@ -686,35 +677,4 @@ export async function exportGroupedForGRPO(
     success: true,
     trajectoriesExported: totalExported,
   };
-}
-
-/**
- * Build Drizzle where conditions from export options
- */
-function buildWhereConditions(options: ExportOptions) {
-  const conditions = [eq(trajectories.isTrainingData, true)];
-
-  if (options.startDate) {
-    conditions.push(gte(trajectories.startTime, options.startDate));
-  }
-  if (options.endDate) {
-    conditions.push(lte(trajectories.startTime, options.endDate));
-  }
-  if (options.agentIds && options.agentIds.length > 0) {
-    conditions.push(inArray(trajectories.agentId, options.agentIds));
-  }
-  if (options.scenarioIds && options.scenarioIds.length > 0) {
-    conditions.push(inArray(trajectories.scenarioId, options.scenarioIds));
-  }
-  if (options.minReward !== undefined) {
-    conditions.push(gte(trajectories.totalReward, options.minReward));
-  }
-  if (options.maxReward !== undefined) {
-    conditions.push(lte(trajectories.totalReward, options.maxReward));
-  }
-  if (options.includeJudged) {
-    conditions.push(isNotNull(trajectories.aiJudgeReward));
-  }
-
-  return conditions;
 }

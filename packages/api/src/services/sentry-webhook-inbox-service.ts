@@ -1,6 +1,6 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { generateSnowflakeId, type JsonValue } from '@babylon/db';
-import { db, sentryWebhookInboxes } from '@babylon/db/runtime';
+import { asSystem, sentryWebhookInboxes } from '@babylon/db/engine-storage';
 
 import { logger } from '@babylon/shared';
 
@@ -479,36 +479,40 @@ export async function ingestSentryWebhook(
   });
   const webhookTimestamp = new Date(parsedTimestamp.timestampSeconds * 1000);
   const inboxId = await generateSnowflakeId();
-  const insertResult = await db
-    .insert(sentryWebhookInboxes)
-    .values({
-      id: inboxId,
-      resource,
-      action,
-      organizationSlug,
-      projectSlug,
-      issueId,
-      issueShortId,
-      issueTitle,
-      issueUrl,
-      eventId,
-      level,
-      culprit,
-      dedupeKey,
-      routingKey,
-      webhookTimestamp,
-      payload,
-      metadata: toMetadata({
-        bodyHash,
-        headers: input.headers,
-        receivedAt: now,
-      }),
-      receivedAt: now,
-      nextAttemptAt: now,
-      updatedAt: now,
-    })
-    .onConflictDoNothing({ target: sentryWebhookInboxes.dedupeKey })
-    .returning({ id: sentryWebhookInboxes.id });
+  const insertResult = await asSystem(
+    async (c) =>
+      c
+        .insert(sentryWebhookInboxes)
+        .values({
+          id: inboxId,
+          resource,
+          action,
+          organizationSlug,
+          projectSlug,
+          issueId,
+          issueShortId,
+          issueTitle,
+          issueUrl,
+          eventId,
+          level,
+          culprit,
+          dedupeKey,
+          routingKey,
+          webhookTimestamp,
+          payload,
+          metadata: toMetadata({
+            bodyHash,
+            headers: input.headers,
+            receivedAt: now,
+          }),
+          receivedAt: now,
+          nextAttemptAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoNothing({ target: sentryWebhookInboxes.dedupeKey })
+        .returning({ id: sentryWebhookInboxes.id }),
+    'sentry-webhook-inbox-insert'
+  );
 
   const insertedId = insertResult[0]?.id;
   if (!insertedId) {

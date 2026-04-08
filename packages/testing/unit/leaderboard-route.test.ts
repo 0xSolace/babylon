@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import * as babylonDb from '@babylon/db';
+import * as sharedActual from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
 const mockOptionalAuth = mock(async () => ({
@@ -92,6 +94,7 @@ mock.module('@babylon/api', () => ({
 }));
 
 mock.module('@babylon/db', () => ({
+  ...babylonDb,
   and: (...conditions: unknown[]) => ({ op: 'and', conditions }),
   eq: (left: unknown, right: unknown) => ({ op: 'eq', left, right }),
   inArray: (column: unknown, values: unknown[]) => ({
@@ -101,19 +104,28 @@ mock.module('@babylon/db', () => ({
   }),
 }));
 
-mock.module('@babylon/db/runtime', () => ({
-  db: {
-    get select() {
-      return mockDbSelect;
-    },
+const leaderboardMockDb = {
+  get select() {
+    return mockDbSelect;
   },
+};
+
+mock.module('@babylon/db/engine-storage', () => ({
+  db: leaderboardMockDb,
   follows: {
     followerId: 'follows.followerId',
     followingId: 'follows.followingId',
   },
+  asUser: async <T>(
+    _user: unknown,
+    op: (c: typeof leaderboardMockDb) => Promise<T>
+  ) => op(leaderboardMockDb),
+  asPublic: async <T>(op: (c: typeof leaderboardMockDb) => Promise<T>) =>
+    op(leaderboardMockDb),
 }));
 
 mock.module('@babylon/shared', () => ({
+  ...sharedActual,
   LeaderboardQuerySchema: {
     safeParse: (input: Record<string, string>) => ({
       success: true,

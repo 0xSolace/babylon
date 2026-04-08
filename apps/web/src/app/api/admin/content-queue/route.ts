@@ -13,9 +13,8 @@
  */
 
 import { requireAdmin, successResponse, withErrorHandling } from '@babylon/api';
-import { and, count, desc, eq, isNull, sql } from '@babylon/db';
-import { comments, db, posts, reports, users } from '@babylon/db/runtime';
-
+import { fetchAdminContentQueueBundle } from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
@@ -100,119 +99,16 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     'GET /api/admin/content-queue'
   );
 
-  // Get reported posts with report counts using JOIN + GROUP BY (optimized, no N+1)
-  const reportedPosts =
-    contentType === 'comments'
-      ? []
-      : await db
-          .select({
-            id: posts.id,
-            content: posts.content,
-            createdAt: posts.createdAt,
-            deletedAt: posts.deletedAt,
-            authorId: posts.authorId,
-            imageUrl: posts.imageUrl,
-            authorUsername: users.username,
-            authorDisplayName: users.displayName,
-            authorProfileImage: users.profileImageUrl,
-            authorIsActor: users.isActor,
-            reportCount: count(reports.id),
-          })
-          .from(posts)
-          .innerJoin(users, eq(posts.authorId, users.id))
-          .innerJoin(
-            reports,
-            and(
-              eq(reports.reportedPostId, posts.id),
-              eq(reports.status, status)
-            )
-          )
-          .where(status === 'pending' ? isNull(posts.deletedAt) : undefined)
-          .groupBy(
-            posts.id,
-            posts.content,
-            posts.createdAt,
-            posts.deletedAt,
-            posts.authorId,
-            posts.imageUrl,
-            users.username,
-            users.displayName,
-            users.profileImageUrl,
-            users.isActor
-          )
-          .orderBy(desc(posts.createdAt))
-          .limit(limit)
-          .offset(offset);
-
-  // Get reported comments with report counts using JOIN + GROUP BY
-  const reportedComments =
-    contentType === 'posts'
-      ? []
-      : await db
-          .select({
-            id: comments.id,
-            content: comments.content,
-            createdAt: comments.createdAt,
-            deletedAt: comments.deletedAt,
-            postId: comments.postId,
-            authorId: comments.authorId,
-            authorUsername: users.username,
-            authorDisplayName: users.displayName,
-            authorProfileImage: users.profileImageUrl,
-            authorIsActor: users.isActor,
-            reportCount: count(reports.id),
-          })
-          .from(comments)
-          .innerJoin(users, eq(comments.authorId, users.id))
-          .innerJoin(
-            reports,
-            and(
-              eq(reports.reportedCommentId, comments.id),
-              eq(reports.status, status)
-            )
-          )
-          .where(status === 'pending' ? isNull(comments.deletedAt) : undefined)
-          .groupBy(
-            comments.id,
-            comments.content,
-            comments.createdAt,
-            comments.deletedAt,
-            comments.postId,
-            comments.authorId,
-            users.username,
-            users.displayName,
-            users.profileImageUrl,
-            users.isActor
-          )
-          .orderBy(desc(comments.createdAt))
-          .limit(limit)
-          .offset(offset);
-
-  // Get queue stats using efficient aggregation
-  const [postStats] = await db
-    .select({
-      pending: sql<number>`COUNT(DISTINCT ${posts.id}) FILTER (WHERE ${posts.deletedAt} IS NULL)`,
-      deleted: sql<number>`COUNT(DISTINCT ${posts.id}) FILTER (WHERE ${posts.deletedAt} IS NOT NULL)`,
-    })
-    .from(posts)
-    .innerJoin(
-      reports,
-      and(eq(reports.reportedPostId, posts.id), eq(reports.status, 'pending'))
-    );
-
-  // Get comment stats using efficient aggregation (separate from paginated results)
-  const [commentStats] = await db
-    .select({
-      pending: sql<number>`COUNT(DISTINCT ${comments.id}) FILTER (WHERE ${comments.deletedAt} IS NULL)`,
-      deleted: sql<number>`COUNT(DISTINCT ${comments.id}) FILTER (WHERE ${comments.deletedAt} IS NOT NULL)`,
-    })
-    .from(comments)
-    .innerJoin(
-      reports,
-      and(
-        eq(reports.reportedCommentId, comments.id),
-        eq(reports.status, 'pending')
-      )
+  const { reportedPosts, reportedComments, postStats, commentStats } =
+    await asSystem(
+      (tx) =>
+        fetchAdminContentQueueBundle(tx, {
+          contentType,
+          status,
+          limit,
+          offset,
+        }),
+      'admin-content-queue'
     );
 
   return successResponse({
@@ -235,15 +131,14 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     })),
     stats: {
       posts: {
-        pending: Number(postStats?.pending ?? 0),
-        hidden: Number(postStats?.deleted ?? 0),
+        pending: postStats?.pending ?? 0,
+        hidden: postStats?.deleted ?? 0,
       },
       comments: {
-        pending: Number(commentStats?.pending ?? 0),
-        hidden: Number(commentStats?.deleted ?? 0),
+        pending: commentStats?.pending ?? 0,
+        hidden: commentStats?.deleted ?? 0,
       },
-      totalPending:
-        Number(postStats?.pending ?? 0) + Number(commentStats?.pending ?? 0),
+      totalPending: (postStats?.pending ?? 0) + (commentStats?.pending ?? 0),
     },
   });
 });

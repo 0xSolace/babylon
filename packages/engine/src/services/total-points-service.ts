@@ -15,21 +15,16 @@
 
 import { isOpenPerpPositionStateValid } from '@babylon/core/markets/perps';
 import { PredictionPricing } from '@babylon/core/markets/prediction';
-import { and, eq, gt, inArray, isNotNull, isNull, lte, sql } from '@babylon/db';
 import {
-  db,
-  markets,
-  perpPositions,
-  positions,
-  userPointsSnapshots,
-  users,
-  whitelist,
-} from '@babylon/db/runtime';
-import {
-  generateSnowflakeId,
-  logger,
-  resolveUserIdentifierKind,
-} from '@babylon/shared';
+  bulkBackfillTotalPointsFromBalance,
+  clearUserTotalPointsDirtyIfBefore,
+  listDirtyTotalPointsUserIdsBatch,
+  markUserTotalPointsDirty,
+  markZeroTotalPointsDirtyBatch,
+  runTotalPointsRecomputeTransaction,
+  snapshotTotalPointsUserBatch,
+} from '@babylon/db';
+import { logger } from '@babylon/shared';
 import { FEE_CONFIG } from '../config/fees';
 import { calculatePerpPositionMarketValue } from '../portfolio-valuation';
 
@@ -137,34 +132,49 @@ export const TotalPointsService = {
       return 0;
     }
 
-    // Classify identifier to determine optimal query route
-    // WHY: Eliminates OR condition that prevents optimal index usage.
-    // This is a SELECT query, but same optimization applies - single indexed query is faster.
-    const kind = resolveUserIdentifierKind(normalizedUserId);
+    const result = await runTotalPointsRecomputeTransaction(
+      normalizedUserId,
+      ({ user, perpRows, predictionRows }) => {
+        const wallet = toNumber(user.virtualBalance);
+        const reputation = user.reputationPoints;
 
-    // Route to single WHERE condition based on classification
-    // WHY sql template for username? Username matching must be case-insensitive to use
-    // the functional index idx_users_username_lower. Using eq() would be case-sensitive.
-    const whereClause =
-      kind === 'id'
-        ? eq(users.id, normalizedUserId)
-        : kind === 'privyId'
-          ? eq(users.privyId, normalizedUserId)
-          : sql`lower(${users.username}) = lower(${normalizedUserId})`; // Case-insensitive for functional index
+        const invalidPerpRows = perpRows.filter(
+          (position) => !isOpenPerpPositionStateValid(position)
+        );
+        if (invalidPerpRows.length > 0) {
+          logger.warn(
+            'Excluding invalid open perp positions from total points calculation',
+            {
+              userId: user.id,
+              invalidPerpPositions: invalidPerpRows.length,
+            },
+            'TotalPointsService'
+          );
+        }
 
-    const userResult = await db
-      .select({
-        id: users.id,
-        privyId: users.privyId,
-        virtualBalance: users.virtualBalance,
-        reputationPoints: users.reputationPoints,
-      })
-      .from(users)
-      .where(whereClause)
-      .limit(1);
+        const perpsValue = perpRows.reduce(
+          (sum, p) => sum + calculatePerpPositionMarketValue(p),
+          0
+        );
 
-    const user = userResult[0];
-    if (!user) {
+        const predictionsValue = predictionRows.reduce(
+          (sum, p) =>
+            sum +
+            calculatePredictionPositionValue({
+              shares: p.shares,
+              avgPrice: p.avgPrice,
+              side: p.side,
+              marketYesShares: p.marketYesShares,
+              marketNoShares: p.marketNoShares,
+            }),
+          0
+        );
+
+        return wallet + perpsValue + predictionsValue + reputation;
+      }
+    );
+
+    if (!result.userFound) {
       logger.warn(
         'recomputeTotalPoints: user not found',
         { userId },
@@ -173,86 +183,7 @@ export const TotalPointsService = {
       return 0;
     }
 
-    const wallet = toNumber(user.virtualBalance);
-    const reputation = user.reputationPoints;
-    const canonicalUserId = user.id;
-    const positionUserIds = Array.from(
-      new Set([canonicalUserId, user.privyId].filter(Boolean))
-    ) as string[];
-
-    const [perpRows, predictionRows] = await Promise.all([
-      db
-        .select({
-          size: perpPositions.size,
-          leverage: perpPositions.leverage,
-          unrealizedPnL: perpPositions.unrealizedPnL,
-        })
-        .from(perpPositions)
-        .where(
-          and(
-            inArray(perpPositions.userId, positionUserIds),
-            isNull(perpPositions.closedAt)
-          )
-        ),
-      db
-        .select({
-          shares: positions.shares,
-          avgPrice: positions.avgPrice,
-          side: positions.side,
-          marketYesShares: markets.yesShares,
-          marketNoShares: markets.noShares,
-        })
-        .from(positions)
-        .innerJoin(markets, eq(positions.marketId, markets.id))
-        .where(
-          and(
-            inArray(positions.userId, positionUserIds),
-            eq(markets.resolved, false),
-            gt(positions.shares, '0')
-          )
-        ),
-    ]);
-
-    const invalidPerpRows = perpRows.filter(
-      (position) => !isOpenPerpPositionStateValid(position)
-    );
-    if (invalidPerpRows.length > 0) {
-      logger.warn(
-        'Excluding invalid open perp positions from total points calculation',
-        {
-          userId: canonicalUserId,
-          invalidPerpPositions: invalidPerpRows.length,
-        },
-        'TotalPointsService'
-      );
-    }
-
-    const perpsValue = perpRows.reduce(
-      (sum, p) => sum + calculatePerpPositionMarketValue(p),
-      0
-    );
-
-    const predictionsValue = predictionRows.reduce(
-      (sum, p) =>
-        sum +
-        calculatePredictionPositionValue({
-          shares: p.shares,
-          avgPrice: p.avgPrice,
-          side: p.side,
-          marketYesShares: p.marketYesShares,
-          marketNoShares: p.marketNoShares,
-        }),
-      0
-    );
-
-    const totalPoints = wallet + perpsValue + predictionsValue + reputation;
-
-    await db
-      .update(users)
-      .set({ totalPoints: totalPoints.toFixed(2) })
-      .where(eq(users.id, canonicalUserId));
-
-    return totalPoints;
+    return result.totalPoints;
   },
 
   /**
@@ -283,28 +214,7 @@ export const TotalPointsService = {
       return;
     }
 
-    // Classify identifier to determine optimal query route
-    // WHY: Eliminates OR condition that prevents optimal index usage.
-    // Performance: OR condition averages 930.9ms. Single indexed query should be <50ms.
-    // This is the highest-impact optimization - 39,782 executions with 930.9ms average.
-    const kind = resolveUserIdentifierKind(normalizedUserId);
-
-    // Route to single WHERE condition based on classification
-    // WHY ternary chain? Ensures exactly one condition is used, no OR overhead
-    // WHY include username fallback? Handles edge cases, though unlikely for this query
-    // WHY sql template for username? Username matching must be case-insensitive to use
-    // the functional index idx_users_username_lower. Using eq() would be case-sensitive.
-    const whereClause =
-      kind === 'id'
-        ? eq(users.id, normalizedUserId)
-        : kind === 'privyId'
-          ? eq(users.privyId, normalizedUserId)
-          : sql`lower(${users.username}) = lower(${normalizedUserId})`; // Case-insensitive for functional index
-
-    await db
-      .update(users)
-      .set({ totalPointsDirtyAt: new Date() })
-      .where(whereClause);
+    await markUserTotalPointsDirty(normalizedUserId);
   },
 
   /**
@@ -314,42 +224,10 @@ export const TotalPointsService = {
    */
   async markZeroTotalPointsDirty(batchSize = 5000): Promise<number> {
     const safeBatchSize = Math.min(Math.max(1, batchSize), 10_000);
-    const baseWhere = and(
-      eq(users.isActor, false),
-      eq(users.totalPoints, '0'),
-      isNull(users.totalPointsDirtyAt)
-    );
-
-    let candidates: { id: string }[];
-    if (isWhitelistOnly()) {
-      candidates = await db
-        .select({ id: users.id })
-        .from(users)
-        .innerJoin(
-          whitelist,
-          and(eq(whitelist.userId, users.id), isNull(whitelist.revokedAt))
-        )
-        .where(baseWhere)
-        .orderBy(users.id)
-        .limit(safeBatchSize);
-    } else {
-      candidates = await db
-        .select({ id: users.id })
-        .from(users)
-        .where(baseWhere)
-        .orderBy(users.id)
-        .limit(safeBatchSize);
-    }
-
-    if (candidates.length === 0) return 0;
-
-    const ids = candidates.map((c) => c.id);
-    await db
-      .update(users)
-      .set({ totalPointsDirtyAt: new Date() })
-      .where(inArray(users.id, ids));
-
-    return candidates.length;
+    return markZeroTotalPointsDirtyBatch({
+      batchSize: safeBatchSize,
+      whitelistOnly: isWhitelistOnly(),
+    });
   },
 
   /**
@@ -363,52 +241,20 @@ export const TotalPointsService = {
     let lastId: string | null = null;
     const wlOnly = isWhitelistOnly();
 
-    // Cursor-based pagination: fetch BATCH_SIZE at a time, ordered by id
     while (true) {
-      const cursorFilter = lastId ? gt(users.id, lastId) : undefined;
+      const batch = await snapshotTotalPointsUserBatch({
+        whitelistOnly: wlOnly,
+        lastId,
+        batchSize: BATCH_SIZE,
+        snapshotDate: now,
+      });
 
-      // Use separate query builders to avoid drizzle type mismatch with
-      // conditional .innerJoin() (join changes the builder generic).
-      let batch: { id: string; totalPoints: string | null }[];
-      if (wlOnly) {
-        batch = await db
-          .select({ id: users.id, totalPoints: users.totalPoints })
-          .from(users)
-          .innerJoin(
-            whitelist,
-            and(eq(whitelist.userId, users.id), isNull(whitelist.revokedAt))
-          )
-          .where(and(eq(users.isActor, false), cursorFilter))
-          .orderBy(users.id)
-          .limit(BATCH_SIZE);
-      } else {
-        batch = await db
-          .select({ id: users.id, totalPoints: users.totalPoints })
-          .from(users)
-          .where(and(eq(users.isActor, false), cursorFilter))
-          .orderBy(users.id)
-          .limit(BATCH_SIZE);
-      }
+      if (batch.count === 0) break;
 
-      if (batch.length === 0) break;
+      processed += batch.count;
+      lastId = batch.lastUserId;
 
-      const rows = await Promise.all(
-        batch.map(async (user) => ({
-          id: await generateSnowflakeId(),
-          userId: user.id,
-          totalPoints: user.totalPoints ?? '0',
-          snapshotDate: now,
-          period: 'daily' as const,
-        }))
-      );
-      await db.insert(userPointsSnapshots).values(rows);
-
-      processed += batch.length;
-      const lastUser = batch[batch.length - 1];
-      if (lastUser) lastId = lastUser.id;
-
-      // If we got fewer than BATCH_SIZE, we've reached the end
-      if (batch.length < BATCH_SIZE) break;
+      if (batch.count < BATCH_SIZE) break;
     }
 
     return processed;
@@ -425,18 +271,11 @@ export const TotalPointsService = {
     let processed = 0;
     let lastId: string | null = null;
 
-    // Cursor-based pagination: fetch BATCH_SIZE at a time, ordered by id
     while (true) {
-      const whereClause = lastId
-        ? and(isNotNull(users.totalPointsDirtyAt), gt(users.id, lastId))
-        : isNotNull(users.totalPointsDirtyAt);
-
-      const batch: { id: string }[] = await db
-        .select({ id: users.id })
-        .from(users)
-        .where(whereClause)
-        .orderBy(users.id)
-        .limit(BATCH_SIZE);
+      const batch = await listDirtyTotalPointsUserIdsBatch({
+        lastId,
+        batchSize: BATCH_SIZE,
+      });
 
       if (batch.length === 0) break;
 
@@ -454,13 +293,10 @@ export const TotalPointsService = {
               'TotalPointsService'
             );
           }
-          // Clear flag even on error to avoid infinite retry loops
-          await db
-            .update(users)
-            .set({ totalPointsDirtyAt: null })
-            .where(
-              and(eq(users.id, user.id), lte(users.totalPointsDirtyAt, cutoff))
-            );
+          await clearUserTotalPointsDirtyIfBefore({
+            userId: user.id,
+            cutoff,
+          });
         })
       );
 
@@ -468,7 +304,6 @@ export const TotalPointsService = {
       const lastUser = batch[batch.length - 1];
       if (lastUser) lastId = lastUser.id;
 
-      // If we got fewer than BATCH_SIZE, we've reached the end
       if (batch.length < BATCH_SIZE) break;
     }
 
@@ -483,32 +318,10 @@ export const TotalPointsService = {
    */
   async bulkBackfillFromBalance(): Promise<number> {
     const wlOnly = isWhitelistOnly();
-    const result = wlOnly
-      ? await db.execute(sql`
-          UPDATE "User" u
-          SET
-            "totalPoints" = COALESCE(CAST(u."virtualBalance" AS DECIMAL(18,2)), 0) + u."reputationPoints",
-            "totalPointsDirtyAt" = NOW()
-          FROM "Whitelist" w
-          WHERE w."userId" = u."id"
-            AND w."revokedAt" IS NULL
-            AND u."totalPoints" = '0'
-            AND u."isActor" = false
-        `)
-      : await db.execute(sql`
-          UPDATE "User"
-          SET
-            "totalPoints" = COALESCE(CAST("virtualBalance" AS DECIMAL(18,2)), 0) + "reputationPoints",
-            "totalPointsDirtyAt" = NOW()
-          WHERE "totalPoints" = '0'
-            AND "isActor" = false
-        `);
+    const count = await bulkBackfillTotalPointsFromBalance({
+      whitelistOnly: wlOnly,
+    });
 
-    // postgres-js puts affected row count on `.count`; drizzle passes through
-    // the raw Result object from the driver.
-    const count = Number(
-      (result as unknown as { count?: number }).count ?? result?.length ?? 0
-    );
     logger.info(
       `Bulk backfilled totalPoints from virtualBalance for ${count} users (whitelistOnly=${wlOnly})`,
       { count, whitelistOnly: wlOnly },

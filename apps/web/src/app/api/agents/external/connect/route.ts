@@ -12,7 +12,7 @@
 import { agentRegistry } from '@babylon/agents';
 import { withErrorHandling } from '@babylon/api';
 
-import { db } from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -29,17 +29,20 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
   const body = await req.json();
   const { externalId, apiKey } = ConnectSchema.parse(body);
 
-  // Find the external agent connection
-  const connection = await db.externalAgentConnection.findUnique({
-    where: { externalId },
-    include: {
-      agentRegistry: {
+  const connection = await asSystem(
+    async (db) =>
+      db.externalAgentConnection.findUnique({
+        where: { externalId },
         include: {
-          capabilities: true,
+          agentRegistry: {
+            include: {
+              capabilities: true,
+            },
+          },
         },
-      },
-    },
-  });
+      }),
+    'external-agent-connect-lookup'
+  );
 
   if (!connection) {
     return NextResponse.json(
@@ -86,13 +89,16 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
     );
   }
 
-  // Update last connected timestamp
-  await db.externalAgentConnection.update({
-    where: { externalId },
-    data: {
-      lastConnected: new Date(),
-    },
-  });
+  await asSystem(
+    async (db) =>
+      db.externalAgentConnection.update({
+        where: { externalId },
+        data: {
+          lastConnected: new Date(),
+        },
+      }),
+    'external-agent-connect-touch'
+  );
 
   type ConnectionWithRegistry = typeof connection & {
     agentRegistry?: {

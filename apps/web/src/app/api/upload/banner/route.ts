@@ -15,10 +15,11 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { eq } from '@babylon/db';
-
-import { db, users } from '@babylon/db/runtime';
-
+import {
+  selectUserManagedByIsAgentForBannerCheck,
+  updateUserCoverImageUrlById,
+} from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -142,12 +143,9 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   // Verify ownership - targetId is required for agents (validated above), optional for users
   const effectiveTargetId = targetId ?? user.userId;
   if (targetType === 'agent') {
-    // Verify user owns/manages the agent
-    const [agent] = await db
-      .select({ managedBy: users.managedBy, isAgent: users.isAgent })
-      .from(users)
-      .where(eq(users.id, effectiveTargetId))
-      .limit(1);
+    const agent = await asUser(user, async (db) =>
+      selectUserManagedByIsAgentForBannerCheck(db, effectiveTargetId)
+    );
 
     if (!agent || !agent.isAgent || agent.managedBy !== user.userId) {
       return NextResponse.json(
@@ -191,11 +189,9 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     folder,
   });
 
-  // Update database - both agents and users use the User table with coverImageUrl
-  await db
-    .update(users)
-    .set({ coverImageUrl: result.url })
-    .where(eq(users.id, effectiveTargetId));
+  await asUser(user, async (db) =>
+    updateUserCoverImageUrlById(db, effectiveTargetId, result.url)
+  );
 
   logger.info(
     `Banner uploaded for ${targetType}`,

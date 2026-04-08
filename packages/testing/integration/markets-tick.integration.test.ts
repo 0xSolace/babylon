@@ -102,20 +102,19 @@ mock.module('@babylon/engine', async () => {
   };
 });
 
+import { type MarketTimeframe } from '@babylon/db';
 import {
-  and,
-  eq,
-  inArray,
-  isNull,
-  type MarketTimeframe,
-  sql,
-} from '@babylon/db';
-import { db, posts, questions, timeframedMarkets } from '@babylon/db/runtime';
+  db,
+  posts,
+  questions,
+  timeframedMarkets,
+} from '@babylon/db/engine-storage';
 import {
   GRANULAR_TO_DB_TIMEFRAME,
   mapGranularToDbTimeframe,
 } from '@babylon/engine';
 import { generateSnowflakeId } from '@babylon/shared';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 // Set timeout to 120 seconds for integration tests (market creation can be slow)
 setDefaultTimeout(120000);

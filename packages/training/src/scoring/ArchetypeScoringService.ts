@@ -7,8 +7,13 @@
  * @packageDocumentation
  */
 
-import { and, eq, inArray, isNull, not } from '@babylon/db';
-import { db, trajectories } from '@babylon/db/runtime';
+import {
+  selectTrajectoryJudgeContextByTrajectoryId,
+  selectTrajectoryJudgeContextsByTrajectoryIds,
+  selectUnscoredTrainingTrajectoryIdsLimit,
+  updateTrajectoryAiJudgeResultByTrajectoryId,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import { getLLMCaller } from '../dependencies';
 import { type BehavioralMetrics, trajectoryMetricsExtractor } from '../metrics';
 import { hasCustomRubric } from '../rubrics';
@@ -91,22 +96,10 @@ export class ArchetypeScoringService {
   ): Promise<ArchetypeScore | null> {
     const opts = { ...DEFAULT_OPTIONS, ...options };
 
-    const trajResult = await db
-      .select({
-        trajectoryId: trajectories.trajectoryId,
-        agentId: trajectories.agentId,
-        archetype: trajectories.archetype,
-        stepsJson: trajectories.stepsJson,
-        scenarioId: trajectories.scenarioId,
-        finalPnL: trajectories.finalPnL,
-        episodeLength: trajectories.episodeLength,
-        totalReward: trajectories.totalReward,
-      })
-      .from(trajectories)
-      .where(eq(trajectories.trajectoryId, trajectoryId))
-      .limit(1);
-
-    const traj = trajResult[0];
+    const traj = await selectTrajectoryJudgeContextByTrajectoryId(
+      db,
+      trajectoryId
+    );
     if (!traj) {
       logger.warn('Trajectory not found', { trajectoryId }, 'ArchetypeScoring');
       return null;
@@ -164,15 +157,12 @@ export class ArchetypeScoringService {
     };
 
     if (opts.saveToDatabase) {
-      await db
-        .update(trajectories)
-        .set({
-          aiJudgeReward: score.score,
-          aiJudgeReasoning: score.reasoning,
-          judgedAt: score.scoredAt,
-          isTrainingData: true,
-        })
-        .where(eq(trajectories.trajectoryId, trajectoryId));
+      await updateTrajectoryAiJudgeResultByTrajectoryId(db, trajectoryId, {
+        aiJudgeReward: score.score,
+        aiJudgeReasoning: score.reasoning,
+        judgedAt: score.scoredAt,
+        isTrainingData: true,
+      });
     }
 
     logger.info(
@@ -212,19 +202,10 @@ export class ArchetypeScoringService {
       return [];
     }
 
-    const trajResults = await db
-      .select({
-        trajectoryId: trajectories.trajectoryId,
-        agentId: trajectories.agentId,
-        archetype: trajectories.archetype,
-        stepsJson: trajectories.stepsJson,
-        scenarioId: trajectories.scenarioId,
-        finalPnL: trajectories.finalPnL,
-        episodeLength: trajectories.episodeLength,
-        totalReward: trajectories.totalReward,
-      })
-      .from(trajectories)
-      .where(inArray(trajectories.trajectoryId, trajectoryIds));
+    const trajResults = await selectTrajectoryJudgeContextsByTrajectoryIds(
+      db,
+      trajectoryIds
+    );
 
     if (trajResults.length < this.minGroupSize) {
       logger.warn(
@@ -314,15 +295,16 @@ export class ArchetypeScoringService {
         scores.push(score);
 
         if (opts.saveToDatabase) {
-          await db
-            .update(trajectories)
-            .set({
+          await updateTrajectoryAiJudgeResultByTrajectoryId(
+            db,
+            ctx.trajectoryId,
+            {
               aiJudgeReward: score.score,
               aiJudgeReasoning: score.reasoning,
               judgedAt: score.scoredAt,
               isTrainingData: true,
-            })
-            .where(eq(trajectories.trajectoryId, ctx.trajectoryId));
+            }
+          );
         }
       }
     }
@@ -382,18 +364,10 @@ export class ArchetypeScoringService {
     archetype: string = 'default',
     limit: number = 100
   ): Promise<{ scored: number; errors: number }> {
-    const unscoredResult = await db
-      .select({ trajectoryId: trajectories.trajectoryId })
-      .from(trajectories)
-      .where(
-        and(
-          isNull(trajectories.aiJudgeReward),
-          eq(trajectories.isTrainingData, true),
-          not(eq(trajectories.stepsJson, 'null')),
-          not(eq(trajectories.stepsJson, '[]'))
-        )
-      )
-      .limit(limit);
+    const unscoredResult = await selectUnscoredTrainingTrajectoryIdsLimit(
+      db,
+      limit
+    );
 
     if (unscoredResult.length === 0) {
       logger.info('No unscored trajectories found', {}, 'ArchetypeScoring');

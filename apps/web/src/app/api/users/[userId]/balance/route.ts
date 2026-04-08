@@ -66,7 +66,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 
-import { db, users } from '@babylon/db/runtime';
+import { asPublic, users } from '@babylon/db/engine-storage';
 import {
   convertBalanceToStrings,
   logger,
@@ -150,15 +150,17 @@ export const GET = withErrorHandling(
     });
 
     if (!dbUser) {
-      const [newUser] = await db
-        .insert(users)
-        .values({
-          id: userId,
-          privyId: userId,
-          isActor: false,
-          updatedAt: new Date(),
-        })
-        .returning();
+      const [newUser] = await asPublic(async (db) =>
+        db
+          .insert(users)
+          .values({
+            id: userId,
+            privyId: userId,
+            isActor: false,
+            updatedAt: new Date(),
+          })
+          .returning()
+      );
       if (!newUser) {
         throw new Error('Failed to create user');
       }

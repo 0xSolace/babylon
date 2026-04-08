@@ -10,37 +10,58 @@
  */
 
 import {
-  and,
-  count,
-  eq,
+  achCountAgentMessagesForManager,
+  achCountAgentsVisits,
+  achCountAgentTradesForManager,
+  achCountComments,
+  achCountDistinctPredictionMarkets,
+  achCountGroupMessages,
+  achCountManagedAgents,
+  achCountPerpTrades,
+  achCountPredictionTrades,
+  achCountPredictionWins,
+  achCountTerminalVisits,
+  achSelectLoginStreak,
+  achWinActivityOnDate,
+  achWinAgentMessages,
+  achWinAgentsCreatedIds,
+  achWinAgentTrades,
+  achWinComments,
+  achWinCountPerp,
+  achWinCountPositions,
+  achWinDistinctCommentedPosts,
+  achWinDistinctLikedPosts,
+  achWinDistinctMarkets,
+  achWinDistinctTradeDays,
+  achWinFollows,
+  achWinGroupCreates,
+  achWinGroupJoins,
+  achWinGroupMessages,
+  achWinMessagedAgentIds,
+  achWinPerpRealizedPnlSum,
+  achWinPosts,
+  achWinPredictionPnlSum,
+  achWinPredictionWinsResolved,
+  achWinReactions,
+  achWinReferralPlay,
+  achWinSessionDays,
+  achWinShares,
+  achWinTopMarketUserTraded,
+  countChallengeBonusRowsForPeriod,
+  countUserCompletedChallengesForPeriod,
   generateSnowflakeId,
-  gte,
-  inArray,
-  isNotNull,
-  isNull,
-  lt,
-  sql,
+  insertChallengeBonusMarkerIfNew,
+  insertUserAchievementIfNew,
+  insertUserChallengeProgressIfNew,
+  selectChallengeProgressRow,
+  selectRecentUserAchievementRows,
+  selectUnlockedAchievementIdsForUser,
+  selectUserAchievementUnlockRows,
+  selectUserChallengeProgressForPeriodKeys,
+  updateChallengeProgressCompletedTransition,
+  updateChallengeProgressInPlace,
 } from '@babylon/db';
-import {
-  agentMessages,
-  chats,
-  comments,
-  db,
-  follows,
-  groupMembers,
-  groups,
-  messages,
-  perpPositions,
-  positions,
-  posts,
-  reactions,
-  referrals,
-  shares,
-  userAchievements,
-  userActivityLogs,
-  userChallengeProgress,
-  users,
-} from '@babylon/db/runtime';
+import { db } from '@babylon/db/engine-storage';
 import {
   ACHIEVEMENT_DEFINITIONS,
   type AchievementDef,
@@ -147,129 +168,35 @@ export function getActiveWeeklyChallengeIds(date: Date = new Date()): string[] {
 type ProgressResolver = (userId: string) => Promise<number>;
 
 const ACHIEVEMENT_RESOLVERS: Record<string, ProgressResolver> = {
-  prediction_trade_count: async (userId) => {
-    const result = await db
-      .select({ c: count() })
-      .from(positions)
-      .where(eq(positions.userId, userId));
-    return result[0]!.c;
-  },
+  prediction_trade_count: (userId) => achCountPredictionTrades(db, userId),
 
-  perp_trade_count: async (userId) => {
-    const result = await db
-      .select({ c: count() })
-      .from(perpPositions)
-      .where(eq(perpPositions.userId, userId));
-    return result[0]!.c;
-  },
+  perp_trade_count: (userId) => achCountPerpTrades(db, userId),
 
   total_trade_count: async (userId) => {
-    const predResult = await db
-      .select({ c: count() })
-      .from(positions)
-      .where(eq(positions.userId, userId));
-    const perpResult = await db
-      .select({ c: count() })
-      .from(perpPositions)
-      .where(eq(perpPositions.userId, userId));
-    return predResult[0]!.c + perpResult[0]!.c;
+    const pred = await achCountPredictionTrades(db, userId);
+    const perp = await achCountPerpTrades(db, userId);
+    return pred + perp;
   },
 
-  distinct_markets: async (userId) => {
-    const result = await db
-      .select({ c: sql<number>`COUNT(DISTINCT ${positions.marketId})` })
-      .from(positions)
-      .where(eq(positions.userId, userId));
-    return Number(result[0]!.c);
-  },
+  distinct_markets: (userId) => achCountDistinctPredictionMarkets(db, userId),
 
-  prediction_win_count: async (userId) => {
-    const result = await db
-      .select({ c: count() })
-      .from(positions)
-      .where(and(eq(positions.userId, userId), eq(positions.outcome, true)));
-    return result[0]!.c;
-  },
+  prediction_win_count: (userId) => achCountPredictionWins(db, userId),
 
-  agent_count: async (userId) => {
-    const result = await db
-      .select({ c: count() })
-      .from(users)
-      .where(and(eq(users.managedBy, userId), eq(users.isAgent, true)));
-    return result[0]!.c;
-  },
+  agent_count: (userId) => achCountManagedAgents(db, userId),
 
-  agent_message_count: async (userId) => {
-    // Count messages sent to agents managed by this user
-    const result = await db
-      .select({ c: count() })
-      .from(agentMessages)
-      .innerJoin(users, eq(agentMessages.agentUserId, users.id))
-      .where(eq(users.managedBy, userId));
-    return result[0]!.c;
-  },
+  agent_message_count: (userId) => achCountAgentMessagesForManager(db, userId),
 
-  agent_trade_count: async (userId) => {
-    // Count trades by agents managed by this user
-    // AgentTrade table has agentUserId; join to User where managedBy = userId
-    const result = await db
-      .select({ c: count() })
-      .from(sql`"AgentTrade" at2`)
-      .innerJoin(users, sql`at2."agentUserId" = ${users.id}`)
-      .where(eq(users.managedBy, userId));
-    return result[0]!.c;
-  },
+  agent_trade_count: (userId) => achCountAgentTradesForManager(db, userId),
 
-  group_message_count: async (userId) => {
-    const result = await db
-      .select({ c: count() })
-      .from(messages)
-      .innerJoin(chats, eq(messages.chatId, chats.id))
-      .where(and(eq(messages.senderId, userId), eq(chats.isGroup, true)));
-    return result[0]!.c;
-  },
+  group_message_count: (userId) => achCountGroupMessages(db, userId),
 
-  comment_count: async (userId) => {
-    const result = await db
-      .select({ c: count() })
-      .from(comments)
-      .where(and(eq(comments.authorId, userId), isNull(comments.deletedAt)));
-    return result[0]!.c;
-  },
+  comment_count: (userId) => achCountComments(db, userId),
 
-  terminal_visit_count: async (userId) => {
-    const result = await db
-      .select({ c: count() })
-      .from(userActivityLogs)
-      .where(
-        and(
-          eq(userActivityLogs.userId, userId),
-          eq(userActivityLogs.activityType, 'open_terminal')
-        )
-      );
-    return result[0]!.c;
-  },
+  terminal_visit_count: (userId) => achCountTerminalVisits(db, userId),
 
-  agents_visit_count: async (userId) => {
-    const result = await db
-      .select({ c: count() })
-      .from(userActivityLogs)
-      .where(
-        and(
-          eq(userActivityLogs.userId, userId),
-          eq(userActivityLogs.activityType, 'open_agents')
-        )
-      );
-    return result[0]!.c;
-  },
+  agents_visit_count: (userId) => achCountAgentsVisits(db, userId),
 
-  login_streak: async (userId) => {
-    const result = await db
-      .select({ streak: users.dailyLoginStreak })
-      .from(users)
-      .where(eq(users.id, userId));
-    return result[0]?.streak ?? 0;
-  },
+  login_streak: (userId) => achSelectLoginStreak(db, userId),
 };
 
 // ── Progress Resolvers (Challenges — windowed) ─────────────────────
@@ -282,760 +209,176 @@ type WindowedResolver = (
 ) => Promise<number>;
 
 const CHALLENGE_RESOLVERS: Record<string, WindowedResolver> = {
-  // ── Simple counts ──
+  daily_pred_trade: (userId, start, end) =>
+    achWinCountPositions(db, userId, start, end),
 
-  daily_pred_trade: async (userId, start, end) => {
-    const r = await db
-      .select({ c: count() })
-      .from(positions)
-      .where(
-        and(
-          eq(positions.userId, userId),
-          gte(positions.createdAt, start),
-          lt(positions.createdAt, end)
-        )
-      );
-    return r[0]!.c;
-  },
-
-  daily_perp_trade: async (userId, start, end) => {
-    const r = await db
-      .select({ c: count() })
-      .from(perpPositions)
-      .where(
-        and(
-          eq(perpPositions.userId, userId),
-          gte(perpPositions.openedAt, start),
-          lt(perpPositions.openedAt, end)
-        )
-      );
-    return r[0]!.c;
-  },
+  daily_perp_trade: (userId, start, end) =>
+    achWinCountPerp(db, userId, start, end),
 
   daily_total_trade: async (userId, start, end) => {
-    const pred = await db
-      .select({ c: count() })
-      .from(positions)
-      .where(
-        and(
-          eq(positions.userId, userId),
-          gte(positions.createdAt, start),
-          lt(positions.createdAt, end)
-        )
-      );
-    const perp = await db
-      .select({ c: count() })
-      .from(perpPositions)
-      .where(
-        and(
-          eq(perpPositions.userId, userId),
-          gte(perpPositions.openedAt, start),
-          lt(perpPositions.openedAt, end)
-        )
-      );
-    return pred[0]!.c + perp[0]!.c;
+    const pred = await achWinCountPositions(db, userId, start, end);
+    const perp = await achWinCountPerp(db, userId, start, end);
+    return pred + perp;
   },
 
-  daily_distinct_markets: async (userId, start, end) => {
-    const r = await db
-      .select({ c: sql<number>`COUNT(DISTINCT ${positions.marketId})` })
-      .from(positions)
-      .where(
-        and(
-          eq(positions.userId, userId),
-          gte(positions.createdAt, start),
-          lt(positions.createdAt, end)
-        )
-      );
-    return Number(r[0]!.c);
-  },
+  daily_distinct_markets: (userId, start, end) =>
+    achWinDistinctMarkets(db, userId, start, end),
 
-  daily_post: async (userId, start, end) => {
-    const r = await db
-      .select({ c: count() })
-      .from(posts)
-      .where(
-        and(
-          eq(posts.authorId, userId),
-          gte(posts.timestamp, start),
-          lt(posts.timestamp, end)
-        )
-      );
-    return r[0]!.c;
-  },
+  daily_post: (userId, start, end) => achWinPosts(db, userId, start, end),
 
-  daily_comment: async (userId, start, end) => {
-    const r = await db
-      .select({ c: count() })
-      .from(comments)
-      .where(
-        and(
-          eq(comments.authorId, userId),
-          isNull(comments.deletedAt),
-          gte(comments.createdAt, start),
-          lt(comments.createdAt, end)
-        )
-      );
-    return r[0]!.c;
-  },
+  daily_comment: (userId, start, end) => achWinComments(db, userId, start, end),
 
-  daily_reaction: async (userId, start, end) => {
-    const r = await db
-      .select({ c: count() })
-      .from(reactions)
-      .where(
-        and(
-          eq(reactions.userId, userId),
-          gte(reactions.createdAt, start),
-          lt(reactions.createdAt, end)
-        )
-      );
-    return r[0]!.c;
-  },
+  daily_reaction: (userId, start, end) =>
+    achWinReactions(db, userId, start, end),
 
-  daily_group_message: async (userId, start, end) => {
-    const r = await db
-      .select({ c: count() })
-      .from(messages)
-      .innerJoin(chats, eq(messages.chatId, chats.id))
-      .where(
-        and(
-          eq(messages.senderId, userId),
-          eq(chats.isGroup, true),
-          gte(messages.createdAt, start),
-          lt(messages.createdAt, end)
-        )
-      );
-    return r[0]!.c;
-  },
+  daily_group_message: (userId, start, end) =>
+    achWinGroupMessages(db, userId, start, end),
 
-  daily_agent_message: async (userId, start, end) => {
-    const r = await db
-      .select({ c: count() })
-      .from(agentMessages)
-      .innerJoin(users, eq(agentMessages.agentUserId, users.id))
-      .where(
-        and(
-          eq(users.managedBy, userId),
-          gte(agentMessages.createdAt, start),
-          lt(agentMessages.createdAt, end)
-        )
-      );
-    return r[0]!.c;
-  },
+  daily_agent_message: (userId, start, end) =>
+    achWinAgentMessages(db, userId, start, end),
 
-  daily_follow: async (userId, start, end) => {
-    const r = await db
-      .select({ c: count() })
-      .from(follows)
-      .where(
-        and(
-          eq(follows.followerId, userId),
-          gte(follows.createdAt, start),
-          lt(follows.createdAt, end)
-        )
-      );
-    return r[0]!.c;
-  },
+  daily_follow: (userId, start, end) => achWinFollows(db, userId, start, end),
 
-  daily_share: async (userId, start, end) => {
-    const r = await db
-      .select({ c: count() })
-      .from(shares)
-      .where(
-        and(
-          eq(shares.userId, userId),
-          gte(shares.createdAt, start),
-          lt(shares.createdAt, end)
-        )
-      );
-    return r[0]!.c;
-  },
+  daily_share: (userId, start, end) => achWinShares(db, userId, start, end),
 
-  // ── Page visits (UserActivityLog) ──
+  daily_terminal_visit: (userId, start, _end) =>
+    achWinActivityOnDate(db, userId, 'open_terminal', getStartOfUTCDay(start)),
 
-  daily_terminal_visit: async (userId, start, _end) => {
-    const dateOnly = getStartOfUTCDay(start);
-    const r = await db
-      .select({ c: count() })
-      .from(userActivityLogs)
-      .where(
-        and(
-          eq(userActivityLogs.userId, userId),
-          eq(userActivityLogs.activityType, 'open_terminal'),
-          eq(userActivityLogs.activityDate, dateOnly)
-        )
-      );
-    return r[0]!.c;
-  },
+  daily_agents_visit: (userId, start, _end) =>
+    achWinActivityOnDate(db, userId, 'open_agents', getStartOfUTCDay(start)),
 
-  daily_agents_visit: async (userId, start, _end) => {
-    const dateOnly = getStartOfUTCDay(start);
-    const r = await db
-      .select({ c: count() })
-      .from(userActivityLogs)
-      .where(
-        and(
-          eq(userActivityLogs.userId, userId),
-          eq(userActivityLogs.activityType, 'open_agents'),
-          eq(userActivityLogs.activityDate, dateOnly)
-        )
-      );
-    return r[0]!.c;
-  },
+  daily_markets_visit: (userId, start, _end) =>
+    achWinActivityOnDate(db, userId, 'open_terminal', getStartOfUTCDay(start)),
 
-  daily_markets_visit: async (userId, start, _end) => {
-    const dateOnly = getStartOfUTCDay(start);
-    const r = await db
-      .select({ c: count() })
-      .from(userActivityLogs)
-      .where(
-        and(
-          eq(userActivityLogs.userId, userId),
-          eq(userActivityLogs.activityType, 'open_terminal'),
-          eq(userActivityLogs.activityDate, dateOnly)
-        )
-      );
-    return r[0]!.c;
-  },
+  daily_feed_visit: (userId, start, _end) =>
+    achWinActivityOnDate(db, userId, 'open_feed', getStartOfUTCDay(start)),
 
-  daily_feed_visit: async (userId, start, _end) => {
-    const dateOnly = getStartOfUTCDay(start);
-    const r = await db
-      .select({ c: count() })
-      .from(userActivityLogs)
-      .where(
-        and(
-          eq(userActivityLogs.userId, userId),
-          eq(userActivityLogs.activityType, 'open_feed'),
-          eq(userActivityLogs.activityDate, dateOnly)
-        )
-      );
-    return r[0]!.c;
-  },
+  daily_leaderboard_visit: (userId, start, _end) =>
+    achWinActivityOnDate(
+      db,
+      userId,
+      'open_leaderboard',
+      getStartOfUTCDay(start)
+    ),
 
-  daily_leaderboard_visit: async (userId, start, _end) => {
-    const dateOnly = getStartOfUTCDay(start);
-    const r = await db
-      .select({ c: count() })
-      .from(userActivityLogs)
-      .where(
-        and(
-          eq(userActivityLogs.userId, userId),
-          eq(userActivityLogs.activityType, 'open_leaderboard'),
-          eq(userActivityLogs.activityDate, dateOnly)
-        )
-      );
-    return r[0]!.c;
-  },
+  daily_notifications_visit: (userId, start, _end) =>
+    achWinActivityOnDate(
+      db,
+      userId,
+      'open_notifications',
+      getStartOfUTCDay(start)
+    ),
 
-  daily_notifications_visit: async (userId, start, _end) => {
-    const dateOnly = getStartOfUTCDay(start);
-    const r = await db
-      .select({ c: count() })
-      .from(userActivityLogs)
-      .where(
-        and(
-          eq(userActivityLogs.userId, userId),
-          eq(userActivityLogs.activityType, 'open_notifications'),
-          eq(userActivityLogs.activityDate, dateOnly)
-        )
-      );
-    return r[0]!.c;
-  },
+  daily_market_detail_visit: (userId, start, _end) =>
+    achWinActivityOnDate(
+      db,
+      userId,
+      'open_market_detail',
+      getStartOfUTCDay(start)
+    ),
 
-  daily_market_detail_visit: async (userId, start, _end) => {
-    const dateOnly = getStartOfUTCDay(start);
-    const r = await db
-      .select({ c: count() })
-      .from(userActivityLogs)
-      .where(
-        and(
-          eq(userActivityLogs.userId, userId),
-          eq(userActivityLogs.activityType, 'open_market_detail'),
-          eq(userActivityLogs.activityDate, dateOnly)
-        )
-      );
-    return r[0]!.c;
-  },
-
-  daily_group_join: async (userId, start, end) => {
-    const r = await db
-      .select({ c: count() })
-      .from(groupMembers)
-      .where(
-        and(
-          eq(groupMembers.userId, userId),
-          gte(groupMembers.joinedAt, start),
-          lt(groupMembers.joinedAt, end)
-        )
-      );
-    return r[0]!.c;
-  },
-
-  // ── Compound daily ──
+  daily_group_join: (userId, start, end) =>
+    achWinGroupJoins(db, userId, start, end),
 
   daily_pred_and_perp: async (userId, start, end) => {
-    const pred = await db
-      .select({ c: count() })
-      .from(positions)
-      .where(
-        and(
-          eq(positions.userId, userId),
-          gte(positions.createdAt, start),
-          lt(positions.createdAt, end)
-        )
-      );
-    const perp = await db
-      .select({ c: count() })
-      .from(perpPositions)
-      .where(
-        and(
-          eq(perpPositions.userId, userId),
-          gte(perpPositions.openedAt, start),
-          lt(perpPositions.openedAt, end)
-        )
-      );
-    return pred[0]!.c > 0 && perp[0]!.c > 0 ? 1 : 0;
+    const pred = await achWinCountPositions(db, userId, start, end);
+    const perp = await achWinCountPerp(db, userId, start, end);
+    return pred > 0 && perp > 0 ? 1 : 0;
   },
 
-  // ── Weekly resolvers ──
+  weekly_pred_trade: (userId, start, end) =>
+    achWinCountPositions(db, userId, start, end),
 
-  weekly_pred_trade: async (userId, start, end) => {
-    const r = await db
-      .select({ c: count() })
-      .from(positions)
-      .where(
-        and(
-          eq(positions.userId, userId),
-          gte(positions.createdAt, start),
-          lt(positions.createdAt, end)
-        )
-      );
-    return r[0]!.c;
-  },
-
-  weekly_perp_trade: async (userId, start, end) => {
-    const r = await db
-      .select({ c: count() })
-      .from(perpPositions)
-      .where(
-        and(
-          eq(perpPositions.userId, userId),
-          gte(perpPositions.openedAt, start),
-          lt(perpPositions.openedAt, end)
-        )
-      );
-    return r[0]!.c;
-  },
+  weekly_perp_trade: (userId, start, end) =>
+    achWinCountPerp(db, userId, start, end),
 
   weekly_total_trade: async (userId, start, end) => {
-    const pred = await db
-      .select({ c: count() })
-      .from(positions)
-      .where(
-        and(
-          eq(positions.userId, userId),
-          gte(positions.createdAt, start),
-          lt(positions.createdAt, end)
-        )
-      );
-    const perp = await db
-      .select({ c: count() })
-      .from(perpPositions)
-      .where(
-        and(
-          eq(perpPositions.userId, userId),
-          gte(perpPositions.openedAt, start),
-          lt(perpPositions.openedAt, end)
-        )
-      );
-    return pred[0]!.c + perp[0]!.c;
+    const pred = await achWinCountPositions(db, userId, start, end);
+    const perp = await achWinCountPerp(db, userId, start, end);
+    return pred + perp;
   },
 
-  weekly_distinct_markets: async (userId, start, end) => {
-    const r = await db
-      .select({ c: sql<number>`COUNT(DISTINCT ${positions.marketId})` })
-      .from(positions)
-      .where(
-        and(
-          eq(positions.userId, userId),
-          gte(positions.createdAt, start),
-          lt(positions.createdAt, end)
-        )
-      );
-    return Number(r[0]!.c);
-  },
+  weekly_distinct_markets: (userId, start, end) =>
+    achWinDistinctMarkets(db, userId, start, end),
 
-  weekly_trade_win: async (userId, start, end) => {
-    const r = await db
-      .select({ c: count() })
-      .from(positions)
-      .where(
-        and(
-          eq(positions.userId, userId),
-          eq(positions.outcome, true),
-          gte(positions.resolvedAt, start),
-          lt(positions.resolvedAt, end)
-        )
-      );
-    return r[0]!.c;
-  },
+  weekly_trade_win: (userId, start, end) =>
+    achWinPredictionWinsResolved(db, userId, start, end),
 
-  weekly_post: async (userId, start, end) => {
-    const r = await db
-      .select({ c: count() })
-      .from(posts)
-      .where(
-        and(
-          eq(posts.authorId, userId),
-          gte(posts.timestamp, start),
-          lt(posts.timestamp, end)
-        )
-      );
-    return r[0]!.c;
-  },
+  weekly_post: (userId, start, end) => achWinPosts(db, userId, start, end),
 
-  weekly_comment: async (userId, start, end) => {
-    const r = await db
-      .select({ c: count() })
-      .from(comments)
-      .where(
-        and(
-          eq(comments.authorId, userId),
-          isNull(comments.deletedAt),
-          gte(comments.createdAt, start),
-          lt(comments.createdAt, end)
-        )
-      );
-    return r[0]!.c;
-  },
+  weekly_comment: (userId, start, end) =>
+    achWinComments(db, userId, start, end),
 
-  weekly_reaction: async (userId, start, end) => {
-    const r = await db
-      .select({ c: count() })
-      .from(reactions)
-      .where(
-        and(
-          eq(reactions.userId, userId),
-          gte(reactions.createdAt, start),
-          lt(reactions.createdAt, end)
-        )
-      );
-    return r[0]!.c;
-  },
+  weekly_reaction: (userId, start, end) =>
+    achWinReactions(db, userId, start, end),
 
-  weekly_group_message: async (userId, start, end) => {
-    const r = await db
-      .select({ c: count() })
-      .from(messages)
-      .innerJoin(chats, eq(messages.chatId, chats.id))
-      .where(
-        and(
-          eq(messages.senderId, userId),
-          eq(chats.isGroup, true),
-          gte(messages.createdAt, start),
-          lt(messages.createdAt, end)
-        )
-      );
-    return r[0]!.c;
-  },
+  weekly_group_message: (userId, start, end) =>
+    achWinGroupMessages(db, userId, start, end),
 
-  weekly_agent_message: async (userId, start, end) => {
-    const r = await db
-      .select({ c: count() })
-      .from(agentMessages)
-      .innerJoin(users, eq(agentMessages.agentUserId, users.id))
-      .where(
-        and(
-          eq(users.managedBy, userId),
-          gte(agentMessages.createdAt, start),
-          lt(agentMessages.createdAt, end)
-        )
-      );
-    return r[0]!.c;
-  },
+  weekly_agent_message: (userId, start, end) =>
+    achWinAgentMessages(db, userId, start, end),
 
-  weekly_agent_trade: async (userId, start, end) => {
-    const r = await db
-      .select({ c: count() })
-      .from(sql`"AgentTrade" at2`)
-      .innerJoin(users, sql`at2."agentUserId" = ${users.id}`)
-      .where(
-        and(
-          eq(users.managedBy, userId),
-          sql`at2."executedAt" >= ${start}`,
-          sql`at2."executedAt" < ${end}`
-        )
-      );
-    return r[0]!.c;
-  },
+  weekly_agent_trade: (userId, start, end) =>
+    achWinAgentTrades(db, userId, start, end),
 
-  weekly_follow: async (userId, start, end) => {
-    const r = await db
-      .select({ c: count() })
-      .from(follows)
-      .where(
-        and(
-          eq(follows.followerId, userId),
-          gte(follows.createdAt, start),
-          lt(follows.createdAt, end)
-        )
-      );
-    return r[0]!.c;
-  },
+  weekly_follow: (userId, start, end) => achWinFollows(db, userId, start, end),
 
-  weekly_share: async (userId, start, end) => {
-    const r = await db
-      .select({ c: count() })
-      .from(shares)
-      .where(
-        and(
-          eq(shares.userId, userId),
-          gte(shares.createdAt, start),
-          lt(shares.createdAt, end)
-        )
-      );
-    return r[0]!.c;
-  },
+  weekly_share: (userId, start, end) => achWinShares(db, userId, start, end),
 
-  weekly_group_join: async (userId, start, end) => {
-    const r = await db
-      .select({ c: count() })
-      .from(groupMembers)
-      .where(
-        and(
-          eq(groupMembers.userId, userId),
-          gte(groupMembers.joinedAt, start),
-          lt(groupMembers.joinedAt, end)
-        )
-      );
-    return r[0]!.c;
-  },
+  weekly_group_join: (userId, start, end) =>
+    achWinGroupJoins(db, userId, start, end),
 
-  weekly_group_create: async (userId, start, end) => {
-    const r = await db
-      .select({ c: count() })
-      .from(groups)
-      .where(
-        and(
-          eq(groups.createdById, userId),
-          gte(groups.createdAt, start),
-          lt(groups.createdAt, end)
-        )
-      );
-    return r[0]!.c;
-  },
+  weekly_group_create: (userId, start, end) =>
+    achWinGroupCreates(db, userId, start, end),
 
-  weekly_login_days: async (userId, start, end) => {
-    const r = await db
-      .select({ c: count() })
-      .from(userActivityLogs)
-      .where(
-        and(
-          eq(userActivityLogs.userId, userId),
-          eq(userActivityLogs.activityType, 'session'),
-          gte(userActivityLogs.activityDate, start),
-          lt(userActivityLogs.activityDate, end)
-        )
-      );
-    return r[0]!.c;
-  },
+  weekly_login_days: (userId, start, end) =>
+    achWinSessionDays(db, userId, start, end),
 
-  weekly_trade_days: async (userId, start, end) => {
-    const r = await db
-      .select({ c: sql<number>`COUNT(DISTINCT DATE(${positions.createdAt}))` })
-      .from(positions)
-      .where(
-        and(
-          eq(positions.userId, userId),
-          gte(positions.createdAt, start),
-          lt(positions.createdAt, end)
-        )
-      );
-    return Number(r[0]!.c);
-  },
-
-  // ── Compound weekly ──
+  weekly_trade_days: (userId, start, end) =>
+    achWinDistinctTradeDays(db, userId, start, end),
 
   weekly_pred_and_perp: async (userId, start, end) => {
-    const pred = await db
-      .select({ c: count() })
-      .from(positions)
-      .where(
-        and(
-          eq(positions.userId, userId),
-          gte(positions.createdAt, start),
-          lt(positions.createdAt, end)
-        )
-      );
-    const perp = await db
-      .select({ c: count() })
-      .from(perpPositions)
-      .where(
-        and(
-          eq(perpPositions.userId, userId),
-          gte(perpPositions.openedAt, start),
-          lt(perpPositions.openedAt, end)
-        )
-      );
-    return pred[0]!.c > 0 && perp[0]!.c > 0 ? 1 : 0;
+    const pred = await achWinCountPositions(db, userId, start, end);
+    const perp = await achWinCountPerp(db, userId, start, end);
+    return pred > 0 && perp > 0 ? 1 : 0;
   },
 
   weekly_agent_and_group: async (userId, start, end) => {
-    const hasAgent = await db
-      .select({ c: count() })
-      .from(agentMessages)
-      .innerJoin(users, eq(agentMessages.agentUserId, users.id))
-      .where(
-        and(
-          eq(users.managedBy, userId),
-          gte(agentMessages.createdAt, start),
-          lt(agentMessages.createdAt, end)
-        )
-      );
-    const hasGroup = await db
-      .select({ c: count() })
-      .from(messages)
-      .innerJoin(chats, eq(messages.chatId, chats.id))
-      .where(
-        and(
-          eq(messages.senderId, userId),
-          eq(chats.isGroup, true),
-          gte(messages.createdAt, start),
-          lt(messages.createdAt, end)
-        )
-      );
-    return hasAgent[0]!.c > 0 && hasGroup[0]!.c > 0 ? 1 : 0;
+    const hasAgent = await achWinAgentMessages(db, userId, start, end);
+    const hasGroup = await achWinGroupMessages(db, userId, start, end);
+    return hasAgent > 0 && hasGroup > 0 ? 1 : 0;
   },
 
   weekly_agent_interact: async (userId, start, end) => {
-    // Distinct agents created or messaged this week
-    const created = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(
-        and(
-          eq(users.managedBy, userId),
-          eq(users.isAgent, true),
-          gte(users.createdAt, start),
-          lt(users.createdAt, end)
-        )
-      );
-    const messaged = await db
-      .select({ agentId: agentMessages.agentUserId })
-      .from(agentMessages)
-      .innerJoin(users, eq(agentMessages.agentUserId, users.id))
-      .where(
-        and(
-          eq(users.managedBy, userId),
-          gte(agentMessages.createdAt, start),
-          lt(agentMessages.createdAt, end)
-        )
-      )
-      .groupBy(agentMessages.agentUserId);
-    const uniqueAgents = new Set([
-      ...created.map((r) => r.id),
-      ...messaged.map((r) => r.agentId),
-    ]);
-    return uniqueAgents.size;
+    const created = await achWinAgentsCreatedIds(db, userId, start, end);
+    const messaged = await achWinMessagedAgentIds(db, userId, start, end);
+    return new Set([...created, ...messaged]).size;
   },
 
   weekly_positive_pnl: async (userId, start, end) => {
-    const predPnl = await db
-      .select({ total: sql<string>`COALESCE(SUM(${positions.pnl}), '0')` })
-      .from(positions)
-      .where(
-        and(
-          eq(positions.userId, userId),
-          isNotNull(positions.resolvedAt),
-          gte(positions.resolvedAt, start),
-          lt(positions.resolvedAt, end)
-        )
-      );
-    const perpPnl = await db
-      .select({
-        total: sql<string>`COALESCE(SUM(${perpPositions.realizedPnL}), '0')`,
-      })
-      .from(perpPositions)
-      .where(
-        and(
-          eq(perpPositions.userId, userId),
-          isNotNull(perpPositions.closedAt),
-          gte(perpPositions.closedAt, start),
-          lt(perpPositions.closedAt, end)
-        )
-      );
-    const totalPnl = Number(predPnl[0]!.total) + Number(perpPnl[0]!.total);
-    return totalPnl > 0 ? 1 : 0;
+    const predPnl = await achWinPredictionPnlSum(db, userId, start, end);
+    const perpPnl = await achWinPerpRealizedPnlSum(db, userId, start, end);
+    return Number(predPnl) + Number(perpPnl) > 0 ? 1 : 0;
   },
 
   weekly_feed_engage: async (userId, start, end) => {
-    const likedPosts = await db
-      .select({ c: sql<number>`COUNT(DISTINCT ${reactions.postId})` })
-      .from(reactions)
-      .where(
-        and(
-          eq(reactions.userId, userId),
-          isNotNull(reactions.postId),
-          gte(reactions.createdAt, start),
-          lt(reactions.createdAt, end)
-        )
-      );
-    const commentedPosts = await db
-      .select({ c: sql<number>`COUNT(DISTINCT ${comments.postId})` })
-      .from(comments)
-      .where(
-        and(
-          eq(comments.authorId, userId),
-          isNull(comments.deletedAt),
-          gte(comments.createdAt, start),
-          lt(comments.createdAt, end)
-        )
-      );
-    // Threshold is applied to the minimum of both (must have >= threshold of each)
-    return Math.min(Number(likedPosts[0]!.c), Number(commentedPosts[0]!.c));
+    const liked = await achWinDistinctLikedPosts(db, userId, start, end);
+    const commented = await achWinDistinctCommentedPosts(
+      db,
+      userId,
+      start,
+      end
+    );
+    return Math.min(liked, commented);
   },
 
   weekly_referral_play: async (userId, start, end) => {
-    const r = await db
-      .select({ c: count() })
-      .from(referrals)
-      .innerJoin(positions, eq(referrals.referredUserId, positions.userId))
-      .where(
-        and(
-          eq(referrals.referrerId, userId),
-          gte(positions.createdAt, start),
-          lt(positions.createdAt, end)
-        )
-      );
-    return r[0]!.c > 0 ? 1 : 0;
+    const c = await achWinReferralPlay(db, userId, start, end);
+    return c > 0 ? 1 : 0;
   },
 
-  weekly_top_market: async (userId, start, end) => {
-    // Find the market with most positions this week
-    const topMarket = await db
-      .select({ marketId: positions.marketId, vol: count() })
-      .from(positions)
-      .where(and(gte(positions.createdAt, start), lt(positions.createdAt, end)))
-      .groupBy(positions.marketId)
-      .orderBy(sql`count(*) DESC`)
-      .limit(1);
-    if (!topMarket[0]) return 0;
-    // Check if user traded in it
-    const userTrade = await db
-      .select({ c: count() })
-      .from(positions)
-      .where(
-        and(
-          eq(positions.userId, userId),
-          eq(positions.marketId, topMarket[0].marketId),
-          gte(positions.createdAt, start),
-          lt(positions.createdAt, end)
-        )
-      );
-    return userTrade[0]!.c > 0 ? 1 : 0;
-  },
+  weekly_top_market: (userId, start, end) =>
+    achWinTopMarketUserTraded(db, userId, start, end),
 };
 
 // ── Achievement Engine ─────────────────────────────────────────────
@@ -1082,20 +425,12 @@ async function checkAchievements(
   );
   if (relevantAchievements.length === 0) return;
 
-  // Check which of these the user has already unlocked
-  const alreadyUnlocked = await db
-    .select({ achievementId: userAchievements.achievementId })
-    .from(userAchievements)
-    .where(
-      and(
-        eq(userAchievements.userId, userId),
-        inArray(
-          userAchievements.achievementId,
-          relevantAchievements.map((a) => a.id)
-        )
-      )
-    );
-  const unlockedSet = new Set(alreadyUnlocked.map((r) => r.achievementId));
+  const unlockedIds = await selectUnlockedAchievementIdsForUser(
+    db,
+    userId,
+    relevantAchievements.map((a) => a.id)
+  );
+  const unlockedSet = new Set(unlockedIds);
 
   // Check each non-unlocked achievement
   for (const achievement of relevantAchievements) {
@@ -1122,20 +457,15 @@ async function unlockAchievement(
   userId: string,
   achievement: AchievementDef
 ): Promise<void> {
-  // Insert with conflict guard (unique on userId + achievementId)
-  const [inserted] = await db
-    .insert(userAchievements)
-    .values({
-      id: await generateSnowflakeId(),
-      userId,
-      achievementId: achievement.id,
-      pointsAwarded: achievement.pointsReward,
-      unlockedAt: new Date(),
-    })
-    .onConflictDoNothing()
-    .returning();
+  const inserted = await insertUserAchievementIfNew(db, {
+    id: await generateSnowflakeId(),
+    userId,
+    achievementId: achievement.id,
+    pointsAwarded: achievement.pointsReward,
+    unlockedAt: new Date(),
+  });
 
-  if (!inserted) return; // Already unlocked by a concurrent request
+  if (!inserted) return;
 
   // Award points
   await PointsService.awardPoints(
@@ -1204,22 +534,14 @@ async function checkChallenges(
       const start = isDaily ? getStartOfUTCDay(now) : getStartOfISOWeek(now);
       const end = isDaily ? getEndOfUTCDay(now) : getEndOfISOWeek(now);
 
-      // Check if already completed for this period
-      const existing = await db
-        .select({
-          id: userChallengeProgress.id,
-          completed: userChallengeProgress.completed,
-        })
-        .from(userChallengeProgress)
-        .where(
-          and(
-            eq(userChallengeProgress.userId, userId),
-            eq(userChallengeProgress.challengeId, challenge.id),
-            eq(userChallengeProgress.periodKey, periodKey)
-          )
-        );
+      const existingRow = await selectChallengeProgressRow(
+        db,
+        userId,
+        challenge.id,
+        periodKey
+      );
 
-      if (existing[0]?.completed === 1) continue; // Already done
+      if (existingRow?.completed === 1) continue;
 
       // Resolve current progress
       const resolver = CHALLENGE_RESOLVERS[challenge.trackingType];
@@ -1239,48 +561,37 @@ async function checkChallenges(
       // Track whether this request actually transitioned to completed
       let didComplete = false;
 
-      if (existing[0]) {
-        // Update existing progress — only award if we transition completed 0→1
-        if (completed && !existing[0].completed) {
-          const [updated] = await db
-            .update(userChallengeProgress)
-            .set({
+      if (existingRow) {
+        if (completed && !existingRow.completed) {
+          const updated = await updateChallengeProgressCompletedTransition(
+            db,
+            existingRow.id,
+            {
               progress,
               completed,
               completedAt,
               pointsAwarded: challenge.pointsReward,
-            })
-            .where(
-              and(
-                eq(userChallengeProgress.id, existing[0].id),
-                eq(userChallengeProgress.completed, 0)
-              )
-            )
-            .returning({ id: userChallengeProgress.id });
+            }
+          );
           didComplete = !!updated;
         } else {
-          // Just update progress, not completing
-          await db
-            .update(userChallengeProgress)
-            .set({ progress, completed, completedAt })
-            .where(eq(userChallengeProgress.id, existing[0].id));
-        }
-      } else {
-        // Insert new progress record — returning confirms insert won the race
-        const [inserted] = await db
-          .insert(userChallengeProgress)
-          .values({
-            id: await generateSnowflakeId(),
-            userId,
-            challengeId: challenge.id,
-            periodKey,
+          await updateChallengeProgressInPlace(db, existingRow.id, {
             progress,
             completed,
             completedAt,
-            pointsAwarded: completed ? challenge.pointsReward : 0,
-          })
-          .onConflictDoNothing()
-          .returning({ id: userChallengeProgress.id });
+          });
+        }
+      } else {
+        const inserted = await insertUserChallengeProgressIfNew(db, {
+          id: await generateSnowflakeId(),
+          userId,
+          challengeId: challenge.id,
+          periodKey,
+          progress,
+          completed,
+          completedAt,
+          pointsAwarded: completed ? challenge.pointsReward : 0,
+        });
         didComplete = completed === 1 && !!inserted;
       }
 
@@ -1340,54 +651,38 @@ async function checkCompletionBonus(
   periodKey: string,
   activeIds: string[]
 ): Promise<void> {
-  const completedCount = await db
-    .select({ c: count() })
-    .from(userChallengeProgress)
-    .where(
-      and(
-        eq(userChallengeProgress.userId, userId),
-        eq(userChallengeProgress.periodKey, periodKey),
-        inArray(userChallengeProgress.challengeId, activeIds),
-        eq(userChallengeProgress.completed, 1)
-      )
-    );
-
   const target = pool === 'daily' ? 3 : 2;
-  if (completedCount[0]!.c !== target) return;
+  const completedCount = await countUserCompletedChallengesForPeriod(
+    db,
+    userId,
+    periodKey,
+    activeIds
+  );
+  if (completedCount !== target) return;
 
-  // Check if bonus already awarded (use a special periodKey suffix)
   const bonusPeriodKey = `${periodKey}:bonus`;
-  const existing = await db
-    .select({ c: count() })
-    .from(userChallengeProgress)
-    .where(
-      and(
-        eq(userChallengeProgress.userId, userId),
-        eq(userChallengeProgress.periodKey, bonusPeriodKey)
-      )
-    );
-  if (existing[0]!.c > 0) return; // Already awarded
+  const bonusExisting = await countChallengeBonusRowsForPeriod(
+    db,
+    userId,
+    bonusPeriodKey
+  );
+  if (bonusExisting > 0) return;
 
   const bonus =
     pool === 'daily'
       ? POINTS.CHALLENGE_DAILY_ALL_BONUS
       : POINTS.CHALLENGE_WEEKLY_ALL_BONUS;
 
-  // Record the bonus award
-  const [insertedBonus] = await db
-    .insert(userChallengeProgress)
-    .values({
-      id: await generateSnowflakeId(),
-      userId,
-      challengeId: `${pool}_all_bonus`,
-      periodKey: bonusPeriodKey,
-      progress: target,
-      completed: 1,
-      completedAt: new Date(),
-      pointsAwarded: bonus,
-    })
-    .onConflictDoNothing()
-    .returning({ id: userChallengeProgress.id });
+  const insertedBonus = await insertChallengeBonusMarkerIfNew(db, {
+    id: await generateSnowflakeId(),
+    userId,
+    challengeId: `${pool}_all_bonus`,
+    periodKey: bonusPeriodKey,
+    progress: target,
+    completed: 1,
+    completedAt: new Date(),
+    pointsAwarded: bonus,
+  });
 
   if (!insertedBonus) return;
 
@@ -1428,14 +723,7 @@ export interface AchievementWithProgress {
 export async function getUserAchievements(
   userId: string
 ): Promise<AchievementWithProgress[]> {
-  // Get user's unlocked achievements
-  const unlocked = await db
-    .select({
-      achievementId: userAchievements.achievementId,
-      unlockedAt: userAchievements.unlockedAt,
-    })
-    .from(userAchievements)
-    .where(eq(userAchievements.userId, userId));
+  const unlocked = await selectUserAchievementUnlockRows(db, userId);
 
   const unlockedMap = new Map(
     unlocked.map((u) => [u.achievementId, u.unlockedAt])
@@ -1512,19 +800,11 @@ export async function getUserChallenges(
   const dailyIds = getActiveDailyChallengeIds(now);
   const weeklyIds = getActiveWeeklyChallengeIds(now);
 
-  // Fetch all progress for this user in current periods
-  const progressRows = await db
-    .select()
-    .from(userChallengeProgress)
-    .where(
-      and(
-        eq(userChallengeProgress.userId, userId),
-        inArray(userChallengeProgress.periodKey, [
-          dailyPeriodKey,
-          weeklyPeriodKey,
-        ])
-      )
-    );
+  const progressRows = await selectUserChallengeProgressForPeriodKeys(
+    db,
+    userId,
+    [dailyPeriodKey, weeklyPeriodKey]
+  );
 
   const progressMap = new Map(progressRows.map((r) => [r.challengeId, r]));
 
@@ -1611,15 +891,7 @@ export async function getRecentAchievements(
   userId: string,
   limit = 5
 ): Promise<AchievementWithProgress[]> {
-  const recent = await db
-    .select({
-      achievementId: userAchievements.achievementId,
-      unlockedAt: userAchievements.unlockedAt,
-    })
-    .from(userAchievements)
-    .where(eq(userAchievements.userId, userId))
-    .orderBy(sql`${userAchievements.unlockedAt} DESC`)
-    .limit(limit);
+  const recent = await selectRecentUserAchievementRows(db, userId, limit);
 
   return recent.map((r) => {
     const def = ACHIEVEMENT_DEFINITIONS.find((a) => a.id === r.achievementId);

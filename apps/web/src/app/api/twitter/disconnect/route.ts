@@ -45,7 +45,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 
-import { db } from '@babylon/db/runtime';
+import { asUser } from '@babylon/db/engine-storage';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -57,18 +57,20 @@ export const POST = withErrorHandling(async function POST(
   const user = await requireUserByIdentifier(authUser.userId, { id: true });
 
   // Clear Twitter OAuth 2.0 credentials from user
-  await db.user.update({
-    where: { id: user.id },
-    data: {
-      twitterAccessToken: null,
-      twitterRefreshToken: null,
-      twitterTokenExpiresAt: null,
-      twitterId: null,
-      twitterUsername: null,
-      twitterVerifiedAt: null,
-      hasTwitter: false,
-    },
-  });
+  await asUser(authUser, async (db) =>
+    db.user.update({
+      where: { id: user.id },
+      data: {
+        twitterAccessToken: null,
+        twitterRefreshToken: null,
+        twitterTokenExpiresAt: null,
+        twitterId: null,
+        twitterUsername: null,
+        twitterVerifiedAt: null,
+        hasTwitter: false,
+      },
+    })
+  );
 
   logger.info(
     'Twitter account disconnected',

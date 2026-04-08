@@ -6,34 +6,26 @@
  */
 
 import {
-  and,
-  desc,
-  eq,
-  gte,
-  ilike,
-  inArray,
-  isNull,
+  countCommentsByPostIdsGroupedNotDeleted,
+  countReactionsLikesByPostIdsGrouped,
+  countSharesByPostIdsGrouped,
   listAgentGroupChatsWithMemberCounts,
+  listOrganizationStatesByPriceDescForWorldContext,
   listTeamGroupIds,
-  lte,
-  ne,
-  sql,
+  selectActivePredictionMarketsUnresolvedEndingAfterNowOrderCreatedDescLimit,
+  selectAgentTopLevelCommentsOnPosts,
+  selectGroupChatIdForAgentAndGroupNameIlike,
+  selectMarketIdQuestionYesNoSharesByIds,
+  selectOpenPerpPositionContextSliceByUserId,
+  selectOwnPostsIdContentTimestampByAuthorNotDeletedOrderTimestampDescLimit,
+  selectPredictionPositionActiveSliceByUserId,
+  selectReactionPostIdsForUserAndPostsTypeLike,
+  selectRecentPostsForEngagementByOthersInTimestampWindowOrderCreatedDescLimit,
+  selectSharePostIdsForUserAndPosts,
+  selectUserIdByExactUsername,
+  selectUsersDisplayUsernameByIds,
 } from '@babylon/db';
-import {
-  chatParticipants,
-  chats,
-  comments,
-  db,
-  getDbInstance,
-  groups,
-  markets,
-  perpPositions,
-  positions,
-  posts,
-  reactions,
-  shares,
-  users,
-} from '@babylon/db/runtime';
+import { db } from '@babylon/db/engine-storage';
 import { StaticDataRegistry } from '@babylon/engine';
 import { logger } from '../../shared/logger';
 import type {
@@ -56,12 +48,11 @@ import { formatTimeHeld, getTimeAgo } from './time-helpers';
 export async function getPredictionMarkets(): Promise<
   PredictionMarketContext[]
 > {
-  const activeMarkets = await db
-    .select()
-    .from(markets)
-    .where(and(eq(markets.resolved, false), gte(markets.endDate, new Date())))
-    .orderBy(desc(markets.createdAt))
-    .limit(8);
+  const activeMarkets =
+    await selectActivePredictionMarketsUnresolvedEndingAfterNowOrderCreatedDescLimit(
+      db,
+      8
+    );
 
   return activeMarkets.map((m) => {
     const yesShares = Number(m.yesShares || 1);
@@ -83,7 +74,7 @@ export async function getPredictionMarkets(): Promise<
  * Get perp markets with current prices
  */
 export async function getPerpMarkets(): Promise<PerpMarketContext[]> {
-  const orgStates = await getDbInstance().getOrganizationsByPrice();
+  const orgStates = await listOrganizationStatesByPriceDescForWorldContext();
   const result: PerpMarketContext[] = [];
 
   for (const state of orgStates.slice(0, 8)) {
@@ -121,19 +112,11 @@ export async function getAgentPositions(agentUserId: string): Promise<{
   const now = Date.now();
 
   // Prediction positions - fetch more fields
-  const predPositions = await db
-    .select({
-      marketId: positions.marketId,
-      side: positions.side,
-      shares: positions.shares,
-      avgPrice: positions.avgPrice,
-      createdAt: positions.createdAt,
-    })
-    .from(positions)
-    .where(
-      and(eq(positions.userId, agentUserId), eq(positions.status, 'active'))
-    )
-    .limit(10);
+  const predPositions = await selectPredictionPositionActiveSliceByUserId(
+    db,
+    agentUserId,
+    10
+  );
 
   // Get market data for positions (question + current prices)
   const marketIds = predPositions
@@ -144,15 +127,10 @@ export async function getAgentPositions(agentUserId: string): Promise<{
     { question: string; yesPrice: number; noPrice: number }
   >();
   if (marketIds.length > 0) {
-    const marketsData = await db
-      .select({
-        id: markets.id,
-        question: markets.question,
-        yesShares: markets.yesShares,
-        noShares: markets.noShares,
-      })
-      .from(markets)
-      .where(inArray(markets.id, marketIds));
+    const marketsData = await selectMarketIdQuestionYesNoSharesByIds(
+      db,
+      marketIds
+    );
     for (const m of marketsData) {
       const yesShares = Number(m.yesShares || 1);
       const noShares = Number(m.noShares || 1);
@@ -196,22 +174,11 @@ export async function getAgentPositions(agentUserId: string): Promise<{
     });
 
   // Perp positions - fetch more fields including entry price and opened time
-  const perpPositionsList = await db
-    .select({
-      ticker: perpPositions.ticker,
-      side: perpPositions.side,
-      size: perpPositions.size,
-      entryPrice: perpPositions.entryPrice,
-      currentPrice: perpPositions.currentPrice,
-      unrealizedPnL: perpPositions.unrealizedPnL,
-      unrealizedPnLPercent: perpPositions.unrealizedPnLPercent,
-      openedAt: perpPositions.openedAt,
-    })
-    .from(perpPositions)
-    .where(
-      and(eq(perpPositions.userId, agentUserId), isNull(perpPositions.closedAt))
-    )
-    .limit(10);
+  const perpPositionsList = await selectOpenPerpPositionContextSliceByUserId(
+    db,
+    agentUserId,
+    10
+  );
 
   const perps: PerpPositionContext[] = perpPositionsList.map((p) => {
     const entryPrice = Number(p.entryPrice || 100);
@@ -297,21 +264,11 @@ export async function resolveGroupChatByName(
   const sanitized = groupName.replace(/[%_\\]/g, '').trim();
   if (sanitized.length < 2) return null;
 
-  const results = await db
-    .select({ chatId: chats.id })
-    .from(chatParticipants)
-    .innerJoin(chats, eq(chatParticipants.chatId, chats.id))
-    .innerJoin(groups, eq(chats.groupId, groups.id))
-    .where(
-      and(
-        eq(chatParticipants.userId, agentUserId),
-        eq(chats.isGroup, true),
-        ilike(groups.name, `%${sanitized}%`)
-      )
-    )
-    .limit(1);
-
-  return results[0]?.chatId ?? null;
+  return selectGroupChatIdForAgentAndGroupNameIlike(
+    db,
+    agentUserId,
+    `%${sanitized}%`
+  );
 }
 
 /**
@@ -324,11 +281,7 @@ export async function resolveUserByUsername(
   const clean = username.replace(/^@/, '').trim().toLowerCase();
   if (!clean) return null;
 
-  const [user] = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(eq(users.username, clean))
-    .limit(1);
+  const user = await selectUserIdByExactUsername(db, clean);
 
   return user?.id ?? null;
 }
@@ -340,16 +293,12 @@ export async function getAgentOwnPosts(
   agentUserId: string
 ): Promise<AgentOwnPostContext[]> {
   try {
-    const recentOwnPosts = await db
-      .select({
-        id: posts.id,
-        content: posts.content,
-        timestamp: posts.timestamp,
-      })
-      .from(posts)
-      .where(and(eq(posts.authorId, agentUserId), isNull(posts.deletedAt)))
-      .orderBy(desc(posts.timestamp))
-      .limit(5);
+    const recentOwnPosts =
+      await selectOwnPostsIdContentTimestampByAuthorNotDeletedOrderTimestampDescLimit(
+        db,
+        agentUserId,
+        5
+      );
 
     if (recentOwnPosts.length === 0) {
       return [];
@@ -358,26 +307,8 @@ export async function getAgentOwnPosts(
     // Get engagement counts for these posts
     const postIds = recentOwnPosts.map((p) => p.id);
     const [likeCounts, commentCounts] = await Promise.all([
-      db
-        .select({
-          postId: reactions.postId,
-          count: sql<number>`count(*)`,
-        })
-        .from(reactions)
-        .where(
-          and(inArray(reactions.postId, postIds), eq(reactions.type, 'like'))
-        )
-        .groupBy(reactions.postId),
-      db
-        .select({
-          postId: comments.postId,
-          count: sql<number>`count(*)`,
-        })
-        .from(comments)
-        .where(
-          and(inArray(comments.postId, postIds), isNull(comments.deletedAt))
-        )
-        .groupBy(comments.postId),
+      countReactionsLikesByPostIdsGrouped(db, postIds),
+      countCommentsByPostIdsGroupedNotDeleted(db, postIds),
     ]);
 
     const likeCountMap = new Map<string, number>();
@@ -417,24 +348,16 @@ export async function getRecentPosts(
   const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const now = new Date();
 
-  const recentPostsRaw = await db
-    .select({
-      id: posts.id,
-      content: posts.content,
-      authorId: posts.authorId,
-      createdAt: posts.createdAt,
-    })
-    .from(posts)
-    .where(
-      and(
-        ne(posts.authorId, agentUserId),
-        isNull(posts.deletedAt),
-        gte(posts.timestamp, oneDayAgo),
-        lte(posts.timestamp, now)
-      )
-    )
-    .orderBy(desc(posts.createdAt))
-    .limit(8);
+  const recentPostsRaw =
+    await selectRecentPostsForEngagementByOthersInTimestampWindowOrderCreatedDescLimit(
+      db,
+      {
+        excludeAuthorId: agentUserId,
+        since: oneDayAgo,
+        until: now,
+        limit: 8,
+      }
+    );
 
   // Get author names
   const authorIds = [...new Set(recentPostsRaw.map((p) => p.authorId))];
@@ -457,14 +380,7 @@ export async function getRecentPosts(
   // Fetch remaining from DB
   const missingIds = authorIds.filter((id) => !authorNames.has(id));
   if (missingIds.length > 0) {
-    const dbUsers = await db
-      .select({
-        id: users.id,
-        displayName: users.displayName,
-        username: users.username,
-      })
-      .from(users)
-      .where(inArray(users.id, missingIds));
+    const dbUsers = await selectUsersDisplayUsernameByIds(db, missingIds);
     for (const u of dbUsers) {
       authorNames.set(u.id, u.displayName || u.username || 'User');
     }
@@ -481,20 +397,11 @@ export async function getRecentPosts(
 
   if (postIds.length > 0) {
     // Fetch agent's existing comments (top-level only)
-    const existingComments = await db
-      .select({
-        postId: comments.postId,
-        content: comments.content,
-      })
-      .from(comments)
-      .where(
-        and(
-          inArray(comments.postId, postIds),
-          eq(comments.authorId, agentUserId),
-          isNull(comments.parentCommentId),
-          isNull(comments.deletedAt)
-        )
-      );
+    const existingComments = await selectAgentTopLevelCommentsOnPosts(
+      db,
+      agentUserId,
+      postIds
+    );
 
     for (const comment of existingComments) {
       if (comment.postId) {
@@ -510,50 +417,11 @@ export async function getRecentPosts(
       repostCounts,
       commentCounts,
     ] = await Promise.all([
-      db
-        .select({ postId: reactions.postId })
-        .from(reactions)
-        .where(
-          and(
-            inArray(reactions.postId, postIds),
-            eq(reactions.userId, agentUserId),
-            eq(reactions.type, 'like')
-          )
-        ),
-      db
-        .select({ postId: shares.postId })
-        .from(shares)
-        .where(
-          and(inArray(shares.postId, postIds), eq(shares.userId, agentUserId))
-        ),
-      db
-        .select({
-          postId: reactions.postId,
-          count: sql<number>`count(*)`,
-        })
-        .from(reactions)
-        .where(
-          and(inArray(reactions.postId, postIds), eq(reactions.type, 'like'))
-        )
-        .groupBy(reactions.postId),
-      db
-        .select({
-          postId: shares.postId,
-          count: sql<number>`count(*)`,
-        })
-        .from(shares)
-        .where(inArray(shares.postId, postIds))
-        .groupBy(shares.postId),
-      db
-        .select({
-          postId: comments.postId,
-          count: sql<number>`count(*)`,
-        })
-        .from(comments)
-        .where(
-          and(inArray(comments.postId, postIds), isNull(comments.deletedAt))
-        )
-        .groupBy(comments.postId),
+      selectReactionPostIdsForUserAndPostsTypeLike(db, agentUserId, postIds),
+      selectSharePostIdsForUserAndPosts(db, agentUserId, postIds),
+      countReactionsLikesByPostIdsGrouped(db, postIds),
+      countSharesByPostIdsGrouped(db, postIds),
+      countCommentsByPostIdsGroupedNotDeleted(db, postIds),
     ]);
 
     for (const like of existingLikes) {

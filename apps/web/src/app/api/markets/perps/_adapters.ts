@@ -23,14 +23,11 @@ import type {
   FeeConfig,
   FeeProcessor,
 } from '@babylon/core/markets/shared';
-import { and, eq, isNull } from '@babylon/db';
 import {
-  db,
-  organizationState,
-  perpMarketSnapshots,
-  perpPositions,
-} from '@babylon/db/runtime';
-
+  type DrizzleClient,
+  fetchPerpBasePriceForTicker,
+  fetchPerpPriceImpactReadContext,
+} from '@babylon/db';
 import {
   FEE_CONFIG,
   FeeService,
@@ -139,22 +136,7 @@ export function createPriceImpactAdapter(): PriceImpactPort {
     },
 
     async getBasePrice(ticker: string): Promise<number | undefined> {
-      const normalizedTicker = ticker.toUpperCase();
-
-      const [snapshot] = await db
-        .select({ organizationId: perpMarketSnapshots.organizationId })
-        .from(perpMarketSnapshots)
-        .where(eq(perpMarketSnapshots.ticker, normalizedTicker))
-        .limit(1);
-      if (!snapshot) return undefined;
-
-      const [state] = await db
-        .select({ basePrice: organizationState.basePrice })
-        .from(organizationState)
-        .where(eq(organizationState.id, snapshot.organizationId))
-        .limit(1);
-
-      return state ? Number(state.basePrice ?? 100) : undefined;
+      return fetchPerpBasePriceForTicker(ticker.toUpperCase());
     },
   };
 }
@@ -163,6 +145,8 @@ export function createPriceImpactAdapter(): PriceImpactPort {
  * Options for creating PerpMarketService.
  */
 export interface CreatePerpServiceOptions {
+  /** Drizzle client (e.g. RLS-scoped). Default: global runtime client */
+  dbClient?: DrizzleClient;
   /** Include fee processor for trading fee handling. Default: false */
   withFeeProcessor?: boolean;
   /** Include broadcast adapter for SSE updates. Default: false */
@@ -197,7 +181,7 @@ export function createPerpMarketService(
   options: CreatePerpServiceOptions = {}
 ): PerpMarketService {
   const deps: PerpServiceDeps = {
-    db: new PerpDbAdapter(),
+    db: new PerpDbAdapter(options.dbClient),
     wallet: createWalletAdapter(),
     fees: perpFeeConfig,
   };
@@ -252,17 +236,8 @@ export async function applyUserTradePriceImpact(ticker: string): Promise<void> {
   try {
     const normalizedTicker = ticker.toUpperCase();
 
-    // 1. Get organizationId and 24h stats from perpMarketSnapshots
-    const [snapshot] = await db
-      .select({
-        organizationId: perpMarketSnapshots.organizationId,
-        currentPrice: perpMarketSnapshots.currentPrice,
-        high24h: perpMarketSnapshots.high24h,
-        low24h: perpMarketSnapshots.low24h,
-      })
-      .from(perpMarketSnapshots)
-      .where(eq(perpMarketSnapshots.ticker, normalizedTicker))
-      .limit(1);
+    const { snapshot, state, openPositions } =
+      await fetchPerpPriceImpactReadContext(normalizedTicker);
 
     if (!snapshot) {
       logger.warn(
@@ -274,18 +249,6 @@ export async function applyUserTradePriceImpact(ticker: string): Promise<void> {
     }
 
     const organizationId = snapshot.organizationId;
-
-    // 2. Get dynamic org pricing state (basePrice/currentPrice)
-    // Do not depend on the legacy `Organization` table which may not be seeded in some envs.
-    const [state] = await db
-      .select({
-        id: organizationState.id,
-        currentPrice: organizationState.currentPrice,
-        basePrice: organizationState.basePrice,
-      })
-      .from(organizationState)
-      .where(eq(organizationState.id, organizationId))
-      .limit(1);
 
     if (!state) {
       logger.warn(
@@ -302,23 +265,6 @@ export async function applyUserTradePriceImpact(ticker: string): Promise<void> {
     const currentPrice = Number(
       snapshot.currentPrice ?? state.currentPrice ?? initialPrice
     );
-
-    // 3. Get all open positions for this ticker
-    // Note: positions use ticker (e.g., "AIPHB"), not organizationId
-    const openPositions = await db
-      .select({
-        side: perpPositions.side,
-        size: perpPositions.size,
-        leverage: perpPositions.leverage,
-        userId: perpPositions.userId,
-      })
-      .from(perpPositions)
-      .where(
-        and(
-          eq(perpPositions.ticker, normalizedTicker),
-          isNull(perpPositions.closedAt)
-        )
-      );
 
     // 4. Calculate net holdings (longs - shorts)
     let netHoldings = 0;

@@ -147,10 +147,17 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import type { DrizzleClient } from '@babylon/db';
-import { asPublic, asUser } from '@babylon/db/runtime';
+import {
+  type DrizzleClient,
+  selectCommentCountRowsGroupedByAuthorId,
+  selectPositionCountRowsGroupedByUserId,
+  selectReactionCountRowsGroupedByUserId,
+} from '@babylon/db';
 import { logger, RegistryQuerySchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+import { countMap } from '@/lib/db/grouped-count-map';
+import { runWithOptionalUserRls } from '@/lib/db/run-with-optional-user-rls';
+
 /**
  * GET /api/registry
  * Fetch all registered users with optional filtering
@@ -194,39 +201,42 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       skip: filters.offset,
     });
 
-    // Get total count for pagination
-    const count = await db.user.count({ where });
+    const userTotalCount = await db.user.count({ where });
 
-    // Get counts for each user
     const userIds = usersList.map((u) => u.id);
-    const [positionCounts, commentCounts, reactionCounts] = await Promise.all([
-      Promise.all(
-        userIds.map((id) => db.position.count({ where: { userId: id } }))
-      ),
-      Promise.all(
-        userIds.map((id) => db.comment.count({ where: { authorId: id } }))
-      ),
-      Promise.all(
-        userIds.map((id) => db.reaction.count({ where: { userId: id } }))
-      ),
-    ]);
 
-    const usersWithCounts = usersList.map((user, index) => ({
+    let positionMap = new Map<string, number>();
+    let commentMap = new Map<string, number>();
+    let reactionMap = new Map<string, number>();
+
+    if (userIds.length > 0) {
+      const [positionRows, commentRows, reactionRows] = await Promise.all([
+        selectPositionCountRowsGroupedByUserId(db, userIds),
+        selectCommentCountRowsGroupedByAuthorId(db, userIds),
+        selectReactionCountRowsGroupedByUserId(db, userIds),
+      ]);
+
+      positionMap = countMap(positionRows, 'userId');
+      commentMap = countMap(commentRows, 'userId');
+      reactionMap = countMap(reactionRows, 'userId');
+    }
+
+    const usersWithCounts = usersList.map((user) => ({
       ...user,
       _counts: {
-        positions: positionCounts[index] ?? 0,
-        comments: commentCounts[index] ?? 0,
-        reactions: reactionCounts[index] ?? 0,
+        positions: positionMap.get(user.id) ?? 0,
+        comments: commentMap.get(user.id) ?? 0,
+        reactions: reactionMap.get(user.id) ?? 0,
       },
     }));
 
-    return { users: usersWithCounts, totalCount: count };
+    return { users: usersWithCounts, totalCount: userTotalCount };
   };
 
-  const { users, totalCount } =
-    authUser && authUser.userId
-      ? await asUser(authUser, dbOperation)
-      : await asPublic(dbOperation);
+  const { users, totalCount } = await runWithOptionalUserRls(
+    authUser,
+    dbOperation
+  );
 
   const usersWithReputation = await Promise.all(
     users.map(async (user) => {

@@ -15,16 +15,15 @@
 
 import { checkProgress, optionalAuth, withErrorHandling } from '@babylon/api';
 import {
-  and,
-  eq,
+  bumpUserSessionHeartbeatCounters,
+  closeStaleOpenUserSessionsBefore,
   generateSnowflakeId,
-  inArray,
-  isNull,
-  lt,
-  sql,
+  insertUserActivityLogOnConflictDoNothing,
+  insertUserSessionRow,
+  selectOpenUserSessionForBrowserSession,
+  updateUserSessionEndedAtById,
 } from '@babylon/db';
-import { db, userActivityLogs, userSessions } from '@babylon/db/runtime';
-
+import { asSystem, asUser } from '@babylon/db/engine-storage';
 import { logger, PATH_TO_ACTIVITY_TYPE } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -141,112 +140,99 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   // DB work (best-effort): if the session tables are missing/mis-migrated in a
   // given environment, we don't want to hard-fail the user flow.
   try {
-    // Helper to create a new session record
-    async function createSession(): Promise<void> {
-      const id = await generateSnowflakeId();
-      await db.insert(userSessions).values({
-        id,
-        userId: validUserId,
-        sessionId,
-        startedAt: nowDate,
-        lastActiveAt: nowDate,
-        deviceType: deviceType || undefined,
-        userAgent: userAgentHeader
-          ? userAgentHeader.substring(0, 500)
-          : undefined,
-        ipHash: ipHash || undefined,
-        pageCount: pageViews,
-        heartbeatCount: 1,
-      });
-      logger.debug(
-        'Created session',
-        { userId: validUserId, id },
-        'POST /api/activity/heartbeat'
-      );
-    }
-
-    // Check for existing active session
-    const existingSession = await db.query.userSessions.findFirst({
-      where: and(
-        eq(userSessions.userId, validUserId),
-        eq(userSessions.sessionId, sessionId),
-        isNull(userSessions.endedAt)
-      ),
-    });
-
-    if (existingSession) {
-      const isTimedOut = existingSession.lastActiveAt < sessionTimeoutThreshold;
-      if (isTimedOut) {
-        // Close old session and create new one
-        await db
-          .update(userSessions)
-          .set({ endedAt: existingSession.lastActiveAt })
-          .where(eq(userSessions.id, existingSession.id));
-        await createSession();
-      } else {
-        // Update existing session with atomic increments to prevent race conditions
-        await db
-          .update(userSessions)
-          .set({
-            lastActiveAt: nowDate,
-            pageCount: sql`${userSessions.pageCount} + ${pageViews}`,
-            heartbeatCount: sql`${userSessions.heartbeatCount} + 1`,
-          })
-          .where(eq(userSessions.id, existingSession.id));
+    await asUser(authUser, async (db) => {
+      async function createSession(): Promise<void> {
+        const id = await generateSnowflakeId();
+        await insertUserSessionRow(db, {
+          id,
+          userId: validUserId,
+          sessionId,
+          startedAt: nowDate,
+          lastActiveAt: nowDate,
+          deviceType: deviceType || undefined,
+          userAgent: userAgentHeader
+            ? userAgentHeader.substring(0, 500)
+            : undefined,
+          ipHash: ipHash || undefined,
+          pageCount: pageViews,
+          heartbeatCount: 1,
+        });
+        logger.debug(
+          'Created session',
+          { userId: validUserId, id },
+          'POST /api/activity/heartbeat'
+        );
       }
-    } else {
-      await createSession();
-    }
 
-    // Log activity for retention tracking (one row per user per day)
-    const activityDate = new Date(
-      nowDate.getFullYear(),
-      nowDate.getMonth(),
-      nowDate.getDate()
-    );
+      const existingSession = await selectOpenUserSessionForBrowserSession(
+        db,
+        validUserId,
+        sessionId
+      );
 
-    const activityLogId = await generateSnowflakeId();
-    await db
-      .insert(userActivityLogs)
-      .values({
+      if (existingSession) {
+        const isTimedOut =
+          existingSession.lastActiveAt < sessionTimeoutThreshold;
+        if (isTimedOut) {
+          await updateUserSessionEndedAtById(
+            db,
+            existingSession.id,
+            existingSession.lastActiveAt
+          );
+          await createSession();
+        } else {
+          await bumpUserSessionHeartbeatCounters(
+            db,
+            existingSession.id,
+            nowDate,
+            pageViews
+          );
+        }
+      } else {
+        await createSession();
+      }
+
+      const activityDate = new Date(
+        nowDate.getFullYear(),
+        nowDate.getMonth(),
+        nowDate.getDate()
+      );
+
+      const activityLogId = await generateSnowflakeId();
+      await insertUserActivityLogOnConflictDoNothing(db, {
         id: activityLogId,
         userId: validUserId,
         activityType: 'session',
         activityDate,
-      })
-      .onConflictDoNothing();
+      });
 
-    // Track page visit for achievements (e.g., open_terminal, open_agents)
-    const lastPath = body.lastPath;
-    if (lastPath) {
-      // Match exact path or strip dynamic segments for base path
-      const basePath = `/${lastPath.split('/').filter(Boolean)[0] ?? ''}`;
-      const isMarketDetail =
-        lastPath.startsWith('/markets/predictions/') ||
-        lastPath.startsWith('/markets/perps/');
-      const pageActivityType =
-        PATH_TO_ACTIVITY_TYPE[lastPath] ??
-        (isMarketDetail ? ('open_market_detail' as const) : undefined) ??
-        PATH_TO_ACTIVITY_TYPE[basePath] ??
-        undefined;
-      if (pageActivityType) {
-        const pageLogId = await generateSnowflakeId();
-        await db
-          .insert(userActivityLogs)
-          .values({
+      const lastPath = body.lastPath;
+      if (lastPath) {
+        const basePath = `/${lastPath.split('/').filter(Boolean)[0] ?? ''}`;
+        const isMarketDetail =
+          lastPath.startsWith('/markets/predictions/') ||
+          lastPath.startsWith('/markets/perps/');
+        const pageActivityType =
+          PATH_TO_ACTIVITY_TYPE[lastPath] ??
+          (isMarketDetail ? ('open_market_detail' as const) : undefined) ??
+          PATH_TO_ACTIVITY_TYPE[basePath] ??
+          undefined;
+        if (pageActivityType) {
+          const pageLogId = await generateSnowflakeId();
+          await insertUserActivityLogOnConflictDoNothing(db, {
             id: pageLogId,
             userId: validUserId,
             activityType: pageActivityType,
             activityDate,
-          })
-          .onConflictDoNothing();
+          });
 
-        void checkProgress(validUserId, {
-          type: 'page_visited',
-          activityType: pageActivityType,
-        });
+          void checkProgress(validUserId, {
+            type: 'page_visited',
+            activityType: pageActivityType,
+          });
+        }
       }
-    }
+    });
   } catch (error) {
     const causeCode = (error as { cause?: { code?: string } } | null)?.cause
       ?.code;
@@ -267,8 +253,6 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     throw error;
   }
 
-  // Opportunistically close stale sessions (non-blocking, ~25% of requests)
-  // Higher probability ensures timely cleanup during low-traffic periods
   if (Math.random() < 0.25) {
     closeStaleSessionsInternal().catch((error) => {
       const errorMessage =
@@ -287,45 +271,9 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   });
 });
 
-/**
- * Cleanup job to close stale sessions.
- * Called opportunistically during heartbeat requests.
- *
- * Returns the sessions that were closed (for logging purposes)
- */
 async function closeStaleSessionsInternal(): Promise<{ id: string }[]> {
-  const threshold = new Date(Date.now() - SESSION_TIMEOUT_MS);
-
-  // Find stale sessions first
-  const staleSessions = await db.query.userSessions.findMany({
-    where: and(
-      isNull(userSessions.endedAt),
-      lt(userSessions.lastActiveAt, threshold)
-    ),
-    columns: {
-      id: true,
-      lastActiveAt: true,
-    },
-  });
-
-  if (staleSessions.length === 0) {
-    return [];
-  }
-
-  const staleSessionIds = staleSessions.map((s) => s.id);
-
-  await db
-    .update(userSessions)
-    .set({
-      endedAt: sql`${userSessions.lastActiveAt}`,
-    })
-    .where(
-      and(
-        isNull(userSessions.endedAt),
-        lt(userSessions.lastActiveAt, threshold),
-        inArray(userSessions.id, staleSessionIds)
-      )
-    );
-
-  return staleSessions.map((s) => ({ id: s.id }));
+  return asSystem(async (db) => {
+    const threshold = new Date(Date.now() - SESSION_TIMEOUT_MS);
+    return closeStaleOpenUserSessionsBefore(db, threshold);
+  }, 'heartbeat-close-stale-sessions');
 }

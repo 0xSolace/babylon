@@ -4,7 +4,10 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { ADMIN_PERMISSIONS, ROLE_PERMISSIONS } from '@babylon/db/runtime';
+import {
+  ADMIN_PERMISSIONS,
+  ROLE_PERMISSIONS,
+} from '@babylon/db/engine-storage';
 
 // GET /api/admin/permissions - Current user's admin permissions
 

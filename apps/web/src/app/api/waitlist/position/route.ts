@@ -72,9 +72,11 @@ import {
   WaitlistService,
   withErrorHandling,
 } from '@babylon/api';
-import { and, desc, eq } from '@babylon/db';
-import { db, referrals, users } from '@babylon/db/runtime';
-
+import {
+  selectCompletedReferralsWithReferredUserSlice,
+  selectPendingReferredUsersIncompleteProfile,
+} from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import { logger, toISO, toISOOrNull } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
@@ -188,48 +190,26 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   // Calculate weekly referral count and fetch referral details
   const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-  // Get completed referrals (qualified users) - limit to prevent unbounded payloads
-  // Use explicit column selection to avoid querying columns that may not exist in DB yet
-  const completedReferralsRaw = await db
-    .select({
-      id: referrals.id,
-      referredUserId: referrals.referredUserId,
-      completedAt: referrals.completedAt,
-      // Join user data
-      userId: users.id,
-      username: users.username,
-      displayName: users.displayName,
-      profileImageUrl: users.profileImageUrl,
-      userCreatedAt: users.createdAt,
-    })
-    .from(referrals)
-    .leftJoin(users, eq(referrals.referredUserId, users.id))
-    .where(
-      and(eq(referrals.referrerId, userId), eq(referrals.status, 'completed'))
-    )
-    .orderBy(desc(referrals.completedAt))
-    .limit(MAX_REFERRALS_PER_LIST);
+  const { completedReferralsRaw, pendingReferredUsers } = await asUser(
+    userId,
+    async (db) => {
+      const [completedReferralsRaw, pendingReferredUsers] = await Promise.all([
+        selectCompletedReferralsWithReferredUserSlice(db, {
+          referrerId: userId,
+          limit: MAX_REFERRALS_PER_LIST,
+        }),
+        selectPendingReferredUsersIncompleteProfile(db, {
+          referredByUserId: userId,
+          limit: MAX_REFERRALS_PER_LIST,
+        }),
+      ]);
+      return { completedReferralsRaw, pendingReferredUsers };
+    }
+  );
 
   const weeklyReferralCount = completedReferralsRaw.filter(
     (r) => r.completedAt && r.completedAt >= oneWeekAgo
   ).length;
-
-  // Get pending referrals (invited but not qualified) - limit to prevent unbounded payloads
-  const pendingReferredUsers = await db
-    .select({
-      id: users.id,
-      username: users.username,
-      displayName: users.displayName,
-      profileImageUrl: users.profileImageUrl,
-      email: users.email,
-      farcasterUsername: users.farcasterUsername,
-      twitterUsername: users.twitterUsername,
-      createdAt: users.createdAt,
-    })
-    .from(users)
-    .where(and(eq(users.referredBy, userId), eq(users.profileComplete, false)))
-    .orderBy(desc(users.createdAt))
-    .limit(MAX_REFERRALS_PER_LIST);
 
   const WEEKLY_REFERRAL_LIMIT = 10;
 

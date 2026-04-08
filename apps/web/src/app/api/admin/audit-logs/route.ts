@@ -65,8 +65,12 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, count, desc, eq, lt } from '@babylon/db';
-import { adminAuditLogs, db, users } from '@babylon/db/runtime';
+import {
+  fetchAdminAuditLogsPageBundle,
+  selectAdminAuditLogDistinctActions,
+  selectAdminAuditLogDistinctResourceTypes,
+} from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
@@ -135,66 +139,19 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     'GET /api/admin/audit-logs'
   );
 
-  // Build filter conditions (not cursor)
-  const filterConditions: ReturnType<typeof eq>[] = [];
-  if (filterAdminId) {
-    filterConditions.push(eq(adminAuditLogs.adminId, filterAdminId));
-  }
-  if (filterAction) {
-    filterConditions.push(eq(adminAuditLogs.action, filterAction));
-  }
-  if (filterResourceType) {
-    filterConditions.push(eq(adminAuditLogs.resourceType, filterResourceType));
-  }
-
-  const filterCondition =
-    filterConditions.length > 0 ? and(...filterConditions) : undefined;
-
-  // Get total count for proper pagination (only needed for offset-based)
-  let total = 0;
-  if (!useCursorPagination) {
-    const [totalResult] = await db
-      .select({ count: count() })
-      .from(adminAuditLogs)
-      .where(filterCondition);
-    total = totalResult?.count ?? 0;
-  }
-
-  // Build full query conditions including cursor
-  const queryConditions = [...filterConditions];
-  if (cursor) {
-    // Cursor is the createdAt timestamp of the last item - get items older than cursor
-    queryConditions.push(lt(adminAuditLogs.createdAt, new Date(cursor)));
-  }
-  const whereCondition =
-    queryConditions.length > 0 ? and(...queryConditions) : undefined;
-
-  // Query logs with admin user info
-  // PERFORMANCE NOTE: For optimal query performance, ensure the database has a composite index:
-  // CREATE INDEX idx_admin_audit_logs_filters ON admin_audit_logs (admin_id, action, resource_type, created_at DESC);
-  // This supports the common filter patterns (adminId, action, resourceType) while also optimizing ORDER BY createdAt DESC
-  const logs = await db
-    .select({
-      id: adminAuditLogs.id,
-      adminId: adminAuditLogs.adminId,
-      action: adminAuditLogs.action,
-      resourceType: adminAuditLogs.resourceType,
-      resourceId: adminAuditLogs.resourceId,
-      previousValue: adminAuditLogs.previousValue,
-      newValue: adminAuditLogs.newValue,
-      ipAddress: adminAuditLogs.ipAddress,
-      metadata: adminAuditLogs.metadata,
-      createdAt: adminAuditLogs.createdAt,
-      adminUsername: users.username,
-      adminDisplayName: users.displayName,
-      adminProfileImageUrl: users.profileImageUrl,
-    })
-    .from(adminAuditLogs)
-    .leftJoin(users, eq(adminAuditLogs.adminId, users.id))
-    .where(whereCondition)
-    .orderBy(desc(adminAuditLogs.createdAt))
-    .limit(limit + 1) // Fetch one extra to determine if there are more
-    .offset(useCursorPagination ? 0 : offset);
+  const { total, logs } = await asSystem(
+    (tx) =>
+      fetchAdminAuditLogsPageBundle(tx, {
+        limit,
+        offset,
+        useCursorPagination,
+        cursor,
+        filterAdminId,
+        filterAction,
+        filterResourceType,
+      }),
+    'admin-audit-logs'
+  );
 
   // Determine if there are more results
   const hasMore = logs.length > limit;
@@ -204,17 +161,14 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const lastLog = resultLogs[resultLogs.length - 1];
   const nextCursor = hasMore && lastLog ? toISO(lastLog.createdAt) : null;
 
-  // Get unique action types for filter dropdown
-  const actionTypes = await db
-    .selectDistinct({ action: adminAuditLogs.action })
-    .from(adminAuditLogs)
-    .orderBy(adminAuditLogs.action);
-
-  // Get unique resource types for filter dropdown
-  const resourceTypes = await db
-    .selectDistinct({ resourceType: adminAuditLogs.resourceType })
-    .from(adminAuditLogs)
-    .orderBy(adminAuditLogs.resourceType);
+  const [actionTypes, resourceTypes] = await asSystem(
+    (tx) =>
+      Promise.all([
+        selectAdminAuditLogDistinctActions(tx),
+        selectAdminAuditLogDistinctResourceTypes(tx),
+      ]),
+    'admin-audit-filters'
+  );
 
   return successResponse({
     logs: resultLogs.map((log) => ({

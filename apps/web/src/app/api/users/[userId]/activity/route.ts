@@ -16,15 +16,14 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { desc, eq, inArray } from '@babylon/db';
 import {
-  balanceTransactions,
-  comments,
-  db,
-  markets,
-  pointsTransactions,
-  posts,
-} from '@babylon/db/runtime';
+  selectBalanceTransactionRowsForUserActivityOrderCreatedDescLimit,
+  selectCommentsForAuthorOrderCreatedDescLimit,
+  selectMarketQuestionsByIds,
+  selectPointsTransactionActivityRowsByUserIdOrderCreatedDescLimit,
+  selectPostsForAuthorOrderCreatedDescLimit,
+} from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import { toISO, UserIdParamSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
@@ -131,185 +130,146 @@ export const GET = withErrorHandling(
       type: searchParams.get('type') ?? undefined,
     });
 
-    const activities: UserActivity[] = [];
+    return asUser(authUser, async (db) => {
+      const activities: UserActivity[] = [];
 
-    // Fetch trades from balanceTransactions (individual trade events)
-    if (type === 'all' || type === 'trade') {
-      const tradeTypes = [
-        'pred_buy',
-        'pred_sell',
-        'perp_open',
-        'perp_close',
-        'perp_liquidation',
-      ];
+      if (type === 'all' || type === 'trade') {
+        const tradeTypes = [
+          'pred_buy',
+          'pred_sell',
+          'perp_open',
+          'perp_close',
+          'perp_liquidation',
+        ];
 
-      const userTrades = await db
-        .select({
-          id: balanceTransactions.id,
-          type: balanceTransactions.type,
-          amount: balanceTransactions.amount,
-          relatedId: balanceTransactions.relatedId,
-          description: balanceTransactions.description,
-          createdAt: balanceTransactions.createdAt,
-        })
-        .from(balanceTransactions)
-        .where(eq(balanceTransactions.userId, canonicalUserId))
-        .orderBy(desc(balanceTransactions.createdAt))
-        .limit(limit * 2); // Fetch more to filter
+        const userTrades =
+          await selectBalanceTransactionRowsForUserActivityOrderCreatedDescLimit(
+            db,
+            canonicalUserId,
+            limit * 2
+          );
 
-      // Filter to only trade types
-      const filteredTrades = userTrades.filter((t) =>
-        tradeTypes.includes(t.type)
+        const filteredTrades = userTrades.filter((t) =>
+          tradeTypes.includes(t.type)
+        );
+
+        const marketIds = [
+          ...new Set(
+            filteredTrades
+              .filter((t) => t.relatedId && t.type.startsWith('pred_'))
+              .map((t) => t.relatedId as string)
+          ),
+        ];
+
+        let marketsMap: Map<string, string> = new Map();
+        if (marketIds.length > 0) {
+          const marketData = await selectMarketQuestionsByIds(db, marketIds);
+
+          marketsMap = new Map(marketData.map((m) => [m.id, m.question]));
+        }
+
+        for (const trade of filteredTrades.slice(0, limit)) {
+          activities.push({
+            type: 'trade',
+            id: trade.id,
+            timestamp: toISO(trade.createdAt),
+            data: {
+              tradeType: trade.type,
+              marketId: trade.relatedId,
+              marketQuestion: trade.relatedId
+                ? marketsMap.get(trade.relatedId) || null
+                : null,
+              amount: Math.abs(Number(trade.amount)),
+              description: trade.description,
+            },
+          });
+        }
+      }
+
+      if (type === 'all' || type === 'points') {
+        const transactions =
+          await selectPointsTransactionActivityRowsByUserIdOrderCreatedDescLimit(
+            db,
+            canonicalUserId,
+            limit
+          );
+
+        for (const tx of transactions) {
+          if (tx.reason === 'trading_pnl') continue;
+
+          activities.push({
+            type: 'points',
+            id: tx.id,
+            timestamp: toISO(tx.createdAt),
+            data: {
+              amount: tx.amount,
+              pointsBefore: tx.pointsBefore,
+              pointsAfter: tx.pointsAfter,
+              reason: tx.reason,
+              paymentProvider: tx.paymentProvider,
+            },
+          });
+        }
+      }
+
+      if (type === 'all' || type === 'post') {
+        const userPosts = await selectPostsForAuthorOrderCreatedDescLimit(
+          db,
+          canonicalUserId,
+          limit
+        );
+
+        for (const post of userPosts) {
+          activities.push({
+            type: 'post',
+            id: post.id,
+            timestamp: toISO(post.createdAt),
+            data: {
+              postId: post.id,
+              contentPreview: post.content.substring(0, 200),
+            },
+          });
+        }
+      }
+
+      if (type === 'all' || type === 'comment') {
+        const userComments = await selectCommentsForAuthorOrderCreatedDescLimit(
+          db,
+          canonicalUserId,
+          limit
+        );
+
+        for (const comment of userComments) {
+          activities.push({
+            type: 'comment',
+            id: comment.id,
+            timestamp: toISO(comment.createdAt),
+            data: {
+              commentId: comment.id,
+              postId: comment.postId,
+              contentPreview: comment.content.substring(0, 200),
+              parentCommentId: comment.parentCommentId,
+            },
+          });
+        }
+      }
+
+      activities.sort(
+        (a, b) =>
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
       );
 
-      // Get market info for trades that have relatedId (marketId)
-      const marketIds = [
-        ...new Set(
-          filteredTrades
-            .filter((t) => t.relatedId && t.type.startsWith('pred_'))
-            .map((t) => t.relatedId as string)
-        ),
-      ];
+      const limitedActivities = activities.slice(0, limit);
 
-      let marketsMap: Map<string, string> = new Map();
-      if (marketIds.length > 0) {
-        const marketData = await db
-          .select({
-            id: markets.id,
-            question: markets.question,
-          })
-          .from(markets)
-          .where(inArray(markets.id, marketIds));
-
-        marketsMap = new Map(marketData.map((m) => [m.id, m.question]));
-      }
-
-      for (const trade of filteredTrades.slice(0, limit)) {
-        activities.push({
-          type: 'trade',
-          id: trade.id,
-          timestamp: toISO(trade.createdAt),
-          data: {
-            tradeType: trade.type,
-            marketId: trade.relatedId,
-            marketQuestion: trade.relatedId
-              ? marketsMap.get(trade.relatedId) || null
-              : null,
-            amount: Math.abs(Number(trade.amount)),
-            description: trade.description,
-          },
-        });
-      }
-    }
-
-    // Fetch points transactions if requested (excluding trading_pnl since we show trades separately)
-    if (type === 'all' || type === 'points') {
-      const transactions = await db
-        .select({
-          id: pointsTransactions.id,
-          amount: pointsTransactions.amount,
-          pointsBefore: pointsTransactions.pointsBefore,
-          pointsAfter: pointsTransactions.pointsAfter,
-          reason: pointsTransactions.reason,
-          paymentProvider: pointsTransactions.paymentProvider,
-          createdAt: pointsTransactions.createdAt,
-        })
-        .from(pointsTransactions)
-        .where(eq(pointsTransactions.userId, canonicalUserId))
-        .orderBy(desc(pointsTransactions.createdAt))
-        .limit(limit);
-
-      for (const tx of transactions) {
-        // Skip trading_pnl since we show trades from balanceTransactions
-        if (tx.reason === 'trading_pnl') continue;
-
-        activities.push({
-          type: 'points',
-          id: tx.id,
-          timestamp: toISO(tx.createdAt),
-          data: {
-            amount: tx.amount,
-            pointsBefore: tx.pointsBefore,
-            pointsAfter: tx.pointsAfter,
-            reason: tx.reason,
-            paymentProvider: tx.paymentProvider,
-          },
-        });
-      }
-    }
-
-    // Fetch posts if requested
-    if (type === 'all' || type === 'post') {
-      const userPosts = await db
-        .select({
-          id: posts.id,
-          content: posts.content,
-          createdAt: posts.createdAt,
-        })
-        .from(posts)
-        .where(eq(posts.authorId, canonicalUserId))
-        .orderBy(desc(posts.createdAt))
-        .limit(limit);
-
-      for (const post of userPosts) {
-        activities.push({
-          type: 'post',
-          id: post.id,
-          timestamp: toISO(post.createdAt),
-          data: {
-            postId: post.id,
-            contentPreview: post.content.substring(0, 200),
-          },
-        });
-      }
-    }
-
-    // Fetch comments if requested
-    if (type === 'all' || type === 'comment') {
-      const userComments = await db
-        .select({
-          id: comments.id,
-          postId: comments.postId,
-          content: comments.content,
-          parentCommentId: comments.parentCommentId,
-          createdAt: comments.createdAt,
-        })
-        .from(comments)
-        .where(eq(comments.authorId, canonicalUserId))
-        .orderBy(desc(comments.createdAt))
-        .limit(limit);
-
-      for (const comment of userComments) {
-        activities.push({
-          type: 'comment',
-          id: comment.id,
-          timestamp: toISO(comment.createdAt),
-          data: {
-            commentId: comment.id,
-            postId: comment.postId,
-            contentPreview: comment.content.substring(0, 200),
-            parentCommentId: comment.parentCommentId,
-          },
-        });
-      }
-    }
-
-    // Sort all activities by timestamp (newest first)
-    activities.sort(
-      (a, b) =>
-        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-    );
-
-    const limitedActivities = activities.slice(0, limit);
-
-    return successResponse({
-      userId: canonicalUserId,
-      activities: limitedActivities,
-      pagination: {
-        limit,
-        count: limitedActivities.length,
-        hasMore: activities.length > limit,
-      },
+      return successResponse({
+        userId: canonicalUserId,
+        activities: limitedActivities,
+        pagination: {
+          limit,
+          count: limitedActivities.length,
+          hasMore: activities.length > limit,
+        },
+      });
     });
   }
 );

@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 /**
  * Seed script for testing alpha group functionality
  *
@@ -15,7 +16,6 @@
  *   bun run scripts/seed-alpha-test-data.ts --user=<username>
  */
 
-import { and, eq } from '@babylon/db';
 import {
   comments,
   db,
@@ -26,8 +26,9 @@ import {
   shares,
   userInteractions,
   users,
-} from '@babylon/db/runtime';
+} from '@babylon/db/engine-storage';
 import { generateSnowflakeId, logger } from '@babylon/shared';
+import { and, eq } from 'drizzle-orm';
 
 const REPLY_TEMPLATES = [
   'Great insight! I was thinking the same thing about this.',

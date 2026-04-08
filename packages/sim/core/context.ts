@@ -3,7 +3,7 @@
  */
 
 import { type DrizzleClient } from '@babylon/db';
-import { db } from '@babylon/db/runtime';
+import { db } from '@babylon/db/engine-storage';
 import { BabylonLLMClient } from '@babylon/engine';
 import { type Logger, logger } from '@babylon/shared';
 import { DefaultLLMOrchestrator } from './llm-orchestrator';

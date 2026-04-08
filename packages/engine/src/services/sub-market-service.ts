@@ -17,26 +17,28 @@
 
 import {
   type ArcStateType,
-  and,
-  eq,
-  gte,
-  lte,
+  fetchSubMarketTrySpawnContext,
+  fetchTimeframedMarketParentRootSlice,
+  incrementSubMarketParentChildCount,
+  incrementSubMarketParentChildCountInTx,
+  insertSubMarketSpawnLogRow,
+  insertSubMarketTimeframedMarketInTx,
+  insertSubMarketTimeframedMarketRow,
+  listActiveTimeframedMarketsByTimeframe,
+  listChildTimeframedMarketsByParentId,
+  listOrganizationIdsDistinctByNameOrTicker,
+  listSubMarketTimeframedMarketsNeedingResolution,
+  listTimeframedMarketsByRootMarketId,
   type MarketCategory,
   type MarketTimeframe,
   type NewSubMarketSpawnLog,
   type NewTimeframedMarket,
-  or,
-  sql,
+  resolveSubMarketTimeframedMarket,
   type TimeframedMarket,
   type Transaction,
-} from '@babylon/db';
-import {
-  db,
-  organizations,
-  subMarketSpawnLogs,
-  timeframedMarkets,
+  updateSubMarketTimeframedArcState,
   withTransaction,
-} from '@babylon/db/runtime';
+} from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import { formatError } from '../utils/error-utils';
 import {
@@ -116,28 +118,24 @@ export class SubMarketService {
         return { spawned: false, reason: 'no_matching_trigger' };
       }
 
-      // Get parent market
-      const [parent] = await db
-        .select()
-        .from(timeframedMarkets)
-        .where(eq(timeframedMarkets.id, parentMarketId))
-        .limit(1);
+      const cutoff = new Date(
+        Date.now() - MIN_SPAWN_INTERVAL_MINUTES * 60 * 1000
+      );
+      const read = await fetchSubMarketTrySpawnContext({
+        parentMarketId,
+        spawnCutoff: cutoff,
+      });
+
+      const { parent, recentSpawns } = read;
 
       if (!parent) {
         return { spawned: false, reason: 'parent_not_found' };
       }
 
-      // Check child market limit
       if (parent.childMarketCount >= MAX_CHILD_MARKETS_PER_PARENT) {
         await this.logSpawnSkipped(context, 'max_children_reached');
         return { spawned: false, reason: 'max_children_reached' };
       }
-
-      // Check spawn interval
-      const recentSpawns = await this.getRecentSpawns(
-        parentMarketId,
-        MIN_SPAWN_INTERVAL_MINUTES
-      );
       if (recentSpawns > 0) {
         await this.logSpawnSkipped(context, 'too_recent');
         return { spawned: false, reason: 'too_recent' };
@@ -192,21 +190,14 @@ export class SubMarketService {
    * Get all active child markets for a parent
    */
   async getChildMarkets(parentMarketId: string): Promise<TimeframedMarket[]> {
-    return db
-      .select()
-      .from(timeframedMarkets)
-      .where(eq(timeframedMarkets.parentMarketId, parentMarketId));
+    return listChildTimeframedMarketsByParentId(parentMarketId);
   }
 
   /**
    * Get all markets in a hierarchy (root and all descendants)
    */
   async getMarketHierarchy(rootMarketId: string): Promise<TimeframedMarket[]> {
-    // Get root and all descendants via rootMarketId
-    return db
-      .select()
-      .from(timeframedMarkets)
-      .where(eq(timeframedMarkets.rootMarketId, rootMarketId));
+    return listTimeframedMarketsByRootMarketId(rootMarketId);
   }
 
   /**
@@ -215,15 +206,7 @@ export class SubMarketService {
   async getActiveMarketsByTimeframe(
     timeframe: MarketTimeframe
   ): Promise<TimeframedMarket[]> {
-    return db
-      .select()
-      .from(timeframedMarkets)
-      .where(
-        and(
-          eq(timeframedMarkets.timeframe, timeframe),
-          eq(timeframedMarkets.isActive, true)
-        )
-      );
+    return listActiveTimeframedMarketsByTimeframe(timeframe);
   }
 
   /**
@@ -250,17 +233,10 @@ export class SubMarketService {
     // Determine root market ID
     let rootMarketId: string | null = null;
     if (params.parentMarketId) {
-      const [parent] = await db
-        .select({
-          rootMarketId: timeframedMarkets.rootMarketId,
-          id: timeframedMarkets.id,
-        })
-        .from(timeframedMarkets)
-        .where(eq(timeframedMarkets.id, params.parentMarketId))
-        .limit(1);
+      const parentMarketId = params.parentMarketId;
+      const parent = await fetchTimeframedMarketParentRootSlice(parentMarketId);
 
       if (parent) {
-        // Root is either parent's root or parent itself if parent is root
         rootMarketId = parent.rootMarketId ?? parent.id;
       }
     }
@@ -312,14 +288,11 @@ export class SubMarketService {
     newState: ArcStateType
   ): Promise<void> {
     const now = new Date();
-    await db
-      .update(timeframedMarkets)
-      .set({
-        arcState: newState,
-        arcStateEnteredAt: now,
-        updatedAt: now,
-      })
-      .where(eq(timeframedMarkets.id, marketId));
+    await updateSubMarketTimeframedArcState({
+      marketId,
+      newState,
+      now,
+    });
   }
 
   /**
@@ -327,16 +300,7 @@ export class SubMarketService {
    */
   async resolveMarket(marketId: string): Promise<void> {
     const now = new Date();
-    await db
-      .update(timeframedMarkets)
-      .set({
-        isActive: false,
-        isResolved: true,
-        resolvedAt: now,
-        arcState: 'resolution',
-        updatedAt: now,
-      })
-      .where(eq(timeframedMarkets.id, marketId));
+    await resolveSubMarketTimeframedMarket({ marketId, now });
   }
 
   /**
@@ -344,17 +308,7 @@ export class SubMarketService {
    */
   async getMarketsNeedingResolution(): Promise<TimeframedMarket[]> {
     const now = new Date();
-    // Use database-level filtering for efficiency
-    return db
-      .select()
-      .from(timeframedMarkets)
-      .where(
-        and(
-          eq(timeframedMarkets.isActive, true),
-          lte(timeframedMarkets.endTime, now),
-          eq(timeframedMarkets.isResolved, false)
-        )
-      );
+    return listSubMarketTimeframedMarketsNeedingResolution(now);
   }
 
   // ===========================================================================
@@ -371,17 +325,11 @@ export class SubMarketService {
     marketData: NewTimeframedMarket,
     tx?: Transaction
   ): Promise<TimeframedMarket> {
-    const dbClient = tx ?? db;
-    const [created] = await dbClient
-      .insert(timeframedMarkets)
-      .values(marketData)
-      .returning();
-
-    if (!created) {
-      throw new Error(`Failed to create timeframed market ${marketData.id}`);
+    if (tx) {
+      return insertSubMarketTimeframedMarketInTx(tx, marketData);
     }
 
-    return created;
+    return insertSubMarketTimeframedMarketRow(marketData);
   }
 
   /**
@@ -394,15 +342,17 @@ export class SubMarketService {
     parentMarketId: string,
     tx?: Transaction
   ): Promise<void> {
-    const dbClient = tx ?? db;
     const now = new Date();
-    await dbClient
-      .update(timeframedMarkets)
-      .set({
-        childMarketCount: sql`${timeframedMarkets.childMarketCount} + 1`,
-        updatedAt: now,
-      })
-      .where(eq(timeframedMarkets.id, parentMarketId));
+
+    if (tx) {
+      await incrementSubMarketParentChildCountInTx(tx, parentMarketId, now);
+      return;
+    }
+
+    await incrementSubMarketParentChildCount({
+      parentMarketId,
+      now,
+    });
   }
 
   private async createChildMarket(
@@ -533,18 +483,10 @@ export class SubMarketService {
 
     // Combine org name and ticker lookups into a single query with DISTINCT
     if (vars.org || vars.ticker) {
-      const conditions = [];
-      if (vars.org) {
-        conditions.push(eq(organizations.name, vars.org));
-      }
-      if (vars.ticker) {
-        conditions.push(eq(organizations.ticker, vars.ticker));
-      }
-
-      const orgs = await db
-        .selectDistinct({ id: organizations.id })
-        .from(organizations)
-        .where(or(...conditions));
+      const orgs = await listOrganizationIdsDistinctByNameOrTicker({
+        orgName: vars.org,
+        ticker: vars.ticker,
+      });
 
       for (const org of orgs) {
         affiliatedOrgIds.push(org.id);
@@ -571,25 +513,6 @@ export class SubMarketService {
     };
   }
 
-  private async getRecentSpawns(
-    parentMarketId: string,
-    withinMinutes: number
-  ): Promise<number> {
-    const cutoff = new Date(Date.now() - withinMinutes * 60 * 1000);
-    // Use COUNT aggregation instead of fetching all rows for efficiency
-    const [result] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(subMarketSpawnLogs)
-      .where(
-        and(
-          eq(subMarketSpawnLogs.parentMarketId, parentMarketId),
-          gte(subMarketSpawnLogs.createdAt, cutoff)
-        )
-      );
-
-    return result?.count ?? 0;
-  }
-
   private async logSpawnSkipped(
     context: SpawnContext,
     reason: string
@@ -604,7 +527,7 @@ export class SubMarketService {
       createdAt: new Date(),
     };
 
-    await db.insert(subMarketSpawnLogs).values(log);
+    await insertSubMarketSpawnLogRow(log, 'sub-market-log-skipped');
   }
 
   private async logSpawnSuccess(
@@ -626,7 +549,7 @@ export class SubMarketService {
       createdAt: new Date(),
     };
 
-    await db.insert(subMarketSpawnLogs).values(log);
+    await insertSubMarketSpawnLogRow(log, 'sub-market-log-success');
   }
 }
 

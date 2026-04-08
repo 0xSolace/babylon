@@ -17,8 +17,8 @@ import {
   RATE_LIMIT_CONFIGS,
   withErrorHandling,
 } from '@babylon/api';
-import { eq } from '@babylon/db';
-import { db, users } from '@babylon/db/runtime';
+import { selectUserDisplayForNotification } from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -81,12 +81,9 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
     );
   }
 
-  // Get user display name
-  const [userInfo] = await db
-    .select({ displayName: users.displayName, username: users.username })
-    .from(users)
-    .where(eq(users.id, user.id))
-    .limit(1);
+  const userInfo = await asUser(user.id, async (db) =>
+    selectUserDisplayForNotification(db, user.id)
+  );
 
   const displayName = userInfo?.displayName || userInfo?.username || 'User';
 

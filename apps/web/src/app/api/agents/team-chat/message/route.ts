@@ -55,8 +55,12 @@ import {
   RATE_LIMIT_CONFIGS,
   withErrorHandling,
 } from '@babylon/api';
-import { and, eq, generateSnowflakeId } from '@babylon/db';
-import { db, messages, users } from '@babylon/db/runtime';
+import {
+  generateSnowflakeId,
+  insertMessageRow,
+  selectTeamChatReplyMessageWithSenderDisplayName,
+} from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import { COORDINATOR_SENDER_ID, logger, toISO } from '@babylon/shared';
 import { generateText } from 'ai';
 import type { NextRequest } from 'next/server';
@@ -252,22 +256,12 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
   } | null = null;
 
   if (replyToMessageId) {
-    const [replyMsg] = await db
-      .select({
-        id: messages.id,
-        content: messages.content,
-        senderId: messages.senderId,
-        senderName: users.displayName,
+    const replyMsg = await asUser(user.id, (tx) =>
+      selectTeamChatReplyMessageWithSenderDisplayName(tx, {
+        messageId: replyToMessageId,
+        chatId: teamChat.chatId,
       })
-      .from(messages)
-      .leftJoin(users, eq(users.id, messages.senderId))
-      .where(
-        and(
-          eq(messages.id, replyToMessageId),
-          eq(messages.chatId, teamChat.chatId)
-        )
-      )
-      .limit(1);
+    );
 
     if (!replyMsg) {
       return NextResponse.json(
@@ -291,16 +285,18 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
   const messageId = await generateSnowflakeId();
   const now = new Date();
 
-  await db.insert(messages).values({
-    id: messageId,
-    chatId: teamChat.chatId,
-    senderId: user.id,
-    content: content.trim(),
-    type: 'user',
-    createdAt: now,
-    targetIds,
-    replyToMessageId: replyToMessageId ?? null,
-  });
+  await asUser(user.id, (tx) =>
+    insertMessageRow(tx, {
+      id: messageId,
+      chatId: teamChat.chatId,
+      senderId: user.id,
+      content: content.trim(),
+      type: 'user',
+      createdAt: now,
+      targetIds,
+      replyToMessageId: replyToMessageId ?? null,
+    })
+  );
 
   logger.info(
     `Team chat message sent by user ${user.id}`,

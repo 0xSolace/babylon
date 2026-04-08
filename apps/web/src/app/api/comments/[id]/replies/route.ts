@@ -85,12 +85,18 @@
 
 import {
   authenticate,
+  BusinessLogicError,
   NotFoundError,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { eq } from '@babylon/db';
-import { asUser, comments, posts, users } from '@babylon/db/runtime';
+import {
+  insertCommentReturning,
+  insertGameGeneratedPostStubIfNotExists,
+  selectCommentReplyAuthorSliceByUserId,
+  selectCommentRowById,
+} from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import {
   CreateCommentSchema,
   generateSnowflakeId,
@@ -125,12 +131,10 @@ export const POST = withErrorHandling(
 
     // Create reply with RLS
     const reply = await asUser(user, async (dbClient) => {
-      // Check if parent comment exists
-      const [parentComment] = await dbClient
-        .select()
-        .from(comments)
-        .where(eq(comments.id, parentCommentId))
-        .limit(1);
+      const parentComment = await selectCommentRowById(
+        dbClient,
+        parentCommentId
+      );
 
       if (!parentComment) {
         throw new NotFoundError('Parent comment', parentCommentId);
@@ -146,53 +150,35 @@ export const POST = withErrorHandling(
         const timestampStr = postParts.slice(2).join('-');
 
         if (gameId && authorId) {
-          // Ensure post exists (insert if not exists pattern)
-          const [existingPost] = await dbClient
-            .select()
-            .from(posts)
-            .where(eq(posts.id, postId))
-            .limit(1);
-
-          if (!existingPost) {
-            await dbClient.insert(posts).values({
-              id: postId,
-              content: '[Game-generated post]',
-              authorId,
-              gameId,
-              timestamp: new Date(timestampStr),
-              createdAt: new Date(),
-            });
-          }
+          await insertGameGeneratedPostStubIfNotExists(dbClient, {
+            postId,
+            authorId,
+            gameId,
+            timestamp: new Date(timestampStr),
+          });
         }
       }
 
-      // Create reply (comment with parentCommentId)
       const now = new Date();
       const replyId = await generateSnowflakeId();
-      const [newReply] = await dbClient
-        .insert(comments)
-        .values({
-          id: replyId,
-          content: content.trim(),
-          postId: parentComment.postId,
-          authorId: user.userId,
-          parentCommentId,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .returning();
+      const newReply = await insertCommentReturning(dbClient, {
+        id: replyId,
+        content: content.trim(),
+        postId: parentComment.postId,
+        authorId: user.userId,
+        parentCommentId,
+        createdAt: now,
+        updatedAt: now,
+      });
 
-      // Fetch author details
-      const [author] = await dbClient
-        .select({
-          id: users.id,
-          displayName: users.displayName,
-          username: users.username,
-          profileImageUrl: users.profileImageUrl,
-        })
-        .from(users)
-        .where(eq(users.id, user.userId))
-        .limit(1);
+      if (!newReply) {
+        throw new BusinessLogicError('Failed to create reply', 'REPLY_FAILED');
+      }
+
+      const author = await selectCommentReplyAuthorSliceByUserId(
+        dbClient,
+        user.userId
+      );
 
       return { ...newReply, author };
     });

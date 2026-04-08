@@ -32,8 +32,12 @@
  * Uses secureRandom for deterministic behavior in testing.
  */
 
-import { asc, eq, type TimeframedMarket } from '@babylon/db';
-import { db, timeframedMarkets } from '@babylon/db/runtime';
+import {
+  listActiveTimeframedMarketsPage,
+  type TimeframedMarket,
+  updateTimeframedMarketArcState,
+  updateTimeframedMarketEventStats,
+} from '@babylon/db';
 import { logger } from '@babylon/shared';
 import { secureRandom } from '../utils/entropy';
 import { formatError } from '../utils/error-utils';
@@ -152,13 +156,10 @@ export class TimeframeArcProcessor {
       let hasMore = true;
 
       while (hasMore) {
-        const activeMarkets = await db
-          .select()
-          .from(timeframedMarkets)
-          .where(eq(timeframedMarkets.isActive, true))
-          .orderBy(asc(timeframedMarkets.id)) // Stable order for pagination
-          .limit(BATCH_SIZE)
-          .offset(offset);
+        const activeMarkets = await listActiveTimeframedMarketsPage({
+          limit: BATCH_SIZE,
+          offset,
+        });
 
         if (activeMarkets.length < BATCH_SIZE) {
           hasMore = false;
@@ -274,14 +275,13 @@ export class TimeframeArcProcessor {
         'TimeframeArcProcessor'
       );
 
-      await db
-        .update(timeframedMarkets)
-        .set({
-          arcState: expectedState,
-          arcStateEnteredAt: now,
-          updatedAt: now,
-        })
-        .where(eq(timeframedMarkets.id, market.id));
+      await updateTimeframedMarketArcState({
+        marketId: market.id,
+        arcState: expectedState,
+        arcStateEnteredAt: now,
+        updatedAt: now,
+        traceLabel: 'timeframe-arc-state-transition',
+      });
 
       return {
         transitioned: true,
@@ -341,15 +341,12 @@ export class TimeframeArcProcessor {
           'generic_event')
         : 'generic_event';
 
-    // Update market
-    await db
-      .update(timeframedMarkets)
-      .set({
-        eventsGenerated: (market.eventsGenerated ?? 0) + 1,
-        lastEventAt: now,
-        updatedAt: now,
-      })
-      .where(eq(timeframedMarkets.id, market.id));
+    await updateTimeframedMarketEventStats({
+      marketId: market.id,
+      eventsGenerated: (market.eventsGenerated ?? 0) + 1,
+      lastEventAt: now,
+      updatedAt: now,
+    });
 
     logger.debug(
       `Generated event`,
@@ -393,14 +390,13 @@ export class TimeframeArcProcessor {
       };
     }
 
-    await db
-      .update(timeframedMarkets)
-      .set({
-        arcState: terminalState,
-        arcStateEnteredAt: now,
-        updatedAt: now,
-      })
-      .where(eq(timeframedMarkets.id, market.id));
+    await updateTimeframedMarketArcState({
+      marketId: market.id,
+      arcState: terminalState,
+      arcStateEnteredAt: now,
+      updatedAt: now,
+      traceLabel: 'timeframe-arc-resolution-pending',
+    });
 
     logger.info(
       `Market reached end time and is awaiting markets-tick resolution`,

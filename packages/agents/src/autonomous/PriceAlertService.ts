@@ -15,13 +15,14 @@
  * Owner alerts use team chat instead.
  */
 
-import { eq, type PriceAlert, sql } from '@babylon/db';
 import {
-  db,
-  perpMarketSnapshots,
-  userAgentConfigs,
-  users,
-} from '@babylon/db/runtime';
+  corePerpSelectMarketSnapshotByTicker,
+  type PriceAlert,
+  selectUserAgentConfigByUserId,
+  selectUserRowById,
+  updateUserAgentConfigPriceAlertLastTriggeredAt,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 
 // Import TeamChatService to resolve the team chat for owner alerts
 import { teamChatService } from '../services/TeamChatService';
@@ -40,13 +41,9 @@ export class PriceAlertService {
    * Returns the number of alerts triggered and sent.
    */
   async checkAlerts(agentUserId: string): Promise<number> {
-    const [config] = await db
-      .select({ priceAlerts: userAgentConfigs.priceAlerts })
-      .from(userAgentConfigs)
-      .where(eq(userAgentConfigs.userId, agentUserId))
-      .limit(1);
+    const config = await selectUserAgentConfigByUserId(db, agentUserId);
 
-    const alerts = (config?.priceAlerts ?? []) as PriceAlert[];
+    const alerts = config?.priceAlerts ?? [];
     const enabledAlerts = alerts.filter((a) => a.enabled);
 
     if (enabledAlerts.length === 0) return 0;
@@ -141,14 +138,10 @@ export class PriceAlertService {
    * Returns markPrice if available, otherwise currentPrice.
    */
   private async getCurrentPrice(tokenSymbol: string): Promise<number | null> {
-    const [snapshot] = await db
-      .select({
-        currentPrice: perpMarketSnapshots.currentPrice,
-        markPrice: perpMarketSnapshots.markPrice,
-      })
-      .from(perpMarketSnapshots)
-      .where(eq(perpMarketSnapshots.ticker, tokenSymbol))
-      .limit(1);
+    const snapshot = await corePerpSelectMarketSnapshotByTicker(
+      db,
+      tokenSymbol
+    );
 
     return snapshot?.markPrice ?? snapshot?.currentPrice ?? null;
   }
@@ -160,12 +153,7 @@ export class PriceAlertService {
   private async getOwnerTeamChatId(
     agentUserId: string
   ): Promise<string | undefined> {
-    // Find the agent's owner
-    const [agent] = await db
-      .select({ managedBy: users.managedBy })
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
+    const agent = await selectUserRowById(db, agentUserId);
 
     if (!agent?.managedBy) return undefined;
 
@@ -184,30 +172,12 @@ export class PriceAlertService {
   ): Promise<void> {
     const now = new Date().toISOString();
 
-    // Atomic JSON update: iterate the array and set lastTriggeredAt on the matching alert.
-    // This avoids the read-modify-write race of SELECT → map → UPDATE.
-    // Column is json (not jsonb), so cast to jsonb for processing, then back to json.
-    await db
-      .update(userAgentConfigs)
-      .set({
-        priceAlerts: sql`(
-          SELECT COALESCE(
-            jsonb_agg(
-              CASE
-                WHEN elem->>'id' = ${alertId}
-                THEN elem || jsonb_build_object('lastTriggeredAt', ${now}::text)
-                ELSE elem
-              END
-            ),
-            '[]'::jsonb
-          )::json
-          FROM jsonb_array_elements(
-            COALESCE(${userAgentConfigs.priceAlerts}::jsonb, '[]'::jsonb)
-          ) AS elem
-        )`,
-        updatedAt: new Date(),
-      })
-      .where(eq(userAgentConfigs.userId, agentUserId));
+    await updateUserAgentConfigPriceAlertLastTriggeredAt(
+      db,
+      agentUserId,
+      alertId,
+      now
+    );
   }
 }
 

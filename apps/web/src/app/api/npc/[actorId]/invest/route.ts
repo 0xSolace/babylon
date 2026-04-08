@@ -64,7 +64,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 
-import { db } from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 import { NPCInvestmentManager, StaticDataRegistry } from '@babylon/engine';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -111,12 +111,16 @@ export const POST = withErrorHandling(
 
     const actor = await requireUserByIdentifier(actorId);
 
-    const pool = await db.pool.findFirst({
-      where: {
-        npcActorId: actor.id,
-        isActive: true,
-      },
-    });
+    const pool = await asSystem(
+      async (db) =>
+        db.pool.findFirst({
+          where: {
+            npcActorId: actor.id,
+            isActive: true,
+          },
+        }),
+      'npc-invest-pool'
+    );
 
     let actorPersonality: string | null = null;
     if (pool) {

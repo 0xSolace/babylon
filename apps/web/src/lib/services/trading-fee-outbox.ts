@@ -6,14 +6,17 @@
  */
 
 import type { TradingFeeOutboxPort } from '@babylon/core/markets/shared';
-import { asc, eq } from '@babylon/db';
 import {
-  db,
+  deleteTradingFeeOutboxById,
+  insertTradingFeeOutboxRow,
+  selectTradingFeeOutboxRowsOrderCreatedAscLimit,
+} from '@babylon/db';
+import {
+  asSystem,
   dbWrite,
   type Transaction,
-  tradingFeeOutbox,
   withTransaction,
-} from '@babylon/db/runtime';
+} from '@babylon/db/engine-storage';
 import { FeeService, type FeeType, isValidFeeType } from '@babylon/engine';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 
@@ -28,15 +31,19 @@ export async function enqueueFailedTradingFee(params: {
   lastError?: string;
 }): Promise<void> {
   const id = await generateSnowflakeId();
-  await db.insert(tradingFeeOutbox).values({
-    id,
-    userId: params.userId,
-    tradeType: params.type,
-    tradeAmount: String(params.amount),
-    tradeId: params.positionId,
-    marketId: params.relatedId,
-    lastError: params.lastError ?? null,
-  });
+  await asSystem(
+    (tx) =>
+      insertTradingFeeOutboxRow(tx, {
+        id,
+        userId: params.userId,
+        tradeType: params.type,
+        tradeAmount: String(params.amount),
+        tradeId: params.positionId,
+        marketId: params.relatedId,
+        lastError: params.lastError ?? null,
+      }),
+    'trading-fee-outbox-enqueue'
+  );
 }
 
 export function createTradingFeeOutboxAdapter(): TradingFeeOutboxPort {
@@ -50,18 +57,15 @@ export async function drainTradingFeeOutboxBatch(): Promise<{
   processed: number;
   failed: number;
 }> {
-  // Drain must read from primary to avoid replica lag re-processing already-deleted rows.
-  const rows = await dbWrite
-    .select()
-    .from(tradingFeeOutbox)
-    .orderBy(asc(tradingFeeOutbox.createdAt))
-    .limit(DRAIN_BATCH_SIZE);
+  const rows = await selectTradingFeeOutboxRowsOrderCreatedAscLimit(
+    dbWrite,
+    DRAIN_BATCH_SIZE
+  );
 
   let processed = 0;
   let failed = 0;
 
   for (const row of rows) {
-    // Validate tradeType before processing to catch invalid data early
     if (!isValidFeeType(row.tradeType)) {
       failed += 1;
       logger.error(
@@ -86,9 +90,7 @@ export async function drainTradingFeeOutboxBatch(): Promise<{
           row.marketId ?? undefined,
           tx
         );
-        await tx
-          .delete(tradingFeeOutbox)
-          .where(eq(tradingFeeOutbox.id, row.id));
+        await deleteTradingFeeOutboxById(tx, row.id);
       });
       processed += 1;
     } catch (error) {

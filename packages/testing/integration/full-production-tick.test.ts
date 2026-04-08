@@ -388,7 +388,7 @@ describe('Full Production Tick Integration Test', () => {
     test('bootstraps game data if needed', async () => {
       // Get static data and DB to check bootstrap state
       const { StaticDataRegistry } = await import('@babylon/engine');
-      const { db, actorState } = await import('@babylon/db/runtime');
+      const { db, actorState } = await import('@babylon/db/engine-storage');
 
       // Check what's in the static data
       const staticActors = StaticDataRegistry.getAllActors();
@@ -483,8 +483,8 @@ describe('Full Production Tick Integration Test', () => {
 
   describe('5. Database State Validation', () => {
     test('validates posts in database', async () => {
-      const { desc } = await import('@babylon/db');
-      const { db, posts } = await import('@babylon/db/runtime');
+      const { desc } = await import('drizzle-orm');
+      const { db, posts } = await import('@babylon/db/engine-storage');
       const { StaticDataRegistry } = await import('@babylon/engine');
 
       // Get recent posts
@@ -524,8 +524,8 @@ describe('Full Production Tick Integration Test', () => {
     });
 
     test('validates events in database', async () => {
-      const { desc } = await import('@babylon/db');
-      const { db, worldEvents } = await import('@babylon/db/runtime');
+      const { desc } = await import('drizzle-orm');
+      const { db, worldEvents } = await import('@babylon/db/engine-storage');
 
       const recentEvents = await db
         .select()
@@ -546,7 +546,7 @@ describe('Full Production Tick Integration Test', () => {
     });
 
     test('validates questions in database', async () => {
-      const { db, questions } = await import('@babylon/db/runtime');
+      const { db, questions } = await import('@babylon/db/engine-storage');
 
       const allQuestions = await db.select().from(questions).limit(20);
 
@@ -568,7 +568,7 @@ describe('Full Production Tick Integration Test', () => {
     });
 
     test('validates markets in database', async () => {
-      const { db, markets } = await import('@babylon/db/runtime');
+      const { db, markets } = await import('@babylon/db/engine-storage');
 
       const allMarkets = await db.select().from(markets).limit(20);
 
@@ -590,8 +590,8 @@ describe('Full Production Tick Integration Test', () => {
     });
 
     test('validates NPC trades in database', async () => {
-      const { desc } = await import('@babylon/db');
-      const { db, npcTrades } = await import('@babylon/db/runtime');
+      const { desc } = await import('drizzle-orm');
+      const { db, npcTrades } = await import('@babylon/db/engine-storage');
       const { StaticDataRegistry } = await import('@babylon/engine');
 
       const recentTrades = await db
@@ -635,8 +635,8 @@ describe('Full Production Tick Integration Test', () => {
     });
 
     test('validates actor state in database', async () => {
-      const { desc } = await import('@babylon/db');
-      const { db, actorState } = await import('@babylon/db/runtime');
+      const { desc } = await import('drizzle-orm');
+      const { db, actorState } = await import('@babylon/db/engine-storage');
       const { StaticDataRegistry } = await import('@babylon/engine');
 
       const actorStates = await db

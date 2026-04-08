@@ -74,7 +74,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import type { JsonValue } from '@babylon/db';
-import { db } from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 import { WalletService } from '@babylon/engine';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
@@ -96,17 +96,21 @@ export const POST = withErrorHandling(
     const body = await request.json();
     const { action, reasoning } = HumanReviewActionSchema.parse(body);
 
-    const user = await db.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        appealStatus: true,
-        isBanned: true,
-        appealStaked: true,
-        appealStakeAmount: true,
-        falsePositiveHistory: true,
-      },
-    });
+    const user = await asSystem(
+      (tx) =>
+        tx.user.findUnique({
+          where: { id: userId },
+          select: {
+            id: true,
+            appealStatus: true,
+            isBanned: true,
+            appealStaked: true,
+            appealStakeAmount: true,
+            falsePositiveHistory: true,
+          },
+        }),
+      'admin-human-review-load'
+    );
 
     if (!user || user.appealStatus !== 'human_review') {
       return successResponse(
@@ -127,20 +131,24 @@ export const POST = withErrorHandling(
         type: 'human_review',
       });
 
-      await db.user.update({
-        where: { id: userId },
-        data: {
-          isBanned: false,
-          isScammer: false,
-          isCSAM: false,
-          bannedAt: null,
-          bannedBy: null,
-          bannedReason: null,
-          appealStatus: 'approved',
-          appealReviewedAt: new Date(),
-          falsePositiveHistory: falsePositiveHistory as JsonValue,
-        },
-      });
+      await asSystem(
+        (tx) =>
+          tx.user.update({
+            where: { id: userId },
+            data: {
+              isBanned: false,
+              isScammer: false,
+              isCSAM: false,
+              bannedAt: null,
+              bannedBy: null,
+              bannedReason: null,
+              appealStatus: 'approved',
+              appealReviewedAt: new Date(),
+              falsePositiveHistory: falsePositiveHistory as JsonValue,
+            },
+          }),
+        'admin-human-review-approve'
+      );
 
       // Refund stake if staked
       if (user.appealStaked && user.appealStakeAmount) {
@@ -170,14 +178,17 @@ export const POST = withErrorHandling(
       });
     }
     // Deny - permanent ban
-    await db.user.update({
-      where: { id: userId },
-      data: {
-        appealStatus: 'denied',
-        appealReviewedAt: new Date(),
-        // Keep banned, scammer, CSAM flags
-      },
-    });
+    await asSystem(
+      (tx) =>
+        tx.user.update({
+          where: { id: userId },
+          data: {
+            appealStatus: 'denied',
+            appealReviewedAt: new Date(),
+          },
+        }),
+      'admin-human-review-deny'
+    );
 
     await createNotification({
       userId,
@@ -219,14 +230,18 @@ async function refundAppealStake(
   );
 
   // Clear stake flags
-  await db.user.update({
-    where: { id: userId },
-    data: {
-      appealStaked: false,
-      appealStakeAmount: null,
-      appealStakeTxHash: null,
-    },
-  });
+  await asSystem(
+    (tx) =>
+      tx.user.update({
+        where: { id: userId },
+        data: {
+          appealStaked: false,
+          appealStakeAmount: null,
+          appealStakeTxHash: null,
+        },
+      }),
+    'admin-human-review-stake-clear'
+  );
 
   logger.info(
     'Appeal stake refunded',

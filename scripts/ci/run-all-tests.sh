@@ -63,6 +63,13 @@ bun lint || {
 }
 
 echo ""
+echo "🧱 Step 4b/7: DB query boundary (runtime imports)..."
+bun run enforce:db-boundary || {
+    echo -e "${RED}❌ DB boundary check failed${NC}"
+    exit 1
+}
+
+echo ""
 echo "🏗️  Step 5/7: Building production..."
 bun run build || {
     echo -e "${RED}❌ Build failed${NC}"

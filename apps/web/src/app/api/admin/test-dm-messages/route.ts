@@ -71,7 +71,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 
-import { db } from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 import { generateSnowflakeId, logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
@@ -142,35 +142,44 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   const sortedIds = [resolvedSenderId, resolvedRecipientId].sort();
   const chatId = `dm-${sortedIds.join('-')}`;
 
-  await db.chat.findUnique({
-    where: { id: chatId },
-  });
+  await asSystem(
+    (tx) => tx.chat.findUnique({ where: { id: chatId } }),
+    'test-dm-chat-lookup'
+  );
 
-  await db.chat.create({
-    data: {
-      id: chatId,
-      name: null,
-      isGroup: false,
-      updatedAt: new Date(),
+  const { senderParticipant, recipientParticipant } = await asSystem(
+    async (tx) => {
+      await tx.chat.create({
+        data: {
+          id: chatId,
+          name: null,
+          isGroup: false,
+          updatedAt: new Date(),
+        },
+      });
+      const [senderRow, recipientRow] = await Promise.all([
+        tx.chatParticipant.create({
+          data: {
+            id: await generateSnowflakeId(),
+            chatId,
+            userId: resolvedSenderId,
+          },
+        }),
+        tx.chatParticipant.create({
+          data: {
+            id: await generateSnowflakeId(),
+            chatId,
+            userId: resolvedRecipientId,
+          },
+        }),
+      ]);
+      return {
+        senderParticipant: senderRow,
+        recipientParticipant: recipientRow,
+      };
     },
-  });
-
-  const [senderParticipant, recipientParticipant] = await Promise.all([
-    db.chatParticipant.create({
-      data: {
-        id: await generateSnowflakeId(),
-        chatId,
-        userId: resolvedSenderId,
-      },
-    }),
-    db.chatParticipant.create({
-      data: {
-        id: await generateSnowflakeId(),
-        chatId,
-        userId: resolvedRecipientId,
-      },
-    }),
-  ]);
+    'test-dm-chat-init'
+  );
 
   logger.info(
     'Created new DM chat for test messages',
@@ -216,7 +225,13 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   );
 
   for (let i = 0; i < messageCount; i += batchSize) {
-    const batch = [];
+    const batch: Array<{
+      id: string;
+      content: string;
+      chatId: string;
+      senderId: string;
+      createdAt: Date;
+    }> = [];
 
     for (let j = 0; j < batchSize && i + j < messageCount; j++) {
       const messageNumber = i + j + 1;
@@ -231,9 +246,10 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       });
     }
 
-    const result = await db.message.createMany({
-      data: batch,
-    });
+    const result = await asSystem(
+      (tx) => tx.message.createMany({ data: batch }),
+      'test-dm-batch'
+    );
 
     logger.info(
       'Created batch of messages',
@@ -280,11 +296,14 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     );
   }
 
-  // Update chat updatedAt
-  await db.chat.update({
-    where: { id: chatId },
-    data: { updatedAt: new Date() },
-  });
+  await asSystem(
+    (tx) =>
+      tx.chat.update({
+        where: { id: chatId },
+        data: { updatedAt: new Date() },
+      }),
+    'test-dm-chat-touch'
+  );
 
   logger.info(
     'Admin test DM messages sent successfully',

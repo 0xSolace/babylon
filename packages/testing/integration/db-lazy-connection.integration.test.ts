@@ -8,7 +8,7 @@
  */
 
 import { afterEach, beforeAll, describe, expect, it } from 'bun:test';
-import { db } from '@babylon/db/runtime';
+import { db } from '@babylon/db/engine-storage';
 
 import {
   setupTestEnvironment,

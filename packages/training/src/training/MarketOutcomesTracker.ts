@@ -5,13 +5,14 @@
  * This gives RULER the ground truth to evaluate agent decisions.
  */
 
-import { and, eq, gte, lte } from '@babylon/db';
 import {
-  db,
-  marketOutcomes,
-  markets,
-  perpPositions,
-} from '@babylon/db/runtime';
+  insertMarketOutcomeRow,
+  marketOutcomeExistsForWindowId,
+  selectMarketOutcomesRowsByWindowId,
+  selectPerpPositionSlicesOpenedBetween,
+  selectResolvedMarketsSliceUpdatedBetween,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import { generateSnowflakeId, logger } from '../utils';
 import { getPreviousWindowId } from './window-utils';
 
@@ -43,24 +44,12 @@ export class MarketOutcomesTracker {
     const windowStart = new Date(windowId);
     const windowEnd = new Date(windowStart.getTime() + 60 * 60 * 1000);
 
-    // Get stock price movements from perpetual positions
-    // (Approximate using PerpPosition data)
-    const perpTrades = await db
-      .select({
-        ticker: perpPositions.ticker,
-        entryPrice: perpPositions.entryPrice,
-        currentPrice: perpPositions.currentPrice,
-        closedAt: perpPositions.closedAt,
-      })
-      .from(perpPositions)
-      .where(
-        and(
-          gte(perpPositions.openedAt, windowStart),
-          lte(perpPositions.openedAt, windowEnd)
-        )
-      );
+    const perpTrades = await selectPerpPositionSlicesOpenedBetween(
+      db,
+      windowStart,
+      windowEnd
+    );
 
-    // Group by ticker and calculate movements
     const stockMovements = new Map<
       string,
       { start: number; end: number; count: number }
@@ -77,17 +66,15 @@ export class MarketOutcomesTracker {
           count: 1,
         });
       } else {
-        // Average the prices
         existing.end = Number(trade.currentPrice);
         existing.count++;
       }
     }
 
-    // Save stock outcomes
     for (const [ticker, data] of stockMovements.entries()) {
       const changePercent = ((data.end - data.start) / data.start) * 100;
 
-      await db.insert(marketOutcomes).values({
+      await insertMarketOutcomeRow(db, {
         id: await generateSnowflakeId(),
         windowId,
         stockTicker: ticker,
@@ -98,31 +85,18 @@ export class MarketOutcomesTracker {
       });
     }
 
-    // Get prediction market resolutions
-    const resolvedMarkets = await db
-      .select({
-        id: markets.id,
-        question: markets.question,
-        resolution: markets.resolution,
-        yesShares: markets.yesShares,
-        noShares: markets.noShares,
-      })
-      .from(markets)
-      .where(
-        and(
-          eq(markets.resolved, true),
-          gte(markets.updatedAt, windowStart),
-          lte(markets.updatedAt, windowEnd)
-        )
-      );
+    const resolvedMarkets = await selectResolvedMarketsSliceUpdatedBetween(
+      db,
+      windowStart,
+      windowEnd
+    );
 
-    // Save prediction outcomes
     for (const market of resolvedMarkets) {
       const totalShares = Number(market.yesShares) + Number(market.noShares);
       const finalProb =
         totalShares > 0 ? Number(market.yesShares) / totalShares : 0.5;
 
-      await db.insert(marketOutcomes).values({
+      await insertMarketOutcomeRow(db, {
         id: await generateSnowflakeId(),
         windowId,
         predictionMarketId: market.id,
@@ -149,14 +123,9 @@ export class MarketOutcomesTracker {
     for (let i = 0; i < hours; i++) {
       const windowId = getPreviousWindowId(i);
 
-      // Check if already tracked
-      const existingResult = await db
-        .select()
-        .from(marketOutcomes)
-        .where(eq(marketOutcomes.windowId, windowId))
-        .limit(1);
+      const exists = await marketOutcomeExistsForWindowId(db, windowId);
 
-      if (existingResult.length === 0) {
+      if (!exists) {
         await this.trackWindowOutcomes(windowId);
         synced++;
       }
@@ -170,18 +139,15 @@ export class MarketOutcomesTracker {
    * Get outcomes for a window
    */
   async getWindowOutcomes(windowId: string): Promise<WindowOutcomes | null> {
-    const outcomes = await db
-      .select()
-      .from(marketOutcomes)
-      .where(eq(marketOutcomes.windowId, windowId));
+    const outcomes = await selectMarketOutcomesRowsByWindowId(db, windowId);
 
     if (outcomes.length === 0) {
       return null;
     }
 
     const stocks = outcomes
-      .filter((o: (typeof outcomes)[number]) => o.stockTicker)
-      .map((o: (typeof outcomes)[number]) => ({
+      .filter((o) => o.stockTicker)
+      .map((o) => ({
         ticker: o.stockTicker!,
         startPrice: Number(o.startPrice),
         endPrice: Number(o.endPrice),
@@ -191,8 +157,8 @@ export class MarketOutcomesTracker {
       }));
 
     const predictions = outcomes
-      .filter((o: (typeof outcomes)[number]) => o.predictionMarketId)
-      .map((o: (typeof outcomes)[number]) => ({
+      .filter((o) => o.predictionMarketId)
+      .map((o) => ({
         marketId: o.predictionMarketId!,
         question: o.question || '',
         outcome: o.outcome || 'UNRESOLVED',

@@ -9,9 +9,15 @@ import {
   prepareAgentSolanaRegistrationTransaction,
   SOLANA_REGISTRATION_MIN_BALANCE_LAMPORTS,
 } from '@babylon/agents/solana-registry';
-import { and, eq, sql } from '@babylon/db';
-import { balanceTransactions, db, users } from '@babylon/db/runtime';
-
+import {
+  type AgentSolanaRegistrationRow,
+  refundVirtualBalanceForAgentRegistration,
+  selectAgentSolanaRegistrationRow,
+  tryDeductVirtualBalanceForAgentRegistration,
+  updateAgentSolanaRegistrationPersisted,
+  updateAgentSolanaWalletPersisted,
+} from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import {
   BusinessLogicError,
   generateSnowflakeId,
@@ -54,42 +60,6 @@ export interface AgentSolanaRegistrationResult {
   cost: number;
 }
 
-type AgentSolanaRecord = {
-  id: string;
-  username: string | null;
-  displayName: string | null;
-  bio: string | null;
-  profileImageUrl: string | null;
-  isAgent: boolean;
-  managedBy: string | null;
-  privyId: string | null;
-  privySolanaWalletId: string | null;
-  solanaWalletAddress: string | null;
-  solanaOfflineWalletReady: boolean;
-  solanaRegistered: boolean;
-  solanaRegistryAssetId: string | null;
-  solanaMetadataUri: string | null;
-  solanaRegistrationTxHash: string | null;
-};
-
-const AGENT_SOLANA_SELECT = {
-  id: users.id,
-  username: users.username,
-  displayName: users.displayName,
-  bio: users.bio,
-  profileImageUrl: users.profileImageUrl,
-  isAgent: users.isAgent,
-  managedBy: users.managedBy,
-  privyId: users.privyId,
-  privySolanaWalletId: users.privySolanaWalletId,
-  solanaWalletAddress: users.solanaWalletAddress,
-  solanaOfflineWalletReady: users.solanaOfflineWalletReady,
-  solanaRegistered: users.solanaRegistered,
-  solanaRegistryAssetId: users.solanaRegistryAssetId,
-  solanaMetadataUri: users.solanaMetadataUri,
-  solanaRegistrationTxHash: users.solanaRegistrationTxHash,
-} as const;
-
 const MINIMUM_SOLANA_REGISTRATION_BALANCE_LAMPORTS =
   SOLANA_REGISTRATION_MIN_BALANCE_LAMPORTS;
 const MINIMUM_SOLANA_REGISTRATION_BALANCE_SOL = formatLamportsAsSol(
@@ -100,7 +70,9 @@ function isSolanaRegistrationEnabled(): boolean {
   return process.env.SOLANA_REGISTRY_ENABLED === 'true';
 }
 
-function isPersistedSolanaWalletReady(agent: AgentSolanaRecord): boolean {
+function isPersistedSolanaWalletReady(
+  agent: AgentSolanaRegistrationRow
+): boolean {
   return (
     agent.solanaOfflineWalletReady &&
     agent.solanaWalletAddress !== null &&
@@ -108,7 +80,9 @@ function isPersistedSolanaWalletReady(agent: AgentSolanaRecord): boolean {
   );
 }
 
-async function resolveAgentSolanaWallet(agent: AgentSolanaRecord): Promise<{
+async function resolveAgentSolanaWallet(
+  agent: AgentSolanaRegistrationRow
+): Promise<{
   privyWalletId: string;
   walletAddress: string;
 } | null> {
@@ -139,12 +113,11 @@ async function resolveAgentSolanaWallet(agent: AgentSolanaRecord): Promise<{
 async function getAgentForOwner(
   ownerUserId: string,
   agentUserId: string
-): Promise<AgentSolanaRecord> {
-  const [agent] = await db
-    .select(AGENT_SOLANA_SELECT)
-    .from(users)
-    .where(eq(users.id, agentUserId))
-    .limit(1);
+): Promise<AgentSolanaRegistrationRow> {
+  const agent = await asSystem(
+    (c) => selectAgentSolanaRegistrationRow(c, agentUserId),
+    'agent-solana-get-for-owner'
+  );
 
   if (!agent || !agent.isAgent) {
     throw new BusinessLogicError('Agent not found', 'AGENT_NOT_FOUND');
@@ -164,51 +137,26 @@ async function deductRegistrationCost(
   ownerUserId: string,
   agentUserId: string,
   cost: number
-): Promise<{ balanceBefore: number; balanceAfter: number }> {
-  const [deducted] = await db
-    .update(users)
-    .set({
-      virtualBalance: sql`(${users.virtualBalance})::numeric - ${cost}`,
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(users.id, ownerUserId),
-        sql`(${users.virtualBalance})::numeric >= ${cost}`
-      )
-    )
-    .returning({ virtualBalance: users.virtualBalance });
+): Promise<void> {
+  const balanceTransactionId = await generateSnowflakeId();
+  const outcome = await asSystem(
+    (c) =>
+      tryDeductVirtualBalanceForAgentRegistration(c, {
+        ownerUserId,
+        agentUserId,
+        cost,
+        balanceTransactionId,
+        withdrawalDescription: 'Agent Solana registration',
+      }),
+    'agent-solana-deduct-registration'
+  );
 
-  if (!deducted) {
-    const [owner] = await db
-      .select({ virtualBalance: users.virtualBalance })
-      .from(users)
-      .where(eq(users.id, ownerUserId))
-      .limit(1);
-
-    const currentBalance = Number(owner?.virtualBalance ?? '0');
+  if (!outcome.ok) {
     throw new BusinessLogicError(
-      `Insufficient balance. Solana agent registration costs ${cost} points. You have ${Math.floor(currentBalance)} points.`,
+      `Insufficient balance. Solana agent registration costs ${cost} points. You have ${Math.floor(outcome.currentBalance)} points.`,
       'INSUFFICIENT_BALANCE'
     );
   }
-
-  const balanceAfter = Number(deducted.virtualBalance);
-  const balanceBefore = balanceAfter + cost;
-
-  await db.insert(balanceTransactions).values({
-    id: await generateSnowflakeId(),
-    userId: ownerUserId,
-    type: 'withdrawal',
-    amount: String(cost),
-    balanceBefore: String(balanceBefore),
-    balanceAfter: String(balanceAfter),
-    relatedId: agentUserId,
-    description: 'Agent Solana registration',
-    createdAt: new Date(),
-  });
-
-  return { balanceBefore, balanceAfter };
 }
 
 async function refundRegistrationCost(
@@ -216,45 +164,28 @@ async function refundRegistrationCost(
   agentUserId: string,
   cost: number
 ): Promise<void> {
-  const [refunded] = await db
-    .update(users)
-    .set({
-      virtualBalance: sql`(${users.virtualBalance})::numeric + ${cost}`,
-      updatedAt: new Date(),
-    })
-    .where(eq(users.id, ownerUserId))
-    .returning({ virtualBalance: users.virtualBalance });
-
-  const balanceAfter = Number(refunded?.virtualBalance ?? '0');
-  const balanceBefore = balanceAfter - cost;
-
-  await db.insert(balanceTransactions).values({
-    id: await generateSnowflakeId(),
-    userId: ownerUserId,
-    type: 'deposit',
-    amount: String(cost),
-    balanceBefore: String(balanceBefore),
-    balanceAfter: String(balanceAfter),
-    relatedId: agentUserId,
-    description: 'Refund - agent Solana registration failed',
-    createdAt: new Date(),
-  });
+  const balanceTransactionId = await generateSnowflakeId();
+  await asSystem(
+    (c) =>
+      refundVirtualBalanceForAgentRegistration(c, {
+        ownerUserId,
+        agentUserId,
+        cost,
+        balanceTransactionId,
+        depositDescription: 'Refund - agent Solana registration failed',
+      }),
+    'agent-solana-refund-registration'
+  );
 }
 
 async function persistSolanaWalletState(
   agentUserId: string,
   wallet: { privyWalletId: string; walletAddress: string }
 ): Promise<void> {
-  await db
-    .update(users)
-    .set({
-      privySolanaWalletId: wallet.privyWalletId,
-      solanaWalletAddress: wallet.walletAddress,
-      solanaOfflineWalletReady: true,
-      solanaOfflineWalletReadyAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(eq(users.id, agentUserId));
+  await asSystem(
+    (c) => updateAgentSolanaWalletPersisted(c, agentUserId, wallet),
+    'agent-solana-persist-wallet'
+  );
 }
 
 async function persistSolanaRegistrationState({
@@ -273,25 +204,16 @@ async function persistSolanaRegistrationState({
   } | null;
   txHash?: string | null;
 }): Promise<void> {
-  await db
-    .update(users)
-    .set({
-      ...(wallet
-        ? {
-            privySolanaWalletId: wallet.walletId,
-            solanaWalletAddress: wallet.walletAddress,
-            solanaOfflineWalletReady: true,
-            solanaOfflineWalletReadyAt: new Date(),
-          }
-        : {}),
-      solanaRegistered: true,
-      solanaRegistryAssetId: assetId,
-      solanaMetadataUri: metadataUri ?? null,
-      solanaRegistrationTxHash: txHash ?? null,
-      solanaRegisteredAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(eq(users.id, agentUserId));
+  await asSystem(
+    (c) =>
+      updateAgentSolanaRegistrationPersisted(c, agentUserId, {
+        assetId,
+        metadataUri,
+        wallet,
+        txHash,
+      }),
+    'agent-solana-persist-registration'
+  );
 }
 
 async function withAgentSolanaRegistrationLock<T>(

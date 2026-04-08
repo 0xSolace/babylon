@@ -3,7 +3,7 @@
  * Shareable P&L page with OG meta tags
  */
 
-import { db } from '@babylon/db/runtime';
+import { asPublic } from '@babylon/db/engine-storage';
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 
@@ -25,13 +25,15 @@ export async function generateMetadata({
   const ogImageUrl = `${appUrl}/api/og/pnl/${userId}`;
 
   // Get user data
-  const user = await db.user.findUnique({
-    where: { id: userId },
-    select: {
-      username: true,
-      displayName: true,
-    },
-  });
+  const user = await asPublic(async (db) =>
+    db.user.findUnique({
+      where: { id: userId },
+      select: {
+        username: true,
+        displayName: true,
+      },
+    })
+  );
 
   const displayName = user?.displayName || user?.username || 'Babylon User';
 
@@ -73,13 +75,15 @@ export default async function SharePnLPage({ params }: PageProps) {
   const { userId } = await params;
 
   // Verify user exists - if not, redirect to markets anyway
-  await db.user.findUnique({
-    where: { id: userId },
-    select: {
-      id: true,
-      username: true,
-    },
-  });
+  await asPublic(async (db) =>
+    db.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        username: true,
+      },
+    })
+  );
 
   // Always redirect to markets (OG crawlers get metadata, users get redirected)
   redirect('/markets');

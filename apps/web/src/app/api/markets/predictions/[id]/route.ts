@@ -10,8 +10,10 @@ import {
   PredictionPricing,
 } from '@babylon/core/markets/prediction';
 import type { PredictionPositionRecord } from '@babylon/core/markets/prediction/types';
-import { and, count, eq, inArray } from '@babylon/db';
-import { balanceTransactions, db, npcTrades } from '@babylon/db/runtime';
+import {
+  getPublicResolutionAudit,
+  selectPredictionMarketTradeCountsByMarketId,
+} from '@babylon/db';
 import { FEE_CONFIG, WalletService } from '@babylon/engine';
 import {
   logger,
@@ -21,7 +23,7 @@ import {
 } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
-import { getPublicResolutionAudit } from '../_resolution-audit';
+import { runWithOptionalUserRls } from '@/lib/db/run-with-optional-user-rls';
 
 type WalletAdjustParams = {
   userId: string;
@@ -85,199 +87,187 @@ export const GET = withErrorHandling(
 
     const { userId } = queryParse.data;
 
-    const service = new PredictionMarketService({
-      db: new PredictionDbAdapter(),
-      wallet: {
-        debit: ({
-          userId,
-          amount,
-          reason,
-          description,
-          relatedId,
-        }: WalletAdjustParams) =>
-          WalletService.debit(
+    return runWithOptionalUserRls(authUser, async (db) => {
+      const service = new PredictionMarketService({
+        db: new PredictionDbAdapter(db),
+        wallet: {
+          debit: ({
             userId,
             amount,
             reason,
-            description ?? '',
-            relatedId
-          ),
-        credit: ({
-          userId,
-          amount,
-          reason,
-          description,
-          relatedId,
-        }: WalletAdjustParams) =>
-          WalletService.credit(
+            description,
+            relatedId,
+          }: WalletAdjustParams) =>
+            WalletService.debit(
+              userId,
+              amount,
+              reason,
+              description ?? '',
+              relatedId
+            ),
+          credit: ({
             userId,
             amount,
             reason,
-            description ?? '',
-            relatedId
-          ),
-        recordPnL: async ({
-          userId,
-          pnl,
-          reason,
-          relatedId,
-        }: {
-          userId: string;
-          pnl: number;
-          reason: string;
-          relatedId?: string;
-        }) => {
-          await WalletService.recordPnL(userId, pnl, reason, relatedId);
+            description,
+            relatedId,
+          }: WalletAdjustParams) =>
+            WalletService.credit(
+              userId,
+              amount,
+              reason,
+              description ?? '',
+              relatedId
+            ),
+          recordPnL: async ({
+            userId,
+            pnl,
+            reason,
+            relatedId,
+          }: {
+            userId: string;
+            pnl: number;
+            reason: string;
+            relatedId?: string;
+          }) => {
+            await WalletService.recordPnL(userId, pnl, reason, relatedId);
+          },
+          getBalance: (uid: string) => WalletService.getBalance(uid),
         },
-        getBalance: (uid: string) => WalletService.getBalance(uid),
-      },
-      fees: {
-        tradingFeeRate: FEE_CONFIG.TRADING_FEE_RATE,
-        platformShare: FEE_CONFIG.PLATFORM_SHARE,
-        referrerShare: FEE_CONFIG.REFERRER_SHARE,
-        minFeeAmount: FEE_CONFIG.MIN_FEE_AMOUNT,
-      },
+        fees: {
+          tradingFeeRate: FEE_CONFIG.TRADING_FEE_RATE,
+          platformShare: FEE_CONFIG.PLATFORM_SHARE,
+          referrerShare: FEE_CONFIG.REFERRER_SHARE,
+          minFeeAmount: FEE_CONFIG.MIN_FEE_AMOUNT,
+        },
+      });
+
+      const market =
+        (await service.getMarket(marketId)) ??
+        (await service.ensureMarketExists({ marketId }).catch(() => null));
+
+      if (!market) {
+        return successResponse({ error: 'Market not found' }, 404);
+      }
+
+      const yesShares = market.yesShares;
+      const noShares = market.noShares;
+      // Probability should reflect the CPMM price, not the raw share ratio.
+      const yesProb = PredictionPricing.getCurrentPrice(
+        yesShares,
+        noShares,
+        'yes'
+      );
+      const noProb = PredictionPricing.getCurrentPrice(
+        yesShares,
+        noShares,
+        'no'
+      );
+
+      let userPositions: UserPositionSnapshot[] = [];
+      let primaryPosition: UserPositionSnapshot | null = null;
+
+      if (userId && authUser?.userId === userId) {
+        const positions = await service.listUserPositions(userId);
+        userPositions = positions
+          .filter(
+            (p: PredictionPositionRecord) =>
+              p.marketId === marketId && p.shares >= 0.01
+          )
+          .map((p: PredictionPositionRecord) => {
+            let currentValue = 0;
+            let currentProbability = 0.5;
+            try {
+              const preview = PredictionPricing.calculateSellWithFees(
+                yesShares,
+                noShares,
+                p.side,
+                p.shares,
+                FEE_CONFIG.TRADING_FEE_RATE
+              );
+              currentValue = preview.netProceeds ?? preview.totalCost;
+              currentProbability = PredictionPricing.getCurrentPrice(
+                yesShares,
+                noShares,
+                p.side
+              );
+            } catch {
+              currentProbability = PredictionPricing.getCurrentPrice(
+                yesShares,
+                noShares,
+                p.side
+              );
+              currentValue =
+                p.shares *
+                currentProbability *
+                (1 - FEE_CONFIG.TRADING_FEE_RATE);
+            }
+
+            const costBasisNet = p.shares * p.avgPrice;
+            const costBasis =
+              FEE_CONFIG.TRADING_FEE_RATE > 0 && FEE_CONFIG.TRADING_FEE_RATE < 1
+                ? costBasisNet / (1 - FEE_CONFIG.TRADING_FEE_RATE)
+                : costBasisNet;
+            return {
+              id: p.id,
+              marketId: p.marketId,
+              side: p.side === 'yes' ? 'YES' : 'NO',
+              shares: p.shares,
+              avgPrice: p.avgPrice,
+              currentPrice: p.shares > 0 ? currentValue / p.shares : 0,
+              currentProbability,
+              currentValue,
+              costBasis,
+              unrealizedPnL: currentValue - costBasis,
+              maxPayout: p.shares * (1 + p.avgPrice),
+              resolved: market.resolved,
+              resolution: market.resolution ?? null,
+            };
+          });
+        primaryPosition = userPositions[0] ?? null;
+      }
+
+      const { balanceTrades, npcTrades: npcTradeCount } =
+        await selectPredictionMarketTradeCountsByMarketId(db, marketId);
+
+      const tradeCount = balanceTrades + npcTradeCount;
+
+      const resolutionAudit = await getPublicResolutionAudit(marketId, db);
+
+      const payload = {
+        id: market.id,
+        text: market.question,
+        question: market.question,
+        status: market.resolved ? 'resolved' : 'active',
+        resolution: market.resolution ?? null,
+        resolved: market.resolved,
+        resolutionDate: toISOOrNull(market.endDate),
+        endDate: toISOOrNull(market.endDate),
+        createdDate: toISOOrNull(market.createdAt),
+        yesShares,
+        noShares,
+        liquidity: market.liquidity,
+        tradeCount,
+        yesProbability: yesProb,
+        noProbability: noProb,
+        userPosition: primaryPosition,
+        userPositions,
+        oracleCommitTxHash: market.oracleCommitTxHash ?? null,
+        oracleRevealTxHash: market.oracleRevealTxHash ?? null,
+        resolutionProofUrl: market.resolutionProofUrl ?? null,
+        resolutionDescription: market.resolutionDescription ?? null,
+        resolutionAudit,
+      };
+
+      logger.info(
+        'Prediction market fetched via core service',
+        { marketId, hasUserId: !!userId },
+        'GET /api/markets/predictions/[id]'
+      );
+
+      const res = successResponse({ success: true, market: payload });
+      if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
+      return res;
     });
-
-    const market =
-      (await service.getMarket(marketId)) ??
-      (await service.ensureMarketExists({ marketId }).catch(() => null));
-
-    if (!market) {
-      return successResponse({ error: 'Market not found' }, 404);
-    }
-
-    const yesShares = market.yesShares;
-    const noShares = market.noShares;
-    // Probability should reflect the CPMM price, not the raw share ratio.
-    const yesProb = PredictionPricing.getCurrentPrice(
-      yesShares,
-      noShares,
-      'yes'
-    );
-    const noProb = PredictionPricing.getCurrentPrice(yesShares, noShares, 'no');
-
-    let userPositions: UserPositionSnapshot[] = [];
-    let primaryPosition: UserPositionSnapshot | null = null;
-
-    if (userId && authUser?.userId === userId) {
-      const positions = await service.listUserPositions(userId);
-      userPositions = positions
-        .filter(
-          (p: PredictionPositionRecord) =>
-            p.marketId === marketId && p.shares >= 0.01
-        )
-        .map((p: PredictionPositionRecord) => {
-          let currentValue = 0;
-          let currentProbability = 0.5;
-          try {
-            const preview = PredictionPricing.calculateSellWithFees(
-              yesShares,
-              noShares,
-              p.side,
-              p.shares,
-              FEE_CONFIG.TRADING_FEE_RATE
-            );
-            currentValue = preview.netProceeds ?? preview.totalCost;
-            currentProbability = PredictionPricing.getCurrentPrice(
-              yesShares,
-              noShares,
-              p.side
-            );
-          } catch {
-            currentProbability = PredictionPricing.getCurrentPrice(
-              yesShares,
-              noShares,
-              p.side
-            );
-            currentValue =
-              p.shares * currentProbability * (1 - FEE_CONFIG.TRADING_FEE_RATE);
-          }
-
-          const costBasisNet = p.shares * p.avgPrice;
-          const costBasis =
-            FEE_CONFIG.TRADING_FEE_RATE > 0 && FEE_CONFIG.TRADING_FEE_RATE < 1
-              ? costBasisNet / (1 - FEE_CONFIG.TRADING_FEE_RATE)
-              : costBasisNet;
-          return {
-            id: p.id,
-            marketId: p.marketId,
-            side: p.side === 'yes' ? 'YES' : 'NO',
-            shares: p.shares,
-            avgPrice: p.avgPrice,
-            currentPrice: p.shares > 0 ? currentValue / p.shares : 0,
-            currentProbability,
-            currentValue,
-            costBasis,
-            unrealizedPnL: currentValue - costBasis,
-            maxPayout: p.shares * (1 + p.avgPrice),
-            resolved: market.resolved,
-            resolution: market.resolution ?? null,
-          };
-        });
-      primaryPosition = userPositions[0] ?? null;
-    }
-
-    const [balanceTradeCountRows, npcTradeCountRows] = await Promise.all([
-      db
-        .select({ count: count() })
-        .from(balanceTransactions)
-        .where(
-          and(
-            eq(balanceTransactions.relatedId, marketId),
-            inArray(balanceTransactions.type, ['pred_buy', 'pred_sell'])
-          )
-        ),
-      db
-        .select({ count: count() })
-        .from(npcTrades)
-        .where(
-          and(
-            eq(npcTrades.marketType, 'prediction'),
-            eq(npcTrades.marketId, marketId)
-          )
-        ),
-    ]);
-
-    const tradeCount =
-      Number(balanceTradeCountRows[0]?.count ?? 0) +
-      Number(npcTradeCountRows[0]?.count ?? 0);
-
-    const resolutionAudit = await getPublicResolutionAudit(marketId);
-
-    const payload = {
-      id: market.id,
-      text: market.question,
-      question: market.question,
-      status: market.resolved ? 'resolved' : 'active',
-      resolution: market.resolution ?? null,
-      resolved: market.resolved,
-      resolutionDate: toISOOrNull(market.endDate),
-      endDate: toISOOrNull(market.endDate),
-      createdDate: toISOOrNull(market.createdAt),
-      yesShares,
-      noShares,
-      liquidity: market.liquidity,
-      tradeCount,
-      yesProbability: yesProb,
-      noProbability: noProb,
-      userPosition: primaryPosition,
-      userPositions,
-      oracleCommitTxHash: market.oracleCommitTxHash ?? null,
-      oracleRevealTxHash: market.oracleRevealTxHash ?? null,
-      resolutionProofUrl: market.resolutionProofUrl ?? null,
-      resolutionDescription: market.resolutionDescription ?? null,
-      resolutionAudit,
-    };
-
-    logger.info(
-      'Prediction market fetched via core service',
-      { marketId, hasUserId: !!userId },
-      'GET /api/markets/predictions/[id]'
-    );
-
-    const res = successResponse({ success: true, market: payload });
-    if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
-    return res;
   }
 );

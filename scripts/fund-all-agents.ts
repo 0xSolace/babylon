@@ -4,8 +4,8 @@
  * Give all agents starting virtual balance for trading
  */
 
-import { eq } from '@babylon/db';
-import { db, users } from '@babylon/db/runtime';
+import { asSystem, users } from '@babylon/db/engine-storage';
+import { eq } from 'drizzle-orm';
 
 const STARTING_BALANCE = '1000.00'; // $1000 starting balance
 
@@ -16,15 +16,19 @@ async function fundAllAgents() {
 
   try {
     // 1. Get all agents
-    const allAgents = await db
-      .select({
-        id: users.id,
-        username: users.username,
-        virtualBalance: users.virtualBalance,
-        autonomousTrading: users.autonomousTrading,
-      })
-      .from(users)
-      .where(eq(users.isAgent, true));
+    const allAgents = await asSystem(
+      async (c) =>
+        c
+          .select({
+            id: users.id,
+            username: users.username,
+            virtualBalance: users.virtualBalance,
+            autonomousTrading: users.autonomousTrading,
+          })
+          .from(users)
+          .where(eq(users.isAgent, true)),
+      'script-fund-agents-list'
+    );
 
     console.log(`Found ${allAgents.length} total agents\n`);
 
@@ -63,14 +67,18 @@ async function fundAllAgents() {
 
     for (const agent of agentsToFund) {
       try {
-        await db
-          .update(users)
-          .set({
-            virtualBalance: STARTING_BALANCE,
-            totalDeposited: STARTING_BALANCE, // Track initial deposit
-            updatedAt: new Date(),
-          })
-          .where(eq(users.id, agent.id));
+        await asSystem(
+          async (c) =>
+            c
+              .update(users)
+              .set({
+                virtualBalance: STARTING_BALANCE,
+                totalDeposited: STARTING_BALANCE, // Track initial deposit
+                updatedAt: new Date(),
+              })
+              .where(eq(users.id, agent.id)),
+          'script-fund-agent-update'
+        );
 
         successCount++;
         console.log(

@@ -11,9 +11,8 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { eq } from '@babylon/db';
-
-import { asUser, userApiKeys } from '@babylon/db/runtime';
+import { revokeUserApiKeyForOwner } from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -30,28 +29,9 @@ export const DELETE = withErrorHandling(
     const { keyId } = await context.params;
 
     // Use asUser to enforce RLS - user can only revoke their own keys
-    const deleted = await asUser(authUser.userId, async (dbClient) => {
-      // First verify the key exists and belongs to the user (RLS enforces this)
-      const key = await dbClient.query.userApiKeys.findFirst({
-        where: (keys, { eq, and: andFn, isNull: isNullFn }) =>
-          andFn(
-            eq(keys.id, keyId),
-            eq(keys.userId, authUser.userId),
-            isNullFn(keys.revokedAt)
-          ),
-      });
-
-      if (!key) {
-        return null;
-      }
-
-      // Revoke the key by setting revokedAt
-      return await dbClient
-        .update(userApiKeys)
-        .set({ revokedAt: new Date() })
-        .where(eq(userApiKeys.id, keyId))
-        .returning();
-    });
+    const deleted = await asUser(authUser.userId, async (dbClient) =>
+      revokeUserApiKeyForOwner(dbClient, keyId, authUser.userId, new Date())
+    );
 
     if (!deleted || deleted.length === 0) {
       return NextResponse.json(

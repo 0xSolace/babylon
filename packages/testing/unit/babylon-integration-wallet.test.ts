@@ -60,12 +60,16 @@ function createFetchMock(): typeof fetch {
 
 const mockFetch = createFetchMock();
 
-mock.module('@babylon/db/runtime', () => ({
-  db: {
-    user: {
-      findUnique: findUniqueMock,
-    },
+const integrationWalletMockDb = {
+  user: {
+    findUnique: findUniqueMock,
   },
+};
+
+mock.module('@babylon/db/engine-storage', () => ({
+  db: integrationWalletMockDb,
+  asSystem: async <T>(op: (c: typeof integrationWalletMockDb) => Promise<T>) =>
+    op(integrationWalletMockDb),
 }));
 
 mock.module('@babylon/engine', () => ({

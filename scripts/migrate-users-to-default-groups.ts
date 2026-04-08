@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 /**
  * Migrate Existing Users to Default Alpha Groups
  *
@@ -19,7 +20,6 @@
  *   --user=<id>    Only process a specific user (for testing)
  */
 
-import { and, count, eq, inArray, isNull } from '@babylon/db';
 import {
   db,
   groupMembers,
@@ -27,9 +27,10 @@ import {
   nftSnapshot,
   users,
   whitelist,
-} from '@babylon/db/runtime';
+} from '@babylon/db/engine-storage';
 import { UserAlphaGroupAssignmentService } from '@babylon/engine';
 import { logger } from '@babylon/shared';
+import { and, count, eq, inArray, isNull } from 'drizzle-orm';
 
 /** Default limit for batch processing when no limit specified */
 const MIGRATE_USERS_DEFAULT_LIMIT = 100000;

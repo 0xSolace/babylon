@@ -19,8 +19,14 @@
  * - Failure resilience
  */
 
-import { and, count, desc, eq, gte, isNull, lt, max } from '@babylon/db';
-import { actorState, db, games, posts, questions } from '@babylon/db/runtime';
+import {
+  aggregateActorPostStatsForLookahead,
+  countPostsInLookaheadTimeWindow,
+  fetchContinuousGameStartedAt,
+  fetchLatestPostTimestampForLookahead,
+  listActiveQuestionsForLookahead,
+  listTopActorStatesByReputationForLookahead,
+} from '@babylon/db';
 import { logger } from '@babylon/shared';
 import {
   CONTENT_PACING,
@@ -89,14 +95,9 @@ export async function checkLookaheadStatus(): Promise<{
 }> {
   const now = new Date();
 
-  // Check latest post timestamp
-  const latestPostResult = await db
-    .select({ timestamp: posts.timestamp })
-    .from(posts)
-    .orderBy(desc(posts.timestamp))
-    .limit(1);
+  const latestTs = await fetchLatestPostTimestampForLookahead();
 
-  if (latestPostResult.length === 0) {
+  if (latestTs === null) {
     return {
       minutesAhead: 0,
       latestTimestamp: null,
@@ -104,7 +105,7 @@ export async function checkLookaheadStatus(): Promise<{
     };
   }
 
-  const latest = new Date(latestPostResult[0]!.timestamp);
+  const latest = new Date(latestTs);
   const minutesAhead = (latest.getTime() - now.getTime()) / (60 * 1000);
   const needsGeneration = minutesAhead < LOOKAHEAD_MINUTES;
 
@@ -435,18 +436,10 @@ async function checkTimeWindowHasContent(
   windowStart: Date,
   windowEnd: Date
 ): Promise<boolean> {
-  const [result] = await db
-    .select({ count: count() })
-    .from(posts)
-    .where(
-      and(
-        gte(posts.timestamp, windowStart),
-        lt(posts.timestamp, windowEnd),
-        isNull(posts.deletedAt)
-      )
-    );
-
-  const existingPosts = result?.count ?? 0;
+  const existingPosts = await countPostsInLookaheadTimeWindow({
+    windowStart,
+    windowEnd,
+  });
 
   // If we have at least 5 posts in this window, consider it already generated
   // This allows some natural variation while preventing duplicates
@@ -484,14 +477,7 @@ async function generateContentWindow(
     return;
   }
 
-  // Get the continuous game to calculate current day for arc plan phase detection
-  const game = await db
-    .select({ startedAt: games.startedAt })
-    .from(games)
-    .where(eq(games.isContinuous, true))
-    .limit(1);
-
-  const gameStartedAt = game[0]?.startedAt ?? null;
+  const gameStartedAt = await fetchContinuousGameStartedAt();
   const dayNumberForTimestamp = (t: Date): number | undefined => {
     if (!gameStartedAt) return undefined;
     return toSafeDayNumber(getGameDayNumber(gameStartedAt, t));
@@ -502,10 +488,7 @@ async function generateContentWindow(
 
   // Get ALL active questions to ensure diversity across markets
   // Previously limited to 3 which caused NPCs to converge on same topics
-  const activeQuestions = await db
-    .select()
-    .from(questions)
-    .where(eq(questions.status, 'active'));
+  const activeQuestions = await listActiveQuestionsForLookahead();
 
   if (activeQuestions.length === 0) {
     logger.warn(
@@ -564,30 +547,14 @@ async function generateContentWindow(
     diverseTopics,
     actorPostStats,
   ] = await Promise.all([
-    db
-      .select()
-      .from(actorState)
-      .orderBy(desc(actorState.reputationPoints))
-      .limit(15),
+    listTopActorStatesByReputationForLookahead({ limit: 15 }),
     worldFactsService.generatePromptContext(),
-    loadSharedPostContext(windowStart), // Load ONCE for all NPC posts
-    diversityService.suggestDiverseTopics(3), // Get diverse topic suggestions
-    // Query actor post stats: last post time and daily count for pacing
-    db
-      .select({
-        authorId: posts.authorId,
-        lastPostTime: max(posts.timestamp),
-        dailyCount: count(),
-      })
-      .from(posts)
-      .where(
-        and(
-          gte(posts.timestamp, todayStart),
-          lt(posts.timestamp, windowStart),
-          isNull(posts.deletedAt)
-        )
-      )
-      .groupBy(posts.authorId),
+    loadSharedPostContext(windowStart),
+    diversityService.suggestDiverseTopics(3),
+    aggregateActorPostStatsForLookahead({
+      dayStartInclusive: todayStart,
+      windowStartExclusive: windowStart,
+    }),
   ]);
 
   // Build a map of actor post stats for quick lookup
@@ -596,7 +563,7 @@ async function generateContentWindow(
       stat.authorId,
       {
         lastPostTime: stat.lastPostTime,
-        dailyCount: Number(stat.dailyCount),
+        dailyCount: stat.dailyCount,
       },
     ])
   );

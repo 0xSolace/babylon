@@ -57,9 +57,11 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, eq } from '@babylon/db';
-import { asUser, chatParticipants, chats } from '@babylon/db/runtime';
-
+import {
+  selectChatGroupSliceByChatId,
+  selectChatParticipantExistsForChatAndUser,
+} from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
@@ -76,28 +78,17 @@ export const GET = withErrorHandling(
     const { id: chatId } = await params;
 
     const groupId = await asUser(user, async (dbClient) => {
-      // Check if user is a participant in the chat
-      const [participant] = await dbClient
-        .select()
-        .from(chatParticipants)
-        .where(
-          and(
-            eq(chatParticipants.chatId, chatId),
-            eq(chatParticipants.userId, user.userId)
-          )
-        )
-        .limit(1);
+      const isParticipant = await selectChatParticipantExistsForChatAndUser(
+        dbClient,
+        chatId,
+        user.userId
+      );
 
-      if (!participant) {
+      if (!isParticipant) {
         throw new ApiError('You are not a participant in this chat', 403);
       }
 
-      // Get the chat and its groupId
-      const [chat] = await dbClient
-        .select({ groupId: chats.groupId, isGroup: chats.isGroup })
-        .from(chats)
-        .where(eq(chats.id, chatId))
-        .limit(1);
+      const chat = await selectChatGroupSliceByChatId(dbClient, chatId);
 
       if (!chat) {
         throw new ApiError('Chat not found', 404);

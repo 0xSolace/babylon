@@ -4,9 +4,15 @@
  * Syncs reputation scores and ban status to ERC-8004 via Agent0
  */
 
-import { eq } from '@babylon/db';
-import { agentPerformanceMetrics, db, users } from '@babylon/db/runtime';
-import { logger } from '../../shared/logger';
+import {
+  insertAgentPerformanceMetricsReputationRow,
+  selectAgentPerformanceMetricsFullRowByUserId,
+  selectUserErc8004LocalSyncSliceById,
+  selectUsersNotBannedForErc8004Batch,
+  updateAgentPerformanceMetricsReputationScoreByUserId,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
+import { logger } from '@babylon/shared';
 import { generateSnowflakeId } from '../../shared/snowflake';
 
 interface ReputationSyncData {
@@ -36,16 +42,7 @@ export async function syncReputationToERC8004(
   userId: string,
   data: ReputationSyncData
 ): Promise<void> {
-  const [user] = await db
-    .select({
-      id: users.id,
-      agent0TokenId: users.agent0TokenId,
-      username: users.username,
-      displayName: users.displayName,
-    })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
+  const user = await selectUserErc8004LocalSyncSliceById(db, userId);
 
   if (!user || !user.agent0TokenId) {
     logger.debug(
@@ -56,20 +53,14 @@ export async function syncReputationToERC8004(
     return;
   }
 
-  // Calculate reputation score based on status
   let reputationScore = data.reputationScore;
 
-  // Banned users get 0
   if (data.isBanned) {
     reputationScore = 0;
-  }
-  // Scammers/CSAM get very low score (but not 0 to distinguish from banned)
-  else if (data.isScammer || data.isCSAM) {
+  } else if (data.isScammer || data.isCSAM) {
     reputationScore = 5;
   }
 
-  // Convert reputation score (0-100) to Agent0 feedback score (0-100)
-  // Agent0 uses 0-100 scale, same as our reputation score
   const agent0Score = Math.round(Math.max(0, Math.min(100, reputationScore)));
 
   logger.info(
@@ -86,30 +77,23 @@ export async function syncReputationToERC8004(
     'ERC8004Sync'
   );
 
-  // Update local AgentPerformanceMetrics with system-calculated reputation
-  // Feedback submission to Agent0 network is handled separately
+  const existingMetrics = await selectAgentPerformanceMetricsFullRowByUserId(
+    db,
+    userId
+  );
 
-  // Check if metrics exist
-  const [existingMetrics] = await db
-    .select()
-    .from(agentPerformanceMetrics)
-    .where(eq(agentPerformanceMetrics.userId, userId))
-    .limit(1);
-
+  const now = new Date();
   if (existingMetrics) {
-    await db
-      .update(agentPerformanceMetrics)
-      .set({
-        reputationScore,
-        updatedAt: new Date(),
-      })
-      .where(eq(agentPerformanceMetrics.userId, userId));
+    await updateAgentPerformanceMetricsReputationScoreByUserId(db, userId, {
+      reputationScore,
+      updatedAt: now,
+    });
   } else {
-    await db.insert(agentPerformanceMetrics).values({
+    await insertAgentPerformanceMetricsReputationRow(db, {
       id: await generateSnowflakeId(),
       userId,
       reputationScore,
-      updatedAt: new Date(),
+      updatedAt: now,
     });
   }
 
@@ -131,17 +115,7 @@ export async function syncReputationToERC8004(
  * syncAllReputationsToERC8004 from erc8004-reputation-sync.ts instead.
  */
 export async function syncAllReputationsToERC8004Simple(): Promise<void> {
-  const userList = await db
-    .select({
-      id: users.id,
-      agent0TokenId: users.agent0TokenId,
-      isBanned: users.isBanned,
-      isScammer: users.isScammer,
-      isCSAM: users.isCSAM,
-    })
-    .from(users)
-    .where(eq(users.isBanned, false))
-    .limit(100); // Process in batches
+  const userList = await selectUsersNotBannedForErc8004Batch(db, 100);
 
   logger.info(
     `Syncing ${userList.length} user reputations to ERC-8004`,
@@ -152,12 +126,10 @@ export async function syncAllReputationsToERC8004Simple(): Promise<void> {
   for (const user of userList) {
     if (!user.agent0TokenId) continue;
 
-    // Get the user's performance metrics for reputation score
-    const [metrics] = await db
-      .select()
-      .from(agentPerformanceMetrics)
-      .where(eq(agentPerformanceMetrics.userId, user.id))
-      .limit(1);
+    const metrics = await selectAgentPerformanceMetricsFullRowByUserId(
+      db,
+      user.id
+    );
 
     await syncReputationToERC8004(user.id, {
       reputationScore: metrics?.reputationScore ?? 50,

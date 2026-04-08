@@ -103,7 +103,7 @@ import {
 } from '@babylon/api';
 import { distributePointsToReporters } from '@babylon/api/services/moderation/points-distribution';
 
-import { db } from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
@@ -142,63 +142,63 @@ export const POST = withErrorHandling(
       'POST /api/admin/users/[userId]/ban'
     );
 
-    // Get target user
-    const targetUser = await db.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        username: true,
-        displayName: true,
-        isActor: true,
-        isAdmin: true,
-        isBanned: true,
-      },
-    });
+    const { targetUser, updatedUser } = await asSystem(async (tx) => {
+      const found = await tx.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          username: true,
+          displayName: true,
+          isActor: true,
+          isAdmin: true,
+          isBanned: true,
+        },
+      });
 
-    if (!targetUser) {
-      throw new NotFoundError('User', userId);
-    }
+      if (!found) {
+        throw new NotFoundError('User', userId);
+      }
 
-    // Prevent banning admins (unless you're banning yourself, which is allowed)
-    if (targetUser.isAdmin && targetUser.id !== adminUser.userId) {
-      throw new BusinessLogicError(
-        'Cannot ban other admins',
-        'CANNOT_BAN_ADMIN'
-      );
-    }
+      if (found.isAdmin && found.id !== adminUser.userId) {
+        throw new BusinessLogicError(
+          'Cannot ban other admins',
+          'CANNOT_BAN_ADMIN'
+        );
+      }
 
-    // Prevent banning NPCs/actors
-    if (targetUser.isActor) {
-      throw new BusinessLogicError(
-        'Cannot ban game actors',
-        'CANNOT_BAN_ACTOR'
-      );
-    }
+      if (found.isActor) {
+        throw new BusinessLogicError(
+          'Cannot ban game actors',
+          'CANNOT_BAN_ACTOR'
+        );
+      }
 
-    // Update user ban status and flags
-    const updatedUser = await db.user.update({
-      where: { id: userId },
-      data: {
-        isBanned: action === 'ban',
-        bannedAt: action === 'ban' ? new Date() : null,
-        bannedReason: action === 'ban' ? reason : null,
-        bannedBy: action === 'ban' ? adminUser.userId : null,
-        isScammer: action === 'ban' ? (isScammer ?? false) : false,
-        isCSAM: action === 'ban' ? (isCSAM ?? false) : false,
-      },
-      select: {
-        id: true,
-        username: true,
-        displayName: true,
-        isBanned: true,
-        bannedAt: true,
-        bannedReason: true,
-        bannedBy: true,
-        isScammer: true,
-        isCSAM: true,
-        agent0TokenId: true,
-      },
-    });
+      const updated = await tx.user.update({
+        where: { id: userId },
+        data: {
+          isBanned: action === 'ban',
+          bannedAt: action === 'ban' ? new Date() : null,
+          bannedReason: action === 'ban' ? reason : null,
+          bannedBy: action === 'ban' ? adminUser.userId : null,
+          isScammer: action === 'ban' ? (isScammer ?? false) : false,
+          isCSAM: action === 'ban' ? (isCSAM ?? false) : false,
+        },
+        select: {
+          id: true,
+          username: true,
+          displayName: true,
+          isBanned: true,
+          bannedAt: true,
+          bannedReason: true,
+          bannedBy: true,
+          isScammer: true,
+          isCSAM: true,
+          agent0TokenId: true,
+        },
+      });
+
+      return { targetUser: found, updatedUser: updated };
+    }, 'admin-ban-user');
 
     // Sync with ERC-8004 reputation system via Agent0
     if (action === 'ban' && updatedUser.agent0TokenId) {

@@ -3,7 +3,7 @@
  * Provides recent news headlines from RSS feeds
  */
 
-import { db } from '@babylon/db/runtime';
+import * as engineStorage from '@babylon/db/engine-storage';
 
 import type {
   IAgentRuntime,
@@ -29,17 +29,21 @@ export const headlinesProvider: Provider = {
     // Get recent headlines (last 24 hours)
     const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-    const headlines = await db.rssHeadline.findMany({
-      where: {
-        publishedAt: {
-          gte: yesterday,
-        },
-      },
-      orderBy: {
-        publishedAt: 'desc',
-      },
-      take: 15,
-    });
+    const headlines = await engineStorage.asSystem(
+      async (c) =>
+        c.rssHeadline.findMany({
+          where: {
+            publishedAt: {
+              gte: yesterday,
+            },
+          },
+          orderBy: {
+            publishedAt: 'desc',
+          },
+          take: 15,
+        }),
+      'babylon-headlines-provider'
+    );
 
     if (headlines.length === 0) {
       return { text: 'No recent headlines available.' };

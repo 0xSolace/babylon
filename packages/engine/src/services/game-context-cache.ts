@@ -17,13 +17,11 @@
  * update callers to use the shared client.
  */
 
-import { asc, desc, eq, gte, inArray } from '@babylon/db';
 import {
-  db,
-  games,
-  questions as questionsSchema,
-  worldEvents,
-} from '@babylon/db/runtime';
+  fetchContinuousGameStateForCache,
+  listActiveQuestionsForGameContextCache,
+  listRecentWorldEventsForGameContextCache,
+} from '@babylon/db';
 import { logger } from '@babylon/shared';
 
 /**
@@ -158,19 +156,7 @@ export class GameContextCache {
     return this.getOrFetch(
       'game-state',
       async () => {
-        const [game] = await db
-          .select({
-            id: games.id,
-            isRunning: games.isRunning,
-            currentDay: games.currentDay,
-            startedAt: games.startedAt,
-            updatedAt: games.updatedAt,
-          })
-          .from(games)
-          .where(eq(games.isContinuous, true))
-          .limit(1);
-
-        return game ?? null;
+        return fetchContinuousGameStateForCache();
       },
       CACHE_TTLS.GAME_STATE
     );
@@ -185,24 +171,7 @@ export class GameContextCache {
     return this.getOrFetch(
       'active-questions',
       async () => {
-        const results = await db
-          .select({
-            id: questionsSchema.id,
-            questionNumber: questionsSchema.questionNumber,
-            text: questionsSchema.text,
-            outcome: questionsSchema.outcome,
-            status: questionsSchema.status,
-            resolutionDate: questionsSchema.resolutionDate,
-            rank: questionsSchema.rank,
-          })
-          .from(questionsSchema)
-          .where(inArray(questionsSchema.status, ['active', 'traded']))
-          .orderBy(
-            asc(questionsSchema.questionNumber),
-            asc(questionsSchema.id)
-          );
-
-        return results;
+        return listActiveQuestionsForGameContextCache();
       },
       CACHE_TTLS.ACTIVE_QUESTIONS
     );
@@ -219,22 +188,10 @@ export class GameContextCache {
       async () => {
         const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
 
-        const events = await db
-          .select({
-            id: worldEvents.id,
-            eventType: worldEvents.eventType,
-            description: worldEvents.description,
-            dayNumber: worldEvents.dayNumber,
-            timestamp: worldEvents.timestamp,
-            relatedQuestion: worldEvents.relatedQuestion,
-            pointsToward: worldEvents.pointsToward,
-          })
-          .from(worldEvents)
-          .where(gte(worldEvents.timestamp, threeDaysAgo))
-          .orderBy(desc(worldEvents.timestamp))
-          .limit(100);
-
-        return events;
+        return listRecentWorldEventsForGameContextCache({
+          since: threeDaysAgo,
+          limit: 100,
+        });
       },
       CACHE_TTLS.WORLD_EVENTS
     );

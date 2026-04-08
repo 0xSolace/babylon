@@ -17,8 +17,8 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import type { WhitelistSource } from '@babylon/api/services/whitelist-service';
-import { eq, or, sql } from '@babylon/db';
-import { db, users } from '@babylon/db/runtime';
+import { selectUserIdUsernameForWhitelistAdminResolve } from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import { type NextRequest, NextResponse } from 'next/server';
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
@@ -58,16 +58,10 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   // Strip leading @ and resolve by userId or username
   const identifier = userId.trim().replace(/^@/, '');
 
-  const [user] = await db
-    .select({ id: users.id, username: users.username })
-    .from(users)
-    .where(
-      or(
-        eq(users.id, identifier),
-        sql`lower(${users.username}) = lower(${identifier})`
-      )
-    )
-    .limit(1);
+  const user = await asSystem(
+    (tx) => selectUserIdUsernameForWhitelistAdminResolve(tx, identifier),
+    'admin-whitelist-resolve-user'
+  );
 
   if (!user) {
     return NextResponse.json({ error: 'User not found' }, { status: 404 });

@@ -1,5 +1,5 @@
-import { inArray } from '@babylon/db';
-import { db, users } from '@babylon/db/runtime';
+import { selectUsersEmailRecipientRows } from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import { logger } from '@babylon/shared';
 import {
   type EmailRecipientRow,
@@ -69,15 +69,10 @@ async function fetchRecipients(
 ): Promise<Map<string, EmailRecipientRow>> {
   if (userIds.length === 0) return new Map();
 
-  const rows = await db
-    .select({
-      id: users.id,
-      email: users.email,
-      emailVerified: users.emailVerified,
-      privyId: users.privyId,
-    })
-    .from(users)
-    .where(inArray(users.id, userIds));
+  const rows = await asSystem(
+    async (c) => selectUsersEmailRecipientRows(c, userIds),
+    'whitelist-email-fetch-recipients'
+  );
 
   return new Map(rows.map((row) => [row.id, row]));
 }

@@ -79,7 +79,7 @@ mock.module('@babylon/db', () => ({
   },
 }));
 
-mock.module('@babylon/db/runtime', () => ({
+mock.module('@babylon/db/engine-storage', () => ({
   ...actualDbRuntime,
   db: {
     select: mockDbSelect,

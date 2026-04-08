@@ -78,11 +78,15 @@
  * @see {@link /lib/logger} Logging utilities
  */
 
-import { withErrorHandling } from '@babylon/api';
-import { db } from '@babylon/db/runtime';
+import {
+  addPublicReadHeaders,
+  publicRateLimit,
+  withErrorHandling,
+} from '@babylon/api';
 import { StaticDataRegistry } from '@babylon/engine';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import { runWithOptionalUserRls } from '@/lib/db/run-with-optional-user-rls';
 
 /**
  * GET /api/actors/[actorId]/historical-stats
@@ -95,9 +99,12 @@ import { NextResponse } from 'next/server';
  * @returns {Promise<NextResponse>} Historical statistics
  */
 export const GET = withErrorHandling(async function GET(
-  _req: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ actorId: string }> }
 ) {
+  const { error, user, rateLimitInfo } = await publicRateLimit(request);
+  if (error) return error;
+
   const { actorId } = await params;
 
   const actor = StaticDataRegistry.getActor(actorId);
@@ -106,51 +113,41 @@ export const GET = withErrorHandling(async function GET(
     return NextResponse.json({ error: 'Actor not found' }, { status: 404 });
   }
 
-  // Get actor's posts from COMPLETED games only
-  // Only show posts up to current time (prevent future access)
-  const now = new Date();
-  const posts = await db.post.findMany({
-    where: {
-      authorId: actorId,
-      timestamp: { lte: now }, // ✅ No future posts
-      // Only from completed games (no oracle leakage):
-      gameId: { not: null },
-    },
-    include: {
-      // We'll need to join with resolved questions to calculate accuracy
-    },
-    orderBy: { createdAt: 'desc' },
-    take: 100, // Last 100 posts
+  return runWithOptionalUserRls(user, async (scopedDb) => {
+    const now = new Date();
+    const posts = await scopedDb.post.findMany({
+      where: {
+        authorId: actorId,
+        timestamp: { lte: now },
+        gameId: { not: null },
+      },
+      include: {},
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+
+    const stats = {
+      actorId: actor.id,
+      name: actor.name,
+      role: actor.role,
+      tier: actor.tier,
+      description: actor.description,
+      totalPosts: posts.length,
+      gamesParticipated: new Set(posts.map((p) => p.gameId).filter(Boolean))
+        .size,
+      historicalAccuracy: null,
+      totalPredictions: null,
+      correctPredictions: null,
+      recentPosts: posts.slice(0, 10).map((p) => ({
+        id: p.id,
+        content: p.content.substring(0, 100),
+        gameId: p.gameId,
+        createdAt: p.createdAt,
+      })),
+    };
+
+    const res = NextResponse.json(stats);
+    if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
+    return res;
   });
-
-  // Calculate stats from historical OUTCOMES (not oracle):
-  // Note: This requires post-resolution analysis to be implemented
-  // For now, return basic observable stats:
-
-  const stats = {
-    actorId: actor.id,
-    name: actor.name,
-    role: actor.role,
-    tier: actor.tier,
-    description: actor.description,
-
-    // Observable metrics:
-    totalPosts: posts.length,
-    gamesParticipated: new Set(posts.map((p) => p.gameId).filter(Boolean)).size,
-
-    // Placeholder for future implementation:
-    historicalAccuracy: null, // Will calculate from resolved questions
-    totalPredictions: null, // Will calculate after post-analysis
-    correctPredictions: null, // Will calculate after post-analysis
-
-    // Recent activity:
-    recentPosts: posts.slice(0, 10).map((p) => ({
-      id: p.id,
-      content: p.content.substring(0, 100),
-      gameId: p.gameId,
-      createdAt: p.createdAt,
-    })),
-  };
-
-  return NextResponse.json(stats);
 });

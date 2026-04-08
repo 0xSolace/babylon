@@ -14,7 +14,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 
-import { db } from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 import { FEE_CONFIG } from '@babylon/engine';
 import { logger, toISO, toISOOrNull } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
@@ -62,64 +62,65 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-  const [
-    totalMarkets,
-    activeMarkets,
-    resolvedMarkets,
-    totalPositions,
-    activePositions,
-    totalPerpPositions,
-    activePerpPositions,
-  ] = await Promise.all([
-    db.market.count(),
-    db.market.count({ where: { resolved: false } }),
-    db.market.count({ where: { resolved: true } }),
-    db.position.count(),
-    db.position.count({ where: { shares: { gt: '0' } } }),
-    db.perpPosition.count(),
-    db.perpPosition.count({ where: { closedAt: null } }),
-  ]);
+  return await asSystem(async (tx) => {
+    const [
+      totalMarkets,
+      activeMarkets,
+      resolvedMarkets,
+      totalPositions,
+      activePositions,
+      totalPerpPositions,
+      activePerpPositions,
+    ] = await Promise.all([
+      tx.market.count(),
+      tx.market.count({ where: { resolved: false } }),
+      tx.market.count({ where: { resolved: true } }),
+      tx.position.count(),
+      tx.position.count({ where: { shares: { gt: '0' } } }),
+      tx.perpPosition.count(),
+      tx.perpPosition.count({ where: { closedAt: null } }),
+    ]);
 
-  const [
-    totalBalanceTransactions,
-    totalNpcTrades,
-    npcTradesToday,
-    tradingFeesResult,
-    feesTodayResult,
-  ] = await Promise.all([
-    db.balanceTransaction.count(),
-    db.npcTrade.count(),
-    db.npcTrade.count({ where: { executedAt: { gte: today } } }),
-    db.tradingFee.aggregate({
-      _sum: { feeAmount: true, platformFee: true, referrerFee: true },
-    }),
-    db.$queryRaw<{ total: string }>`
+    const [
+      totalBalanceTransactions,
+      totalNpcTrades,
+      npcTradesToday,
+      tradingFeesResult,
+      feesTodayResult,
+    ] = await Promise.all([
+      tx.balanceTransaction.count(),
+      tx.npcTrade.count(),
+      tx.npcTrade.count({ where: { executedAt: { gte: today } } }),
+      tx.tradingFee.aggregate({
+        _sum: { feeAmount: true, platformFee: true, referrerFee: true },
+      }),
+      tx.$queryRaw<{ total: string }>`
       SELECT COALESCE(SUM("feeAmount"::numeric), 0) as total
       FROM "TradingFee"
       WHERE "createdAt" >= ${today}
     `,
-  ]);
+    ]);
 
-  const totalFees = tradingFeesResult._sum?.feeAmount
-    ? Number(tradingFeesResult._sum.feeAmount)
-    : 0;
-  const platformFees = tradingFeesResult._sum?.platformFee
-    ? Number(tradingFeesResult._sum.platformFee)
-    : 0;
-  const referrerFees = tradingFeesResult._sum?.referrerFee
-    ? Number(tradingFeesResult._sum.referrerFee)
-    : 0;
-  const feesTodayRow = feesTodayResult[0];
-  const feesToday = feesTodayRow ? Number(feesTodayRow.total) : 0;
+    const totalFees = tradingFeesResult._sum?.feeAmount
+      ? Number(tradingFeesResult._sum.feeAmount)
+      : 0;
+    const platformFees = tradingFeesResult._sum?.platformFee
+      ? Number(tradingFeesResult._sum.platformFee)
+      : 0;
+    const referrerFees = tradingFeesResult._sum?.referrerFee
+      ? Number(tradingFeesResult._sum.referrerFee)
+      : 0;
+    const feesTodayRow = feesTodayResult[0];
+    const feesToday = feesTodayRow ? Number(feesTodayRow.total) : 0;
 
-  const topTraders = await db.$queryRaw<{
-    userId: string;
-    username: string | null;
-    displayName: string | null;
-    profileImageUrl: string | null;
-    tradeCount: string;
-    totalVolume: string;
-  }>`
+    const topTraders = await tx.$queryRaw<{
+      userId: string;
+      username: string | null;
+      displayName: string | null;
+      profileImageUrl: string | null;
+      tradeCount: string;
+      totalVolume: string;
+    }>`
     SELECT 
       u.id as "userId",
       u.username,
@@ -136,12 +137,12 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     LIMIT 10
   `;
 
-  const topMarkets = await db.$queryRaw<{
-    marketId: string;
-    question: string;
-    positionCount: string;
-    totalVolume: string;
-  }>`
+    const topMarkets = await tx.$queryRaw<{
+      marketId: string;
+      question: string;
+      positionCount: string;
+      totalVolume: string;
+    }>`
     SELECT 
       m.id as "marketId",
       m.question,
@@ -154,32 +155,32 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     LIMIT 10
   `;
 
-  let timeSeries: Array<{
-    date: string;
-    trades: number;
-    volume: number;
-    fees: number;
-  }> = [];
-
-  if (includeTimeSeries) {
-    const timeSeriesStart =
-      startDate ?? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const timeSeriesEnd = endDate ?? new Date();
-
-    let dailyStats: Array<{
+    let timeSeries: Array<{
       date: string;
-      trades: string;
-      volume: string;
-      fees: string;
-    }>;
+      trades: number;
+      volume: number;
+      fees: number;
+    }> = [];
 
-    if (marketType === 'prediction') {
-      dailyStats = await db.$queryRaw<{
+    if (includeTimeSeries) {
+      const timeSeriesStart =
+        startDate ?? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const timeSeriesEnd = endDate ?? new Date();
+
+      let dailyStats: Array<{
         date: string;
         trades: string;
         volume: string;
         fees: string;
-      }>`
+      }>;
+
+      if (marketType === 'prediction') {
+        dailyStats = await tx.$queryRaw<{
+          date: string;
+          trades: string;
+          volume: string;
+          fees: string;
+        }>`
         SELECT DATE(bt."createdAt") as date, COUNT(*) as trades,
           ABS(SUM(bt.amount::numeric)) as volume, COALESCE(SUM(tf."feeAmount"::numeric), 0) as fees
         FROM "BalanceTransaction" bt
@@ -188,13 +189,13 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           AND bt.type IN ('prediction_buy', 'prediction_sell')
         GROUP BY DATE(bt."createdAt") ORDER BY date ASC
       `;
-    } else if (marketType === 'perpetual') {
-      dailyStats = await db.$queryRaw<{
-        date: string;
-        trades: string;
-        volume: string;
-        fees: string;
-      }>`
+      } else if (marketType === 'perpetual') {
+        dailyStats = await tx.$queryRaw<{
+          date: string;
+          trades: string;
+          volume: string;
+          fees: string;
+        }>`
         SELECT DATE(bt."createdAt") as date, COUNT(*) as trades,
           ABS(SUM(bt.amount::numeric)) as volume, COALESCE(SUM(tf."feeAmount"::numeric), 0) as fees
         FROM "BalanceTransaction" bt
@@ -203,13 +204,13 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           AND bt.type IN ('perp_open', 'perp_close')
         GROUP BY DATE(bt."createdAt") ORDER BY date ASC
       `;
-    } else {
-      dailyStats = await db.$queryRaw<{
-        date: string;
-        trades: string;
-        volume: string;
-        fees: string;
-      }>`
+      } else {
+        dailyStats = await tx.$queryRaw<{
+          date: string;
+          trades: string;
+          volume: string;
+          fees: string;
+        }>`
         SELECT DATE(bt."createdAt") as date, COUNT(*) as trades,
           ABS(SUM(bt.amount::numeric)) as volume, COALESCE(SUM(tf."feeAmount"::numeric), 0) as fees
         FROM "BalanceTransaction" bt
@@ -218,33 +219,33 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           AND bt.type IN ('prediction_buy', 'prediction_sell', 'perp_open', 'perp_close')
         GROUP BY DATE(bt."createdAt") ORDER BY date ASC
       `;
+      }
+
+      timeSeries = dailyStats.map((row) => ({
+        date: row.date,
+        trades: Number(row.trades),
+        volume: Number(row.volume),
+        fees: Number(row.fees),
+      }));
     }
 
-    timeSeries = dailyStats.map((row) => ({
-      date: row.date,
-      trades: Number(row.trades),
-      volume: Number(row.volume),
-      fees: Number(row.fees),
-    }));
-  }
+    let recentTrades: Array<{
+      id: string;
+      userId: string;
+      username: string | null;
+      displayName: string | null;
+      type: string;
+      amount: string;
+      createdAt: Date;
+    }>;
 
-  let recentTrades: Array<{
-    id: string;
-    userId: string;
-    username: string | null;
-    displayName: string | null;
-    type: string;
-    amount: string;
-    createdAt: Date;
-  }>;
+    // Default to last 30 days if no start date provided (avoid scanning from 1970)
+    const recentTradesStart =
+      startDate ?? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const recentTradesEnd = endDate ?? new Date();
 
-  // Default to last 30 days if no start date provided (avoid scanning from 1970)
-  const recentTradesStart =
-    startDate ?? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const recentTradesEnd = endDate ?? new Date();
-
-  if (marketType === 'prediction') {
-    recentTrades = await db.$queryRaw`
+    if (marketType === 'prediction') {
+      recentTrades = await tx.$queryRaw`
       SELECT bt.id, bt."userId", u.username, u."displayName", bt.type, bt.amount, bt."createdAt"
       FROM "BalanceTransaction" bt
       JOIN "User" u ON bt."userId" = u.id
@@ -252,8 +253,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         AND bt."createdAt" >= ${recentTradesStart} AND bt."createdAt" <= ${recentTradesEnd}
       ORDER BY bt."createdAt" DESC LIMIT 20
     `;
-  } else if (marketType === 'perpetual') {
-    recentTrades = await db.$queryRaw`
+    } else if (marketType === 'perpetual') {
+      recentTrades = await tx.$queryRaw`
       SELECT bt.id, bt."userId", u.username, u."displayName", bt.type, bt.amount, bt."createdAt"
       FROM "BalanceTransaction" bt
       JOIN "User" u ON bt."userId" = u.id
@@ -261,8 +262,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         AND bt."createdAt" >= ${recentTradesStart} AND bt."createdAt" <= ${recentTradesEnd}
       ORDER BY bt."createdAt" DESC LIMIT 20
     `;
-  } else {
-    recentTrades = await db.$queryRaw`
+    } else {
+      recentTrades = await tx.$queryRaw`
       SELECT bt.id, bt."userId", u.username, u."displayName", bt.type, bt.amount, bt."createdAt"
       FROM "BalanceTransaction" bt
       JOIN "User" u ON bt."userId" = u.id
@@ -270,51 +271,52 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         AND bt."createdAt" >= ${recentTradesStart} AND bt."createdAt" <= ${recentTradesEnd}
       ORDER BY bt."createdAt" DESC LIMIT 20
     `;
-  }
+    }
 
-  return successResponse({
-    overview: {
-      totalMarkets,
-      activeMarkets,
-      resolvedMarkets,
-      totalPositions,
-      activePositions,
-      totalPerpPositions,
-      activePerpPositions,
-    },
-    volume: {
-      totalBalanceTransactions,
-      totalNpcTrades,
-      npcTradesToday,
-    },
-    fees: {
-      totalFees,
-      platformFees,
-      referrerFees,
-      feesToday,
-      feeRate: FEE_CONFIG.TRADING_FEE_RATE,
-    },
-    topTraders: topTraders.map((t) => ({
-      ...t,
-      tradeCount: Number(t.tradeCount),
-      totalVolume: Number(t.totalVolume),
-    })),
-    topMarkets: topMarkets.map((m) => ({
-      ...m,
-      positionCount: Number(m.positionCount),
-      totalVolume: Number(m.totalVolume),
-    })),
-    recentTrades: recentTrades.map((t) => ({
-      ...t,
-      amount: Number(t.amount),
-      createdAt: toISO(t.createdAt),
-    })),
-    timeSeries,
-    filters: {
-      startDate: toISOOrNull(startDate),
-      endDate: toISOOrNull(endDate),
-      marketType,
-      applied: Boolean(startDate || endDate || marketType !== 'all'),
-    },
-  });
+    return successResponse({
+      overview: {
+        totalMarkets,
+        activeMarkets,
+        resolvedMarkets,
+        totalPositions,
+        activePositions,
+        totalPerpPositions,
+        activePerpPositions,
+      },
+      volume: {
+        totalBalanceTransactions,
+        totalNpcTrades,
+        npcTradesToday,
+      },
+      fees: {
+        totalFees,
+        platformFees,
+        referrerFees,
+        feesToday,
+        feeRate: FEE_CONFIG.TRADING_FEE_RATE,
+      },
+      topTraders: topTraders.map((t) => ({
+        ...t,
+        tradeCount: Number(t.tradeCount),
+        totalVolume: Number(t.totalVolume),
+      })),
+      topMarkets: topMarkets.map((m) => ({
+        ...m,
+        positionCount: Number(m.positionCount),
+        totalVolume: Number(m.totalVolume),
+      })),
+      recentTrades: recentTrades.map((t) => ({
+        ...t,
+        amount: Number(t.amount),
+        createdAt: toISO(t.createdAt),
+      })),
+      timeSeries,
+      filters: {
+        startDate: toISOOrNull(startDate),
+        endDate: toISOOrNull(endDate),
+        marketType,
+        applied: Boolean(startDate || endDate || marketType !== 'all'),
+      },
+    });
+  }, 'admin-stats-trading');
 });

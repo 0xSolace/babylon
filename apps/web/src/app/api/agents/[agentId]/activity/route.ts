@@ -11,9 +11,13 @@
 
 import { agentService } from '@babylon/agents';
 import { authenticateUser, withErrorHandling } from '@babylon/api';
-import { desc, eq, inArray } from '@babylon/db';
-import { agentTrades, comments, db, markets, posts } from '@babylon/db/runtime';
-
+import {
+  selectAgentTradesActivityForAgentOrderExecutedDescLimit,
+  selectCommentsForAuthorOrderCreatedDescLimit,
+  selectMarketQuestionsByIds,
+  selectPostsForAuthorOrderCreatedDescLimit,
+} from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import { toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -92,126 +96,106 @@ export const GET = withErrorHandling(async function GET(
 
   const activities: AgentActivity[] = [];
 
-  // Fetch trades if requested
-  if (type === 'all' || type === 'trade') {
-    const trades = await db
-      .select({
-        id: agentTrades.id,
-        marketType: agentTrades.marketType,
-        marketId: agentTrades.marketId,
-        ticker: agentTrades.ticker,
-        action: agentTrades.action,
-        side: agentTrades.side,
-        amount: agentTrades.amount,
-        price: agentTrades.price,
-        pnl: agentTrades.pnl,
-        reasoning: agentTrades.reasoning,
-        executedAt: agentTrades.executedAt,
-      })
-      .from(agentTrades)
-      .where(eq(agentTrades.agentUserId, agentId))
-      .orderBy(desc(agentTrades.executedAt))
-      .limit(limit);
+  const { trades, marketsData, agentPosts, agentComments } = await asUser(
+    user.id,
+    async (tx) => {
+      const tradeRows =
+        type === 'all' || type === 'trade'
+          ? await selectAgentTradesActivityForAgentOrderExecutedDescLimit(
+              tx,
+              agentId,
+              limit
+            )
+          : [];
 
-    // Fetch market questions for prediction trades
-    const marketIds = [
-      ...new Set(
-        trades
-          .filter((t) => t.marketType === 'prediction' && t.marketId)
-          .map((t) => t.marketId!)
-      ),
-    ];
+      const marketIds = [
+        ...new Set(
+          tradeRows
+            .filter((t) => t.marketType === 'prediction' && t.marketId)
+            .map((t) => t.marketId!)
+        ),
+      ];
 
-    const marketQuestions = new Map<string, string>();
-    if (marketIds.length > 0) {
-      const marketsData = await db
-        .select({ id: markets.id, question: markets.question })
-        .from(markets)
-        .where(inArray(markets.id, marketIds));
+      const marketRows =
+        marketIds.length > 0
+          ? await selectMarketQuestionsByIds(tx, marketIds)
+          : [];
 
-      for (const m of marketsData) {
-        marketQuestions.set(m.id, m.question);
-      }
+      const postRows =
+        type === 'all' || type === 'post'
+          ? await selectPostsForAuthorOrderCreatedDescLimit(tx, agentId, limit)
+          : [];
+
+      const commentRows =
+        type === 'all' || type === 'comment'
+          ? await selectCommentsForAuthorOrderCreatedDescLimit(
+              tx,
+              agentId,
+              limit
+            )
+          : [];
+
+      return {
+        trades: tradeRows,
+        marketsData: marketRows,
+        agentPosts: postRows,
+        agentComments: commentRows,
+      };
     }
+  );
 
-    for (const trade of trades) {
-      activities.push({
-        type: 'trade',
-        id: trade.id,
-        timestamp: toISO(trade.executedAt),
-        data: {
-          tradeId: trade.id,
-          marketType: trade.marketType as 'prediction' | 'perp',
-          marketId: trade.marketId,
-          ticker: trade.ticker,
-          marketQuestion: trade.marketId
-            ? (marketQuestions.get(trade.marketId) ?? null)
-            : null,
-          action: trade.action,
-          side: trade.side,
-          amount: trade.amount,
-          price: trade.price,
-          pnl: trade.pnl,
-          reasoning: trade.reasoning,
-        },
-      });
-    }
+  const marketQuestions = new Map<string, string>();
+  for (const m of marketsData) {
+    marketQuestions.set(m.id, m.question);
   }
 
-  // Fetch posts if requested
-  if (type === 'all' || type === 'post') {
-    const agentPosts = await db
-      .select({
-        id: posts.id,
-        content: posts.content,
-        createdAt: posts.createdAt,
-      })
-      .from(posts)
-      .where(eq(posts.authorId, agentId))
-      .orderBy(desc(posts.createdAt))
-      .limit(limit);
-
-    for (const post of agentPosts) {
-      activities.push({
-        type: 'post',
-        id: post.id,
-        timestamp: toISO(post.createdAt),
-        data: {
-          postId: post.id,
-          contentPreview: post.content.substring(0, 200),
-        },
-      });
-    }
+  for (const trade of trades) {
+    activities.push({
+      type: 'trade',
+      id: trade.id,
+      timestamp: toISO(trade.executedAt),
+      data: {
+        tradeId: trade.id,
+        marketType: trade.marketType as 'prediction' | 'perp',
+        marketId: trade.marketId,
+        ticker: trade.ticker,
+        marketQuestion: trade.marketId
+          ? (marketQuestions.get(trade.marketId) ?? null)
+          : null,
+        action: trade.action,
+        side: trade.side,
+        amount: trade.amount,
+        price: trade.price,
+        pnl: trade.pnl,
+        reasoning: trade.reasoning,
+      },
+    });
   }
 
-  // Fetch comments if requested
-  if (type === 'all' || type === 'comment') {
-    const agentComments = await db
-      .select({
-        id: comments.id,
-        postId: comments.postId,
-        content: comments.content,
-        parentCommentId: comments.parentCommentId,
-        createdAt: comments.createdAt,
-      })
-      .from(comments)
-      .where(eq(comments.authorId, agentId))
-      .orderBy(desc(comments.createdAt))
-      .limit(limit);
+  for (const post of agentPosts) {
+    activities.push({
+      type: 'post',
+      id: post.id,
+      timestamp: toISO(post.createdAt),
+      data: {
+        postId: post.id,
+        contentPreview: post.content.substring(0, 200),
+      },
+    });
+  }
 
-    for (const comment of agentComments) {
-      activities.push({
-        type: 'comment',
-        id: comment.id,
-        timestamp: toISO(comment.createdAt),
-        data: {
-          commentId: comment.id,
-          postId: comment.postId,
-          contentPreview: comment.content.substring(0, 200),
-          parentCommentId: comment.parentCommentId,
-        },
-      });
-    }
+  for (const comment of agentComments) {
+    activities.push({
+      type: 'comment',
+      id: comment.id,
+      timestamp: toISO(comment.createdAt),
+      data: {
+        commentId: comment.id,
+        postId: comment.postId,
+        contentPreview: comment.content.substring(0, 200),
+        parentCommentId: comment.parentCommentId,
+      },
+    });
   }
 
   // When type='all', we fetch up to `limit` from each activity type (trades,

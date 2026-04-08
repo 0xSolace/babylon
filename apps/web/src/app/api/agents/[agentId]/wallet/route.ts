@@ -12,9 +12,11 @@
 
 import { agentService } from '@babylon/agents';
 import { authenticateUser, withErrorHandling } from '@babylon/api';
-import { desc, eq } from '@babylon/db';
-import { balanceTransactions, db, users } from '@babylon/db/runtime';
-
+import {
+  selectBalanceTransactionsForUserOrderCreatedDescLimitInTx,
+  selectUserVirtualBalanceInTx,
+} from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import { BABYLON_POINTS_SYMBOL, logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -29,22 +31,19 @@ export const GET = withErrorHandling(async function GET(
   // Verify ownership and get agent
   const agent = await agentService.getAgent(agentId, user.id);
 
-  // Get user's balance (source for deposits)
-  const userResult = await db
-    .select({ virtualBalance: users.virtualBalance })
-    .from(users)
-    .where(eq(users.id, user.id))
-    .limit(1);
+  const { userBalance, transactions } = await asUser(user.id, async (tx) => {
+    const userResult = await selectUserVirtualBalanceInTx(tx, user.id);
+    const balance = Number(userResult?.virtualBalance ?? 0);
 
-  const userBalance = Number(userResult[0]?.virtualBalance ?? 0);
+    const txRows =
+      await selectBalanceTransactionsForUserOrderCreatedDescLimitInTx(
+        tx,
+        agentId,
+        100
+      );
 
-  // Get agent's balance transactions
-  const transactions = await db
-    .select()
-    .from(balanceTransactions)
-    .where(eq(balanceTransactions.userId, agentId))
-    .orderBy(desc(balanceTransactions.createdAt))
-    .limit(100);
+    return { userBalance: balance, transactions: txRows };
+  });
 
   return NextResponse.json({
     success: true,
@@ -96,13 +95,10 @@ export const POST = withErrorHandling(async function POST(
 
   // Re-fetch agent and user balance
   const agent = await agentService.getAgent(agentId, user.id);
-  const userResult = await db
-    .select({ virtualBalance: users.virtualBalance })
-    .from(users)
-    .where(eq(users.id, user.id))
-    .limit(1);
-
-  const userBalance = Number(userResult[0]?.virtualBalance ?? 0);
+  const userBalance = await asUser(user.id, async (tx) => {
+    const userResult = await selectUserVirtualBalanceInTx(tx, user.id);
+    return Number(userResult?.virtualBalance ?? 0);
+  });
 
   return NextResponse.json({
     success: true,

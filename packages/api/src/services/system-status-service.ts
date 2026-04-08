@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { queryMonitor } from '@babylon/db';
-import { checkDatabaseHealth, db } from '@babylon/db/runtime';
+import { asSystem, checkDatabaseHealth } from '@babylon/db/engine-storage';
 
 import { logger } from '@babylon/shared';
 import type { CronJobStats } from '../monitoring/cron-metrics';
@@ -793,22 +793,24 @@ export async function getSystemStatusSnapshot(): Promise<SystemStatusSnapshot> {
     latestPost,
     pendingReports,
     activeQuestions,
-  ] = await Promise.all([
-    db.game.findFirst({
-      where: { isContinuous: true },
-    }),
-    db.user.count({ where: { createdAt: { gte: oneHourAgo } } }),
-    db.user.count({ where: { createdAt: { gte: oneDayAgo } } }),
-    db.post.count({ where: { createdAt: { gte: oneHourAgo } } }),
-    db.post.count({ where: { createdAt: { gte: oneDayAgo } } }),
-    db.$queryRaw<{ count: string }>`
+  ] = await asSystem(
+    async (c) =>
+      Promise.all([
+        c.game.findFirst({
+          where: { isContinuous: true },
+        }),
+        c.user.count({ where: { createdAt: { gte: oneHourAgo } } }),
+        c.user.count({ where: { createdAt: { gte: oneDayAgo } } }),
+        c.post.count({ where: { createdAt: { gte: oneHourAgo } } }),
+        c.post.count({ where: { createdAt: { gte: oneDayAgo } } }),
+        c.$queryRaw<{ count: string }>`
       SELECT 0::text as count
     `,
-    db.$queryRaw<{
-      totalCalls: string;
-      totalInputTokens: string;
-      totalOutputTokens: string;
-    }>`
+        c.$queryRaw<{
+          totalCalls: string;
+          totalInputTokens: string;
+          totalOutputTokens: string;
+        }>`
       SELECT
         COUNT(*) as "totalCalls",
         COALESCE(SUM("promptTokens"), 0) as "totalInputTokens",
@@ -816,11 +818,11 @@ export async function getSystemStatusSnapshot(): Promise<SystemStatusSnapshot> {
       FROM "llm_call_logs"
       WHERE "createdAt" >= NOW() - INTERVAL '24 hours'
     `,
-    db.$queryRaw<{
-      tableName: string;
-      rowCount: string;
-      sizeBytes: string;
-    }>`
+        c.$queryRaw<{
+          tableName: string;
+          rowCount: string;
+          sizeBytes: string;
+        }>`
       SELECT 
         relname as "tableName",
         n_live_tup as "rowCount",
@@ -829,32 +831,34 @@ export async function getSystemStatusSnapshot(): Promise<SystemStatusSnapshot> {
       ORDER BY pg_total_relation_size(quote_ident(relname)::regclass) DESC
       LIMIT 20
     `,
-    db.$queryRaw<{
-      pending: string;
-      oldest: Date | null;
-    }>`
+        c.$queryRaw<{
+          pending: string;
+          oldest: Date | null;
+        }>`
       SELECT 
         COUNT(*) as pending,
         MIN("createdAt") as oldest
       FROM "RealtimeOutbox"
       WHERE "processedAt" IS NULL
     `,
-    db.generationLock.findMany({
-      where: { expiresAt: { gt: generatedAt } },
-      orderBy: { lockedAt: 'desc' },
-      take: 5,
-    }),
-    db.post.findFirst({
-      orderBy: { timestamp: 'desc' },
-      select: { timestamp: true },
-    }),
-    db.report.count({
-      where: { status: 'pending' },
-    }),
-    db.question.count({
-      where: { status: 'active' },
-    }),
-  ]);
+        c.generationLock.findMany({
+          where: { expiresAt: { gt: generatedAt } },
+          orderBy: { lockedAt: 'desc' },
+          take: 5,
+        }),
+        c.post.findFirst({
+          orderBy: { timestamp: 'desc' },
+          select: { timestamp: true },
+        }),
+        c.report.count({
+          where: { status: 'pending' },
+        }),
+        c.question.count({
+          where: { status: 'active' },
+        }),
+      ]),
+    'system-status-snapshot-queries'
+  );
 
   const recentLlmErrorsCount = llmErrorCountResult[0]
     ? Number(llmErrorCountResult[0].count)

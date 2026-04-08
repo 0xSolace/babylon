@@ -115,7 +115,7 @@ const createQueryBuilder = (
 };
 
 const registerMocks = async () => {
-  const actualDbRuntime = await import('@babylon/db/runtime');
+  const actualDbRuntime = await import('@babylon/db/engine-storage');
 
   const articleRouteMockDb = {
     select: mock(() =>
@@ -159,7 +159,7 @@ const registerMocks = async () => {
     asPublic: async <T>(fn: (db: unknown) => Promise<T>) => fn({}),
   }));
 
-  mock.module('@babylon/db/runtime', () => ({
+  mock.module('@babylon/db/engine-storage', () => ({
     ...actualDbRuntime,
     db: articleRouteMockDb,
     games: {

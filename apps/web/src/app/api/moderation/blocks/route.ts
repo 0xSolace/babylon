@@ -54,7 +54,7 @@
  */
 
 import { authenticate, successResponse, withErrorHandling } from '@babylon/api';
-import { db } from '@babylon/db/runtime';
+import { asUser } from '@babylon/db/engine-storage';
 
 import { GetBlocksSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
@@ -68,28 +68,31 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     offset: searchParams.get('offset') || '0',
   });
 
-  const [blocks, total] = await Promise.all([
-    db.userBlock.findMany({
-      where: { blockerId: authUser.userId },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-      skip: offset,
-      include: {
-        blocked: {
-          select: {
-            id: true,
-            username: true,
-            displayName: true,
-            profileImageUrl: true,
-            isActor: true,
+  const { blocks, total } = await asUser(authUser, async (db) => {
+    const [blockRows, count] = await Promise.all([
+      db.userBlock.findMany({
+        where: { blockerId: authUser.userId },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset,
+        include: {
+          blocked: {
+            select: {
+              id: true,
+              username: true,
+              displayName: true,
+              profileImageUrl: true,
+              isActor: true,
+            },
           },
         },
-      },
-    }),
-    db.userBlock.count({
-      where: { blockerId: authUser.userId },
-    }),
-  ]);
+      }),
+      db.userBlock.count({
+        where: { blockerId: authUser.userId },
+      }),
+    ]);
+    return { blocks: blockRows, total: count };
+  });
 
   return successResponse({
     blocks,

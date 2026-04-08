@@ -50,7 +50,7 @@
  */
 
 import { requireAdmin, successResponse, withErrorHandling } from '@babylon/api';
-import { db } from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 
 import { modelStorage } from '@babylon/training';
 import type { NextRequest } from 'next/server';
@@ -60,10 +60,14 @@ export const dynamic = 'force-dynamic';
 export const GET = withErrorHandling(async (request: NextRequest) => {
   await requireAdmin(request);
   // Get models from database
-  const dbModels = await db.trainedModel.findMany({
-    orderBy: { createdAt: 'desc' },
-    take: 20,
-  });
+  const dbModels = await asSystem(
+    (tx) =>
+      tx.trainedModel.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }),
+    'admin-training-models-list'
+  );
 
   // Get models from Vercel Blob
   const blobModels = await modelStorage.listModels();

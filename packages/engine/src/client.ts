@@ -17,6 +17,7 @@ export {
   type ShareCalculation,
   type ShareCalculationWithFees,
 } from '@babylon/core/markets/prediction/pricing';
+export type { PortfolioPnLSnapshot } from '@babylon/db';
 // Fee Configuration (pure constants, no dependencies)
 export {
   FEE_CONFIG,
@@ -128,20 +129,6 @@ export {
   sampleRandom,
   shuffleArray,
 } from './utils/randomization';
-
-// Portfolio PnL type (interface only, no runtime deps - defined here to avoid importing from server-only file)
-export interface PortfolioPnLSnapshot {
-  lifetimePnL: number;
-  netContributions: number;
-  totalDeposited: number;
-  totalWithdrawn: number;
-  availableBalance: number;
-  unrealizedPerpPnL: number;
-  unrealizedPredictionPnL: number;
-  totalUnrealizedPnL: number;
-  totalPnL: number;
-  accountEquity: number;
-}
 
 export interface PortfolioBreakdownSnapshot {
   wallet: number;

@@ -11,16 +11,13 @@
  * Uses configurable thresholds from ALPHA_GROUP_CONFIG.
  */
 
-import { and, count, eq, gte, inArray, lte } from '@babylon/db';
 import {
-  agentTrades,
-  db,
-  posts,
-  reactions,
-  shares,
-  userInteractions,
-  users,
-} from '@babylon/db/runtime';
+  fetchNpcActorAuthorIdForPostIfActor,
+  fetchNpcEngagementSocialSlice,
+  listAgentCloseTradesPnlInWindow,
+  listCandidateUserIdsForNpcTopEngagement,
+  listDistinctNpcIdsForUserInteractions,
+} from '@babylon/db';
 import { logger } from '@babylon/shared';
 import { ALPHA_GROUP_CONFIG } from '../config/alpha-group-config';
 
@@ -87,28 +84,15 @@ export class NPCInteractionTracker {
    * Actual like data is stored in the Reaction table.
    */
   static async trackLike(userId: string, postId: string): Promise<void> {
-    const [post] = await db
-      .select({ authorId: posts.authorId })
-      .from(posts)
-      .where(eq(posts.id, postId))
-      .limit(1);
+    const ok = await fetchNpcActorAuthorIdForPostIfActor({
+      postId,
+      traceLabel: 'npc-tracker-like',
+    });
 
-    if (!post) {
-      return;
-    }
-
-    const [author] = await db
-      .select({ isActor: users.isActor })
-      .from(users)
-      .where(eq(users.id, post.authorId))
-      .limit(1);
-
-    if (!author?.isActor) {
-      return;
-    }
+    if (!ok) return;
 
     logger.debug(
-      `User ${userId} liked NPC ${post.authorId}'s post`,
+      `User ${userId} liked NPC ${ok}'s post`,
       undefined,
       'NPCInteractionTracker'
     );
@@ -119,28 +103,15 @@ export class NPCInteractionTracker {
    * Actual share data is stored in the Share table.
    */
   static async trackShare(userId: string, postId: string): Promise<void> {
-    const [post] = await db
-      .select({ authorId: posts.authorId })
-      .from(posts)
-      .where(eq(posts.id, postId))
-      .limit(1);
+    const authorId = await fetchNpcActorAuthorIdForPostIfActor({
+      postId,
+      traceLabel: 'npc-tracker-share',
+    });
 
-    if (!post) {
-      return;
-    }
-
-    const [author] = await db
-      .select({ isActor: users.isActor })
-      .from(users)
-      .where(eq(users.id, post.authorId))
-      .limit(1);
-
-    if (!author?.isActor) {
-      return;
-    }
+    if (!authorId) return;
 
     logger.debug(
-      `User ${userId} shared NPC ${post.authorId}'s post`,
+      `User ${userId} shared NPC ${authorId}'s post`,
       undefined,
       'NPCInteractionTracker'
     );
@@ -158,21 +129,11 @@ export class NPCInteractionTracker {
     const startDate =
       window?.startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-    // Query closed trades from AgentTrade table
-    const trades = await db
-      .select({
-        pnl: agentTrades.pnl,
-        action: agentTrades.action,
-      })
-      .from(agentTrades)
-      .where(
-        and(
-          eq(agentTrades.agentUserId, userId),
-          eq(agentTrades.action, 'close'),
-          gte(agentTrades.executedAt, startDate),
-          lte(agentTrades.executedAt, endDate)
-        )
-      );
+    const trades = await listAgentCloseTradesPnlInWindow({
+      userId,
+      startDate,
+      endDate,
+    });
 
     const totalTrades = trades.length;
     const profitableTrades = trades.filter((t) => (t.pnl ?? 0) > 0).length;
@@ -216,32 +177,14 @@ export class NPCInteractionTracker {
     // SOCIAL INTERACTIONS
     // ==========================================================================
 
-    // Get all NPC posts in the time window
-    const npcPosts = await db
-      .select({ id: posts.id })
-      .from(posts)
-      .where(
-        and(
-          eq(posts.authorId, npcId),
-          gte(posts.timestamp, startDate),
-          lte(posts.timestamp, effectiveEndDate)
-        )
-      );
-
-    const npcPostIds = npcPosts.map((p) => p.id);
-
-    // Count replies (from UserInteraction table)
-    const replyInteractions = await db
-      .select({ qualityScore: userInteractions.qualityScore })
-      .from(userInteractions)
-      .where(
-        and(
-          eq(userInteractions.userId, userId),
-          eq(userInteractions.npcId, npcId),
-          gte(userInteractions.timestamp, startDate),
-          lte(userInteractions.timestamp, endDate)
-        )
-      );
+    const { replyInteractions, likeCount, shareCount } =
+      await fetchNpcEngagementSocialSlice({
+        userId,
+        npcId,
+        startDate,
+        interactionEnd: endDate,
+        postsEnd: effectiveEndDate,
+      });
 
     const replyCount = replyInteractions.length;
     const avgQualityScore =
@@ -249,41 +192,6 @@ export class NPCInteractionTracker {
         ? replyInteractions.reduce((acc, i) => acc + i.qualityScore, 0) /
           replyCount
         : 0;
-
-    // Count likes
-    let likeCount = 0;
-    if (npcPostIds.length > 0) {
-      const [likeResult] = await db
-        .select({ count: count() })
-        .from(reactions)
-        .where(
-          and(
-            eq(reactions.userId, userId),
-            inArray(reactions.postId, npcPostIds),
-            eq(reactions.type, 'like'),
-            gte(reactions.createdAt, startDate),
-            lte(reactions.createdAt, endDate)
-          )
-        );
-      likeCount = likeResult?.count ?? 0;
-    }
-
-    // Count shares
-    let shareCount = 0;
-    if (npcPostIds.length > 0) {
-      const [shareResult] = await db
-        .select({ count: count() })
-        .from(shares)
-        .where(
-          and(
-            eq(shares.userId, userId),
-            inArray(shares.postId, npcPostIds),
-            gte(shares.createdAt, startDate),
-            lte(shares.createdAt, endDate)
-          )
-        );
-      shareCount = shareResult?.count ?? 0;
-    }
 
     const totalInteractions = replyCount + likeCount + shareCount;
 
@@ -488,46 +396,17 @@ export class NPCInteractionTracker {
     window?: InteractionWindow,
     focusWeights?: FocusWeights
   ): Promise<NPCInteractionScore[]> {
-    // Build conditions for finding users who interacted with this NPC
-    const conditions = [eq(userInteractions.npcId, npcId)];
-    if (window) {
-      conditions.push(gte(userInteractions.timestamp, window.startDate));
-      conditions.push(lte(userInteractions.timestamp, window.endDate));
-    }
+    const defaultTradingWindow = {
+      startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+      endDate: new Date(),
+    };
 
-    // Get all users who have interacted with this NPC
-    const interactions = await db
-      .selectDistinct({ userId: userInteractions.userId })
-      .from(userInteractions)
-      .where(and(...conditions));
-
-    const userIds = interactions.map((i) => i.userId);
-
-    // If including trading activity, also get users who have traded
-    // (they might have traded without social interactions)
-    if (ALPHA_GROUP_CONFIG.includeTradingActivity) {
-      const startDate =
-        window?.startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-      const endDate = window?.endDate || new Date();
-
-      const traders = await db
-        .selectDistinct({ userId: agentTrades.agentUserId })
-        .from(agentTrades)
-        .where(
-          and(
-            eq(agentTrades.action, 'close'),
-            gte(agentTrades.executedAt, startDate),
-            lte(agentTrades.executedAt, endDate)
-          )
-        );
-
-      // Add traders who aren't already in the list
-      for (const trader of traders) {
-        if (!userIds.includes(trader.userId)) {
-          userIds.push(trader.userId);
-        }
-      }
-    }
+    const userIds = await listCandidateUserIdsForNpcTopEngagement({
+      npcId,
+      window,
+      mergeRecentCloseTraders: ALPHA_GROUP_CONFIG.includeTradingActivity,
+      defaultTradingWindow,
+    });
 
     // Calculate scores for each user
     const scores = await Promise.all(
@@ -557,18 +436,7 @@ export class NPCInteractionTracker {
     userId: string,
     window?: InteractionWindow
   ): Promise<string[]> {
-    const conditions = [eq(userInteractions.userId, userId)];
-    if (window) {
-      conditions.push(gte(userInteractions.timestamp, window.startDate));
-      conditions.push(lte(userInteractions.timestamp, window.endDate));
-    }
-
-    const interactions = await db
-      .selectDistinct({ npcId: userInteractions.npcId })
-      .from(userInteractions)
-      .where(and(...conditions));
-
-    return interactions.map((i) => i.npcId);
+    return listDistinctNpcIdsForUserInteractions({ userId, window });
   }
 
   /**
@@ -621,14 +489,14 @@ export class NPCInteractionTracker {
       return {
         eligible: false,
         tradingStats,
-        reason: `Win rate ${(tradingStats.winRate * 100).toFixed(0)}% < ${(ALPHA_GROUP_CONFIG.fastTrackMinWinRate * 100).toFixed(0)}% required`,
+        reason: `Win rate ${(tradingStats.winRate * 100).toFixed(0)}% is below ${(ALPHA_GROUP_CONFIG.fastTrackMinWinRate * 100).toFixed(0)}% requirement`,
       };
     }
 
     return {
       eligible: true,
       tradingStats,
-      reason: 'Qualifies for fast-track',
+      reason: 'Meets fast-track trading criteria',
     };
   }
 }

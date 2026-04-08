@@ -84,43 +84,25 @@
  */
 
 import { optionalAuth, successResponse, withErrorHandling } from '@babylon/api';
-import { asPublic, asUser } from '@babylon/db/runtime';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+import { runWithOptionalUserRls } from '@/lib/db/run-with-optional-user-rls';
 
 export const GET = withErrorHandling(async (_request: NextRequest) => {
-  // Optional auth - game assets are public but RLS still applies
   const authUser = await optionalAuth(_request).catch(() => null);
 
-  // Get group chats from database with RLS
-  const groupChats =
-    authUser && authUser.userId
-      ? await asUser(authUser, async (db) => {
-          return await db.chat.findMany({
-            where: {
-              isGroup: true,
-              gameId: 'continuous',
-            },
-            select: {
-              id: true,
-              name: true,
-              // Map to expected format
-            },
-          });
-        })
-      : await asPublic(async (db) => {
-          return await db.chat.findMany({
-            where: {
-              isGroup: true,
-              gameId: 'continuous',
-            },
-            select: {
-              id: true,
-              name: true,
-              // Map to expected format
-            },
-          });
-        });
+  const groupChats = await runWithOptionalUserRls(authUser, async (db) => {
+    return await db.chat.findMany({
+      where: {
+        isGroup: true,
+        gameId: 'continuous',
+      },
+      select: {
+        id: true,
+        name: true,
+      },
+    });
+  });
 
   // If you need additional game assets, store them in database or
   // have the client use /api/actors endpoint for actor/org/relationship data

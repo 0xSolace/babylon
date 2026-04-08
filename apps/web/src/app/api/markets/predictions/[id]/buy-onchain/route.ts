@@ -7,7 +7,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 
-import { db } from '@babylon/db/runtime';
+import { asUser } from '@babylon/db/engine-storage';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { createPublicClient, http } from 'viem';
@@ -47,21 +47,22 @@ export const POST = withErrorHandling(
       userId: user.userId,
     });
 
-    // Verify user owns this wallet
-    const userRecord = await db.user.findUnique({
-      where: { id: user.userId },
-      select: { walletAddress: true },
-    });
+    await asUser(user, async (db) => {
+      const userRecord = await db.user.findUnique({
+        where: { id: user.userId },
+        select: { walletAddress: true },
+      });
 
-    if (
-      !userRecord?.walletAddress ||
-      userRecord.walletAddress.toLowerCase() !== walletAddress.toLowerCase()
-    ) {
-      throw new BusinessLogicError(
-        'Wallet address mismatch',
-        'WALLET_MISMATCH'
-      );
-    }
+      if (
+        !userRecord?.walletAddress ||
+        userRecord.walletAddress.toLowerCase() !== walletAddress.toLowerCase()
+      ) {
+        throw new BusinessLogicError(
+          'Wallet address mismatch',
+          'WALLET_MISMATCH'
+        );
+      }
+    });
 
     // Verify transaction on blockchain
     const publicClient = createPublicClient({
@@ -96,43 +97,44 @@ export const POST = withErrorHandling(
       status: receipt.status,
     });
 
-    // Update database to match on-chain state
-    // Note: We trust the blockchain as source of truth
-    const existingPosition = await db.position.findFirst({
-      where: {
-        userId: user.userId,
-        marketId,
-        side: side === 'yes',
-      },
-    });
-
-    if (existingPosition) {
-      // Calculate new shares value (shares is stored as string)
-      const currentShares = Number.parseFloat(existingPosition.shares);
-      const newShares = currentShares + numShares;
-
-      await db.position.update({
-        where: { id: existingPosition.id },
-        data: {
-          shares: String(newShares),
-          updatedAt: new Date(),
-        },
-      });
-    } else {
-      await db.position.create({
-        data: {
-          id: `onchain-${txHash}`,
+    await asUser(user, async (db) => {
+      // Update database to match on-chain state
+      // Note: We trust the blockchain as source of truth
+      const existingPosition = await db.position.findFirst({
+        where: {
           userId: user.userId,
           marketId,
           side: side === 'yes',
-          shares: String(numShares),
-          avgPrice: '0.5', // Will be calculated from on-chain cost
-          amount: '0', // Track separately
-          status: 'active',
-          updatedAt: new Date(),
         },
       });
-    }
+
+      if (existingPosition) {
+        const currentShares = Number.parseFloat(existingPosition.shares);
+        const newShares = currentShares + numShares;
+
+        await db.position.update({
+          where: { id: existingPosition.id },
+          data: {
+            shares: String(newShares),
+            updatedAt: new Date(),
+          },
+        });
+      } else {
+        await db.position.create({
+          data: {
+            id: `onchain-${txHash}`,
+            userId: user.userId,
+            marketId,
+            side: side === 'yes',
+            shares: String(numShares),
+            avgPrice: '0.5', // Will be calculated from on-chain cost
+            amount: '0', // Track separately
+            status: 'active',
+            updatedAt: new Date(),
+          },
+        });
+      }
+    });
 
     logger.info('On-chain position recorded in database', {
       userId: user.userId,

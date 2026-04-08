@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 /**
  * Validate Tiered Group System Implementation
  *
@@ -12,8 +13,7 @@
  *   --verbose     Show detailed output
  */
 
-import { and, count, eq } from '@babylon/db';
-import { db, groupMembers, groups, users } from '@babylon/db/runtime';
+import { db, groupMembers, groups, users } from '@babylon/db/engine-storage';
 import {
   AlphaGroupInviteService,
   GroupChatService,
@@ -22,6 +22,7 @@ import {
   UserAlphaGroupAssignmentService,
 } from '@babylon/engine';
 import { logger } from '@babylon/shared';
+import { and, count, eq } from 'drizzle-orm';
 
 interface ValidationResult {
   name: string;

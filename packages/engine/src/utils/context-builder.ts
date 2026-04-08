@@ -12,8 +12,7 @@
  * - Relationship context
  */
 
-import { and, desc, gte, lte } from '@babylon/db';
-import { db, worldEvents } from '@babylon/db/runtime';
+import { listWorldEventsBetweenTimestampsOrderedDesc } from '@babylon/db';
 import { RelationshipEvolutionEngine } from '../RelationshipEvolutionEngine';
 import { parseStringArraySafe } from '../services/jsonb-validators';
 import { MarketContextService } from '../services/market-context-service';
@@ -137,17 +136,11 @@ export async function buildComprehensiveNPCContext(
   } else {
     const now = new Date();
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const eventList = await db
-      .select()
-      .from(worldEvents)
-      .where(
-        and(
-          gte(worldEvents.timestamp, sevenDaysAgo),
-          lte(worldEvents.timestamp, now)
-        )
-      )
-      .orderBy(desc(worldEvents.timestamp))
-      .limit(CONTEXT_LIMITS.MAX_EVENTS_RECENT);
+    const eventList = await listWorldEventsBetweenTimestampsOrderedDesc({
+      sinceInclusive: sevenDaysAgo,
+      untilInclusive: now,
+      limit: CONTEXT_LIMITS.MAX_EVENTS_RECENT,
+    });
 
     recentEvents = eventList.map((e) => ({
       type: e.eventType || 'unknown',

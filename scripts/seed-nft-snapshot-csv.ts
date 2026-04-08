@@ -14,9 +14,14 @@
  *   bun run scripts/seed-nft-snapshot-csv.ts --file "/path/to/file.csv" --dry-run
  */
 
-import { eq } from '@babylon/db';
-import { closeDatabase, db, nftSnapshot, users } from '@babylon/db/runtime';
+import {
+  closeDatabase,
+  db,
+  nftSnapshot,
+  users,
+} from '@babylon/db/engine-storage';
 import { parse } from 'csv-parse/sync';
+import { eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 
 type CliOptions = {

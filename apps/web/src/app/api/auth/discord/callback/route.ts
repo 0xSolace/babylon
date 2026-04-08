@@ -10,7 +10,7 @@
  */
 
 import { PointsService, withErrorHandling } from '@babylon/api';
-import { db } from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 
 import { getWaitlistBaseUrl, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
@@ -122,15 +122,19 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     );
   }
 
-  // Retrieve OAuth state from database
-  const oauthState = await db.oAuthState.findFirst({
-    where: {
-      state,
-      returnPath: 'discord', // Provider stored in returnPath
-      userId,
-      expiresAt: { gte: new Date() },
-    },
-  });
+  // Retrieve OAuth state from database (system: cross-table OAuth flow + dedupe)
+  const oauthState = await asSystem(
+    async (db) =>
+      db.oAuthState.findFirst({
+        where: {
+          state,
+          returnPath: 'discord', // Provider stored in returnPath
+          userId,
+          expiresAt: { gte: new Date() },
+        },
+      }),
+    'auth-discord-oauth-state'
+  );
 
   if (!oauthState) {
     logger.warn(
@@ -166,17 +170,16 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   );
 
   // Clean up OAuth state after use
-  await db.oAuthState
-    .delete({
-      where: { id: oauthState.id },
-    })
-    .catch((error: unknown) => {
-      logger.warn(
-        'Failed to delete OAuth state',
-        { error, stateId: oauthState.id },
-        'DiscordCallback'
-      );
-    });
+  await asSystem(
+    async (db) => db.oAuthState.delete({ where: { id: oauthState.id } }),
+    'auth-discord-oauth-cleanup'
+  ).catch((error: unknown) => {
+    logger.warn(
+      'Failed to delete OAuth state',
+      { error, stateId: oauthState.id },
+      'DiscordCallback'
+    );
+  });
 
   if (!tokenResponse.ok) {
     const errorData = await tokenResponse.text();
@@ -230,12 +233,16 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const discordUsername = userData.username;
 
   // Check if Discord account is already linked to another user
-  const existingLink = await db.user.findFirst({
-    where: {
-      discordId,
-      id: { not: userId },
-    },
-  });
+  const existingLink = await asSystem(
+    async (db) =>
+      db.user.findFirst({
+        where: {
+          discordId,
+          id: { not: userId },
+        },
+      }),
+    'auth-discord-dedupe'
+  );
 
   if (existingLink) {
     return NextResponse.redirect(
@@ -244,20 +251,24 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   }
 
   // Update user with Discord info
-  await db.user.update({
-    where: { id: userId },
-    data: {
-      discordId,
-      discordUsername,
-      hasDiscord: true,
-      discordAccessToken: accessToken, // Store encrypted in production
-      discordRefreshToken: tokenData.refresh_token,
-      discordTokenExpiresAt: tokenData.expires_in
-        ? new Date(Date.now() + tokenData.expires_in * 1000)
-        : null,
-      discordVerifiedAt: new Date(),
-    },
-  });
+  await asSystem(
+    async (db) =>
+      db.user.update({
+        where: { id: userId },
+        data: {
+          discordId,
+          discordUsername,
+          hasDiscord: true,
+          discordAccessToken: accessToken, // Store encrypted in production
+          discordRefreshToken: tokenData.refresh_token,
+          discordTokenExpiresAt: tokenData.expires_in
+            ? new Date(Date.now() + tokenData.expires_in * 1000)
+            : null,
+          discordVerifiedAt: new Date(),
+        },
+      }),
+    'auth-discord-link'
+  );
 
   // Award points if this is the first time linking Discord
   const pointsResult = await PointsService.awardDiscordLink(

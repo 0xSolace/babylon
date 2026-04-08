@@ -81,8 +81,8 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { eq } from '@babylon/db';
-import { asPublic, asUser, db, users } from '@babylon/db/runtime';
+import { selectManagedUsersIdAndDisplayName } from '@babylon/db';
+import { asPublic } from '@babylon/db/engine-storage';
 import { FEE_CONFIG } from '@babylon/engine/config/fees';
 import {
   logger,
@@ -92,6 +92,7 @@ import {
   UserPositionsQuerySchema,
 } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+import { runWithOptionalUserRls } from '@/lib/db/run-with-optional-user-rls';
 import { calculatePredictionPositionSnapshot } from '@/lib/wallet/predictionPositionSnapshot';
 
 /**
@@ -146,15 +147,9 @@ export const GET = withErrorHandling(
       status === 'closed' ? { in: ['closed', 'resolved'] } : undefined; // open and all: no filter (existing behavior)
 
     // Get user's agents to include their positions
-    const userAgents = await asPublic(async () => {
-      return await db
-        .select({
-          id: users.id,
-          displayName: users.displayName,
-        })
-        .from(users)
-        .where(eq(users.managedBy, canonicalUserId));
-    });
+    const userAgents = await asPublic(async (client) =>
+      selectManagedUsersIdAndDisplayName(client, canonicalUserId)
+    );
 
     const agentIds = userAgents.map((a) => a.id);
     const agentMap = new Map(userAgents.map((a) => [a.id, a.displayName]));
@@ -174,18 +169,14 @@ export const GET = withErrorHandling(
     };
 
     // Get perpetual positions from database (respecting RLS if viewer is the same user)
-    const userPerpPositions =
-      authUser && authUser.userId
-        ? await asUser(authUser, async (db) => {
-            return await db.perpPosition.findMany({
-              where: perpWhereBase,
-            });
-          })
-        : await asPublic(async (db) => {
-            return await db.perpPosition.findMany({
-              where: perpWhereBase,
-            });
-          });
+    const userPerpPositions = await runWithOptionalUserRls(
+      authUser,
+      async (dbClient) => {
+        return await dbClient.perpPosition.findMany({
+          where: perpWhereBase,
+        });
+      }
+    );
 
     // Get agent perp positions if user has agents
     const agentPerpPositions =
@@ -227,18 +218,14 @@ export const GET = withErrorHandling(
       ...(predictionStatusFilter ? { status: predictionStatusFilter } : {}),
     };
 
-    const userPredictionPositionsRaw =
-      authUser && authUser.userId
-        ? await asUser(authUser, async (db) => {
-            return await db.position.findMany({
-              where: predictionWhereBase,
-            });
-          })
-        : await asPublic(async (db) => {
-            return await db.position.findMany({
-              where: predictionWhereBase,
-            });
-          });
+    const userPredictionPositionsRaw = await runWithOptionalUserRls(
+      authUser,
+      async (dbClient) => {
+        return await dbClient.position.findMany({
+          where: predictionWhereBase,
+        });
+      }
+    );
 
     // Get agent prediction positions if user has agents
     const agentPredictionPositionsRaw =
@@ -272,39 +259,22 @@ export const GET = withErrorHandling(
     ];
     const markets =
       marketIds.length > 0
-        ? authUser && authUser.userId
-          ? await asUser(authUser, async (db) => {
-              return await db.market.findMany({
-                where: {
-                  id: { in: marketIds },
-                },
-                select: {
-                  id: true,
-                  question: true,
-                  endDate: true,
-                  resolved: true,
-                  resolution: true,
-                  yesShares: true,
-                  noShares: true,
-                },
-              });
-            })
-          : await asPublic(async (db) => {
-              return await db.market.findMany({
-                where: {
-                  id: { in: marketIds },
-                },
-                select: {
-                  id: true,
-                  question: true,
-                  endDate: true,
-                  resolved: true,
-                  resolution: true,
-                  yesShares: true,
-                  noShares: true,
-                },
-              });
-            })
+        ? await runWithOptionalUserRls(authUser, async (dbClient) => {
+            return await dbClient.market.findMany({
+              where: {
+                id: { in: marketIds },
+              },
+              select: {
+                id: true,
+                question: true,
+                endDate: true,
+                resolved: true,
+                resolution: true,
+                yesShares: true,
+                noShares: true,
+              },
+            });
+          })
         : [];
 
     const marketMap = new Map(markets.map((m) => [m.id, m]));

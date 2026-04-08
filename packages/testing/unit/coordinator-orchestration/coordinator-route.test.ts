@@ -114,8 +114,13 @@ mock.module('@babylon/db', () => ({
   eq: (_a: unknown, _b: unknown) => ({ type: 'eq' }),
 }));
 
-mock.module('@babylon/db/runtime', () => ({
-  db: { select: mockDbSelect, insert: mockDbInsert },
+const coordinatorMockDb = {
+  select: mockDbSelect,
+  insert: mockDbInsert,
+};
+
+mock.module('@babylon/db/engine-storage', () => ({
+  db: coordinatorMockDb,
   messages: {
     id: 'messages.id',
     chatId: 'messages.chatId',
@@ -126,6 +131,10 @@ mock.module('@babylon/db/runtime', () => ({
     displayName: 'users.displayName',
     username: 'users.username',
   },
+  asUser: async <T>(
+    _user: unknown,
+    op: (c: typeof coordinatorMockDb) => Promise<T>
+  ) => op(coordinatorMockDb),
 }));
 
 // @babylon/shared

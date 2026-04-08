@@ -10,8 +10,8 @@
  */
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { and, eq, gte } from '@babylon/db';
-import { db, posts } from '@babylon/db/runtime';
+import { db, posts } from '@babylon/db/engine-storage';
+import { and, eq, gte } from 'drizzle-orm';
 
 // Skip unless explicitly enabled with database running
 const SKIP = process.env.RUN_INTEGRATION_TESTS !== 'true';

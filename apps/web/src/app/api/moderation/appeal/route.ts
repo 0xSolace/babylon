@@ -78,7 +78,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import type { JsonValue } from '@babylon/db';
-import { db } from '@babylon/db/runtime';
+import { asSystem, asUser } from '@babylon/db/engine-storage';
 import { WalletService } from '@babylon/engine';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
@@ -99,19 +99,21 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   const { reason, stakeTxHash } = AppealSchema.parse(body);
 
   // Get user
-  const user = await db.user.findUnique({
-    where: { id: userId },
-    select: {
-      id: true,
-      isBanned: true,
-      appealCount: true,
-      appealStaked: true,
-      appealStatus: true,
-      bannedAt: true,
-      bannedReason: true,
-      falsePositiveHistory: true,
-    },
-  });
+  const user = await asUser(userId, async (db) =>
+    db.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        isBanned: true,
+        appealCount: true,
+        appealStaked: true,
+        appealStatus: true,
+        bannedAt: true,
+        bannedReason: true,
+        falsePositiveHistory: true,
+      },
+    })
+  );
 
   if (!user) {
     return successResponse({ success: false, error: 'User not found' }, 404);
@@ -150,18 +152,22 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   // If this is a staked appeal, verify stake or escrow payment
   if (stakeTxHash && !user.appealStaked) {
     // First check if this is an escrow payment
-    const escrow = await db.moderationEscrow.findUnique({
-      where: { paymentTxHash: stakeTxHash },
-      include: {
-        User: {
-          select: {
-            id: true,
-            appealStaked: true,
-            appealStakeTxHash: true,
+    const escrow = await asSystem(
+      async (db) =>
+        db.moderationEscrow.findUnique({
+          where: { paymentTxHash: stakeTxHash },
+          include: {
+            User: {
+              select: {
+                id: true,
+                appealStaked: true,
+                appealStakeTxHash: true,
+              },
+            },
           },
-        },
-      },
-    });
+        }),
+      'moderation-appeal-escrow'
+    );
 
     if (escrow) {
       // Validate escrow can be used for appeal
@@ -197,11 +203,15 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       }
 
       // Check if escrow was already used for an appeal by any user
-      const existingAppealWithEscrow = await db.user.findFirst({
-        where: {
-          appealStakeTxHash: stakeTxHash,
-        },
-      });
+      const existingAppealWithEscrow = await asSystem(
+        async (db) =>
+          db.user.findFirst({
+            where: {
+              appealStakeTxHash: stakeTxHash,
+            },
+          }),
+        'moderation-appeal-escrow-dedupe'
+      );
 
       if (existingAppealWithEscrow) {
         if (existingAppealWithEscrow.id === userId) {
@@ -224,14 +234,16 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       }
 
       // Use escrow payment as stake
-      await db.user.update({
-        where: { id: userId },
-        data: {
-          appealStaked: true,
-          appealStakeAmount: escrow.amountUSD.toString(),
-          appealStakeTxHash: stakeTxHash,
-        },
-      });
+      await asUser(userId, async (db) =>
+        db.user.update({
+          where: { id: userId },
+          data: {
+            appealStaked: true,
+            appealStakeAmount: escrow.amountUSD.toString(),
+            appealStakeTxHash: stakeTxHash,
+          },
+        })
+      );
     } else {
       // Verify regular stake transaction
       const verificationResult = await verifyStakeTransaction(
@@ -250,14 +262,16 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         );
       }
 
-      await db.user.update({
-        where: { id: userId },
-        data: {
-          appealStaked: true,
-          appealStakeAmount: String(verificationResult.amount || 10),
-          appealStakeTxHash: stakeTxHash,
-        },
-      });
+      await asUser(userId, async (db) =>
+        db.user.update({
+          where: { id: userId },
+          data: {
+            appealStaked: true,
+            appealStakeAmount: String(verificationResult.amount || 10),
+            appealStakeTxHash: stakeTxHash,
+          },
+        })
+      );
     }
   }
 
@@ -266,14 +280,16 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   const appealType = isStakedAppeal ? 'lenient_review' : 'strict_review';
 
   // Update user appeal status
-  await db.user.update({
-    where: { id: userId },
-    data: {
-      appealCount: user.appealCount + 1,
-      appealStatus: appealType,
-      appealSubmittedAt: new Date(),
-    },
-  });
+  await asUser(userId, async (db) =>
+    db.user.update({
+      where: { id: userId },
+      data: {
+        appealCount: user.appealCount + 1,
+        appealStatus: appealType,
+        appealSubmittedAt: new Date(),
+      },
+    })
+  );
 
   // Process appeal based on type
   if (isStakedAppeal) {
@@ -282,12 +298,14 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
     if (result.shouldDeny) {
       // Send to human review
-      await db.user.update({
-        where: { id: userId },
-        data: {
-          appealStatus: 'human_review',
-        },
-      });
+      await asUser(userId, async (db) =>
+        db.user.update({
+          where: { id: userId },
+          data: {
+            appealStatus: 'human_review',
+          },
+        })
+      );
 
       await createNotification({
         userId,
@@ -326,13 +344,15 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     });
   }
   // Denied - user must stake for second review
-  await db.user.update({
-    where: { id: userId },
-    data: {
-      appealStatus: 'denied',
-      appealReviewedAt: new Date(),
-    },
-  });
+  await asUser(userId, async (db) =>
+    db.user.update({
+      where: { id: userId },
+      data: {
+        appealStatus: 'denied',
+        appealReviewedAt: new Date(),
+      },
+    })
+  );
 
   await createNotification({
     userId,
@@ -480,45 +500,49 @@ async function collectAppealContext(
   user: { bannedReason: string | null }
 ) {
   const now = new Date();
-  const [reports, recentPosts, recentMessages] = await Promise.all([
-    db.report.findMany({
-      where: { reportedUserId: userId },
-      take: 10,
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        category: true,
-        reason: true,
-        status: true,
-        resolution: true,
-        createdAt: true,
-      },
-    }),
-    db.post.findMany({
-      where: {
-        authorId: userId,
-        deletedAt: null,
-        timestamp: { lte: now }, // ✅ No future posts - prevent information leakage
-      },
-      take: 10,
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        content: true,
-        createdAt: true,
-      },
-    }),
-    db.message.findMany({
-      where: { senderId: userId },
-      take: 20,
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        content: true,
-        createdAt: true,
-      },
-    }),
-  ]);
+  const [reports, recentPosts, recentMessages] = await asSystem(
+    async (db) =>
+      Promise.all([
+        db.report.findMany({
+          where: { reportedUserId: userId },
+          take: 10,
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            category: true,
+            reason: true,
+            status: true,
+            resolution: true,
+            createdAt: true,
+          },
+        }),
+        db.post.findMany({
+          where: {
+            authorId: userId,
+            deletedAt: null,
+            timestamp: { lte: now }, // ✅ No future posts - prevent information leakage
+          },
+          take: 10,
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            content: true,
+            createdAt: true,
+          },
+        }),
+        db.message.findMany({
+          where: { senderId: userId },
+          take: 20,
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            content: true,
+            createdAt: true,
+          },
+        }),
+      ]),
+    'moderation-appeal-context'
+  );
 
   return {
     bannedReason: user.bannedReason,
@@ -533,42 +557,49 @@ async function collectAppealContext(
  * Restore user account after successful appeal
  */
 async function restoreAccount(userId: string, reasoning: string) {
-  const user = await db.user.findUnique({
-    where: { id: userId },
-    select: { falsePositiveHistory: true },
-  });
+  const { appealStaked, appealStakeAmount } = await asSystem(async (db) => {
+    const row = await db.user.findUnique({
+      where: { id: userId },
+      select: { falsePositiveHistory: true },
+    });
 
-  const falsePositiveHistory =
-    (user?.falsePositiveHistory as Array<Record<string, unknown>> | null) || [];
-  falsePositiveHistory.push({
-    date: new Date().toISOString(),
-    reason: reasoning,
-    reviewedBy: 'ai',
-  });
+    const falsePositiveHistory =
+      (row?.falsePositiveHistory as Array<Record<string, unknown>> | null) ||
+      [];
+    falsePositiveHistory.push({
+      date: new Date().toISOString(),
+      reason: reasoning,
+      reviewedBy: 'ai',
+    });
 
-  await db.user.update({
-    where: { id: userId },
-    data: {
-      isBanned: false,
-      isScammer: false,
-      isCSAM: false,
-      bannedAt: null,
-      bannedBy: null,
-      bannedReason: null,
-      appealStatus: 'approved',
-      appealReviewedAt: new Date(),
-      falsePositiveHistory: falsePositiveHistory as JsonValue,
-    },
-  });
+    await db.user.update({
+      where: { id: userId },
+      data: {
+        isBanned: false,
+        isScammer: false,
+        isCSAM: false,
+        bannedAt: null,
+        bannedBy: null,
+        bannedReason: null,
+        appealStatus: 'approved',
+        appealReviewedAt: new Date(),
+        falsePositiveHistory: falsePositiveHistory as JsonValue,
+      },
+    });
 
-  // Refund stake if staked
-  const updatedUser = await db.user.findUnique({
-    where: { id: userId },
-    select: { appealStaked: true, appealStakeAmount: true },
-  });
+    const after = await db.user.findUnique({
+      where: { id: userId },
+      select: { appealStaked: true, appealStakeAmount: true },
+    });
 
-  if (updatedUser?.appealStaked && updatedUser.appealStakeAmount) {
-    await refundAppealStake(userId, Number(updatedUser.appealStakeAmount));
+    return {
+      appealStaked: after?.appealStaked,
+      appealStakeAmount: after?.appealStakeAmount,
+    };
+  }, 'moderation-appeal-restore');
+
+  if (appealStaked && appealStakeAmount) {
+    await refundAppealStake(userId, Number(appealStakeAmount));
   }
 
   await createNotification({
@@ -614,10 +645,12 @@ async function verifyStakeTransaction(
   }
 
   // Get user's wallet address
-  const user = await db.user.findUnique({
-    where: { id: userId },
-    select: { walletAddress: true },
-  });
+  const user = await asUser(userId, async (db) =>
+    db.user.findUnique({
+      where: { id: userId },
+      select: { walletAddress: true },
+    })
+  );
 
   if (!user?.walletAddress) {
     return { verified: false, error: 'User has no wallet address' };
@@ -690,14 +723,16 @@ async function refundAppealStake(
   );
 
   // Clear stake flags
-  await db.user.update({
-    where: { id: userId },
-    data: {
-      appealStaked: false,
-      appealStakeAmount: null,
-      appealStakeTxHash: null,
-    },
-  });
+  await asUser(userId, async (db) =>
+    db.user.update({
+      where: { id: userId },
+      data: {
+        appealStaked: false,
+        appealStakeAmount: null,
+        appealStakeTxHash: null,
+      },
+    })
+  );
 
   logger.info(
     'Appeal stake refunded',

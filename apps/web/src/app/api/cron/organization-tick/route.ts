@@ -37,8 +37,12 @@ import {
   verifyCronAuth,
   withErrorHandling,
 } from '@babylon/api';
-import { desc, eq, generateSnowflakeId, inArray } from '@babylon/db';
-import { db, games, posts } from '@babylon/db/runtime';
+import {
+  generateSnowflakeId,
+  insertOrganizationTickPost,
+  selectContinuousGameStateForCron,
+  selectRecentOrgAuthorPostsForCooldown,
+} from '@babylon/db';
 import {
   BabylonLLMClient,
   getActiveEventsForPosting,
@@ -216,19 +220,8 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
     // Check Game status from database (cached for 60s to reduce DB load)
     const gameState = await getCacheOrFetch<GameState | null>(
       'continuous-game',
-      async () => {
-        const [game] = await db
-          .select({
-            id: games.id,
-            isRunning: games.isRunning,
-            isContinuous: games.isContinuous,
-            currentDay: games.currentDay,
-          })
-          .from(games)
-          .where(eq(games.isContinuous, true))
-          .limit(1);
-        return game ?? null;
-      },
+      async () =>
+        selectContinuousGameStateForCron('organization-tick-continuous-game'),
       { namespace: 'organization-tick', ttl: 60 }
     );
 
@@ -286,15 +279,10 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
     const orgIds = allOrgs.map((o) => o.id);
 
     // Get most recent post time for each org within the cooldown window
-    const recentOrgPosts = await db
-      .select({
-        authorId: posts.authorId,
-        latestPost: posts.timestamp,
-      })
-      .from(posts)
-      .where(inArray(posts.authorId, orgIds))
-      .orderBy(desc(posts.timestamp))
-      .limit(orgIds.length * 3); // Get enough to cover recent activity
+    const recentOrgPosts = await selectRecentOrgAuthorPostsForCooldown(
+      orgIds,
+      orgIds.length * 3
+    );
 
     // Build a map of org ID -> most recent post time
     const lastPostMap = new Map<string, Date>();
@@ -458,7 +446,7 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
 
         // Create the post in database (always type: 'post', never 'article')
         const postId = await generateSnowflakeId();
-        await db.insert(posts).values({
+        await insertOrganizationTickPost({
           id: postId,
           content,
           authorId: org.id,

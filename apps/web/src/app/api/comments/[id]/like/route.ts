@@ -117,9 +117,14 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, count, eq } from '@babylon/db';
-import { comments, db, reactions } from '@babylon/db/runtime';
-
+import {
+  countLikesOnComment,
+  deleteReactionById,
+  insertCommentLikeReactionReturning,
+  selectCommentIdAuthorIdPostIdById,
+  selectCommentLikeReactionIdForUser,
+} from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import { generateSnowflakeId, IdParamSchema, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
@@ -160,95 +165,67 @@ export const POST = withErrorHandling(
     const { user: dbUser } = await ensureUserForAuth(user, { displayName });
     const canonicalUserId = dbUser.id;
 
-    // Check if comment exists
-    const [comment] = await db
-      .select({
-        id: comments.id,
-        authorId: comments.authorId,
-        postId: comments.postId,
-      })
-      .from(comments)
-      .where(eq(comments.id, commentId))
-      .limit(1);
+    return asUser(user, async (db) => {
+      const comment = await selectCommentIdAuthorIdPostIdById(db, commentId);
 
-    if (!comment) {
-      throw new NotFoundError('Comment', commentId);
-    }
+      if (!comment) {
+        throw new NotFoundError('Comment', commentId);
+      }
 
-    // Check if already liked
-    const [existingReaction] = await db
-      .select({ id: reactions.id })
-      .from(reactions)
-      .where(
-        and(
-          eq(reactions.commentId, commentId),
-          eq(reactions.userId, canonicalUserId),
-          eq(reactions.type, 'like')
-        )
-      )
-      .limit(1);
+      const existingReaction = await selectCommentLikeReactionIdForUser(db, {
+        commentId,
+        userId: canonicalUserId,
+      });
 
-    if (existingReaction) {
-      throw new BusinessLogicError('Comment already liked', 'ALREADY_LIKED');
-    }
+      if (existingReaction) {
+        throw new BusinessLogicError('Comment already liked', 'ALREADY_LIKED');
+      }
 
-    // Create like reaction
-    const reactionId = await generateSnowflakeId();
-    const [reaction] = await db
-      .insert(reactions)
-      .values({
+      const reactionId = await generateSnowflakeId();
+      const reaction = await insertCommentLikeReactionReturning(db, {
         id: reactionId,
         commentId,
         userId: canonicalUserId,
-        type: 'like',
-      })
-      .returning();
+      });
 
-    if (!reaction) {
-      throw new BusinessLogicError(
-        'Failed to create reaction',
-        'REACTION_FAILED'
-      );
-    }
+      if (!reaction) {
+        throw new BusinessLogicError(
+          'Failed to create reaction',
+          'REACTION_FAILED'
+        );
+      }
 
-    // Create notification for comment author (if not self-like)
-    if (comment.authorId && comment.authorId !== canonicalUserId) {
-      await notifyReactionOnComment(
-        comment.authorId,
-        canonicalUserId,
-        commentId,
-        comment.postId,
-        'like'
-      );
-    }
-
-    // Get updated like count
-    const [likeCountResult] = await db
-      .select({ count: count() })
-      .from(reactions)
-      .where(
-        and(eq(reactions.commentId, commentId), eq(reactions.type, 'like'))
-      );
-    const likeCount = Number(likeCountResult?.count ?? 0);
-
-    logger.info(
-      'Comment liked successfully',
-      { commentId, userId: canonicalUserId, likeCount },
-      'POST /api/comments/[id]/like'
-    );
-
-    return successResponse(
-      {
-        data: {
-          id: reaction.id,
+      if (comment.authorId && comment.authorId !== canonicalUserId) {
+        await notifyReactionOnComment(
+          comment.authorId,
+          canonicalUserId,
           commentId,
-          likeCount,
-          isLiked: true,
-          createdAt: reaction.createdAt,
+          comment.postId,
+          'like'
+        );
+      }
+
+      const likeCount = await countLikesOnComment(db, commentId);
+
+      logger.info(
+        'Comment liked successfully',
+        { commentId, userId: canonicalUserId, likeCount },
+        'POST /api/comments/[id]/like'
+      );
+
+      return successResponse(
+        {
+          data: {
+            id: reaction.id,
+            commentId,
+            likeCount,
+            isLiked: true,
+            createdAt: reaction.createdAt,
+          },
         },
-      },
-      201
-    );
+        201
+      );
+    });
   }
 );
 
@@ -279,48 +256,34 @@ export const DELETE = withErrorHandling(
     const { user: dbUser } = await ensureUserForAuth(user, { displayName });
     const canonicalUserId = dbUser.id;
 
-    // Find existing like
-    const [reaction] = await db
-      .select({ id: reactions.id })
-      .from(reactions)
-      .where(
-        and(
-          eq(reactions.commentId, commentId),
-          eq(reactions.userId, canonicalUserId),
-          eq(reactions.type, 'like')
-        )
-      )
-      .limit(1);
-
-    if (!reaction) {
-      throw new NotFoundError('Like', `${commentId}-${canonicalUserId}`);
-    }
-
-    // Delete like
-    await db.delete(reactions).where(eq(reactions.id, reaction.id));
-
-    // Get updated like count
-    const [likeCountResult] = await db
-      .select({ count: count() })
-      .from(reactions)
-      .where(
-        and(eq(reactions.commentId, commentId), eq(reactions.type, 'like'))
-      );
-    const likeCount = Number(likeCountResult?.count ?? 0);
-
-    logger.info(
-      'Comment unliked successfully',
-      { commentId, userId: canonicalUserId, likeCount },
-      'DELETE /api/comments/[id]/like'
-    );
-
-    return successResponse({
-      data: {
+    return asUser(user, async (db) => {
+      const reaction = await selectCommentLikeReactionIdForUser(db, {
         commentId,
-        likeCount,
-        isLiked: false,
-        message: 'Comment unliked successfully',
-      },
+        userId: canonicalUserId,
+      });
+
+      if (!reaction) {
+        throw new NotFoundError('Like', `${commentId}-${canonicalUserId}`);
+      }
+
+      await deleteReactionById(db, reaction.id);
+
+      const likeCount = await countLikesOnComment(db, commentId);
+
+      logger.info(
+        'Comment unliked successfully',
+        { commentId, userId: canonicalUserId, likeCount },
+        'DELETE /api/comments/[id]/like'
+      );
+
+      return successResponse({
+        data: {
+          commentId,
+          likeCount,
+          isLiked: false,
+          message: 'Comment unliked successfully',
+        },
+      });
     });
   }
 );

@@ -25,7 +25,7 @@ mock.module('@babylon/db', () => ({
   eq: mock(),
 }));
 
-mock.module('@babylon/db/runtime', () => ({
+mock.module('@babylon/db/engine-storage', () => ({
   comments: {},
   db: {},
   posts: {},

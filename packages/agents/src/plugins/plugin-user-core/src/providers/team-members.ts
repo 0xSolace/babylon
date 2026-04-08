@@ -5,8 +5,8 @@
  * Allows coordinator to know who the user's agents are and help with @mentions.
  */
 
-import { and, eq } from '@babylon/db';
-import { chatParticipants, db, users } from '@babylon/db/runtime';
+import { selectActiveTeamChatParticipantsWithUsers } from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import type {
   IAgentRuntime,
   Memory,
@@ -59,21 +59,10 @@ export const coordinatorTeamMembersProvider: Provider = {
 
     // Fetch all ACTIVE participants in the team chat
     // Fail-fast: let DB errors propagate to caller
-    const participants = await db
-      .select({
-        id: users.id,
-        displayName: users.displayName,
-        username: users.username,
-        isAgent: users.isAgent,
-      })
-      .from(chatParticipants)
-      .innerJoin(users, eq(chatParticipants.userId, users.id))
-      .where(
-        and(
-          eq(chatParticipants.chatId, teamChatId),
-          eq(chatParticipants.isActive, true)
-        )
-      );
+    const participants = await selectActiveTeamChatParticipantsWithUsers(
+      db,
+      teamChatId
+    );
 
     if (participants.length === 0) {
       return {

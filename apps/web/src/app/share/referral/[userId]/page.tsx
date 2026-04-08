@@ -4,7 +4,7 @@
  */
 
 import { getOrCreateReferralCode } from '@babylon/api';
-import { db } from '@babylon/db/runtime';
+import { asPublic } from '@babylon/db/engine-storage';
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 
@@ -28,13 +28,15 @@ export async function generateMetadata({
   const ogImageUrl = `${appUrl}/api/og/referral/${encodeURIComponent(userId)}`;
 
   // Get user data
-  const user = await db.user.findUnique({
-    where: { id: userId },
-    select: {
-      username: true,
-      displayName: true,
-    },
-  });
+  const user = await asPublic(async (db) =>
+    db.user.findUnique({
+      where: { id: userId },
+      select: {
+        username: true,
+        displayName: true,
+      },
+    })
+  );
 
   if (!user) {
     // User not found - return default metadata
@@ -90,10 +92,12 @@ export default async function ShareReferralPage({ params }: PageProps) {
   const userId = decodeURIComponent(rawUserId);
 
   // Check if user exists
-  const user = await db.user.findUnique({
-    where: { id: userId },
-    select: { id: true },
-  });
+  const user = await asPublic(async (db) =>
+    db.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    })
+  );
 
   if (!user) {
     redirect('/');

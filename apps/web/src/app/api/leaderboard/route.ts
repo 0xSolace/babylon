@@ -51,11 +51,10 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, eq, inArray } from '@babylon/db';
-import { db, follows } from '@babylon/db/runtime';
-
+import { selectFollowingIdsForFollowerInCandidateList } from '@babylon/db';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+import { runWithOptionalUserRls } from '@/lib/db/run-with-optional-user-rls';
 import { parseLeaderboardQuery } from './query';
 
 const CACHE_KEY_NAMESPACE = 'leaderboard';
@@ -150,18 +149,13 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       .map((entry) => entry.id)
       .filter((id) => id !== authUserId);
 
-    if (leaderboardUserIds.length > 0) {
-      const followedUsers = await db
-        .select({ followingId: follows.followingId })
-        .from(follows)
-        .where(
-          and(
-            eq(follows.followerId, authUserId),
-            inArray(follows.followingId, leaderboardUserIds)
-          )
-        );
-
-      followingUserIds = followedUsers.map((follow) => follow.followingId);
+    if (leaderboardUserIds.length > 0 && authUser) {
+      followingUserIds = await runWithOptionalUserRls(authUser, async (db) =>
+        selectFollowingIdsForFollowerInCandidateList(db, {
+          followerId: authUserId,
+          candidateFollowingIds: leaderboardUserIds,
+        })
+      );
     }
 
     followingUserIdsResolved = true;

@@ -68,7 +68,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 
-import { db } from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 import { StaticDataRegistry } from '@babylon/engine';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -100,22 +100,72 @@ export const GET = withErrorHandling(
     const limit = Number.parseInt(searchParams.get('limit') || '100');
     const offset = Number.parseInt(searchParams.get('offset') || '0');
 
-    // Get chat details
-    const chat = await db.chat.findUnique({
-      where: { id: chatId },
-      select: {
-        id: true,
-        name: true,
-        isGroup: true,
-        createdAt: true,
+    const { chat, totalMessages, messages, users } = await asSystem(
+      async (tx) => {
+        const chatRow = await tx.chat.findUnique({
+          where: { id: chatId },
+          select: {
+            id: true,
+            name: true,
+            isGroup: true,
+            createdAt: true,
+          },
+        });
+
+        if (!chatRow) {
+          return { chat: null, totalMessages: 0, messages: [], users: [] };
+        }
+
+        if (!chatRow.isGroup) {
+          return {
+            chat: chatRow,
+            totalMessages: 0,
+            messages: [],
+            users: [],
+          };
+        }
+
+        const [total, messageRows] = await Promise.all([
+          tx.message.count({ where: { chatId } }),
+          tx.message.findMany({
+            where: { chatId },
+            orderBy: {
+              createdAt: 'desc',
+            },
+            skip: offset,
+            take: limit,
+          }),
+        ]);
+
+        const senderIds = [...new Set(messageRows.map((m) => m.senderId))];
+        const userRows =
+          senderIds.length === 0
+            ? []
+            : await tx.user.findMany({
+                where: { id: { in: senderIds } },
+                select: {
+                  id: true,
+                  username: true,
+                  displayName: true,
+                  isActor: true,
+                  profileImageUrl: true,
+                },
+              });
+
+        return {
+          chat: chatRow,
+          totalMessages: total,
+          messages: messageRows,
+          users: userRows,
+        };
       },
-    });
+      'admin-group-messages'
+    );
 
     if (!chat) {
       return NextResponse.json({ error: 'Chat not found' }, { status: 404 });
     }
 
-    // Ensure this is a group chat, not a DM
     if (!chat.isGroup) {
       return NextResponse.json(
         { error: 'This endpoint is only for group chats' },
@@ -123,32 +173,7 @@ export const GET = withErrorHandling(
       );
     }
 
-    // Get total message count
-    const totalMessages = await db.message.count({
-      where: { chatId },
-    });
-
-    // Get messages with pagination
-    const messages = await db.message.findMany({
-      where: { chatId },
-      orderBy: {
-        createdAt: 'desc',
-      },
-      skip: offset,
-      take: limit,
-    });
-
     const senderIds = [...new Set(messages.map((m) => m.senderId))];
-    const users = await db.user.findMany({
-      where: { id: { in: senderIds } },
-      select: {
-        id: true,
-        username: true,
-        displayName: true,
-        isActor: true,
-        profileImageUrl: true,
-      },
-    });
     const actors = senderIds
       .map((id) => StaticDataRegistry.getActor(id))
       .filter((a): a is NonNullable<typeof a> => a !== null);

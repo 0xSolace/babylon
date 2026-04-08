@@ -16,22 +16,17 @@
  */
 
 import {
-  and,
-  desc,
-  eq,
+  createPostWithAllFieldsAsSystem,
+  fetchActorRelationshipBidirectional,
+  fetchQuestionByNumberForPostGenDiscourseAsSystem,
+  fetchSharedPostGenerationContextAsSystem,
   generateSnowflakeId,
-  gte,
-  isNull,
-  lte,
+  insertNpcEngagementNpcInteraction,
+  listOpenPoolPositionSlicesForPostGenNpcAsSystem,
+  listRecentNpcInteractionsBetweenActorsForPostGenAsSystem,
+  listRecentPostsByNpcAuthorsForDiscourseAsSystem,
   type Question,
 } from '@babylon/db';
-import {
-  db,
-  getDbInstance,
-  poolPositions,
-  posts,
-  worldEvents,
-} from '@babylon/db/runtime';
 import { type JsonValue, logger } from '@babylon/shared';
 import type { BabylonLLMClient } from '../llm/openai-client';
 import type { LLMJsonClient } from '../llm/types';
@@ -260,37 +255,8 @@ const MAX_POST_TOKENS = 16384; // No practical limit
 export async function loadSharedPostContext(
   asOf: Date
 ): Promise<SharedPostContext> {
-  const twelveHoursAgo = new Date(asOf.getTime() - 12 * 60 * 60 * 1000);
-  const threeDaysAgo = new Date(asOf.getTime() - 3 * 24 * 60 * 60 * 1000);
-
-  // Fetch feed posts and events in parallel - ONE query each
-  const [recentPostsRaw, recentEventsRaw] = await Promise.all([
-    db
-      .select()
-      .from(posts)
-      .where(
-        and(
-          eq(posts.type, 'post'),
-          gte(posts.timestamp, twelveHoursAgo),
-          lte(posts.timestamp, asOf),
-          isNull(posts.deletedAt)
-        )
-      )
-      .orderBy(desc(posts.timestamp))
-      .limit(50),
-    db
-      .select()
-      .from(worldEvents)
-      .where(
-        and(
-          gte(worldEvents.timestamp, threeDaysAgo),
-          lte(worldEvents.timestamp, asOf), // Don't include future events
-          eq(worldEvents.visibility, 'public')
-        )
-      )
-      .orderBy(desc(worldEvents.timestamp))
-      .limit(100),
-  ]);
+  const { recentPostsRaw, recentEventsRaw } =
+    await fetchSharedPostGenerationContextAsSystem(asOf);
 
   // Resolve author names using StaticDataRegistry (NO DB CALL!)
   const recentFeedPosts: FeedPostContext[] = recentPostsRaw.map((post) => {
@@ -469,15 +435,10 @@ ${posLines}`);
 async function getNPCPositions(
   npcId: string
 ): Promise<{ ticker: string; side: string; pnl: number }[]> {
-  const positions = await db
-    .select({
-      ticker: poolPositions.ticker,
-      side: poolPositions.side,
-      unrealizedPnL: poolPositions.unrealizedPnL,
-    })
-    .from(poolPositions)
-    .where(and(eq(poolPositions.poolId, npcId), isNull(poolPositions.closedAt)))
-    .limit(5);
+  const positions = await listOpenPoolPositionSlicesForPostGenNpcAsSystem(
+    npcId,
+    5
+  );
 
   return positions
     .filter((p) => p.ticker)
@@ -714,7 +675,7 @@ ${worldFactsContext}
     );
   }
 
-  await getDbInstance().createPostWithAllFields({
+  await createPostWithAllFieldsAsSystem({
     id: await generateSnowflakeId(),
     content: transformed.transformedText,
     authorId: actor.id,
@@ -874,7 +835,7 @@ ${worldFactsContext}
     );
   }
 
-  await getDbInstance().createPostWithAllFields({
+  await createPostWithAllFieldsAsSystem({
     id: await generateSnowflakeId(),
     content: transformed.transformedText,
     authorId: actor.id,
@@ -1027,7 +988,7 @@ ${worldFactsContext}
   const cleaned = stripHashtagsAndEmojis(postContent.trim());
   const transformed = await characterMappingService.transformText(cleaned);
 
-  await getDbInstance().createPostWithAllFields({
+  await createPostWithAllFieldsAsSystem({
     id: await generateSnowflakeId(),
     content: transformed.transformedText,
     authorId: actor.id,
@@ -1179,7 +1140,7 @@ ${worldFactsContext}
   const cleaned = stripHashtagsAndEmojis(postContent.trim());
   const transformed = await characterMappingService.transformText(cleaned);
 
-  await getDbInstance().createPostWithAllFields({
+  await createPostWithAllFieldsAsSystem({
     id: await generateSnowflakeId(),
     content: transformed.transformedText,
     authorId: actor.id,
@@ -1277,7 +1238,7 @@ ${worldFactsContext}
     );
   }
 
-  await getDbInstance().createPostWithAllFields({
+  await createPostWithAllFieldsAsSystem({
     id: await generateSnowflakeId(),
     type: 'post',
     content: transformed.transformedText,
@@ -1416,24 +1377,10 @@ export async function generateNPCRepliesFromPreviousTicks(
   // Get recent NPC posts that can be replied to
   // Include both original posts AND first-level replies (for threaded discourse)
   // Exclude deep reply chains (posts that reply to replies of replies)
-  const recentNPCPosts = await db.post.findMany({
-    where: {
-      deletedAt: null,
-      authorId: { in: actorIds },
-    },
-    orderBy: { timestamp: 'desc' },
-    take: 40,
-    select: {
-      id: true,
-      content: true,
-      authorId: true,
-      timestamp: true,
-      commentOnPostId: true,
-      originalPostId: true,
-      relatedQuestion: true,
-      type: true,
-    },
-  });
+  const recentNPCPosts = await listRecentPostsByNpcAuthorsForDiscourseAsSystem(
+    actorIds,
+    40
+  );
 
   // Filter to posts in the right time window
   // Allow replies to:
@@ -1719,20 +1666,11 @@ async function getPairRelationshipContext(
   otherActorId: string,
   otherActorName: string
 ): Promise<{ prompt: string; sentiment: number }> {
-  const relationship = await db.actorRelationship.findFirst({
-    where: {
-      OR: [
-        { actor1Id: actorId, actor2Id: otherActorId },
-        { actor1Id: otherActorId, actor2Id: actorId },
-      ],
-    },
-    select: {
-      relationshipType: true,
-      strength: true,
-      sentiment: true,
-      history: true,
-    },
-  });
+  const relationship = await fetchActorRelationshipBidirectional(
+    actorId,
+    otherActorId,
+    'post-gen-discourse-relationship'
+  );
 
   if (!relationship) {
     return {
@@ -1775,24 +1713,13 @@ async function getRecentPairInteractionsContext(
 ): Promise<string> {
   // Keep it tight: last 3 interactions in the past week (if any)
   const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-  const interactions = await db.npcInteraction.findMany({
-    where: {
-      OR: [
-        { actor1Id: actorId, actor2Id: otherActorId },
-        { actor1Id: otherActorId, actor2Id: actorId },
-      ],
-      timestamp: { gte: oneWeekAgo },
-    },
-    orderBy: { timestamp: 'desc' },
-    take: 3,
-    select: {
-      actor1Id: true,
-      actor2Id: true,
-      interactionType: true,
-      context: true,
-      timestamp: true,
-    },
-  });
+  const interactions =
+    await listRecentNpcInteractionsBetweenActorsForPostGenAsSystem(
+      actorId,
+      otherActorId,
+      oneWeekAgo,
+      3
+    );
 
   if (interactions.length === 0) return '';
 
@@ -1814,10 +1741,9 @@ async function getArcSignalGuidanceForDiscourse(
   relatedQuestionNumber: number,
   currentDay: number
 ): Promise<string> {
-  const q = await db.question.findFirst({
-    where: { questionNumber: relatedQuestionNumber },
-    select: { id: true, text: true, outcome: true },
-  });
+  const q = await fetchQuestionByNumberForPostGenDiscourseAsSystem(
+    relatedQuestionNumber
+  );
   if (!q) return '';
 
   const arcPlan = await getArcPlan(q.id);
@@ -2012,46 +1938,42 @@ Return your response as XML in this exact format:
     originalPost.originalPostId ?? // If it's a reply, use its original
     (originalPost.commentOnPostId ? originalPost.commentOnPostId : null); // If it's replying to something
   const createdPostId = await generateSnowflakeId();
-  await db.post.create({
-    data: {
-      id: createdPostId,
-      type: 'reply',
-      content: transformed.transformedText,
-      authorId: replier.id,
-      commentOnPostId: originalPost.id,
-      originalPostId: rootPostId ?? originalPost.id, // Root of the chain
-      relatedQuestion:
-        typeof originalPost.relatedQuestion === 'number'
-          ? originalPost.relatedQuestion
-          : null,
-      gameId: 'continuous',
-      dayNumber: currentDay,
-      timestamp,
-    },
+  await createPostWithAllFieldsAsSystem({
+    id: createdPostId,
+    type: 'reply',
+    content: transformed.transformedText,
+    authorId: replier.id,
+    commentOnPostId: originalPost.id,
+    originalPostId: rootPostId ?? originalPost.id,
+    relatedQuestion:
+      typeof originalPost.relatedQuestion === 'number'
+        ? originalPost.relatedQuestion
+        : undefined,
+    gameId: 'continuous',
+    dayNumber: currentDay,
+    timestamp,
   });
 
   // Record interaction for relationship evolution + future callbacks
-  await db.npcInteraction.create({
-    data: {
-      id: await generateSnowflakeId(),
-      actor1Id: replier.id,
-      actor2Id: originalPost.authorId,
-      interactionType: 'reply',
-      sentiment:
-        relationship.sentiment > 0.3
-          ? 0.4
-          : relationship.sentiment < -0.3
-            ? -0.4
-            : 0.1,
-      context: transformed.transformedText.slice(0, 280),
-      metadata: {
-        postId: createdPostId,
-        replyToPostId: originalPost.id,
-        originalPostId: rootPostId ?? originalPost.id,
-        relatedQuestion: originalPost.relatedQuestion ?? null,
-      } satisfies Record<string, JsonValue>,
-      timestamp,
-    },
+  await insertNpcEngagementNpcInteraction({
+    id: await generateSnowflakeId(),
+    actor1Id: replier.id,
+    actor2Id: originalPost.authorId,
+    interactionType: 'reply',
+    sentiment:
+      relationship.sentiment > 0.3
+        ? 0.4
+        : relationship.sentiment < -0.3
+          ? -0.4
+          : 0.1,
+    context: transformed.transformedText.slice(0, 280),
+    metadata: {
+      postId: createdPostId,
+      replyToPostId: originalPost.id,
+      originalPostId: rootPostId ?? originalPost.id,
+      relatedQuestion: originalPost.relatedQuestion ?? null,
+    } satisfies JsonValue,
+    timestamp,
   });
 
   logger.debug(
@@ -2219,43 +2141,39 @@ Return your response as XML in this exact format:
   }
 
   const createdPostId = await generateSnowflakeId();
-  await db.post.create({
-    data: {
-      id: createdPostId,
-      type: 'quote',
-      content: transformed.transformedText,
-      authorId: quoter.id,
-      originalPostId: originalPost.id, // The post being quoted
-      relatedQuestion:
-        typeof originalPost.relatedQuestion === 'number'
-          ? originalPost.relatedQuestion
-          : null,
-      gameId: 'continuous',
-      dayNumber: currentDay,
-      timestamp,
-    },
+  await createPostWithAllFieldsAsSystem({
+    id: createdPostId,
+    type: 'quote',
+    content: transformed.transformedText,
+    authorId: quoter.id,
+    originalPostId: originalPost.id,
+    relatedQuestion:
+      typeof originalPost.relatedQuestion === 'number'
+        ? originalPost.relatedQuestion
+        : undefined,
+    gameId: 'continuous',
+    dayNumber: currentDay,
+    timestamp,
   });
 
-  await db.npcInteraction.create({
-    data: {
-      id: await generateSnowflakeId(),
-      actor1Id: quoter.id,
-      actor2Id: originalPost.authorId,
-      interactionType: 'quote',
-      sentiment:
-        relationship.sentiment > 0.3
-          ? 0.35
-          : relationship.sentiment < -0.3
-            ? -0.35
-            : 0.05,
-      context: transformed.transformedText.slice(0, 280),
-      metadata: {
-        postId: createdPostId,
-        quotedPostId: originalPost.id,
-        relatedQuestion: originalPost.relatedQuestion ?? null,
-      } satisfies Record<string, JsonValue>,
-      timestamp,
-    },
+  await insertNpcEngagementNpcInteraction({
+    id: await generateSnowflakeId(),
+    actor1Id: quoter.id,
+    actor2Id: originalPost.authorId,
+    interactionType: 'quote',
+    sentiment:
+      relationship.sentiment > 0.3
+        ? 0.35
+        : relationship.sentiment < -0.3
+          ? -0.35
+          : 0.05,
+    context: transformed.transformedText.slice(0, 280),
+    metadata: {
+      postId: createdPostId,
+      quotedPostId: originalPost.id,
+      relatedQuestion: originalPost.relatedQuestion ?? null,
+    } satisfies JsonValue,
+    timestamp,
   });
 
   logger.debug(

@@ -4,8 +4,8 @@
  * Final verification of training pipeline
  */
 
-import { count, isNotNull } from '@babylon/db';
-import { db, trajectories } from '@babylon/db/runtime';
+import { db, trajectories } from '@babylon/db/engine-storage';
+import { count, isNotNull } from 'drizzle-orm';
 import { existsSync, readdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 

@@ -4,8 +4,13 @@
  * Handlers for moderation escrow payment methods via A2A protocol
  */
 
-import { and, eq, lt, type SQL, sql } from '@babylon/db';
-import { db, moderationEscrows, users } from '@babylon/db/runtime';
+import {
+  expireStalePendingModerationEscrows,
+  insertModerationEscrowReturning,
+  listModerationEscrowsAdminPage,
+  updateUserAppealStakeFromEscrow,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import { parseEther } from 'ethers';
 import { z } from 'zod';
@@ -216,25 +221,22 @@ export async function handleCreateEscrowPayment(
 
   // Create escrow record
   const expiresAt = new Date(paymentRequest.expiresAt);
-  const [escrow] = await db
-    .insert(moderationEscrows)
-    .values({
-      id: await generateSnowflakeId(),
-      recipientId: params.recipientId,
-      adminId: agentId,
-      amountUSD: params.amountUSD.toString(),
-      amountWei: amountInWei,
-      status: 'pending',
-      reason: params.reason || null,
-      paymentRequestId: paymentRequest.requestId,
-      expiresAt,
-      metadata: {
-        recipientWalletAddress: params.recipientWalletAddress,
-        adminWalletAddress: adminCheck.walletAddress,
-      },
-      updatedAt: new Date(),
-    })
-    .returning();
+  const escrow = await insertModerationEscrowReturning(db, {
+    id: await generateSnowflakeId(),
+    recipientId: params.recipientId,
+    adminId: agentId,
+    amountUSD: params.amountUSD.toString(),
+    amountWei: amountInWei,
+    status: 'pending',
+    reason: params.reason || null,
+    paymentRequestId: paymentRequest.requestId,
+    expiresAt,
+    metadata: {
+      recipientWalletAddress: params.recipientWalletAddress,
+      adminWalletAddress: adminCheck.walletAddress,
+    },
+    updatedAt: new Date(),
+  });
 
   if (!escrow) {
     throw new Error('Failed to create escrow record');
@@ -597,79 +599,12 @@ export async function handleListEscrowPayments(
 
   // Auto-expire old pending escrows before querying
   const now = new Date();
-  await db
-    .update(moderationEscrows)
-    .set({ status: 'expired', updatedAt: new Date() })
-    .where(
-      and(
-        eq(moderationEscrows.status, 'pending'),
-        lt(moderationEscrows.expiresAt, now)
-      )
-    );
+  await expireStalePendingModerationEscrows(db, now);
 
-  const whereConditions: SQL<unknown>[] = [];
-  if (params.recipientId)
-    whereConditions.push(eq(moderationEscrows.recipientId, params.recipientId));
-  if (params.adminId)
-    whereConditions.push(eq(moderationEscrows.adminId, params.adminId));
-  if (params.status)
-    whereConditions.push(eq(moderationEscrows.status, params.status));
-  const whereClause =
-    whereConditions.length > 0 ? and(...whereConditions) : undefined;
-
-  const [escrowsRaw, totalResult] = await Promise.all([
-    db.query.moderationEscrows.findMany({
-      where: whereClause
-        ? (moderationEscrows, { eq, and: andFn }) => {
-            const conditions: SQL<unknown>[] = [];
-            if (params.recipientId)
-              conditions.push(
-                eq(moderationEscrows.recipientId, params.recipientId)
-              );
-            if (params.adminId)
-              conditions.push(eq(moderationEscrows.adminId, params.adminId));
-            if (params.status)
-              conditions.push(eq(moderationEscrows.status, params.status));
-            return conditions.length > 0 ? andFn(...conditions) : undefined;
-          }
-        : undefined,
-      orderBy: (moderationEscrows, { desc: descFn }) => [
-        descFn(moderationEscrows.createdAt),
-      ],
-      limit: params.limit,
-      offset: params.offset,
-      with: {
-        recipient: {
-          columns: {
-            id: true,
-            username: true,
-            displayName: true,
-            profileImageUrl: true,
-          },
-        },
-        admin: {
-          columns: {
-            id: true,
-            username: true,
-            displayName: true,
-          },
-        },
-        refundedByUser: {
-          columns: {
-            id: true,
-            username: true,
-            displayName: true,
-          },
-        },
-      },
-    }),
-    db
-      .select({ count: sql<number>`count(*)` })
-      .from(moderationEscrows)
-      .where(whereClause),
-  ]);
-
-  const total = Number(totalResult[0]?.count ?? 0);
+  const { rows: escrowsRaw, total } = await listModerationEscrowsAdminPage(
+    db,
+    params
+  );
 
   return {
     jsonrpc: '2.0',
@@ -868,18 +803,11 @@ export async function handleAppealBanWithEscrow(
   }
 
   // Update user appeal status (using escrow as stake)
-  await db
-    .update(users)
-    .set({
-      appealCount: (user.appealCount || 0) + 1,
-      appealStaked: true,
-      appealStakeAmount: escrow.amountUSD.toString(),
-      appealStakeTxHash: params.escrowPaymentTxHash,
-      appealStatus: 'lenient_review',
-      appealSubmittedAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(eq(users.id, agentId));
+  await updateUserAppealStakeFromEscrow(db, agentId, {
+    appealCount: (user.appealCount || 0) + 1,
+    appealStakeAmount: escrow.amountUSD.toString(),
+    appealStakeTxHash: params.escrowPaymentTxHash,
+  });
 
   logger.info('A2A Ban appeal with escrow', {
     agentId,

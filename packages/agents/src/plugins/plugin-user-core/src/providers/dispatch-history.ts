@@ -17,8 +17,8 @@
  * - Avoid re-dispatching when a response already exists
  */
 
-import { and, desc, eq } from '@babylon/db';
-import { db, messages, users } from '@babylon/db/runtime';
+import { selectRecentTeamChatAgentMessagesWithSenders } from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import type {
   IAgentRuntime,
   Memory,
@@ -66,23 +66,11 @@ export const coordinatorDispatchHistoryProvider: Provider = {
 
     // Fetch recent agent messages — join on users.isAgent to avoid fetching
     // user or coordinator messages, which are covered by RECENT_MESSAGES.
-    const agentMessages = await db
-      .select({
-        id: messages.id,
-        content: messages.content,
-        createdAt: messages.createdAt,
-        senderId: messages.senderId,
-        username: users.username,
-        displayName: users.displayName,
-      })
-      .from(messages)
-      .innerJoin(
-        users,
-        and(eq(messages.senderId, users.id), eq(users.isAgent, true))
-      )
-      .where(eq(messages.chatId, teamChatId))
-      .orderBy(desc(messages.createdAt))
-      .limit(10);
+    const agentMessages = await selectRecentTeamChatAgentMessagesWithSenders(
+      db,
+      teamChatId,
+      10
+    );
 
     if (agentMessages.length === 0) {
       return {

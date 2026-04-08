@@ -22,7 +22,7 @@
  * complete implementation of all ports for offline simulation and training.
  */
 
-import { checkDatabaseHealth, closeDatabase } from '@babylon/db/runtime';
+import { checkDatabaseHealth, closeDatabase } from '@babylon/db/engine-storage';
 
 import type { ActorPort, OrganizationPort } from '../../ports/actors';
 import type { AgentPort } from '../../ports/agents';

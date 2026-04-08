@@ -5,8 +5,12 @@
  * Handles gradual rollout and rollback if needed.
  */
 
-import { eq } from '@babylon/db';
-import { db, trainedModels, users } from '@babylon/db/runtime';
+import {
+  listAgentUsersIdDisplayNameForTraining,
+  selectTrainedModelByVersion,
+  updateTrainedModelDeployedByModelId,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import { getAgentRuntimeManager } from '../dependencies';
 import { logger } from '../utils/logger';
 
@@ -35,13 +39,7 @@ export class ModelDeployer {
     });
 
     // Get model
-    const modelResult = await db
-      .select()
-      .from(trainedModels)
-      .where(eq(trainedModels.version, options.modelVersion))
-      .limit(1);
-
-    const model = modelResult[0];
+    const model = await selectTrainedModelByVersion(db, options.modelVersion);
 
     if (!model) {
       throw new Error(`Model ${options.modelVersion} not found`);
@@ -55,14 +53,11 @@ export class ModelDeployer {
     const deploymentId = `deploy-${Date.now()}`;
 
     // Update model status
-    await db
-      .update(trainedModels)
-      .set({
-        status: 'deployed',
-        deployedAt: new Date(),
-        agentsUsing: targetAgents.length,
-      })
-      .where(eq(trainedModels.modelId, model.modelId));
+    await updateTrainedModelDeployedByModelId(db, model.modelId, {
+      status: 'deployed',
+      deployedAt: new Date(),
+      agentsUsing: targetAgents.length,
+    });
 
     // Clear agent runtimes so they pick up the new model
     for (const agent of targetAgents) {
@@ -87,10 +82,7 @@ export class ModelDeployer {
    * Get target agents based on deployment strategy
    */
   private async getTargetAgents(options: DeploymentOptions) {
-    const agents = await db
-      .select({ id: users.id, displayName: users.displayName })
-      .from(users)
-      .where(eq(users.isAgent, true));
+    const agents = await listAgentUsersIdDisplayNameForTraining(db);
 
     switch (options.strategy) {
       case 'immediate':

@@ -47,7 +47,7 @@
  */
 
 import { requireAdmin, successResponse, withErrorHandling } from '@babylon/api';
-import { db } from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 
 import { logger, toISO, toISOOrNull } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
@@ -105,148 +105,152 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
     // Token usage stats (last 24h)
     llmTokenStats,
-  ] = await Promise.all([
-    // Game state
-    db.game.findFirst({
-      where: { isContinuous: true },
-      select: {
-        id: true,
-        isRunning: true,
-        currentDay: true,
-        currentDate: true,
-        startedAt: true,
-        pausedAt: true,
-        lastTickAt: true,
-        speed: true,
-      },
-    }),
+  ] = await asSystem(
+    (tx) =>
+      Promise.all([
+        // Game state
+        tx.game.findFirst({
+          where: { isContinuous: true },
+          select: {
+            id: true,
+            isRunning: true,
+            currentDay: true,
+            currentDate: true,
+            startedAt: true,
+            pausedAt: true,
+            lastTickAt: true,
+            speed: true,
+          },
+        }),
 
-    // Total counts
-    db.post.count({
-      where: { type: 'post', deletedAt: null },
-    }),
-    db.post.count({
-      where: { type: 'article', deletedAt: null },
-    }),
-    db.chat.count({
-      where: { isGroup: true },
-    }),
-    db.message.count(),
-    db.llmCallLog.count(),
+        // Total counts
+        tx.post.count({
+          where: { type: 'post', deletedAt: null },
+        }),
+        tx.post.count({
+          where: { type: 'article', deletedAt: null },
+        }),
+        tx.chat.count({
+          where: { isGroup: true },
+        }),
+        tx.message.count(),
+        tx.llmCallLog.count(),
 
-    // Last 24 hours
-    db.post.count({
-      where: {
-        type: 'post',
-        deletedAt: null,
-        createdAt: { gte: twentyFourHoursAgo },
-      },
-    }),
-    db.post.count({
-      where: {
-        type: 'article',
-        deletedAt: null,
-        createdAt: { gte: twentyFourHoursAgo },
-      },
-    }),
-    db.chat.count({
-      where: {
-        isGroup: true,
-        createdAt: { gte: twentyFourHoursAgo },
-      },
-    }),
-    db.message.count({
-      where: { createdAt: { gte: twentyFourHoursAgo } },
-    }),
-    db.llmCallLog.count({
-      where: { timestamp: { gte: twentyFourHoursAgo } },
-    }),
+        // Last 24 hours
+        tx.post.count({
+          where: {
+            type: 'post',
+            deletedAt: null,
+            createdAt: { gte: twentyFourHoursAgo },
+          },
+        }),
+        tx.post.count({
+          where: {
+            type: 'article',
+            deletedAt: null,
+            createdAt: { gte: twentyFourHoursAgo },
+          },
+        }),
+        tx.chat.count({
+          where: {
+            isGroup: true,
+            createdAt: { gte: twentyFourHoursAgo },
+          },
+        }),
+        tx.message.count({
+          where: { createdAt: { gte: twentyFourHoursAgo } },
+        }),
+        tx.llmCallLog.count({
+          where: { timestamp: { gte: twentyFourHoursAgo } },
+        }),
 
-    // Last hour
-    db.post.count({
-      where: {
-        type: 'post',
-        deletedAt: null,
-        createdAt: { gte: oneHourAgo },
-      },
-    }),
-    db.post.count({
-      where: {
-        type: 'article',
-        deletedAt: null,
-        createdAt: { gte: oneHourAgo },
-      },
-    }),
-    db.chat.count({
-      where: {
-        isGroup: true,
-        createdAt: { gte: oneHourAgo },
-      },
-    }),
-    db.message.count({
-      where: { createdAt: { gte: oneHourAgo } },
-    }),
-    db.llmCallLog.count({
-      where: { timestamp: { gte: oneHourAgo } },
-    }),
+        // Last hour
+        tx.post.count({
+          where: {
+            type: 'post',
+            deletedAt: null,
+            createdAt: { gte: oneHourAgo },
+          },
+        }),
+        tx.post.count({
+          where: {
+            type: 'article',
+            deletedAt: null,
+            createdAt: { gte: oneHourAgo },
+          },
+        }),
+        tx.chat.count({
+          where: {
+            isGroup: true,
+            createdAt: { gte: oneHourAgo },
+          },
+        }),
+        tx.message.count({
+          where: { createdAt: { gte: oneHourAgo } },
+        }),
+        tx.llmCallLog.count({
+          where: { timestamp: { gte: oneHourAgo } },
+        }),
 
-    // Last 5 minutes
-    db.post.count({
-      where: {
-        type: 'post',
-        deletedAt: null,
-        createdAt: { gte: fiveMinutesAgo },
-      },
-    }),
-    db.post.count({
-      where: {
-        type: 'article',
-        deletedAt: null,
-        createdAt: { gte: fiveMinutesAgo },
-      },
-    }),
-    db.message.count({
-      where: { createdAt: { gte: fiveMinutesAgo } },
-    }),
-    db.llmCallLog.count({
-      where: { timestamp: { gte: fiveMinutesAgo } },
-    }),
+        // Last 5 minutes
+        tx.post.count({
+          where: {
+            type: 'post',
+            deletedAt: null,
+            createdAt: { gte: fiveMinutesAgo },
+          },
+        }),
+        tx.post.count({
+          where: {
+            type: 'article',
+            deletedAt: null,
+            createdAt: { gte: fiveMinutesAgo },
+          },
+        }),
+        tx.message.count({
+          where: { createdAt: { gte: fiveMinutesAgo } },
+        }),
+        tx.llmCallLog.count({
+          where: { timestamp: { gte: fiveMinutesAgo } },
+        }),
 
-    // Last minute
-    db.post.count({
-      where: {
-        type: 'post',
-        deletedAt: null,
-        createdAt: { gte: oneMinuteAgo },
-      },
-    }),
-    db.post.count({
-      where: {
-        type: 'article',
-        deletedAt: null,
-        createdAt: { gte: oneMinuteAgo },
-      },
-    }),
-    db.message.count({
-      where: { createdAt: { gte: oneMinuteAgo } },
-    }),
-    db.llmCallLog.count({
-      where: { timestamp: { gte: oneMinuteAgo } },
-    }),
+        // Last minute
+        tx.post.count({
+          where: {
+            type: 'post',
+            deletedAt: null,
+            createdAt: { gte: oneMinuteAgo },
+          },
+        }),
+        tx.post.count({
+          where: {
+            type: 'article',
+            deletedAt: null,
+            createdAt: { gte: oneMinuteAgo },
+          },
+        }),
+        tx.message.count({
+          where: { createdAt: { gte: oneMinuteAgo } },
+        }),
+        tx.llmCallLog.count({
+          where: { timestamp: { gte: oneMinuteAgo } },
+        }),
 
-    // LLM token usage (last 24h)
-    db.llmCallLog.aggregate({
-      where: { timestamp: { gte: twentyFourHoursAgo } },
-      _sum: {
-        promptTokens: true,
-        completionTokens: true,
-        totalTokens: true,
-      },
-      _avg: {
-        latencyMs: true,
-      },
-    }),
-  ]);
+        // LLM token usage (last 24h)
+        tx.llmCallLog.aggregate({
+          where: { timestamp: { gte: twentyFourHoursAgo } },
+          _sum: {
+            promptTokens: true,
+            completionTokens: true,
+            totalTokens: true,
+          },
+          _avg: {
+            latencyMs: true,
+          },
+        }),
+      ]),
+    'admin-game-stats'
+  );
 
   if (!gameState) {
     return successResponse({

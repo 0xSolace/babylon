@@ -7,28 +7,51 @@
  */
 
 import {
-  and,
-  asc,
-  count,
-  desc,
-  eq,
-  gt,
-  gte,
-  isNull,
+  addUserVirtualBalanceAtomic,
+  countActorStatesWithHigherReputation,
+  countAgentsForManager,
+  countNonActorNonAgentUsers,
+  countTeamLeaderboardHigherThanUser,
+  countUnqualifiedReferralsWithSignupAwarded,
+  countUsersNonActor,
+  countUsersWithHigherReputationNonActor,
+  countWalletLeaderboardHigherThanUser,
+  deductUserVirtualBalanceFloored,
+  executeTeamLeaderboardPage,
+  incrementUserReferralCount,
+  incrementUserReferralCountAfterSignupAward,
+  insertBalanceTransactionRow,
+  insertPointsTransactionRow,
   type JsonValue,
-  lt,
-  ne,
-  or,
-  sql,
+  listRecentPointsTransactionsForUser,
+  markReferralSignupPointsAwarded,
+  type PointsAwardUserPatch,
+  type PointsAwardUserStateRow,
+  selectActorStatesMinReputation,
+  selectAgentTotalPointsSumForManager,
+  selectExistingBalanceTxByRelatedId,
+  selectExistingPurchaseBalanceTx,
+  selectLatestReferralIdBetweenUsers,
+  selectLeaderboardUsersAllMinReputation,
+  selectLeaderboardUsersByTotalPointsPage,
+  selectLeaderboardUsersEarnedNonZero,
+  selectLeaderboardUsersWithInvitePoints,
+  selectOldestPendingReferralWithoutSignup,
+  selectPointsAwardUserState,
+  selectReferralQualificationRow,
+  selectReferredUserSocialSlice,
+  selectUserPointsSummary,
+  selectUserPositionSlice,
+  selectUserReferralIdentity,
+  selectUserReputationAndActorFlag,
+  selectUserReputationPointsOnly,
+  selectUserVirtualBalance,
+  selectWalletLeaderboardPage,
+  updateReferralQualifiedAtNow,
+  updateReferralSignupFields,
+  updateUserPointsAwardPatch,
 } from '@babylon/db';
-import {
-  actorState,
-  balanceTransactions,
-  db,
-  pointsTransactions,
-  referrals,
-  users,
-} from '@babylon/db/runtime';
+import { db } from '@babylon/db/engine-storage';
 import { StaticDataRegistry, TotalPointsService } from '@babylon/engine';
 import {
   generateSnowflakeId,
@@ -108,32 +131,7 @@ export class PointsService {
     reason: PointsReason,
     metadata?: Record<string, JsonValue>
   ): Promise<AwardPointsResult> {
-    // Get current user state
-    const userResult = await db
-      .select({
-        reputationPoints: users.reputationPoints,
-        invitePoints: users.invitePoints,
-        earnedPoints: users.earnedPoints,
-        bonusPoints: users.bonusPoints,
-        pointsAwardedForProfile: users.pointsAwardedForProfile,
-        pointsAwardedForFarcaster: users.pointsAwardedForFarcaster,
-        pointsAwardedForFarcasterFollow: users.pointsAwardedForFarcasterFollow,
-        pointsAwardedForTwitter: users.pointsAwardedForTwitter,
-        pointsAwardedForTwitterFollow: users.pointsAwardedForTwitterFollow,
-        pointsAwardedForDiscord: users.pointsAwardedForDiscord,
-        pointsAwardedForDiscordJoin: users.pointsAwardedForDiscordJoin,
-        pointsAwardedForWallet: users.pointsAwardedForWallet,
-        pointsAwardedForReferralBonus: users.pointsAwardedForReferralBonus,
-        pointsAwardedForShare: users.pointsAwardedForShare,
-        pointsAwardedForPrivateGroup: users.pointsAwardedForPrivateGroup,
-        pointsAwardedForPrivateChannel: users.pointsAwardedForPrivateChannel,
-        pointsAwardedForTelegram: users.pointsAwardedForTelegram,
-      })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    const user = userResult[0];
+    const user = await selectPointsAwardUserState(db, userId);
 
     if (!user) {
       return {
@@ -158,25 +156,7 @@ export class PointsService {
     const pointsBefore = user.reputationPoints;
     const pointsAfter = pointsBefore + amount;
 
-    // Build update data
-    const updateData: Partial<{
-      reputationPoints: number;
-      invitePoints: number;
-      bonusPoints: number;
-      pointsAwardedForProfile: boolean;
-      pointsAwardedForFarcaster: boolean;
-      pointsAwardedForFarcasterFollow: boolean;
-      pointsAwardedForTwitter: boolean;
-      pointsAwardedForTwitterFollow: boolean;
-      pointsAwardedForDiscord: boolean;
-      pointsAwardedForDiscordJoin: boolean;
-      pointsAwardedForWallet: boolean;
-      pointsAwardedForReferralBonus: boolean;
-      pointsAwardedForShare: boolean;
-      pointsAwardedForPrivateGroup: boolean;
-      pointsAwardedForPrivateChannel: boolean;
-      pointsAwardedForTelegram: boolean;
-    }> = {
+    const updateData: PointsAwardUserPatch = {
       reputationPoints: pointsAfter,
     };
 
@@ -244,11 +224,9 @@ export class PointsService {
         break;
     }
 
-    // Execute in transaction
     await db.transaction(async (tx) => {
-      await tx.update(users).set(updateData).where(eq(users.id, userId));
-
-      await tx.insert(pointsTransactions).values({
+      await updateUserPointsAwardPatch(tx, userId, updateData);
+      await insertPointsTransactionRow(tx, {
         id: await generateSnowflakeId(),
         userId,
         amount,
@@ -461,21 +439,10 @@ export class PointsService {
     referrerId: string,
     referredUserId: string
   ): Promise<AwardPointsResult> {
-    // Count unqualified referrals with points already awarded (toward the limit)
-    // Unqualified = completed AND qualifiedAt IS NULL AND signupPointsAwarded = true
-    const [unqualifiedCountResult] = await db
-      .select({ count: count() })
-      .from(referrals)
-      .where(
-        and(
-          eq(referrals.referrerId, referrerId),
-          eq(referrals.status, 'completed'),
-          isNull(referrals.qualifiedAt),
-          eq(referrals.signupPointsAwarded, true)
-        )
-      );
-
-    const unqualifiedCount = unqualifiedCountResult?.count ?? 0;
+    const unqualifiedCount = await countUnqualifiedReferralsWithSignupAwarded(
+      db,
+      referrerId
+    );
     const shouldAwardPoints = unqualifiedCount < UNQUALIFIED_REFERRAL_LIMIT;
 
     if (!shouldAwardPoints) {
@@ -487,36 +454,10 @@ export class PointsService {
       // Don't return error - we still track the referral, just defer points
     }
 
-    // Check IP addresses and other identifiers for self-referral detection
-    const [referrerResult, referredUserResult] = await Promise.all([
-      db
-        .select({
-          registrationIpHash: users.registrationIpHash,
-          createdAt: users.createdAt,
-          walletAddress: users.walletAddress,
-          privyId: users.privyId,
-          farcasterFid: users.farcasterFid,
-          twitterId: users.twitterId,
-        })
-        .from(users)
-        .where(eq(users.id, referrerId))
-        .limit(1),
-      db
-        .select({
-          registrationIpHash: users.registrationIpHash,
-          createdAt: users.createdAt,
-          walletAddress: users.walletAddress,
-          privyId: users.privyId,
-          farcasterFid: users.farcasterFid,
-          twitterId: users.twitterId,
-        })
-        .from(users)
-        .where(eq(users.id, referredUserId))
-        .limit(1),
+    const [referrer, referredUser] = await Promise.all([
+      selectUserReferralIdentity(db, referrerId),
+      selectUserReferralIdentity(db, referredUserId),
     ]);
-
-    const referrer = referrerResult[0];
-    const referredUser = referredUserResult[0];
 
     // Check if IP addresses match (potential self-referral)
     if (referrer?.registrationIpHash && referredUser?.registrationIpHash) {
@@ -631,36 +572,21 @@ export class PointsService {
         }
       );
     } else {
-      // Points deferred - return success but with 0 points awarded
-      const userResult = await db
-        .select({ reputationPoints: users.reputationPoints })
-        .from(users)
-        .where(eq(users.id, referrerId))
-        .limit(1);
-
+      const rep = await selectUserReputationPointsOnly(db, referrerId);
       result = {
         success: true,
         pointsAwarded: 0,
-        newTotal: userResult[0]?.reputationPoints ?? 0,
+        newTotal: rep ?? 0,
       };
     }
 
-    // Find the referral record to update
-    const referralRecordResult = await db
-      .select({ id: referrals.id })
-      .from(referrals)
-      .where(
-        and(
-          eq(referrals.referrerId, referrerId),
-          eq(referrals.referredUserId, referredUserId)
-        )
-      )
-      .orderBy(desc(referrals.createdAt))
-      .limit(1);
+    const referralRecordId = await selectLatestReferralIdBetweenUsers(
+      db,
+      referrerId,
+      referredUserId
+    );
 
-    const referralRecord = referralRecordResult[0];
-
-    if (referralRecord) {
+    if (referralRecordId) {
       // Build update object
       const updateData: {
         signupPointsAwarded?: boolean;
@@ -693,21 +619,15 @@ export class PointsService {
         }
       }
 
-      await db
-        .update(referrals)
-        .set(updateData)
-        .where(eq(referrals.id, referralRecord.id));
+      await updateReferralSignupFields(db, referralRecordId, updateData);
     }
 
-    // Also increment referral count only if points were successfully awarded
     if (shouldAwardPoints && result.success) {
-      await db
-        .update(users)
-        .set({
-          referralCount: sql`${users.referralCount} + 1`,
-          lastReferralIpHash: referredUser?.registrationIpHash || null,
-        })
-        .where(eq(users.id, referrerId));
+      await incrementUserReferralCountAfterSignupAward(
+        db,
+        referrerId,
+        referredUser?.registrationIpHash ?? null
+      );
     }
 
     return result;
@@ -721,45 +641,19 @@ export class PointsService {
   static async awardPendingReferralSignupPoints(
     referrerId: string
   ): Promise<AwardPointsResult | null> {
-    // Check current unqualified count to see if there's a slot available
-    const [unqualifiedCountResult] = await db
-      .select({ count: count() })
-      .from(referrals)
-      .where(
-        and(
-          eq(referrals.referrerId, referrerId),
-          eq(referrals.status, 'completed'),
-          isNull(referrals.qualifiedAt),
-          eq(referrals.signupPointsAwarded, true)
-        )
-      );
+    const unqualifiedCount = await countUnqualifiedReferralsWithSignupAwarded(
+      db,
+      referrerId
+    );
 
-    const unqualifiedCount = unqualifiedCountResult?.count ?? 0;
-
-    // If still at or above limit, no slot available
     if (unqualifiedCount >= UNQUALIFIED_REFERRAL_LIMIT) {
       return null;
     }
 
-    // Find the oldest pending referral (FIFO) that hasn't received signup points yet
-    const pendingReferralResult = await db
-      .select({
-        id: referrals.id,
-        referredUserId: referrals.referredUserId,
-        completedAt: referrals.completedAt,
-      })
-      .from(referrals)
-      .where(
-        and(
-          eq(referrals.referrerId, referrerId),
-          eq(referrals.status, 'completed'),
-          eq(referrals.signupPointsAwarded, false)
-        )
-      )
-      .orderBy(asc(referrals.completedAt))
-      .limit(1);
-
-    const pendingReferral = pendingReferralResult[0];
+    const pendingReferral = await selectOldestPendingReferralWithoutSignup(
+      db,
+      referrerId
+    );
 
     if (!pendingReferral) {
       // No pending referrals waiting for points
@@ -779,19 +673,8 @@ export class PointsService {
     );
 
     if (result.success) {
-      // Mark this referral as having received signup points
-      await db
-        .update(referrals)
-        .set({ signupPointsAwarded: true })
-        .where(eq(referrals.id, pendingReferral.id));
-
-      // Increment referral count for deferred awards
-      await db
-        .update(users)
-        .set({
-          referralCount: sql`${users.referralCount} + 1`,
-        })
-        .where(eq(users.id, referrerId));
+      await markReferralSignupPointsAwarded(db, pendingReferral.id);
+      await incrementUserReferralCount(db, referrerId);
 
       logger.info(
         `Awarded deferred referral signup points to user ${referrerId}`,
@@ -814,49 +697,23 @@ export class PointsService {
   static async checkAndQualifyReferral(
     referredUserId: string
   ): Promise<AwardPointsResult | null> {
-    // Get user with referrer info and social account status
-    const userResult = await db
-      .select({
-        referredBy: users.referredBy,
-        hasFarcaster: users.hasFarcaster,
-        hasTwitter: users.hasTwitter,
-        walletAddress: users.walletAddress,
-      })
-      .from(users)
-      .where(eq(users.id, referredUserId))
-      .limit(1);
-
-    const user = userResult[0];
+    const user = await selectReferredUserSocialSlice(db, referredUserId);
 
     if (!user || !user.referredBy) {
       return null;
     }
 
-    // Check if user has at least one social account linked
     const hasSocialAccount =
       user.hasFarcaster || user.hasTwitter || !!user.walletAddress;
     if (!hasSocialAccount) {
       return null;
     }
 
-    // Find the referral record
-    const referralResult = await db
-      .select({
-        id: referrals.id,
-        qualifiedAt: referrals.qualifiedAt,
-      })
-      .from(referrals)
-      .where(
-        and(
-          eq(referrals.referrerId, user.referredBy),
-          eq(referrals.referredUserId, referredUserId),
-          eq(referrals.status, 'completed')
-        )
-      )
-      .orderBy(desc(referrals.completedAt))
-      .limit(1);
-
-    const referral = referralResult[0];
+    const referral = await selectReferralQualificationRow(
+      db,
+      user.referredBy,
+      referredUserId
+    );
 
     if (!referral) {
       logger.warn(
@@ -884,11 +741,7 @@ export class PointsService {
     );
 
     if (qualificationResult.success) {
-      // Update referral record to mark as qualified
-      await db
-        .update(referrals)
-        .set({ qualifiedAt: new Date() })
-        .where(eq(referrals.id, referral.id));
+      await updateReferralQualifiedAtNow(db, referral.id);
 
       logger.info(
         `Referral qualified: referrer ${user.referredBy} earned ${POINTS.REFERRAL_QUALIFIED} points for qualified referral`,
@@ -941,28 +794,14 @@ export class PointsService {
     // Fall back to session ID for crypto or when payment intent not available
     const relatedIdValue = paymentTxHash || paymentRequestId;
 
-    // Execute everything in a transaction for atomicity
     const result = await db.transaction(async (tx) => {
-      // Idempotency check: has this payment already been processed?
-      // Check both by relatedId (payment intent) and by session ID in description
-      const existingTransaction = await tx
-        .select({ id: balanceTransactions.id })
-        .from(balanceTransactions)
-        .where(
-          and(
-            eq(balanceTransactions.userId, userId),
-            eq(balanceTransactions.type, transactionType),
-            eq(balanceTransactions.relatedId, relatedIdValue)
-          )
-        )
-        .limit(1);
+      const duplicate = await selectExistingPurchaseBalanceTx(tx, {
+        userId,
+        transactionType,
+        relatedIdValue,
+      });
 
-      if (existingTransaction.length > 0) {
-        logger.info(
-          `Purchase already processed for paymentRequestId ${paymentRequestId}`,
-          { userId, paymentRequestId, paymentProvider },
-          'PointsService'
-        );
+      if (duplicate) {
         return {
           success: true,
           pointsAwarded: 0,
@@ -971,14 +810,7 @@ export class PointsService {
         };
       }
 
-      // Get current balance (inside transaction for consistency)
-      const userResult = await tx
-        .select({ virtualBalance: users.virtualBalance })
-        .from(users)
-        .where(eq(users.id, userId))
-        .limit(1);
-
-      const user = userResult[0];
+      const user = await selectUserVirtualBalance(tx, userId);
 
       if (!user) {
         return {
@@ -992,31 +824,23 @@ export class PointsService {
       const balanceBefore = Number(user.virtualBalance ?? 0);
       const balanceAfter = balanceBefore + pointsAmount;
 
-      // Atomic balance update
-      await tx
-        .update(users)
-        .set({
-          virtualBalance: sql`COALESCE(CAST("virtualBalance" AS NUMERIC), 0) + ${pointsAmount}`,
-        })
-        .where(eq(users.id, userId));
+      await addUserVirtualBalanceAtomic(tx, userId, pointsAmount);
 
-      // Record the transaction in balanceTransactions (supports decimal balances)
-      // Store paymentTxHash (payment intent ID) in relatedId for dispute/refund lookups
-      await tx.insert(balanceTransactions).values({
+      await insertBalanceTransactionRow(tx, {
         id: await generateSnowflakeId(),
         userId,
         type: transactionType,
         amount: String(pointsAmount),
         balanceBefore: String(balanceBefore),
         balanceAfter: String(balanceAfter),
-        relatedId: relatedIdValue, // Payment intent ID (for lookups) or session ID
+        relatedId: relatedIdValue,
         description: JSON.stringify({
           amountUSD,
           pointsPerDollar: 100,
           purchasedAt: new Date().toISOString(),
           paymentProvider,
-          paymentRequestId, // Session ID for reference
-          paymentTxHash, // Payment intent ID for reference
+          paymentRequestId,
+          paymentTxHash,
         }),
       });
 
@@ -1026,6 +850,14 @@ export class PointsService {
         newTotal: balanceAfter,
       };
     });
+
+    if (result.alreadyAwarded) {
+      logger.info(
+        `Purchase already processed for paymentRequestId ${paymentRequestId}`,
+        { userId, paymentRequestId, paymentProvider },
+        'PointsService'
+      );
+    }
 
     if (result.success && !result.alreadyAwarded) {
       logger.info(
@@ -1069,27 +901,22 @@ export class PointsService {
     const transactionType =
       reason === 'refund' ? 'stripe_refund' : 'stripe_dispute';
 
-    // Execute everything in a transaction for atomicity
-    const result = await db.transaction(async (tx) => {
-      // Idempotency check: has this event already been processed?
-      // Use balanceTransactions with relatedId = stripeEventId
-      const existingReversal = await tx
-        .select({ id: balanceTransactions.id })
-        .from(balanceTransactions)
-        .where(
-          and(
-            eq(balanceTransactions.userId, userId),
-            eq(balanceTransactions.relatedId, stripeEventId)
-          )
-        )
-        .limit(1);
+    const reversalLog: {
+      value: {
+        actualDeduction: number;
+        balanceBefore: number;
+        balanceAfter: number;
+      } | null;
+    } = { value: null };
 
-      if (existingReversal.length > 0) {
-        logger.info(
-          `Reversal already processed for event ${stripeEventId}`,
-          { userId, stripeEventId, reason },
-          'PointsService'
-        );
+    const result = await db.transaction(async (tx) => {
+      const duplicate = await selectExistingBalanceTxByRelatedId(
+        tx,
+        userId,
+        stripeEventId
+      );
+
+      if (duplicate) {
         return {
           success: true,
           pointsAwarded: 0,
@@ -1098,21 +925,9 @@ export class PointsService {
         };
       }
 
-      // Get current user balance (inside transaction for consistency)
-      const userResult = await tx
-        .select({ virtualBalance: users.virtualBalance })
-        .from(users)
-        .where(eq(users.id, userId))
-        .limit(1);
-
-      const user = userResult[0];
+      const user = await selectUserVirtualBalance(tx, userId);
 
       if (!user) {
-        logger.error(
-          `Cannot reverse points: user not found`,
-          { userId, paymentIntentId, reason },
-          'PointsService'
-        );
         return {
           success: false,
           pointsAwarded: 0,
@@ -1122,27 +937,19 @@ export class PointsService {
       }
 
       const balanceBefore = Number(user.virtualBalance ?? 0);
-      // Floor at 0 - we don't allow negative trading balance
       const balanceAfter = Math.max(0, balanceBefore - pointsToDeduct);
       const actualDeduction = balanceBefore - balanceAfter;
 
-      // Atomic balance update - deduct but floor at 0
-      await tx
-        .update(users)
-        .set({
-          virtualBalance: sql`GREATEST(0, COALESCE(CAST("virtualBalance" AS NUMERIC), 0) - ${pointsToDeduct})`,
-        })
-        .where(eq(users.id, userId));
+      await deductUserVirtualBalanceFloored(tx, userId, pointsToDeduct);
 
-      // Record the transaction in balanceTransactions (supports decimal balances)
-      await tx.insert(balanceTransactions).values({
+      await insertBalanceTransactionRow(tx, {
         id: await generateSnowflakeId(),
         userId,
         type: transactionType,
-        amount: String(-actualDeduction), // Negative for deduction
+        amount: String(-actualDeduction),
         balanceBefore: String(balanceBefore),
         balanceAfter: String(balanceAfter),
-        relatedId: stripeEventId, // Used for idempotency
+        relatedId: stripeEventId,
         description: JSON.stringify({
           amountUSD,
           pointsRequested: pointsToDeduct,
@@ -1153,20 +960,7 @@ export class PointsService {
         }),
       });
 
-      logger.info(
-        `Reversed ${actualDeduction} trading points from user ${userId} due to ${reason}`,
-        {
-          userId,
-          paymentIntentId,
-          reason,
-          pointsRequested: pointsToDeduct,
-          pointsDeducted: actualDeduction,
-          balanceBefore,
-          balanceAfter,
-          stripeEventId,
-        },
-        'PointsService'
-      );
+      reversalLog.value = { actualDeduction, balanceBefore, balanceAfter };
 
       return {
         success: true,
@@ -1174,6 +968,36 @@ export class PointsService {
         newTotal: balanceAfter,
       };
     });
+
+    if (result.alreadyAwarded) {
+      logger.info(
+        `Reversal already processed for event ${stripeEventId}`,
+        { userId, stripeEventId, reason },
+        'PointsService'
+      );
+    } else if (reversalLog.value) {
+      const m = reversalLog.value;
+      logger.info(
+        `Reversed ${m.actualDeduction} trading points from user ${userId} due to ${reason}`,
+        {
+          userId,
+          paymentIntentId,
+          reason,
+          pointsRequested: pointsToDeduct,
+          pointsDeducted: m.actualDeduction,
+          balanceBefore: m.balanceBefore,
+          balanceAfter: m.balanceAfter,
+          stripeEventId,
+        },
+        'PointsService'
+      );
+    } else if (!result.success && result.error === 'User not found') {
+      logger.error(
+        `Cannot reverse points: user not found`,
+        { userId, paymentIntentId, reason },
+        'PointsService'
+      );
+    }
 
     return result;
   }
@@ -1200,27 +1024,18 @@ export class PointsService {
   ): Promise<AwardPointsResult> {
     const pointsToCredit = Math.floor(amountUSD * 100);
 
-    // Execute everything in a transaction for atomicity
-    const result = await db.transaction(async (tx) => {
-      // Idempotency check: has this event already been processed?
-      // Use balanceTransactions with relatedId = stripeEventId
-      const existingCredit = await tx
-        .select({ id: balanceTransactions.id })
-        .from(balanceTransactions)
-        .where(
-          and(
-            eq(balanceTransactions.userId, userId),
-            eq(balanceTransactions.relatedId, stripeEventId)
-          )
-        )
-        .limit(1);
+    const disputeCreditLog: {
+      value: { balanceBefore: number; balanceAfter: number } | null;
+    } = { value: null };
 
-      if (existingCredit.length > 0) {
-        logger.info(
-          `Dispute win credit already processed for event ${stripeEventId}`,
-          { userId, stripeEventId, disputeId },
-          'PointsService'
-        );
+    const result = await db.transaction(async (tx) => {
+      const duplicate = await selectExistingBalanceTxByRelatedId(
+        tx,
+        userId,
+        stripeEventId
+      );
+
+      if (duplicate) {
         return {
           success: true,
           pointsAwarded: 0,
@@ -1229,21 +1044,9 @@ export class PointsService {
         };
       }
 
-      // Get current user balance (inside transaction for consistency)
-      const userResult = await tx
-        .select({ virtualBalance: users.virtualBalance })
-        .from(users)
-        .where(eq(users.id, userId))
-        .limit(1);
-
-      const user = userResult[0];
+      const user = await selectUserVirtualBalance(tx, userId);
 
       if (!user) {
-        logger.error(
-          `Cannot credit dispute win: user not found`,
-          { userId, disputeId },
-          'PointsService'
-        );
         return {
           success: false,
           pointsAwarded: 0,
@@ -1255,23 +1058,16 @@ export class PointsService {
       const balanceBefore = Number(user.virtualBalance ?? 0);
       const balanceAfter = balanceBefore + pointsToCredit;
 
-      // Atomic balance update
-      await tx
-        .update(users)
-        .set({
-          virtualBalance: sql`COALESCE(CAST("virtualBalance" AS NUMERIC), 0) + ${pointsToCredit}`,
-        })
-        .where(eq(users.id, userId));
+      await addUserVirtualBalanceAtomic(tx, userId, pointsToCredit);
 
-      // Record the transaction in balanceTransactions (supports decimal balances)
-      await tx.insert(balanceTransactions).values({
+      await insertBalanceTransactionRow(tx, {
         id: await generateSnowflakeId(),
         userId,
         type: 'stripe_dispute_won',
         amount: String(pointsToCredit),
         balanceBefore: String(balanceBefore),
         balanceAfter: String(balanceAfter),
-        relatedId: stripeEventId, // Used for idempotency
+        relatedId: stripeEventId,
         description: JSON.stringify({
           amountUSD,
           pointsCredited: pointsToCredit,
@@ -1280,18 +1076,7 @@ export class PointsService {
         }),
       });
 
-      logger.info(
-        `Re-credited ${pointsToCredit} trading points to user ${userId} after winning dispute`,
-        {
-          userId,
-          disputeId,
-          pointsCredited: pointsToCredit,
-          balanceBefore,
-          balanceAfter,
-          stripeEventId,
-        },
-        'PointsService'
-      );
+      disputeCreditLog.value = { balanceBefore, balanceAfter };
 
       return {
         success: true,
@@ -1300,6 +1085,34 @@ export class PointsService {
       };
     });
 
+    if (result.alreadyAwarded) {
+      logger.info(
+        `Dispute win credit already processed for event ${stripeEventId}`,
+        { userId, stripeEventId, disputeId },
+        'PointsService'
+      );
+    } else if (disputeCreditLog.value) {
+      const c = disputeCreditLog.value;
+      logger.info(
+        `Re-credited ${pointsToCredit} trading points to user ${userId} after winning dispute`,
+        {
+          userId,
+          disputeId,
+          pointsCredited: pointsToCredit,
+          balanceBefore: c.balanceBefore,
+          balanceAfter: c.balanceAfter,
+          stripeEventId,
+        },
+        'PointsService'
+      );
+    } else if (!result.success && result.error === 'User not found') {
+      logger.error(
+        `Cannot credit dispute win: user not found`,
+        { userId, disputeId },
+        'PointsService'
+      );
+    }
+
     return result;
   }
 
@@ -1307,19 +1120,20 @@ export class PointsService {
    * Check if points were already awarded for a specific reason
    */
   private static checkAlreadyAwarded(
-    user: {
-      pointsAwardedForProfile: boolean;
-      pointsAwardedForFarcaster: boolean;
-      pointsAwardedForFarcasterFollow: boolean;
-      pointsAwardedForTwitter: boolean;
-      pointsAwardedForTwitterFollow: boolean;
-      pointsAwardedForDiscord: boolean;
-      pointsAwardedForDiscordJoin: boolean;
-      pointsAwardedForWallet: boolean;
-      pointsAwardedForReferralBonus: boolean;
-      pointsAwardedForShare: boolean;
-      pointsAwardedForTelegram: boolean;
-    },
+    user: Pick<
+      PointsAwardUserStateRow,
+      | 'pointsAwardedForProfile'
+      | 'pointsAwardedForFarcaster'
+      | 'pointsAwardedForFarcasterFollow'
+      | 'pointsAwardedForTwitter'
+      | 'pointsAwardedForTwitterFollow'
+      | 'pointsAwardedForDiscord'
+      | 'pointsAwardedForDiscordJoin'
+      | 'pointsAwardedForWallet'
+      | 'pointsAwardedForReferralBonus'
+      | 'pointsAwardedForShare'
+      | 'pointsAwardedForTelegram'
+    >,
     reason: PointsReason
   ): boolean {
     switch (reason) {
@@ -1357,27 +1171,17 @@ export class PointsService {
    * Get user's points and transaction history
    */
   static async getUserPoints(userId: string) {
-    const userResult = await db
-      .select({
-        reputationPoints: users.reputationPoints,
-        referralCount: users.referralCount,
-      })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    const user = userResult[0];
+    const user = await selectUserPointsSummary(db, userId);
 
     if (!user) {
       return null;
     }
 
-    const transactions = await db
-      .select()
-      .from(pointsTransactions)
-      .where(eq(pointsTransactions.userId, userId))
-      .orderBy(desc(pointsTransactions.createdAt))
-      .limit(50);
+    const transactions = await listRecentPointsTransactionsForUser(
+      db,
+      userId,
+      50
+    );
 
     return {
       points: user.reputationPoints,
@@ -1397,44 +1201,18 @@ export class PointsService {
   ) {
     const skip = (page - 1) * pageSize;
 
-    // Common user select fields for leaderboard
-    const userSelectFields = {
-      id: users.id,
-      username: users.username,
-      displayName: users.displayName,
-      profileImageUrl: users.profileImageUrl,
-      reputationPoints: users.reputationPoints,
-      invitePoints: users.invitePoints,
-      earnedPoints: users.earnedPoints,
-      bonusPoints: users.bonusPoints,
-      referralCount: users.referralCount,
-      virtualBalance: users.virtualBalance,
-      lifetimePnL: users.lifetimePnL,
-      totalPoints: users.totalPoints,
-      createdAt: users.createdAt,
-      onChainRegistered: users.onChainRegistered,
-      nftTokenId: users.nftTokenId,
-    };
-
-    // Build users query based on category
-    // All modes exclude actors (isActor=false) AND agents (isAgent=false)
-    let usersResult;
+    let usersResult: Awaited<
+      ReturnType<typeof selectLeaderboardUsersAllMinReputation>
+    >;
     let totalCountForTotal: number | null = null;
     if (pointsCategory === 'total') {
-      // DB-level ordering and pagination for scalable leaderboard queries.
-      const [countResult] = await db
-        .select({ count: count() })
-        .from(users)
-        .where(and(eq(users.isActor, false), eq(users.isAgent, false)));
-      totalCountForTotal = countResult?.count ?? 0;
+      totalCountForTotal = await countNonActorNonAgentUsers(db);
 
-      usersResult = await db
-        .select(userSelectFields)
-        .from(users)
-        .where(and(eq(users.isActor, false), eq(users.isAgent, false)))
-        .orderBy(desc(users.totalPoints))
-        .limit(pageSize)
-        .offset(skip);
+      usersResult = await selectLeaderboardUsersByTotalPointsPage(
+        db,
+        skip,
+        pageSize
+      );
 
       const usersWithRank = usersResult.map((user, index) => ({
         id: user.id,
@@ -1466,38 +1244,11 @@ export class PointsService {
         pointsCategory,
       };
     } else if (pointsCategory === 'all') {
-      usersResult = await db
-        .select(userSelectFields)
-        .from(users)
-        .where(
-          and(
-            eq(users.isActor, false),
-            eq(users.isAgent, false),
-            gte(users.reputationPoints, minPoints)
-          )
-        );
+      usersResult = await selectLeaderboardUsersAllMinReputation(db, minPoints);
     } else if (pointsCategory === 'earned') {
-      usersResult = await db
-        .select(userSelectFields)
-        .from(users)
-        .where(
-          and(
-            eq(users.isActor, false),
-            eq(users.isAgent, false),
-            ne(users.earnedPoints, 0)
-          )
-        );
+      usersResult = await selectLeaderboardUsersEarnedNonZero(db);
     } else {
-      usersResult = await db
-        .select(userSelectFields)
-        .from(users)
-        .where(
-          and(
-            eq(users.isActor, false),
-            eq(users.isAgent, false),
-            gt(users.invitePoints, 0)
-          )
-        );
+      usersResult = await selectLeaderboardUsersWithInvitePoints(db);
     }
 
     const combined = [
@@ -1523,17 +1274,8 @@ export class PointsService {
     ];
 
     if (pointsCategory === 'all') {
-      // Get actor states with sufficient reputation points
-      const actorStates = await db
-        .select({
-          id: actorState.id,
-          reputationPoints: actorState.reputationPoints,
-          createdAt: actorState.createdAt,
-        })
-        .from(actorState)
-        .where(gte(actorState.reputationPoints, minPoints));
+      const actorStates = await selectActorStatesMinReputation(db, minPoints);
 
-      // Combine with static data
       combined.push(
         ...actorStates
           .map((state) => {
@@ -1618,40 +1360,20 @@ export class PointsService {
    * Get user's rank on leaderboard (including actors)
    */
   static async getUserRank(userId: string): Promise<number | null> {
-    const userResult = await db
-      .select({
-        reputationPoints: users.reputationPoints,
-        isActor: users.isActor,
-      })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    const user = userResult[0];
+    const user = await selectUserReputationAndActorFlag(db, userId);
 
     if (!user || user.isActor) {
       return null;
     }
 
-    // Count users with more points
-    const [higherUsersResult] = await db
-      .select({ count: count() })
-      .from(users)
-      .where(
-        and(
-          gt(users.reputationPoints, user.reputationPoints),
-          eq(users.isActor, false)
-        )
-      );
-
-    // Count actors with more points using actorState table
-    const [higherActorsResult] = await db
-      .select({ count: count() })
-      .from(actorState)
-      .where(gt(actorState.reputationPoints, user.reputationPoints));
-
-    const higherUsersCount = higherUsersResult?.count ?? 0;
-    const higherActorsCount = higherActorsResult?.count ?? 0;
+    const higherUsersCount = await countUsersWithHigherReputationNonActor(
+      db,
+      user.reputationPoints
+    );
+    const higherActorsCount = await countActorStatesWithHigherReputation(
+      db,
+      user.reputationPoints
+    );
 
     return higherUsersCount + higherActorsCount + 1;
   }
@@ -1662,33 +1384,8 @@ export class PointsService {
   static async getWalletLeaderboard(page = 1, pageSize = 100) {
     const skip = (page - 1) * pageSize;
 
-    const walletSelectFields = {
-      id: users.id,
-      username: users.username,
-      displayName: users.displayName,
-      profileImageUrl: users.profileImageUrl,
-      virtualBalance: users.virtualBalance,
-      lifetimePnL: users.lifetimePnL,
-      totalPoints: users.totalPoints,
-      createdAt: users.createdAt,
-      onChainRegistered: users.onChainRegistered,
-      nftTokenId: users.nftTokenId,
-      isAgent: users.isAgent,
-      managedBy: users.managedBy,
-    };
-
-    const [countResult] = await db
-      .select({ count: count() })
-      .from(users)
-      .where(eq(users.isActor, false));
-
-    const usersResult = await db
-      .select(walletSelectFields)
-      .from(users)
-      .where(eq(users.isActor, false))
-      .orderBy(desc(users.totalPoints), asc(users.createdAt), asc(users.id))
-      .limit(pageSize)
-      .offset(skip);
+    const totalCount = await countUsersNonActor(db);
+    const usersResult = await selectWalletLeaderboardPage(db, skip, pageSize);
 
     const usersWithRank = usersResult.map((user, index) => ({
       id: user.id,
@@ -1706,7 +1403,6 @@ export class PointsService {
       rank: skip + index + 1,
     }));
 
-    const totalCount = countResult?.count ?? 0;
     return {
       users: usersWithRank,
       totalCount,
@@ -1723,55 +1419,8 @@ export class PointsService {
   static async getTeamLeaderboard(page = 1, pageSize = 100) {
     const skip = (page - 1) * pageSize;
 
-    const [countResult] = await db
-      .select({ count: count() })
-      .from(users)
-      .where(and(eq(users.isActor, false), eq(users.isAgent, false)));
-
-    const teamsResult = await db.execute(sql`
-      SELECT
-        u."id",
-        u."username",
-        u."displayName",
-        u."profileImageUrl",
-        u."totalPoints"::numeric AS "userPoints",
-        u."virtualBalance"::numeric AS "balance",
-        u."lifetimePnL"::numeric AS "lifetimePnL",
-        u."onChainRegistered",
-        u."nftTokenId",
-        u."createdAt",
-        COALESCE(agents."agentPoints", 0)::numeric AS "agentPoints",
-        COALESCE(agents."agentCount", 0)::int AS "agentCount",
-        (u."totalPoints"::numeric + COALESCE(agents."agentPoints", 0))::numeric AS "teamTotalPoints"
-      FROM "User" u
-      LEFT JOIN (
-        SELECT "managedBy",
-               SUM("totalPoints"::numeric) AS "agentPoints",
-               COUNT(*)::int AS "agentCount"
-        FROM "User"
-        WHERE "isAgent" = true AND "isActor" = false
-        GROUP BY "managedBy"
-      ) agents ON agents."managedBy" = u."id"
-      WHERE u."isActor" = false AND u."isAgent" = false
-      ORDER BY "teamTotalPoints" DESC, u."createdAt" ASC, u."id" ASC
-      LIMIT ${pageSize} OFFSET ${skip}
-    `);
-
-    const rows = teamsResult as unknown as Array<{
-      id: string;
-      username: string | null;
-      displayName: string | null;
-      profileImageUrl: string | null;
-      userPoints: string;
-      balance: string;
-      lifetimePnL: string;
-      onChainRegistered: boolean;
-      nftTokenId: number | null;
-      createdAt: Date;
-      agentPoints: string;
-      agentCount: number;
-      teamTotalPoints: string;
-    }>;
+    const totalCount = await countNonActorNonAgentUsers(db);
+    const rows = await executeTeamLeaderboardPage(db, skip, pageSize);
 
     const usersWithRank = rows.map((team, index) => ({
       id: team.id,
@@ -1792,7 +1441,6 @@ export class PointsService {
       rank: skip + index + 1,
     }));
 
-    const totalCount = countResult?.count ?? 0;
     return {
       users: usersWithRank,
       totalCount,
@@ -1816,29 +1464,10 @@ export class PointsService {
     page: number;
     entry: LeaderboardEntry;
   } | null> {
-    const positionSelectFields = {
-      id: users.id,
-      username: users.username,
-      displayName: users.displayName,
-      profileImageUrl: users.profileImageUrl,
-      virtualBalance: users.virtualBalance,
-      lifetimePnL: users.lifetimePnL,
-      totalPoints: users.totalPoints,
-      createdAt: users.createdAt,
-      onChainRegistered: users.onChainRegistered,
-      nftTokenId: users.nftTokenId,
-      isAgent: users.isAgent,
-      managedBy: users.managedBy,
-    };
+    const userRow = await selectUserPositionSlice(db, userId);
 
-    const userResult = await db
-      .select(positionSelectFields)
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    if (!userResult[0]) return null;
-    const user = userResult[0];
+    if (!userRow) return null;
+    const user = userRow;
 
     const effectiveUserId =
       leaderboardType === 'team' && user.isAgent && user.managedBy
@@ -1847,40 +1476,20 @@ export class PointsService {
 
     let effectiveUser = user;
     if (effectiveUserId !== user.id) {
-      const managerResult = await db
-        .select(positionSelectFields)
-        .from(users)
-        .where(eq(users.id, effectiveUserId))
-        .limit(1);
-      if (!managerResult[0]) return null;
-      effectiveUser = managerResult[0];
+      const managerRow = await selectUserPositionSlice(db, effectiveUserId);
+      if (!managerRow) return null;
+      effectiveUser = managerRow;
     }
 
     if (leaderboardType === 'wallet') {
       const effectiveTotalPoints = effectiveUser.totalPoints ?? '0';
-      const [higherCount] = await db
-        .select({ count: count() })
-        .from(users)
-        .where(
-          and(
-            eq(users.isActor, false),
-            or(
-              gt(users.totalPoints, effectiveTotalPoints),
-              and(
-                eq(users.totalPoints, effectiveTotalPoints),
-                or(
-                  lt(users.createdAt, effectiveUser.createdAt),
-                  and(
-                    eq(users.createdAt, effectiveUser.createdAt),
-                    lt(users.id, effectiveUser.id)
-                  )
-                )
-              )
-            )
-          )
-        );
+      const higher = await countWalletLeaderboardHigherThanUser(db, {
+        effectiveTotalPoints,
+        effectiveCreatedAt: effectiveUser.createdAt,
+        effectiveUserId: effectiveUser.id,
+      });
 
-      const rank = (higherCount?.count ?? 0) + 1;
+      const rank = higher + 1;
       return {
         rank,
         page: Math.ceil(rank / pageSize),
@@ -1902,58 +1511,23 @@ export class PointsService {
       };
     }
 
-    // Team leaderboard position
-    const [agentSum] = await db
-      .select({
-        total: sql<string>`COALESCE(SUM("totalPoints"::numeric), 0)`,
-      })
-      .from(users)
-      .where(
-        and(
-          eq(users.managedBy, effectiveUserId),
-          eq(users.isAgent, true),
-          eq(users.isActor, false)
-        )
-      );
+    const agentSumTotal = await selectAgentTotalPointsSumForManager(
+      db,
+      effectiveUserId
+    );
 
     const teamTotal =
-      Number(effectiveUser.totalPoints) + Number(agentSum?.total ?? 0);
+      Number(effectiveUser.totalPoints) + Number(agentSumTotal ?? 0);
 
-    const higherResult = await db.execute(sql`
-      SELECT COUNT(*)::int AS "count" FROM (
-        SELECT u."id"
-        FROM "User" u
-        LEFT JOIN (
-          SELECT "managedBy", SUM("totalPoints"::numeric) AS "agentPoints"
-          FROM "User" WHERE "isAgent" = true AND "isActor" = false GROUP BY "managedBy"
-        ) a ON a."managedBy" = u."id"
-        WHERE u."isActor" = false AND u."isAgent" = false
-          AND (
-            (u."totalPoints"::numeric + COALESCE(a."agentPoints", 0)) > ${teamTotal}
-            OR (
-              (u."totalPoints"::numeric + COALESCE(a."agentPoints", 0)) = ${teamTotal}
-              AND (
-                u."createdAt" < ${effectiveUser.createdAt.toISOString()}
-                OR (u."createdAt" = ${effectiveUser.createdAt.toISOString()} AND u."id" < ${effectiveUserId})
-              )
-            )
-          )
-      ) higher
-    `);
+    const higherCount = await countTeamLeaderboardHigherThanUser(db, {
+      teamTotal,
+      effectiveUserCreatedAt: effectiveUser.createdAt,
+      effectiveUserId,
+    });
 
-    const higherRows = higherResult as unknown as Array<{ count: number }>;
-    const rank = (higherRows[0]?.count ?? 0) + 1;
+    const rank = higherCount + 1;
 
-    const [agentCountResult] = await db
-      .select({ count: count() })
-      .from(users)
-      .where(
-        and(
-          eq(users.managedBy, effectiveUserId),
-          eq(users.isAgent, true),
-          eq(users.isActor, false)
-        )
-      );
+    const agentCount = await countAgentsForManager(db, effectiveUserId);
 
     return {
       rank,
@@ -1966,8 +1540,8 @@ export class PointsService {
         totalPoints: Number(effectiveUser.totalPoints ?? 0),
         teamTotalPoints: teamTotal,
         userPoints: Number(effectiveUser.totalPoints ?? 0),
-        agentPoints: Number(agentSum?.total ?? 0),
-        agentCount: agentCountResult?.count ?? 0,
+        agentPoints: Number(agentSumTotal ?? 0),
+        agentCount,
         balance: Number(effectiveUser.virtualBalance ?? 0),
         lifetimePnL: Number(effectiveUser.lifetimePnL ?? 0),
         createdAt: effectiveUser.createdAt,

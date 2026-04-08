@@ -60,18 +60,11 @@
 
 import { teamChatService } from '@babylon/agents';
 import { authenticateUser, withErrorHandling } from '@babylon/api';
-import { eq, inArray } from '@babylon/db';
 import {
-  chatParticipants,
-  chats,
-  db,
-  groupMembers,
-  groups,
-  messages,
-  userAgentConfigs,
-  withTransaction,
-} from '@babylon/db/runtime';
-
+  deleteTeamChatGroupCascadeInTx,
+  selectUserAgentConfigModelTiersForUserIds,
+} from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -108,13 +101,9 @@ export const GET = withErrorHandling(async function GET(req: NextRequest) {
   const agentIds = teamChatWithMembers.agents.map((a) => a.id);
   const agentConfigs =
     agentIds.length > 0
-      ? await db
-          .select({
-            userId: userAgentConfigs.userId,
-            modelTier: userAgentConfigs.modelTier,
-          })
-          .from(userAgentConfigs)
-          .where(inArray(userAgentConfigs.userId, agentIds))
+      ? await asUser(user.id, (tx) =>
+          selectUserAgentConfigModelTiersForUserIds(tx, agentIds)
+        )
       : [];
 
   // Create a map for quick lookup
@@ -174,13 +163,9 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
   const agentIds = agents.map((a) => a.id);
   const agentConfigs =
     agentIds.length > 0
-      ? await db
-          .select({
-            userId: userAgentConfigs.userId,
-            modelTier: userAgentConfigs.modelTier,
-          })
-          .from(userAgentConfigs)
-          .where(inArray(userAgentConfigs.userId, agentIds))
+      ? await asUser(user.id, (tx) =>
+          selectUserAgentConfigModelTiersForUserIds(tx, agentIds)
+        )
       : [];
 
   // Create a map for quick lookup
@@ -261,30 +246,8 @@ export const DELETE = withErrorHandling(async function DELETE(
 
   // Delete all related data in a transaction for atomicity
   // Need to delete all chats in the group, not just the active one
-  await withTransaction(async (tx) => {
-    // Get all chats in this group
-    const allChatsInGroup = await tx
-      .select({ id: chats.id })
-      .from(chats)
-      .where(eq(chats.groupId, teamChat.groupId));
-    const chatIds = allChatsInGroup.map((c) => c.id);
-
-    if (chatIds.length > 0) {
-      // Delete messages for all chats
-      await tx.delete(messages).where(inArray(messages.chatId, chatIds));
-      // Delete participants for all chats
-      await tx
-        .delete(chatParticipants)
-        .where(inArray(chatParticipants.chatId, chatIds));
-      // Delete all chats
-      await tx.delete(chats).where(inArray(chats.id, chatIds));
-    }
-
-    // Delete group members and the group itself
-    await tx
-      .delete(groupMembers)
-      .where(eq(groupMembers.groupId, teamChat.groupId));
-    await tx.delete(groups).where(eq(groups.id, teamChat.groupId));
+  await asUser(user.id, async (tx) => {
+    await deleteTeamChatGroupCascadeInTx(tx, teamChat.groupId);
   });
 
   logger.info(

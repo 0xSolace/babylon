@@ -1,4 +1,3 @@
-// @ts-nocheck — Legacy Prisma-shaped queries on registry/all; migrate to Drizzle (see TODO in fetchUsers/fetchActors).
 /**
  * Enhanced Registry API
  *
@@ -59,14 +58,26 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { asPublic } from '@babylon/db/runtime';
+import {
+  type DrizzleClient,
+  selectActorFollowerCountRowsGroupedByFollowingId,
+  selectActorFollowingCountRowsGroupedByFollowerId,
+  selectAgentPerformanceMetricsRowsForUserIds,
+  selectAllActorStateRows,
+  selectCommentCountRowsGroupedByAuthorId,
+  selectFollowerCountRowsGroupedByFollowingId,
+  selectFollowingCountRowsGroupedByFollowerId,
+  selectNpcTradeCountRowsGroupedByNpcActorId,
+  selectPoolCountRowsGroupedByNpcActorId,
+  selectPositionCountRowsGroupedByUserId,
+  selectReactionCountRowsGroupedByUserId,
+  selectUsersForRegistryAllList,
+} from '@babylon/db';
 import { StaticDataRegistry } from '@babylon/engine';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
-
-/** @todo Port registry/all to Drizzle; `asPublic` currently receives a client still queried like Prisma. */
-// biome-ignore lint/suspicious/noExplicitAny: legacy Prisma-shaped API pending Drizzle migration
-type RegistryAllLegacyDb = any;
+import { countMap } from '@/lib/db/grouped-count-map';
+import { runWithOptionalUserRls } from '@/lib/db/run-with-optional-user-rls';
 
 function parseAgent0TokenId(agentId: string): number {
   const tokenIdPart = agentId.split(':')[1];
@@ -115,72 +126,51 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const search = searchParams.get('search') || '';
   const onChainOnly = searchParams.get('onChainOnly') === 'true';
 
-  const { error, rateLimitInfo } = await publicRateLimit(request);
+  const {
+    error,
+    rateLimitInfo,
+    user: authUser,
+  } = await publicRateLimit(request);
   if (error) return error;
 
   // Fetch users from database
   const fetchUsers = async () => {
-    // TODO(odi-refactor): Port to Drizzle — body still uses Prisma-shaped client API.
-    const dbOperation = async (db: RegistryAllLegacyDb) => {
-      const conditions: Record<string, unknown>[] = [];
-
-      if (onChainOnly) {
-        conditions.push({ onChainRegistered: true });
-      }
-
-      if (search) {
-        conditions.push({
-          OR: [
-            { username: { contains: search, mode: 'insensitive' as const } },
-            {
-              displayName: { contains: search, mode: 'insensitive' as const },
-            },
-            { bio: { contains: search, mode: 'insensitive' as const } },
-          ],
-        });
-      }
-
-      const where = conditions.length > 0 ? { AND: conditions } : {};
-
-      const users = await db.user.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        take: 100,
+    const dbOperation = async (db: DrizzleClient) => {
+      const userRows = await selectUsersForRegistryAllList(db, {
+        onChainOnly,
+        search,
+        limit: 100,
       });
 
-      // Get performance metrics for all users
-      const userIds = users.map((u) => u.id);
-      const metricsResults = await db.agentPerformanceMetrics.findMany({
-        where: { userId: { in: userIds } },
-      });
-      const metricsMap = new Map(metricsResults.map((m) => [m.userId, m]));
+      const userIds = userRows.map((u) => u.id);
+      if (userIds.length === 0) {
+        return [];
+      }
 
-      // Get counts for all users in parallel
       const [
-        positionCounts,
-        commentCounts,
-        reactionCounts,
-        followerCounts,
-        followingCounts,
+        metricsResults,
+        positionRows,
+        commentRows,
+        reactionRows,
+        followerRows,
+        followingRows,
       ] = await Promise.all([
-        Promise.all(
-          userIds.map((id) => db.position.count({ where: { userId: id } }))
-        ),
-        Promise.all(
-          userIds.map((id) => db.comment.count({ where: { authorId: id } }))
-        ),
-        Promise.all(
-          userIds.map((id) => db.reaction.count({ where: { userId: id } }))
-        ),
-        Promise.all(
-          userIds.map((id) => db.follow.count({ where: { followingId: id } }))
-        ),
-        Promise.all(
-          userIds.map((id) => db.follow.count({ where: { followerId: id } }))
-        ),
+        selectAgentPerformanceMetricsRowsForUserIds(db, userIds),
+        selectPositionCountRowsGroupedByUserId(db, userIds),
+        selectCommentCountRowsGroupedByAuthorId(db, userIds),
+        selectReactionCountRowsGroupedByUserId(db, userIds),
+        selectFollowerCountRowsGroupedByFollowingId(db, userIds),
+        selectFollowingCountRowsGroupedByFollowerId(db, userIds),
       ]);
 
-      return users.map((user, index) => {
+      const metricsMap = new Map(metricsResults.map((m) => [m.userId, m]));
+      const positionMap = countMap(positionRows, 'userId');
+      const commentMap = countMap(commentRows, 'userId');
+      const reactionMap = countMap(reactionRows, 'userId');
+      const followerMap = countMap(followerRows, 'userId');
+      const followingMap = countMap(followingRows, 'userId');
+
+      return userRows.map((user) => {
         const metrics = metricsMap.get(user.id);
         const compositeScore = metrics?.reputationScore ?? 0;
         const averageFeedbackScore = metrics?.averageFeedbackScore ?? 0;
@@ -214,21 +204,21 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           averageFeedbackScore,
           totalFeedbackCount,
           stats: {
-            positions: positionCounts[index] ?? 0,
-            comments: commentCounts[index] ?? 0,
-            reactions: reactionCounts[index] ?? 0,
-            followers: followerCounts[index] ?? 0,
-            following: followingCounts[index] ?? 0,
+            positions: positionMap.get(user.id) ?? 0,
+            comments: commentMap.get(user.id) ?? 0,
+            reactions: reactionMap.get(user.id) ?? 0,
+            followers: followerMap.get(user.id) ?? 0,
+            following: followingMap.get(user.id) ?? 0,
           },
         };
       });
     };
 
-    return await asPublic(dbOperation);
+    return await runWithOptionalUserRls(authUser, dbOperation);
   };
 
   const fetchActors = async () => {
-    const dbOperation = async (db: RegistryAllLegacyDb) => {
+    const dbOperation = async (db: DrizzleClient) => {
       // Get all static actors
       let actors = StaticDataRegistry.getAllActors();
 
@@ -243,8 +233,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         );
       }
 
-      // Get dynamic state for all actors
-      const actorStates = await db.actorState.findMany();
+      const actorStates = await selectAllActorStateRows(db);
       const stateMap = new Map(actorStates.map((s) => [s.id, s]));
 
       // Sort by reputationPoints (from state) and take top 100
@@ -258,31 +247,29 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         })
         .slice(0, 100);
 
-      // Get counts for all actors in parallel
       const actorIds = actors.map((a) => a.id);
-      const [poolCounts, tradeCounts, followerCounts, followingCounts] =
-        await Promise.all([
-          Promise.all(
-            actorIds.map((id) => db.pool.count({ where: { npcActorId: id } }))
-          ),
-          Promise.all(
-            actorIds.map((id) =>
-              db.npcTrade.count({ where: { npcActorId: id } })
-            )
-          ),
-          Promise.all(
-            actorIds.map((id) =>
-              db.actorFollow.count({ where: { followingId: id } })
-            )
-          ),
-          Promise.all(
-            actorIds.map((id) =>
-              db.actorFollow.count({ where: { followerId: id } })
-            )
-          ),
-        ]);
 
-      return actors.map((actor, index) => {
+      let poolMap = new Map<string, number>();
+      let tradeMap = new Map<string, number>();
+      let actorFollowersMap = new Map<string, number>();
+      let actorFollowingMap = new Map<string, number>();
+
+      if (actorIds.length > 0) {
+        const [poolRows, tradeRows, followersRows, followingRows] =
+          await Promise.all([
+            selectPoolCountRowsGroupedByNpcActorId(db, actorIds),
+            selectNpcTradeCountRowsGroupedByNpcActorId(db, actorIds),
+            selectActorFollowerCountRowsGroupedByFollowingId(db, actorIds),
+            selectActorFollowingCountRowsGroupedByFollowerId(db, actorIds),
+          ]);
+
+        poolMap = countMap(poolRows, 'npcActorId');
+        tradeMap = countMap(tradeRows, 'npcActorId');
+        actorFollowersMap = countMap(followersRows, 'actorId');
+        actorFollowingMap = countMap(followingRows, 'actorId');
+      }
+
+      return actors.map((actor) => {
         const state = stateMap.get(actor.id);
         return {
           type: 'actor',
@@ -298,16 +285,16 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           reputationPoints: state?.reputationPoints ?? 10000,
           createdAt: state?.createdAt ?? new Date(),
           stats: {
-            pools: poolCounts[index] ?? 0,
-            trades: tradeCounts[index] ?? 0,
-            followers: followerCounts[index] ?? 0,
-            following: followingCounts[index] ?? 0,
+            pools: poolMap.get(actor.id) ?? 0,
+            trades: tradeMap.get(actor.id) ?? 0,
+            followers: actorFollowersMap.get(actor.id) ?? 0,
+            following: actorFollowingMap.get(actor.id) ?? 0,
           },
         };
       });
     };
 
-    return await asPublic(dbOperation);
+    return await runWithOptionalUserRls(authUser, dbOperation);
   };
 
   const fetchAgents = async () => {

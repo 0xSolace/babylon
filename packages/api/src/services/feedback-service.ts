@@ -6,7 +6,7 @@
  */
 
 import { type JsonValue } from '@babylon/db';
-import { db } from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 import {
   type FeedbackType,
   GameFeedbackSchema,
@@ -83,20 +83,24 @@ export async function createGameFeedback(
     rating: parsed.rating ?? null,
   };
 
-  const feedback = await db.feedback.create({
-    data: {
-      id: await generateSnowflakeId(),
-      fromUserId: userId,
-      toUserId: null,
-      score: calculateFeedbackScore(parsed.rating),
-      comment: parsed.description,
-      category: FEEDBACK_CATEGORY_MAP[parsed.feedbackType],
-      interactionType: 'general_game_feedback',
-      metadata,
-      createdAt: now,
-      updatedAt: now,
-    },
-  });
+  const feedback = await asSystem(
+    async (c) =>
+      c.feedback.create({
+        data: {
+          id: await generateSnowflakeId(),
+          fromUserId: userId,
+          toUserId: null,
+          score: calculateFeedbackScore(parsed.rating),
+          comment: parsed.description,
+          category: FEEDBACK_CATEGORY_MAP[parsed.feedbackType],
+          interactionType: 'general_game_feedback',
+          metadata,
+          createdAt: now,
+          updatedAt: now,
+        },
+      }),
+    'feedback-service-create-game-feedback'
+  );
 
   logger.info('Game feedback submitted', {
     feedbackId: feedback.id,

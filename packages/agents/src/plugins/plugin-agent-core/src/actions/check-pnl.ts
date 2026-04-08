@@ -4,15 +4,13 @@
  * Returns the agent's balance, P&L, open positions (with IDs), and recent trades.
  */
 
-import { and, desc, eq, isNull } from '@babylon/db';
 import {
-  agentTrades,
-  db,
-  markets,
-  perpPositions,
-  positions,
-  users,
-} from '@babylon/db/runtime';
+  selectActivePredictionPositionsWithMarketForUser,
+  selectOpenPerpPositionsForUser,
+  selectRecentAgentTradesWithMarketQuestion,
+  selectUserDisplayNameLifetimePnl,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import { calculatePortfolioBreakdown, WalletService } from '@babylon/engine';
 import type { MessageTag } from '@babylon/shared';
 import type {
@@ -86,15 +84,7 @@ export const checkPnlAction: Action = {
     const agentId = runtime.agentId;
 
     try {
-      // Get agent info
-      const [agent] = await db
-        .select({
-          displayName: users.displayName,
-          lifetimePnL: users.lifetimePnL,
-        })
-        .from(users)
-        .where(eq(users.id, agentId))
-        .limit(1);
+      const agent = await selectUserDisplayNameLifetimePnl(db, agentId);
 
       // Get portfolio breakdown for accurate P&L (same as profile page)
       const portfolio = await calculatePortfolioBreakdown(agentId);
@@ -116,51 +106,19 @@ export const checkPnlAction: Action = {
       const positionsValue = portfolio?.positions ?? 0;
       const available = portfolio?.available ?? balance;
 
-      // Get active prediction positions with market details
-      const predictionPositions = await db
-        .select({
-          id: positions.id,
-          marketId: positions.marketId,
-          side: positions.side,
-          shares: positions.shares,
-          avgPrice: positions.avgPrice,
-          amount: positions.amount,
-          question: markets.question,
-          yesShares: markets.yesShares,
-          noShares: markets.noShares,
-        })
-        .from(positions)
-        .leftJoin(markets, eq(positions.marketId, markets.id))
-        .where(
-          and(eq(positions.userId, agentId), eq(positions.status, 'active'))
-        );
+      const predictionPositions =
+        await selectActivePredictionPositionsWithMarketForUser(db, agentId);
 
-      // Get active perp positions
-      const perpPositionsList = await db
-        .select()
-        .from(perpPositions)
-        .where(
-          and(eq(perpPositions.userId, agentId), isNull(perpPositions.closedAt))
-        );
+      const perpPositionsList = await selectOpenPerpPositionsForUser(
+        db,
+        agentId
+      );
 
-      // Get recent trades with market details for predictions
-      const recentTrades = await db
-        .select({
-          action: agentTrades.action,
-          marketType: agentTrades.marketType,
-          ticker: agentTrades.ticker,
-          marketId: agentTrades.marketId,
-          amount: agentTrades.amount,
-          pnl: agentTrades.pnl,
-          executedAt: agentTrades.executedAt,
-          // Join with markets to get question for prediction trades
-          marketQuestion: markets.question,
-        })
-        .from(agentTrades)
-        .leftJoin(markets, eq(agentTrades.marketId, markets.id))
-        .where(eq(agentTrades.agentUserId, agentId))
-        .orderBy(desc(agentTrades.executedAt))
-        .limit(5);
+      const recentTrades = await selectRecentAgentTradesWithMarketQuestion(
+        db,
+        agentId,
+        5
+      );
 
       const totalPositions =
         predictionPositions.length + perpPositionsList.length;

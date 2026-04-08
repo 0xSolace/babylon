@@ -78,9 +78,14 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, eq, ne } from '@babylon/db';
-import { db, users } from '@babylon/db/runtime';
-
+import {
+  selectUserIdByFarcasterUsernameExcludingUserId,
+  selectUserIdByTwitterUsernameExcludingUserId,
+  selectUserIdByWalletAddress,
+  selectUserLinkSocialStateById,
+  updateUserLinkSocialPatchById,
+} from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import { logger, UserIdParamSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
@@ -129,108 +134,88 @@ export const POST = withErrorHandling(
     const body = await request.json();
     const { platform, username, address } = LinkSocialRequestSchema.parse(body);
 
-    // Get current user state
-    const [user] = await db
-      .select({
-        hasFarcaster: users.hasFarcaster,
-        hasTwitter: users.hasTwitter,
-        walletAddress: users.walletAddress,
-        farcasterFid: users.farcasterFid,
-        twitterId: users.twitterId,
-      })
-      .from(users)
-      .where(eq(users.id, canonicalUserId))
-      .limit(1);
+    const { alreadyLinked } = await asUser(authUser, async (db) => {
+      const user = await selectUserLinkSocialStateById(db, canonicalUserId);
 
-    if (!user) {
-      throw new NotFoundError('User', canonicalUserId);
-    }
-
-    // Check if already linked
-    let alreadyLinked = false;
-    switch (platform) {
-      case 'farcaster':
-        alreadyLinked = user.hasFarcaster;
-        // Check if Farcaster username is already linked to another user
-        if (username && !alreadyLinked) {
-          const [existingFarcasterUser] = await db
-            .select({ id: users.id })
-            .from(users)
-            .where(
-              and(
-                eq(users.farcasterUsername, username),
-                ne(users.id, canonicalUserId)
-              )
-            )
-            .limit(1);
-          if (existingFarcasterUser) {
-            throw new ConflictError(
-              'Farcaster account already linked to another user',
-              'User.farcasterUsername'
-            );
-          }
-        }
-        break;
-      case 'twitter':
-        alreadyLinked = user.hasTwitter;
-        // Check if Twitter account is already linked to another user
-        if (username && !alreadyLinked) {
-          const [existingTwitterUser] = await db
-            .select({ id: users.id })
-            .from(users)
-            .where(
-              and(
-                eq(users.twitterUsername, username),
-                ne(users.id, canonicalUserId)
-              )
-            )
-            .limit(1);
-          if (existingTwitterUser) {
-            throw new ConflictError(
-              'Twitter account already linked to another user',
-              'User.twitterUsername'
-            );
-          }
-        }
-        break;
-      case 'wallet':
-        alreadyLinked = !!user.walletAddress;
-        break;
-    }
-
-    // Check if wallet address is already in use by another user
-    if (platform === 'wallet' && address) {
-      const [existingWalletUser] = await db
-        .select({ id: users.id })
-        .from(users)
-        .where(eq(users.walletAddress, address.toLowerCase()))
-        .limit(1);
-
-      if (existingWalletUser && existingWalletUser.id !== canonicalUserId) {
-        throw new ConflictError(
-          'Wallet address already linked to another account',
-          'User.walletAddress'
-        );
+      if (!user) {
+        throw new NotFoundError('User', canonicalUserId);
       }
-    }
 
-    // Update user with social connection
-    const updateData: Partial<typeof users.$inferInsert> = {};
-    switch (platform) {
-      case 'farcaster':
-        updateData.hasFarcaster = true;
-        if (username) updateData.farcasterUsername = username;
-        break;
-      case 'twitter':
-        updateData.hasTwitter = true;
-        if (username) updateData.twitterUsername = username;
-        break;
-      case 'wallet':
-        if (address) updateData.walletAddress = address.toLowerCase();
-        break;
-    }
+      let alreadyLinked = false;
+      switch (platform) {
+        case 'farcaster':
+          alreadyLinked = user.hasFarcaster;
+          if (username && !alreadyLinked) {
+            const existingFarcasterUser =
+              await selectUserIdByFarcasterUsernameExcludingUserId(
+                db,
+                username,
+                canonicalUserId
+              );
+            if (existingFarcasterUser) {
+              throw new ConflictError(
+                'Farcaster account already linked to another user',
+                'User.farcasterUsername'
+              );
+            }
+          }
+          break;
+        case 'twitter':
+          alreadyLinked = user.hasTwitter;
+          if (username && !alreadyLinked) {
+            const existingTwitterUser =
+              await selectUserIdByTwitterUsernameExcludingUserId(
+                db,
+                username,
+                canonicalUserId
+              );
+            if (existingTwitterUser) {
+              throw new ConflictError(
+                'Twitter account already linked to another user',
+                'User.twitterUsername'
+              );
+            }
+          }
+          break;
+        case 'wallet':
+          alreadyLinked = !!user.walletAddress;
+          break;
+      }
 
-    await db.update(users).set(updateData).where(eq(users.id, canonicalUserId));
+      if (platform === 'wallet' && address) {
+        const existingWalletUser = await selectUserIdByWalletAddress(
+          db,
+          address.toLowerCase()
+        );
+
+        if (existingWalletUser && existingWalletUser.id !== canonicalUserId) {
+          throw new ConflictError(
+            'Wallet address already linked to another account',
+            'User.walletAddress'
+          );
+        }
+      }
+
+      const updateData: Parameters<typeof updateUserLinkSocialPatchById>[2] =
+        {};
+      switch (platform) {
+        case 'farcaster':
+          updateData.hasFarcaster = true;
+          if (username) updateData.farcasterUsername = username;
+          break;
+        case 'twitter':
+          updateData.hasTwitter = true;
+          if (username) updateData.twitterUsername = username;
+          break;
+        case 'wallet':
+          if (address) updateData.walletAddress = address.toLowerCase();
+          break;
+      }
+
+      await updateUserLinkSocialPatchById(db, canonicalUserId, updateData);
+
+      return { alreadyLinked };
+    });
 
     // Award points if not already linked
     let pointsResult;

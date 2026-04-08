@@ -63,12 +63,14 @@
 
 import {
   authenticate,
+  BusinessLogicError,
   cachedDb,
   createNotification,
+  NotFoundError,
   withErrorHandling,
 } from '@babylon/api';
 
-import { db } from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -122,73 +124,68 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     );
   }
 
-  // Verify sender and recipient exist
-  const [sender, recipient] = await Promise.all([
-    db.user.findUnique({
-      where: { id: senderId },
-      select: {
-        id: true,
-        reputationPoints: true,
-        displayName: true,
-        username: true,
-      },
-    }),
-    db.user.findUnique({
-      where: { id: recipientId },
-      select: {
-        id: true,
-        reputationPoints: true,
-        displayName: true,
-        username: true,
-      },
-    }),
-  ]);
+  const { sender, recipient, result } = await asSystem(async (db) => {
+    const [senderRow, recipientRow] = await Promise.all([
+      db.user.findUnique({
+        where: { id: senderId },
+        select: {
+          id: true,
+          reputationPoints: true,
+          displayName: true,
+          username: true,
+        },
+      }),
+      db.user.findUnique({
+        where: { id: recipientId },
+        select: {
+          id: true,
+          reputationPoints: true,
+          displayName: true,
+          username: true,
+        },
+      }),
+    ]);
 
-  if (!sender) {
-    return NextResponse.json({ error: 'Sender not found' }, { status: 404 });
-  }
+    if (!senderRow) {
+      throw new NotFoundError('Sender');
+    }
+    if (!recipientRow) {
+      throw new NotFoundError('Recipient');
+    }
 
-  if (!recipient) {
-    return NextResponse.json({ error: 'Recipient not found' }, { status: 404 });
-  }
+    if (senderRow.reputationPoints < amount) {
+      throw new BusinessLogicError(
+        `Insufficient points. You have ${senderRow.reputationPoints} points, but tried to send ${amount} points.`,
+        'INSUFFICIENT_POINTS',
+        {
+          details: {
+            available: senderRow.reputationPoints,
+            requested: amount,
+          },
+        }
+      );
+    }
 
-  // Check if sender has enough points
-  if (sender.reputationPoints < amount) {
-    return NextResponse.json(
-      {
-        error: `Insufficient points. You have ${sender.reputationPoints} points, but tried to send ${amount} points.`,
-        available: sender.reputationPoints,
-        requested: amount,
-      },
-      { status: 400 }
-    );
-  }
+    const senderPointsBefore = senderRow.reputationPoints;
+    const recipientPointsBefore = recipientRow.reputationPoints;
+    const senderCurrentPoints = Number(senderRow.reputationPoints);
+    const recipientCurrentPoints = Number(recipientRow.reputationPoints);
 
-  // Perform the transfer in a transaction
-  const result = await db.$transaction(async (tx) => {
-    const senderPointsBefore = sender.reputationPoints;
-    const recipientPointsBefore = recipient.reputationPoints;
-
-    // Deduct from sender
-    const senderCurrentPoints = Number(sender.reputationPoints);
-    const updatedSender = await tx.user.update({
+    const updatedSender = await db.user.update({
       where: { id: senderId },
       data: {
         reputationPoints: senderCurrentPoints - amount,
       },
     });
 
-    // Add to recipient
-    const recipientCurrentPoints = Number(recipient.reputationPoints);
-    const updatedRecipient = await tx.user.update({
+    const updatedRecipient = await db.user.update({
       where: { id: recipientId },
       data: {
         reputationPoints: recipientCurrentPoints + amount,
       },
     });
 
-    // Create transaction record for sender (negative)
-    await tx.pointsTransaction.create({
+    await db.pointsTransaction.create({
       data: {
         id: await generateSnowflakeId(),
         userId: senderId,
@@ -198,14 +195,13 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         reason: 'transfer_sent',
         metadata: JSON.stringify({
           recipientId,
-          recipientName: recipient.displayName || recipient.username,
+          recipientName: recipientRow.displayName || recipientRow.username,
           message,
         }),
       },
     });
 
-    // Create transaction record for recipient (positive)
-    await tx.pointsTransaction.create({
+    await db.pointsTransaction.create({
       data: {
         id: await generateSnowflakeId(),
         userId: recipientId,
@@ -215,17 +211,21 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         reason: 'transfer_received',
         metadata: JSON.stringify({
           senderId,
-          senderName: sender.displayName || sender.username,
+          senderName: senderRow.displayName || senderRow.username,
           message,
         }),
       },
     });
 
     return {
-      sender: updatedSender,
-      recipient: updatedRecipient,
+      sender: senderRow,
+      recipient: recipientRow,
+      result: {
+        sender: updatedSender,
+        recipient: updatedRecipient,
+      },
     };
-  });
+  }, 'points-transfer');
 
   // Invalidate cache for both users to update UI immediately
   await Promise.all([

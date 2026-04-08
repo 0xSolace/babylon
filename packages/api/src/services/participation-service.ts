@@ -6,15 +6,8 @@
  * activity scores and tracks last activity timestamps.
  */
 
-import { and, count, desc, eq, isNull } from '@babylon/db';
-import {
-  comments,
-  db,
-  positions,
-  posts,
-  reactions,
-  shares,
-} from '@babylon/db/runtime';
+import { fetchParticipationAggregates } from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 
 /**
  * Participation statistics for a user
@@ -51,83 +44,14 @@ export class ParticipationService {
    * @returns {Promise<ParticipationStats | null>} Participation stats or null if user not found
    */
   static async getStats(userId: string): Promise<ParticipationStats | null> {
-    // Get all counts in parallel
-    const [
-      postsCountResult,
-      commentsCountResult,
-      sharesCountResult,
-      reactionsCountResult,
-      positionsCountResult,
-      lastPostResult,
-      lastCommentResult,
-      lastShareResult,
-      lastReactionResult,
-      lastPositionResult,
-    ] = await Promise.all([
-      db
-        .select({ count: count() })
-        .from(posts)
-        .where(eq(posts.authorId, userId)),
-      db
-        .select({ count: count() })
-        .from(comments)
-        .where(eq(comments.authorId, userId)),
-      db
-        .select({ count: count() })
-        .from(shares)
-        .where(eq(shares.userId, userId)),
-      db
-        .select({ count: count() })
-        .from(reactions)
-        .where(eq(reactions.userId, userId)),
-      db
-        .select({ count: count() })
-        .from(positions)
-        .where(eq(positions.userId, userId)),
-      db
-        .select({ createdAt: posts.createdAt })
-        .from(posts)
-        .where(and(eq(posts.authorId, userId), isNull(posts.deletedAt)))
-        .orderBy(desc(posts.createdAt))
-        .limit(1),
-      db
-        .select({ createdAt: comments.createdAt })
-        .from(comments)
-        .where(eq(comments.authorId, userId))
-        .orderBy(desc(comments.createdAt))
-        .limit(1),
-      db
-        .select({ createdAt: shares.createdAt })
-        .from(shares)
-        .where(eq(shares.userId, userId))
-        .orderBy(desc(shares.createdAt))
-        .limit(1),
-      db
-        .select({ createdAt: reactions.createdAt })
-        .from(reactions)
-        .where(eq(reactions.userId, userId))
-        .orderBy(desc(reactions.createdAt))
-        .limit(1),
-      db
-        .select({ createdAt: positions.createdAt })
-        .from(positions)
-        .where(eq(positions.userId, userId))
-        .orderBy(desc(positions.createdAt))
-        .limit(1),
-    ]);
+    const agg = await fetchParticipationAggregates(db, userId);
 
-    const postsCreated = postsCountResult[0]?.count ?? 0;
-    const commentsMade = commentsCountResult[0]?.count ?? 0;
-    const sharesMade = sharesCountResult[0]?.count ?? 0;
-    const reactionsGiven = reactionsCountResult[0]?.count ?? 0;
-    const marketsParticipated = positionsCountResult[0]?.count ?? 0;
-    const lastPost = lastPostResult[0];
-    const lastComment = lastCommentResult[0];
-    const lastShare = lastShareResult[0];
-    const lastReaction = lastReactionResult[0];
-    const lastPosition = lastPositionResult[0];
+    const postsCreated = agg.postsCreated;
+    const commentsMade = agg.commentsMade;
+    const sharesMade = agg.sharesMade;
+    const reactionsGiven = agg.reactionsGiven;
+    const marketsParticipated = agg.marketsParticipated;
 
-    // Calculate total activity score
     // Weighted scoring: posts=10, comments=5, shares=3, reactions=1, markets=5
     const totalActivity =
       postsCreated * 10 +
@@ -136,19 +60,18 @@ export class ParticipationService {
       reactionsGiven * 1 +
       marketsParticipated * 5;
 
-    // Find the most recent activity timestamp
     const activityTimestamps = [
-      lastPost?.createdAt,
-      lastComment?.createdAt,
-      lastShare?.createdAt,
-      lastReaction?.createdAt,
-      lastPosition?.createdAt,
+      agg.lastPostAt,
+      agg.lastCommentAt,
+      agg.lastShareAt,
+      agg.lastReactionAt,
+      agg.lastPositionAt,
     ].filter((date): date is Date => date !== null && date !== undefined);
 
     const lastActivityAt =
       activityTimestamps.length > 0
         ? new Date(Math.max(...activityTimestamps.map((d) => d.getTime())))
-        : new Date(); // Default to now if no activity
+        : new Date();
 
     return {
       postsCreated,

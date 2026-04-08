@@ -9,8 +9,15 @@
  * when multiple concurrent updates occur.
  */
 
-import { and, eq, type NpcMemory, type RelationshipState } from '@babylon/db';
-import { actorState, db } from '@babylon/db/runtime';
+import {
+  fetchActorStateRecentMemoriesJson,
+  fetchActorStateRelationshipsJson,
+  type NpcMemory,
+  type RelationshipState,
+  runNpcActivityStateUpdateTransaction,
+  runNpcMemoryAddTransaction,
+  runNpcRelationshipUpdateTransaction,
+} from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import { first } from '../utils/array-utils';
 import { getGameDayNumber } from '../utils/date-utils';
@@ -89,17 +96,29 @@ export class NpcMemoryService {
 
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
-        // Get current state with updatedAt for optimistic locking
-        const [state] = await db
-          .select({
-            recentMemories: actorState.recentMemories,
-            updatedAt: actorState.updatedAt,
-          })
-          .from(actorState)
-          .where(eq(actorState.id, actorId))
-          .limit(1);
+        const outcome = await runNpcMemoryAddTransaction({
+          actorId,
+          parseMemories: parseMemoriesSafe,
+          buildMemories: (memories) => {
+            const newMemory: NpcMemory = {
+              id: memoryId,
+              ...memory,
+            };
 
-        if (!state) {
+            memories.push(newMemory);
+            if (memories.length > MAX_MEMORIES) {
+              memories.splice(0, memories.length - MAX_MEMORIES);
+            }
+
+            return {
+              memories,
+              memoryCount: memories.length,
+              memoryType: memory.type,
+            };
+          },
+        });
+
+        if (outcome.kind === 'missing') {
           logger.warn(
             `Cannot add memory: ActorState not found for ${actorId}`,
             { actorId },
@@ -108,66 +127,34 @@ export class NpcMemoryService {
           return false;
         }
 
-        // Parse memories with Zod validation - handles corrupted data gracefully
-        const memories = parseMemoriesSafe(state.recentMemories, { actorId });
-
-        // Create new memory with pre-generated ID
-        const newMemory: NpcMemory = {
-          id: memoryId,
-          ...memory,
-        };
-
-        // Add new memory and enforce cap (splice is O(n) vs repeated shift() being O(n²))
-        memories.push(newMemory);
-        if (memories.length > MAX_MEMORIES) {
-          memories.splice(0, memories.length - MAX_MEMORIES);
+        if (outcome.kind === 'success') {
+          logger.debug(
+            `Added memory for ${actorId}`,
+            {
+              memoryType: outcome.memoryType,
+              totalMemories: outcome.memoryCount,
+            },
+            'NpcMemoryService'
+          );
+          return true;
         }
 
-        const now = new Date();
-
-        // Update database with optimistic locking
-        // Only update if updatedAt hasn't changed since we read it
-        const result = await db
-          .update(actorState)
-          .set({
-            recentMemories: memories,
-            updatedAt: now,
-          })
-          .where(
-            and(
-              eq(actorState.id, actorId),
-              eq(actorState.updatedAt, state.updatedAt)
-            )
-          )
-          .returning({ id: actorState.id });
-
-        // If no rows were updated, another process modified the record
-        if (result.length === 0) {
-          if (attempt < MAX_RETRIES - 1) {
-            // Exponential backoff before retry
-            const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
-            await new Promise((resolve) => setTimeout(resolve, delay));
-            logger.debug(
-              `Memory update conflict for ${actorId}, retrying (attempt ${attempt + 1})`,
-              { actorId },
-              'NpcMemoryService'
-            );
-            continue;
-          }
-          logger.warn(
-            `Memory update failed after ${MAX_RETRIES} attempts due to concurrent modification`,
+        if (attempt < MAX_RETRIES - 1) {
+          const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          logger.debug(
+            `Memory update conflict for ${actorId}, retrying (attempt ${attempt + 1})`,
             { actorId },
             'NpcMemoryService'
           );
-          return false;
+          continue;
         }
-
-        logger.debug(
-          `Added memory for ${actorId}`,
-          { memoryType: memory.type, totalMemories: memories.length },
+        logger.warn(
+          `Memory update failed after ${MAX_RETRIES} attempts due to concurrent modification`,
+          { actorId },
           'NpcMemoryService'
         );
-        return true; // Success
+        return false;
       } catch (error) {
         // Log the error but allow retries for transient DB errors
         logger.error(
@@ -207,13 +194,7 @@ export class NpcMemoryService {
     types?: NpcMemory['type'][]
   ): Promise<NpcMemory[]> {
     try {
-      const [state] = await db
-        .select({
-          recentMemories: actorState.recentMemories,
-        })
-        .from(actorState)
-        .where(eq(actorState.id, actorId))
-        .limit(1);
+      const state = await fetchActorStateRecentMemoriesJson(actorId);
 
       if (!state?.recentMemories) {
         return [];
@@ -247,13 +228,7 @@ export class NpcMemoryService {
     otherActorId: string
   ): Promise<RelationshipState | null> {
     try {
-      const [state] = await db
-        .select({
-          relationships: actorState.relationships,
-        })
-        .from(actorState)
-        .where(eq(actorState.id, actorId))
-        .limit(1);
+      const state = await fetchActorStateRelationshipsJson(actorId);
 
       if (!state?.relationships) {
         return null;
@@ -292,16 +267,48 @@ export class NpcMemoryService {
   ): Promise<boolean> {
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
-        const [state] = await db
-          .select({
-            relationships: actorState.relationships,
-            updatedAt: actorState.updatedAt,
-          })
-          .from(actorState)
-          .where(eq(actorState.id, actorId))
-          .limit(1);
+        const outcome = await runNpcRelationshipUpdateTransaction({
+          actorId,
+          otherActorId,
+          parseRelationships: parseRelationshipsSafe,
+          mutate: (relationships) => {
+            const existing = relationships[otherActorId];
+            const now = new Date();
 
-        if (!state) {
+            if (existing) {
+              const newSentiment =
+                existing.sentiment + interaction.sentimentChange * 0.1;
+              existing.sentiment =
+                Math.round(Math.max(-1, Math.min(1, newSentiment)) * 100) / 100;
+              existing.lastInteraction = now.toISOString();
+              existing.interactionCount += 1;
+
+              if (interaction.note) {
+                existing.notes.push(interaction.note);
+                if (existing.notes.length > MAX_RELATIONSHIP_NOTES) {
+                  existing.notes = existing.notes.slice(
+                    -MAX_RELATIONSHIP_NOTES
+                  );
+                }
+              }
+            } else {
+              relationships[otherActorId] = {
+                actorId: otherActorId,
+                sentiment: Math.max(
+                  -1,
+                  Math.min(1, interaction.sentimentChange)
+                ),
+                lastInteraction: now.toISOString(),
+                interactionCount: 1,
+                notes: interaction.note ? [interaction.note] : [],
+              };
+            }
+
+            return relationships;
+          },
+        });
+
+        if (outcome.kind === 'missing') {
           logger.warn(
             `Cannot update relationship: ActorState not found for ${actorId}`,
             { actorId },
@@ -310,87 +317,35 @@ export class NpcMemoryService {
           return false;
         }
 
-        // Parse relationships with Zod validation - handles corrupted data gracefully
-        const relationships = parseRelationshipsSafe(state.relationships, {
-          actorId,
-        });
-
-        // Get or create relationship
-        const existing = relationships[otherActorId];
-        const now = new Date();
-
-        if (existing) {
-          // Update existing relationship with fixed precision to avoid floating-point drift
-          const newSentiment =
-            existing.sentiment + interaction.sentimentChange * 0.1;
-          existing.sentiment =
-            Math.round(Math.max(-1, Math.min(1, newSentiment)) * 100) / 100;
-          existing.lastInteraction = now.toISOString();
-          existing.interactionCount += 1;
-
-          if (interaction.note) {
-            existing.notes.push(interaction.note);
-            // Keep only recent notes (slice is O(n) vs repeated shift() being O(n²))
-            if (existing.notes.length > MAX_RELATIONSHIP_NOTES) {
-              existing.notes = existing.notes.slice(-MAX_RELATIONSHIP_NOTES);
-            }
-          }
-        } else {
-          // Create new relationship
-          relationships[otherActorId] = {
-            actorId: otherActorId,
-            sentiment: Math.max(-1, Math.min(1, interaction.sentimentChange)),
-            lastInteraction: now.toISOString(),
-            interactionCount: 1,
-            notes: interaction.note ? [interaction.note] : [],
-          };
+        if (outcome.kind === 'success') {
+          logger.debug(
+            `Updated relationship`,
+            {
+              actorId,
+              otherActorId,
+              newSentiment: outcome.newSentiment,
+            },
+            'NpcMemoryService'
+          );
+          return true;
         }
 
-        // Update database with optimistic locking
-        const result = await db
-          .update(actorState)
-          .set({
-            relationships,
-            updatedAt: now,
-          })
-          .where(
-            and(
-              eq(actorState.id, actorId),
-              eq(actorState.updatedAt, state.updatedAt)
-            )
-          )
-          .returning({ id: actorState.id });
-
-        // If no rows were updated, another process modified the record
-        if (result.length === 0) {
-          if (attempt < MAX_RETRIES - 1) {
-            const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
-            await new Promise((resolve) => setTimeout(resolve, delay));
-            logger.debug(
-              `Relationship update conflict for ${actorId}, retrying (attempt ${attempt + 1})`,
-              { actorId },
-              'NpcMemoryService'
-            );
-            continue;
-          }
-          logger.warn(
-            `Relationship update failed after ${MAX_RETRIES} attempts due to concurrent modification`,
+        if (attempt < MAX_RETRIES - 1) {
+          const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          logger.debug(
+            `Relationship update conflict for ${actorId}, retrying (attempt ${attempt + 1})`,
             { actorId },
             'NpcMemoryService'
           );
-          return false;
+          continue;
         }
-
-        logger.debug(
-          `Updated relationship`,
-          {
-            actorId,
-            otherActorId,
-            newSentiment: relationships[otherActorId]?.sentiment,
-          },
+        logger.warn(
+          `Relationship update failed after ${MAX_RETRIES} attempts due to concurrent modification`,
+          { actorId },
           'NpcMemoryService'
         );
-        return true; // Success
+        return false;
       } catch (error) {
         // Check if this is a transient/connection error that should be retried
         if (isTransientError(error) && attempt < MAX_RETRIES - 1) {
@@ -436,20 +391,58 @@ export class NpcMemoryService {
   ): Promise<boolean> {
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
-        const now = new Date();
+        const outcome = await runNpcActivityStateUpdateTransaction({
+          actorId,
+          buildPatch: (state) => {
+            const now = new Date();
 
-        // Get current state including updatedAt for optimistic locking
-        const [state] = await db
-          .select({
-            postsToday: actorState.postsToday,
-            postsTodayResetAt: actorState.postsTodayResetAt,
-            updatedAt: actorState.updatedAt,
-          })
-          .from(actorState)
-          .where(eq(actorState.id, actorId))
-          .limit(1);
+            const set: Partial<{
+              lastPostAt: Date;
+              lastActiveAt: Date;
+              postsToday: number;
+              postsTodayResetAt: Date;
+            }> = {};
 
-        if (!state) {
+            if (options.active) {
+              set.lastActiveAt = now;
+            }
+
+            if (options.posted) {
+              set.lastPostAt = now;
+
+              const resetAt = state.postsTodayResetAt;
+              let shouldReset = !resetAt;
+
+              if (!shouldReset && resetAt) {
+                if (options.gameStartedAt) {
+                  const currentGameDay = getGameDayNumber(
+                    options.gameStartedAt,
+                    now
+                  );
+                  const lastResetGameDay = getGameDayNumber(
+                    options.gameStartedAt,
+                    resetAt
+                  );
+                  shouldReset = currentGameDay !== lastResetGameDay;
+                } else {
+                  shouldReset =
+                    now.getTime() - resetAt.getTime() > 24 * 60 * 60 * 1000;
+                }
+              }
+
+              if (shouldReset) {
+                set.postsToday = 1;
+                set.postsTodayResetAt = now;
+              } else {
+                set.postsToday = (state.postsToday ?? 0) + 1;
+              }
+            }
+
+            return { kind: 'commit' as const, set };
+          },
+        });
+
+        if (outcome.kind === 'missing') {
           logger.warn(
             `Actor state not found for ${actorId}`,
             { actorId },
@@ -458,89 +451,26 @@ export class NpcMemoryService {
           return false;
         }
 
-        const updates: Partial<{
-          lastPostAt: Date;
-          lastActiveAt: Date;
-          postsToday: number;
-          postsTodayResetAt: Date;
-          updatedAt: Date;
-        }> = {
-          updatedAt: now,
-        };
-
-        if (options.active) {
-          updates.lastActiveAt = now;
+        if (outcome.kind === 'success') {
+          return true;
         }
 
-        if (options.posted) {
-          updates.lastPostAt = now;
-
-          // Determine if we should reset postsToday based on game day change
-          // If gameStartedAt is provided, use game-relative days; otherwise fall back to wall-clock
-          const resetAt = state.postsTodayResetAt;
-          let shouldReset = !resetAt;
-
-          if (!shouldReset && resetAt) {
-            if (options.gameStartedAt) {
-              // Use game day calculation - reset when game day changes
-              const currentGameDay = getGameDayNumber(
-                options.gameStartedAt,
-                now
-              );
-              const lastResetGameDay = getGameDayNumber(
-                options.gameStartedAt,
-                resetAt
-              );
-              shouldReset = currentGameDay !== lastResetGameDay;
-            } else {
-              // Fall back to 24-hour wall-clock check (legacy behavior)
-              shouldReset =
-                now.getTime() - resetAt.getTime() > 24 * 60 * 60 * 1000;
-            }
-          }
-
-          if (shouldReset) {
-            updates.postsToday = 1;
-            updates.postsTodayResetAt = now;
-          } else {
-            updates.postsToday = (state.postsToday ?? 0) + 1;
-          }
-        }
-
-        // Update with optimistic locking
-        const result = await db
-          .update(actorState)
-          .set(updates)
-          .where(
-            and(
-              eq(actorState.id, actorId),
-              eq(actorState.updatedAt, state.updatedAt)
-            )
-          )
-          .returning({ id: actorState.id });
-
-        // If no rows were updated, another process modified the record
-        if (result.length === 0) {
-          if (attempt < MAX_RETRIES - 1) {
-            // Exponential backoff before retry
-            const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
-            await new Promise((resolve) => setTimeout(resolve, delay));
-            logger.debug(
-              `Activity state update conflict for ${actorId}, retrying (attempt ${attempt + 1})`,
-              { actorId },
-              'NpcMemoryService'
-            );
-            continue;
-          }
-          logger.warn(
-            `Activity state update failed after ${MAX_RETRIES} attempts due to concurrent modification`,
+        if (attempt < MAX_RETRIES - 1) {
+          const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          logger.debug(
+            `Activity state update conflict for ${actorId}, retrying (attempt ${attempt + 1})`,
             { actorId },
             'NpcMemoryService'
           );
-          return false;
+          continue;
         }
-
-        return true; // Success
+        logger.warn(
+          `Activity state update failed after ${MAX_RETRIES} attempts due to concurrent modification`,
+          { actorId },
+          'NpcMemoryService'
+        );
+        return false;
       } catch (error) {
         // Check if this is a transient/connection error that should be retried
         if (isTransientError(error) && attempt < MAX_RETRIES - 1) {

@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 /**
  * Verify Game startedAt Script
  *
@@ -8,9 +9,9 @@
  * Usage: bun scripts/verify-game-started-at.ts
  */
 
-import { eq } from '@babylon/db';
-import { db, games } from '@babylon/db/runtime';
+import { db, games } from '@babylon/db/engine-storage';
 import { getGameDayNumber } from '@babylon/engine/utils/date-utils';
+import { eq } from 'drizzle-orm';
 
 async function verifyGameStartedAt() {
   console.log('🔍 Checking continuous game startedAt...\n');

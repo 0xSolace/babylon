@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 /**
  * Diagnose User Group Assignment
  *
@@ -8,13 +9,19 @@
  *   bun run scripts/diagnose-user-groups.ts --user=<userId>
  */
 
-import { and, count, eq } from '@babylon/db';
-import { chats, db, groupMembers, groups, users } from '@babylon/db/runtime';
+import {
+  chats,
+  db,
+  groupMembers,
+  groups,
+  users,
+} from '@babylon/db/engine-storage';
 import {
   StaticDataRegistry,
   TIER_CONFIG,
   UserAlphaGroupAssignmentService,
 } from '@babylon/engine';
+import { and, count, eq } from 'drizzle-orm';
 
 async function main() {
   const args = process.argv.slice(2);

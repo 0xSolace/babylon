@@ -101,11 +101,10 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import type { DrizzleClient } from '@babylon/db';
-import { eq } from '@babylon/db';
-import { asPublic, asUser, users } from '@babylon/db/runtime';
+import { type DrizzleClient, selectUserIdByExactUsername } from '@babylon/db';
 import { logger, sanitizeOnboardingUsername } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+import { runWithOptionalUserRls } from '@/lib/db/run-with-optional-user-rls';
 
 interface UsernameCheckResult {
   available: boolean;
@@ -122,11 +121,7 @@ async function checkUsernameAvailability(
 ): Promise<UsernameCheckResult> {
   const cleanUsername = sanitizeOnboardingUsername(baseUsername);
 
-  const [existingUser] = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(eq(users.username, cleanUsername))
-    .limit(1);
+  const existingUser = await selectUserIdByExactUsername(db, cleanUsername);
 
   if (!existingUser) {
     return {
@@ -141,11 +136,7 @@ async function checkUsernameAvailability(
 
   // Keep incrementing until we find an available username
   while (attempt < 9999) {
-    const [exists] = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.username, suggestedUsername))
-      .limit(1);
+    const exists = await selectUserIdByExactUsername(db, suggestedUsername);
 
     if (!exists) {
       return {
@@ -206,15 +197,9 @@ export const GET = withErrorHandling(async function GET(request: NextRequest) {
   } = await publicRateLimit(request);
   if (error) return error;
 
-  // Check username availability with RLS (public or user context)
-  const result =
-    authUser && authUser.userId
-      ? await asUser(authUser, async (db) => {
-          return await checkUsernameAvailability(username, db);
-        })
-      : await asPublic(async (db) => {
-          return await checkUsernameAvailability(username, db);
-        });
+  const result = await runWithOptionalUserRls(authUser, async (db) =>
+    checkUsernameAvailability(username, db)
+  );
 
   logger.info(
     'Username check result',

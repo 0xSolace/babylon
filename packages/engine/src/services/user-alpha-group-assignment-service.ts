@@ -15,16 +15,18 @@
  * has access to NPC insider information from day one.
  */
 
-import { and, count, eq, isNotNull } from '@babylon/db';
 import {
-  chatParticipants,
-  chats,
-  db,
-  follows,
-  groupMembers,
-  groups,
-  users,
-} from '@babylon/db/runtime';
+  countUserActiveNpcGroupMemberships,
+  fetchUserEligibilityForAlphaAssignment,
+  findGroupMemberRowForUserInGroup,
+  insertTier3MemberAndParticipantIfCapacityTx,
+  listFollowedActorIdsForUser,
+  listNpcOwnerIdsForUserActiveGroups,
+  listTier3GroupCapacityStats,
+  listTier3NpcGroupsWithChatAndMemberCounts,
+  reactivateTier3MemberAndUpsertChatParticipantTx,
+  withTransaction,
+} from '@babylon/db';
 import {
   GROUP_CONFIG,
   generateSnowflakeId,
@@ -99,16 +101,7 @@ export class UserAlphaGroupAssignmentService {
     };
 
     // 1. Verify user exists and is eligible
-    const [user] = await db
-      .select({
-        id: users.id,
-        isActor: users.isActor,
-        isAgent: users.isAgent,
-        isBanned: users.isBanned,
-      })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
+    const user = await fetchUserEligibilityForAlphaAssignment(userId);
 
     if (!user) {
       result.errors.push(`User ${userId} not found`);
@@ -132,19 +125,7 @@ export class UserAlphaGroupAssignmentService {
     }
 
     // 2. Check existing NPC group memberships
-    const [existingCount] = await db
-      .select({ count: count() })
-      .from(groupMembers)
-      .innerJoin(groups, eq(groupMembers.groupId, groups.id))
-      .where(
-        and(
-          eq(groupMembers.userId, userId),
-          eq(groupMembers.isActive, true),
-          eq(groups.type, 'npc')
-        )
-      );
-
-    const currentGroups = existingCount?.count ?? 0;
+    const currentGroups = await countUserActiveNpcGroupMemberships(userId);
     if (currentGroups >= this.TARGET_DEFAULT_GROUPS) {
       // User already has sufficient groups
       result.success = true;
@@ -160,29 +141,14 @@ export class UserAlphaGroupAssignmentService {
     const groupsNeeded = this.TARGET_DEFAULT_GROUPS - currentGroups;
 
     // 3. Get NPCs user follows (for prioritization)
-    const followedNpcs = await db
-      .select({ followingId: follows.followingId })
-      .from(follows)
-      .innerJoin(users, eq(follows.followingId, users.id))
-      .where(and(eq(follows.followerId, userId), eq(users.isActor, true)))
-      .limit(20);
-
-    const followedNpcIds = new Set(followedNpcs.map((f) => f.followingId));
+    const followedNpcIdList = await listFollowedActorIdsForUser(userId, 20);
+    const followedNpcIds = new Set(followedNpcIdList);
 
     // 4. Get NPCs user is already in groups with (to ensure diversity)
-    const existingNpcMemberships = await db
-      .select({ ownerId: groups.ownerId })
-      .from(groupMembers)
-      .innerJoin(groups, eq(groupMembers.groupId, groups.id))
-      .where(
-        and(
-          eq(groupMembers.userId, userId),
-          eq(groupMembers.isActive, true),
-          eq(groups.type, 'npc')
-        )
-      );
+    const existingNpcOwnerIds =
+      await listNpcOwnerIdsForUserActiveGroups(userId);
 
-    const excludeNpcIds = new Set(existingNpcMemberships.map((e) => e.ownerId));
+    const excludeNpcIds = new Set(existingNpcOwnerIds);
 
     // 5. Find available Tier 3 groups with capacity
     const availableGroups = await this.findAvailableTier3Groups(
@@ -286,31 +252,7 @@ export class UserAlphaGroupAssignmentService {
     }
 
     // Query all Tier 3 groups with their member counts
-    const tier3Groups = await db
-      .select({
-        groupId: groups.id,
-        npcId: groups.ownerId,
-        maxMembers: groups.maxMembers,
-        chatId: chats.id,
-        memberCount: count(groupMembers.id),
-      })
-      .from(groups)
-      .leftJoin(chats, eq(chats.groupId, groups.id))
-      .leftJoin(
-        groupMembers,
-        and(
-          eq(groupMembers.groupId, groups.id),
-          eq(groupMembers.isActive, true)
-        )
-      )
-      .where(
-        and(
-          eq(groups.type, 'npc'),
-          eq(groups.tier, 3),
-          isNotNull(chats.id) // Only groups with associated chats
-        )
-      )
-      .groupBy(groups.id, groups.ownerId, groups.maxMembers, chats.id);
+    const tier3Groups = await listTier3NpcGroupsWithChatAndMemberCounts();
 
     // Filter and enrich results
     const availableGroups: AvailableGroup[] = [];
@@ -374,16 +316,10 @@ export class UserAlphaGroupAssignmentService {
     ]);
 
     // Check if user is already a member (could be inactive from previous membership)
-    const [existingMember] = await db
-      .select({ id: groupMembers.id, isActive: groupMembers.isActive })
-      .from(groupMembers)
-      .where(
-        and(
-          eq(groupMembers.groupId, group.groupId),
-          eq(groupMembers.userId, userId)
-        )
-      )
-      .limit(1);
+    const existingMember = await findGroupMemberRowForUserInGroup(
+      group.groupId,
+      userId
+    );
 
     if (existingMember) {
       if (existingMember.isActive) {
@@ -392,36 +328,16 @@ export class UserAlphaGroupAssignmentService {
       }
 
       // Reactivate existing membership in a transaction for atomicity
-      await db.$transaction(async (tx) => {
-        await tx
-          .update(groupMembers)
-          .set({
-            isActive: true,
-            joinedAt: new Date(),
-            kickedAt: null,
-            kickReason: null,
-            tier: 3,
-          })
-          .where(eq(groupMembers.id, existingMember.id));
-
-        // Upsert chat participant - insert if missing, update if exists
-        await tx
-          .insert(chatParticipants)
-          .values({
-            id: participantId,
-            chatId: group.chatId,
-            userId,
-            invitedBy: group.npcId,
-            isActive: true,
-            joinedAt: new Date(),
-          })
-          .onConflictDoUpdate({
-            target: [chatParticipants.chatId, chatParticipants.userId],
-            set: {
-              isActive: true,
-              joinedAt: new Date(),
-            },
-          });
+      const joinedAt = new Date();
+      await withTransaction(async (tx) => {
+        await reactivateTier3MemberAndUpsertChatParticipantTx(tx, {
+          memberRowId: existingMember.id,
+          participantId,
+          chatId: group.chatId,
+          userId,
+          npcId: group.npcId,
+          joinedAt,
+        });
       });
 
       return { success: true };
@@ -429,45 +345,17 @@ export class UserAlphaGroupAssignmentService {
 
     // Create new membership using transaction for atomicity
     try {
-      await db.$transaction(async (tx) => {
-        // Re-check capacity inside transaction to prevent race conditions
-        const [currentCount] = await tx
-          .select({ count: count() })
-          .from(groupMembers)
-          .where(
-            and(
-              eq(groupMembers.groupId, group.groupId),
-              eq(groupMembers.isActive, true)
-            )
-          );
-
-        const memberCount = currentCount?.count ?? 0;
-        if (memberCount >= group.maxMembers) {
-          throw new Error('GROUP_FULL');
-        }
-
-        // Add to group members
-        await tx.insert(groupMembers).values({
-          id: memberId,
+      const joinedAt = new Date();
+      await withTransaction(async (tx) => {
+        await insertTier3MemberAndParticipantIfCapacityTx(tx, {
           groupId: group.groupId,
+          maxMembers: group.maxMembers,
+          memberId,
           userId,
-          role: 'member',
-          addedBy: group.npcId, // NPC is the one adding them
-          tier: 3,
-          isActive: true,
-          joinedAt: new Date(),
-          messageCount: 0,
-          qualityScore: 1.0,
-        });
-
-        // Add to chat participants
-        await tx.insert(chatParticipants).values({
-          id: participantId,
+          npcId: group.npcId,
+          participantId,
           chatId: group.chatId,
-          userId,
-          invitedBy: group.npcId,
-          isActive: true,
-          joinedAt: new Date(),
+          joinedAt,
         });
       });
 
@@ -494,22 +382,7 @@ export class UserAlphaGroupAssignmentService {
     maxUsersCanServe: number;
   }> {
     // Get all Tier 3 groups with member counts
-    const tier3Stats = await db
-      .select({
-        groupId: groups.id,
-        maxMembers: groups.maxMembers,
-        memberCount: count(groupMembers.id),
-      })
-      .from(groups)
-      .leftJoin(
-        groupMembers,
-        and(
-          eq(groupMembers.groupId, groups.id),
-          eq(groupMembers.isActive, true)
-        )
-      )
-      .where(and(eq(groups.type, 'npc'), eq(groups.tier, 3)))
-      .groupBy(groups.id, groups.maxMembers);
+    const tier3Stats = await listTier3GroupCapacityStats();
 
     let totalCapacity = 0;
     let currentMembers = 0;
@@ -517,7 +390,7 @@ export class UserAlphaGroupAssignmentService {
     for (const g of tier3Stats) {
       const max = g.maxMembers ?? DEFAULT_TIER3_MAX_MEMBERS;
       totalCapacity += max;
-      currentMembers += g.memberCount ?? 0;
+      currentMembers += g.memberCount;
     }
 
     const availableSlots = totalCapacity - currentMembers;

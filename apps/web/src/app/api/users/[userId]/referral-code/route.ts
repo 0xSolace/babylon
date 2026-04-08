@@ -60,9 +60,8 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-
-import { eq } from '@babylon/db';
-import { db, users } from '@babylon/db/runtime';
+import { selectUserReferralCountById } from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import { logger, UserIdParamSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
@@ -94,14 +93,9 @@ export const GET = withErrorHandling(
     // Get or create referral code
     const referralCode = await getOrCreateReferralCode(canonicalUserId);
 
-    // Get user stats
-    const [user] = await db
-      .select({
-        referralCount: users.referralCount,
-      })
-      .from(users)
-      .where(eq(users.id, canonicalUserId))
-      .limit(1);
+    const user = await asUser(authUser, async (db) =>
+      selectUserReferralCountById(db, canonicalUserId)
+    );
 
     if (!user) {
       throw new NotFoundError('User', canonicalUserId);

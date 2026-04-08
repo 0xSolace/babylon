@@ -12,8 +12,15 @@
  * 5. Optional trajectory recording for RL training
  */
 
-import { and, eq, gte, or } from '@babylon/db';
-import { db, markets, userAgentConfigs, users } from '@babylon/db/runtime';
+import {
+  countOpenPerpPositionsByUserId,
+  countUnresolvedMarkets,
+  selectActivePredictionMarketsUnresolvedEndingAfterNowOrderCreatedDescLimit,
+  selectAgentUsersIdDisplayNameAnyAutonomousEnabled,
+  selectUserRowById,
+  selectUserVirtualBalanceAndLifetimePnLById,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import { trajectoryRecorder } from '@babylon/training';
 import type { IAgentRuntime } from '@elizaos/core';
 import {
@@ -109,13 +116,7 @@ export class AutonomousCoordinator {
     // For NPCs, skip User table lookup (they don't have User records)
     // For USER_CONTROLLED agents, verify they exist in User table
     if (!isNpc) {
-      const agentResult = await db
-        .select({ id: users.id, isAgent: users.isAgent })
-        .from(users)
-        .where(eq(users.id, agentUserId))
-        .limit(1);
-
-      const agent = agentResult[0];
+      const agent = await selectUserRowById(db, agentUserId);
       if (!agent || !agent.isAgent) {
         throw new Error('Agent not found or not an agent');
       }
@@ -281,25 +282,8 @@ export class AutonomousCoordinator {
   }> {
     // Get all agents with autonomous features enabled
     // Join users with userAgentConfigs to filter by autonomous settings
-    const activeAgentResults = await db
-      .select({
-        id: users.id,
-        displayName: users.displayName,
-      })
-      .from(users)
-      .innerJoin(userAgentConfigs, eq(users.id, userAgentConfigs.userId))
-      .where(
-        and(
-          eq(users.isAgent, true),
-          or(
-            eq(userAgentConfigs.autonomousTrading, true),
-            eq(userAgentConfigs.autonomousPosting, true),
-            eq(userAgentConfigs.autonomousCommenting, true),
-            eq(userAgentConfigs.autonomousDMs, true),
-            eq(userAgentConfigs.autonomousGroupChats, true)
-          )
-        )
-      );
+    const activeAgentResults =
+      await selectAgentUsersIdDisplayNameAnyAutonomousEnabled(db);
 
     logger.info(
       `Processing ${activeAgentResults.length} active agents`,
@@ -351,16 +335,11 @@ export class AutonomousCoordinator {
     await topicDiversityService.seedFromRecentPosts();
 
     // Get active prediction markets for topic assignment
-    const activeMarkets = await db
-      .select({
-        id: markets.id,
-        question: markets.question,
-        yesShares: markets.yesShares,
-        noShares: markets.noShares,
-      })
-      .from(markets)
-      .where(and(eq(markets.resolved, false), gte(markets.endDate, new Date())))
-      .limit(20);
+    const activeMarkets =
+      await selectActivePredictionMarketsUnresolvedEndingAfterNowOrderCreatedDescLimit(
+        db,
+        20
+      );
 
     // Convert to format expected by diversity service
     const marketsForTopics = activeMarkets.map((m) => {
@@ -399,31 +378,19 @@ export class AutonomousCoordinator {
    * Capture current environment state for trajectory recording
    */
   private async captureEnvironmentState(agentUserId: string) {
-    const agentResult = await db
-      .select({
-        virtualBalance: users.virtualBalance,
-        lifetimePnL: users.lifetimePnL,
-      })
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
-
-    const agent = agentResult[0];
+    const agent = await selectUserVirtualBalanceAndLifetimePnLById(
+      db,
+      agentUserId
+    );
 
     // Get open positions count
-    const positionsCount = await db.perpPosition.count({
-      where: {
-        userId: agentUserId,
-        closedAt: null,
-      },
-    });
+    const positionsCount = await countOpenPerpPositionsByUserId(
+      db,
+      agentUserId
+    );
 
     // Get active markets count
-    const marketsCount = await db.market.count({
-      where: {
-        resolved: false,
-      },
-    });
+    const marketsCount = await countUnresolvedMarkets(db);
 
     return {
       agentBalance: agent ? Number(agent.virtualBalance ?? 0) : 0,

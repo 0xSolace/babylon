@@ -5,8 +5,13 @@
  * Use CHECK_POST_DETAIL or CHECK_COMMENT_DETAIL first to get IDs.
  */
 
-import { and, eq, isNull } from '@babylon/db';
-import { comments, db, posts } from '@babylon/db/runtime';
+import {
+  insertCommentRow,
+  type NewComment,
+  selectActiveCommentIdAndPostId,
+  selectActivePostIdAndAuthorId,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import type {
   Action,
   ActionResult,
@@ -108,12 +113,7 @@ export const createCommentAction: Action = {
     }
 
     try {
-      // Verify the post exists and is not deleted
-      const [post] = await db
-        .select({ id: posts.id, authorId: posts.authorId })
-        .from(posts)
-        .where(and(eq(posts.id, postId), isNull(posts.deletedAt)))
-        .limit(1);
+      const post = await selectActivePostIdAndAuthorId(db, postId);
 
       if (!post) {
         return {
@@ -125,13 +125,10 @@ export const createCommentAction: Action = {
 
       // If replying to a comment, verify it exists
       if (parentCommentId) {
-        const [parentComment] = await db
-          .select({ id: comments.id, postId: comments.postId })
-          .from(comments)
-          .where(
-            and(eq(comments.id, parentCommentId), isNull(comments.deletedAt))
-          )
-          .limit(1);
+        const parentComment = await selectActiveCommentIdAndPostId(
+          db,
+          parentCommentId
+        );
 
         if (!parentComment) {
           return {
@@ -155,7 +152,7 @@ export const createCommentAction: Action = {
       const commentId = await generateSnowflakeId();
       const now = new Date();
 
-      await db.insert(comments).values({
+      const row: NewComment = {
         id: commentId,
         content: content.trim(),
         postId,
@@ -163,7 +160,8 @@ export const createCommentAction: Action = {
         parentCommentId: parentCommentId || null,
         createdAt: now,
         updatedAt: now,
-      });
+      };
+      await insertCommentRow(db, row);
 
       const isReply = !!parentCommentId;
       const actionDescription = isReply

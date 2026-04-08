@@ -52,7 +52,8 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 
-import { db, userAgentConfigs } from '@babylon/db/runtime';
+import { pauseAllUserAgentConfigsEmergency } from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -68,16 +69,10 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
     metadata: { action: 'emergency_pause_all' },
   });
 
-  // Pause ALL autonomous agents immediately by updating their configs
-  await db.update(userAgentConfigs).set({
-    autonomousTrading: false,
-    autonomousPosting: false,
-    autonomousCommenting: false,
-    autonomousDMs: false,
-    autonomousGroupChats: false,
-    status: 'idle',
-    updatedAt: new Date(),
-  });
+  await asSystem(
+    (tx) => pauseAllUserAgentConfigsEmergency(tx),
+    'admin-agents-pause-all'
+  );
 
   logger.warn(
     `EMERGENCY: Paused all autonomous agents`,

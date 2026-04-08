@@ -103,7 +103,7 @@
 import { AutonomousCoordinator, agentRuntimeManager } from '@babylon/agents';
 import { authenticateUser, withErrorHandling } from '@babylon/api';
 import { type JsonValue } from '@babylon/db';
-import { db } from '@babylon/db/runtime';
+import { asUser } from '@babylon/db/engine-storage';
 
 import { logger } from '@babylon/shared';
 import type { BenchmarkGameSnapshot } from '@babylon/training';
@@ -131,19 +131,20 @@ export const POST = withErrorHandling(async function POST(
   // Authenticate
   const user = await authenticateUser(req);
 
-  // Verify agent ownership
-  const agent = await db.user.findUnique({
-    where: { id: agentId },
-    select: {
-      id: true,
-      isAgent: true,
-      username: true,
-      autonomousTrading: true,
-      autonomousPosting: true,
-      autonomousCommenting: true,
-      managedBy: true,
-    },
-  });
+  const agent = await asUser(user.id, (tx) =>
+    tx.user.findUnique({
+      where: { id: agentId },
+      select: {
+        id: true,
+        isAgent: true,
+        username: true,
+        autonomousTrading: true,
+        autonomousPosting: true,
+        autonomousCommenting: true,
+        managedBy: true,
+      },
+    })
+  );
 
   if (!agent) {
     return NextResponse.json(

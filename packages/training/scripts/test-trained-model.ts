@@ -14,8 +14,8 @@
  *   bun run packages/training/scripts/test-trained-model.ts --model-path <path> --benchmark
  */
 
-import { eq } from '@babylon/db';
-import { db, trainedModels } from '@babylon/db/runtime';
+import { db, trainedModels } from '@babylon/db/engine-storage';
+import { eq } from 'drizzle-orm';
 import { BenchmarkService } from '../src/training/BenchmarkService';
 import { logger } from '../src/utils/logger';
 

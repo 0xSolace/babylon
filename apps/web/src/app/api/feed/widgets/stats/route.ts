@@ -76,18 +76,11 @@
  */
 
 import { optionalAuth, successResponse, withErrorHandling } from '@babylon/api';
-import { count, eq, sum } from '@babylon/db';
-import {
-  actorState,
-  asPublic,
-  asUser,
-  posts,
-  users,
-} from '@babylon/db/runtime';
-
+import { selectFeedWidgetPlatformStatsAggregates } from '@babylon/db';
 import { StaticDataRegistry } from '@babylon/engine';
 import { logger, StatsQuerySchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+import { runWithOptionalUserRls } from '@/lib/db/run-with-optional-user-rls';
 
 interface BabylonStats {
   activePlayers: number;
@@ -109,36 +102,13 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   const authUser = await optionalAuth(request).catch(() => null);
 
-  const queryStats = async (
-    db: Parameters<Parameters<typeof asUser>[1]>[0]
-  ) => {
-    const [
-      activePlayersResult,
-      totalHootsResult,
-      userPointsResult,
-      actorPointsResult,
-    ] = await Promise.all([
-      db.select({ count: count() }).from(users).where(eq(users.isActor, false)),
-      db.select({ count: count() }).from(posts),
-      db
-        .select({ total: sum(users.virtualBalance) })
-        .from(users)
-        .where(eq(users.isActor, false)),
-      db.select({ total: sum(actorState.tradingBalance) }).from(actorState),
-    ]);
-
+  const statsResult = await runWithOptionalUserRls(authUser, async (db) => {
+    const aggregates = await selectFeedWidgetPlatformStatsAggregates(db);
     return {
-      activePlayers: Number(activePlayersResult[0]?.count ?? 0),
+      ...aggregates,
       aiAgents: StaticDataRegistry.getAllActors().length,
-      totalHoots: Number(totalHootsResult[0]?.count ?? 0),
-      userPoints: userPointsResult[0]?.total ?? '0',
-      actorPoints: actorPointsResult[0]?.total ?? '0',
     };
-  };
-
-  const statsResult = authUser?.userId
-    ? await asUser(authUser, queryStats)
-    : await asPublic(queryStats);
+  });
 
   const totalPoints =
     Number(statsResult.userPoints) + Number(statsResult.actorPoints);

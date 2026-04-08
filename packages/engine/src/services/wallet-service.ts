@@ -12,13 +12,21 @@
  * - Calculates PnL
  */
 
-import { type DrizzleClient, desc, eq, type Transaction } from '@babylon/db';
 import {
-  balanceTransactions,
-  db,
-  users,
+  applyInitialDepositInTx,
+  type DrizzleClient,
+  fetchUserRowByIdForWallet,
+  fetchUserVirtualBalanceOnly,
+  fetchUserWalletBalanceStats,
+  insertBalanceTransactionInTx,
+  listBalanceTransactionsForUser,
+  selectUserRowByIdInTx,
+  selectUserVirtualBalanceInTx,
+  type Transaction,
+  updateUserLifetimePnLInTx,
+  updateUserVirtualBalanceInTx,
   withTransaction,
-} from '@babylon/db/runtime';
+} from '@babylon/db';
 import {
   generateSnowflakeId,
   InsufficientFundsError,
@@ -130,15 +138,7 @@ export class WalletService {
     description: string,
     relatedId?: string
   ): Promise<void> {
-    const result = await tx
-      .select({
-        virtualBalance: users.virtualBalance,
-      })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    const [user] = result;
+    const user = await selectUserVirtualBalanceInTx(tx, userId);
     if (!user) {
       // Fail-fast: NPCs should have User records after bootstrap (ensureNpcUsers).
       // A missing user here indicates a bug in bootstrap or an invalid userId.
@@ -166,12 +166,9 @@ export class WalletService {
       throw new InsufficientFundsError(Math.abs(delta), currentBalance, 'USD');
     }
 
-    await tx
-      .update(users)
-      .set({ virtualBalance: String(newBalance) })
-      .where(eq(users.id, userId));
+    await updateUserVirtualBalanceInTx(tx, userId, String(newBalance));
 
-    await tx.insert(balanceTransactions).values({
+    await insertBalanceTransactionInTx(tx, {
       id: await generateSnowflakeId(),
       userId,
       type,
@@ -199,18 +196,7 @@ export class WalletService {
    * ```
    */
   static async getBalance(userId: string): Promise<BalanceInfo> {
-    const result = await db
-      .select({
-        virtualBalance: users.virtualBalance,
-        totalDeposited: users.totalDeposited,
-        totalWithdrawn: users.totalWithdrawn,
-        lifetimePnL: users.lifetimePnL,
-      })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    const [user] = result;
+    const user = await fetchUserWalletBalanceStats(userId);
     if (!user) {
       throw new Error(`User not found: ${userId}`);
     }
@@ -243,15 +229,7 @@ export class WalletService {
     userId: string,
     requiredAmount: number
   ): Promise<boolean> {
-    const result = await db
-      .select({
-        virtualBalance: users.virtualBalance,
-      })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    const [user] = result;
+    const user = await fetchUserVirtualBalanceOnly(userId);
     if (!user) {
       return false;
     }
@@ -385,13 +363,7 @@ export class WalletService {
     earnedPointsDelta: number;
   }> {
     return await withTransaction(async (tx) => {
-      const result = await tx
-        .select()
-        .from(users)
-        .where(eq(users.id, userId))
-        .limit(1);
-
-      const [user] = result;
+      const user = await selectUserRowByIdInTx(tx, userId);
       if (!user) {
         // Fail-fast: NPCs should have User records after bootstrap (ensureNpcUsers).
         // A missing user here indicates a bug in bootstrap or an invalid userId.
@@ -416,11 +388,7 @@ export class WalletService {
         );
       }
 
-      // Update lifetimePnL first within the transaction
-      await tx
-        .update(users)
-        .set({ lifetimePnL: String(newLifetimePnL) })
-        .where(eq(users.id, userId));
+      await updateUserLifetimePnLInTx(tx, userId, String(newLifetimePnL));
 
       // Now award earned points within the same transaction
       // This ensures atomicity and prevents race conditions
@@ -448,12 +416,7 @@ export class WalletService {
     userId: string,
     limit = 50
   ): Promise<TransactionHistoryItem[]> {
-    const transactions = await db
-      .select()
-      .from(balanceTransactions)
-      .where(eq(balanceTransactions.userId, userId))
-      .orderBy(desc(balanceTransactions.createdAt))
-      .limit(limit);
+    const transactions = await listBalanceTransactionsForUser(userId, limit);
 
     return transactions.map((tx) => ({
       id: tx.id,
@@ -471,36 +434,27 @@ export class WalletService {
    * Initialize user balance (for new users)
    */
   static async initializeBalance(userId: string): Promise<void> {
-    const result = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    const [user] = result;
+    const user = await fetchUserRowByIdForWallet(userId);
     if (!user) {
       throw new Error(`User not found: ${userId}`);
     }
 
     if (Number(user.virtualBalance ?? 0) === 0) {
       await withTransaction(async (tx) => {
-        await tx
-          .update(users)
-          .set({
-            virtualBalance: String(WalletService.STARTING_BALANCE),
-            totalDeposited: String(WalletService.STARTING_BALANCE),
-          })
-          .where(eq(users.id, userId));
-
-        await tx.insert(balanceTransactions).values({
-          id: await generateSnowflakeId(),
+        await applyInitialDepositInTx(
+          tx,
           userId,
-          type: 'deposit',
-          amount: String(WalletService.STARTING_BALANCE),
-          balanceBefore: '0',
-          balanceAfter: String(WalletService.STARTING_BALANCE),
-          description: 'Initial deposit - Welcome to Babylon!',
-        });
+          WalletService.STARTING_BALANCE,
+          {
+            id: await generateSnowflakeId(),
+            userId,
+            type: 'deposit',
+            amount: String(WalletService.STARTING_BALANCE),
+            balanceBefore: '0',
+            balanceAfter: String(WalletService.STARTING_BALANCE),
+            description: 'Initial deposit - Welcome to Babylon!',
+          }
+        );
       });
     }
   }

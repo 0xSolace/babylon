@@ -10,9 +10,13 @@
  * every autonomous tick (~3 minutes) by PriceAlertService.
  */
 
-import { eq, type PriceAlert } from '@babylon/db';
-import { db, userAgentConfigs } from '@babylon/db/runtime';
-
+import {
+  type PriceAlert,
+  selectUserAgentConfigPriceAlertRowByUserId,
+  selectUserAgentConfigPriceAlertsOnlyByUserId,
+  updateUserAgentConfigPriceAlertsById,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import type {
   Action,
   ActionResult,
@@ -170,15 +174,10 @@ export const setPriceAlertAction: Action = {
       };
     }
 
-    // Fetch current config
-    const [config] = await db
-      .select({
-        id: userAgentConfigs.id,
-        priceAlerts: userAgentConfigs.priceAlerts,
-      })
-      .from(userAgentConfigs)
-      .where(eq(userAgentConfigs.userId, agentUserId))
-      .limit(1);
+    const config = await selectUserAgentConfigPriceAlertRowByUserId(
+      db,
+      agentUserId
+    );
 
     if (!config) {
       return {
@@ -214,10 +213,12 @@ export const setPriceAlertAction: Action = {
         a.id === existing.id ? newAlert : a
       );
 
-      await db
-        .update(userAgentConfigs)
-        .set({ priceAlerts: updatedAlerts, updatedAt: new Date() })
-        .where(eq(userAgentConfigs.id, config.id));
+      await updateUserAgentConfigPriceAlertsById(
+        db,
+        config.id,
+        updatedAlerts,
+        new Date()
+      );
 
       logger.info(
         `[SET_PRICE_ALERT] Updated alert: ${tokenSymbol} ${condition} ${threshold}`,
@@ -247,10 +248,12 @@ export const setPriceAlertAction: Action = {
     };
 
     const updatedAlerts = [...alerts, newAlert];
-    await db
-      .update(userAgentConfigs)
-      .set({ priceAlerts: updatedAlerts, updatedAt: new Date() })
-      .where(eq(userAgentConfigs.id, config.id));
+    await updateUserAgentConfigPriceAlertsById(
+      db,
+      config.id,
+      updatedAlerts,
+      new Date()
+    );
 
     logger.info(
       `[SET_PRICE_ALERT] Created alert: ${tokenSymbol} ${condition} ${threshold}`,
@@ -304,13 +307,12 @@ export const listPriceAlertsAction: Action = {
   ): Promise<ActionResult> => {
     const agentUserId = _runtime.agentId;
 
-    const [config] = await db
-      .select({ priceAlerts: userAgentConfigs.priceAlerts })
-      .from(userAgentConfigs)
-      .where(eq(userAgentConfigs.userId, agentUserId))
-      .limit(1);
+    const configRow = await selectUserAgentConfigPriceAlertsOnlyByUserId(
+      db,
+      agentUserId
+    );
 
-    const alerts = (config?.priceAlerts ?? []) as PriceAlert[];
+    const alerts = (configRow?.priceAlerts ?? []) as PriceAlert[];
 
     if (alerts.length === 0) {
       return {
@@ -419,14 +421,10 @@ export const removePriceAlertAction: Action = {
       };
     }
 
-    const [config] = await db
-      .select({
-        id: userAgentConfigs.id,
-        priceAlerts: userAgentConfigs.priceAlerts,
-      })
-      .from(userAgentConfigs)
-      .where(eq(userAgentConfigs.userId, agentUserId))
-      .limit(1);
+    const config = await selectUserAgentConfigPriceAlertRowByUserId(
+      db,
+      agentUserId
+    );
 
     if (!config) {
       return {
@@ -462,10 +460,12 @@ export const removePriceAlertAction: Action = {
       };
     }
 
-    await db
-      .update(userAgentConfigs)
-      .set({ priceAlerts: remaining, updatedAt: new Date() })
-      .where(eq(userAgentConfigs.id, config.id));
+    await updateUserAgentConfigPriceAlertsById(
+      db,
+      config.id,
+      remaining,
+      new Date()
+    );
 
     logger.info(
       `[REMOVE_PRICE_ALERT] Removed alert: ${removed.tokenSymbol} ${removed.condition} ${removed.threshold}`,

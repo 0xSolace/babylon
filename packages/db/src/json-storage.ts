@@ -6,9 +6,8 @@
  *
  * Usage:
  * ```typescript
- * import { exportJsonState, getJsonState, getJsonStoragePath, groups, initJsonStorage } from '@babylon/db/runtime';
- * import { db, loadJsonSnapshot, saveJsonSnapshot, tables } from '@babylon/db/runtime';
-
+ * import { exportJsonState, getJsonState, getJsonStoragePath, groups, initJsonStorage } from '@babylon/db/engine-storage';
+ * import { db, loadJsonSnapshot, saveJsonSnapshot, tables } from '@babylon/db/engine-storage';
  *
  * // Initialize JSON mode
  * await initJsonStorage('./simulation-data');

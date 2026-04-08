@@ -66,15 +66,16 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, count, desc, eq, gte, inArray, sum } from '@babylon/db';
 import {
-  db,
-  follows,
-  referrals,
-  tradingFees,
-  users,
-} from '@babylon/db/runtime';
-
+  countCompletedReferralsForReferrerSince,
+  selectCompletedReferralsByReferrerIdOrderCompletedDesc,
+  selectFollowingIdsByFollowerAndFollowingIn,
+  selectPendingReferredUsersIncompleteByReferrerId,
+  selectReferredUsersCompletedSliceByIds,
+  selectUserReferralDashboardSelfById,
+  sumTradingFeesReferrerFeeByReferrerId,
+} from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import {
   logger,
   ReferralQuerySchema,
@@ -125,245 +126,154 @@ export const GET = withErrorHandling(
       );
     }
 
-    // Get user's referral data
-    const [user] = await db
-      .select({
-        id: users.id,
-        username: users.username,
-        displayName: users.displayName,
-        bio: users.bio,
-        profileImageUrl: users.profileImageUrl,
-        referralCode: users.referralCode,
-        referralCount: users.referralCount,
-        reputationPoints: users.reputationPoints,
-        totalPoints: users.totalPoints,
-        totalFeesEarned: users.totalFeesEarned,
-        pointsAwardedForProfile: users.pointsAwardedForProfile,
-        pointsAwardedForFarcaster: users.pointsAwardedForFarcaster,
-        pointsAwardedForTwitter: users.pointsAwardedForTwitter,
-        pointsAwardedForWallet: users.pointsAwardedForWallet,
-        farcasterUsername: users.farcasterUsername,
-        twitterUsername: users.twitterUsername,
-        walletAddress: users.walletAddress,
-        onChainRegistered: users.onChainRegistered,
-      })
-      .from(users)
-      .where(eq(users.id, canonicalUserId))
-      .limit(1);
-
-    if (!user) {
-      throw new NotFoundError('User', canonicalUserId);
-    }
-
-    // Get all completed referrals - explicitly select only needed columns
-    const completedReferralsData = await db
-      .select({
-        id: referrals.id,
-        referredUserId: referrals.referredUserId,
-        completedAt: referrals.completedAt,
-      })
-      .from(referrals)
-      .where(
-        and(
-          eq(referrals.referrerId, canonicalUserId),
-          eq(referrals.status, 'completed')
-        )
-      )
-      .orderBy(desc(referrals.completedAt));
-
-    // Get referred user IDs from completed referrals
-    const completedReferredUserIds = completedReferralsData
-      .map((r) => r.referredUserId)
-      .filter((id): id is string => id !== null);
-
-    // Fetch user data for completed referrals
-    let completedReferredUsersData: Array<{
-      id: string;
-      username: string | null;
-      displayName: string | null;
-      profileImageUrl: string | null;
-      createdAt: Date;
-      reputationPoints: number;
-      profileComplete: boolean;
-    }> = [];
-
-    if (completedReferredUserIds.length > 0) {
-      completedReferredUsersData = await db
-        .select({
-          id: users.id,
-          username: users.username,
-          displayName: users.displayName,
-          profileImageUrl: users.profileImageUrl,
-          createdAt: users.createdAt,
-          reputationPoints: users.reputationPoints,
-          profileComplete: users.profileComplete,
-        })
-        .from(users)
-        .where(inArray(users.id, completedReferredUserIds));
-    }
-
-    const completedUsersMap = new Map(
-      completedReferredUsersData.map((u) => [u.id, u])
-    );
-
-    // Get pending referrals (users who haven't completed profile yet)
-    const pendingReferredUsers = await db
-      .select({
-        id: users.id,
-        username: users.username,
-        displayName: users.displayName,
-        profileImageUrl: users.profileImageUrl,
-        createdAt: users.createdAt,
-        reputationPoints: users.reputationPoints,
-        profileComplete: users.profileComplete,
-        email: users.email,
-        farcasterUsername: users.farcasterUsername,
-        twitterUsername: users.twitterUsername,
-      })
-      .from(users)
-      .where(
-        and(
-          eq(users.referredBy, canonicalUserId),
-          eq(users.profileComplete, false)
-        )
-      )
-      .orderBy(desc(users.createdAt));
-
-    // Get fee earnings from referrals
-    const [feeEarnings] = await db
-      .select({
-        total: sum(tradingFees.referrerFee),
-      })
-      .from(tradingFees)
-      .where(eq(tradingFees.referrerId, canonicalUserId));
-
-    const totalFeesEarned = Number(feeEarnings?.total || 0);
-
-    // Calculate weekly referral count (last 7 days) - only completed
-    const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    const [weeklyCountResult] = await db
-      .select({
-        count: count(),
-      })
-      .from(referrals)
-      .where(
-        and(
-          eq(referrals.referrerId, canonicalUserId),
-          eq(referrals.status, 'completed'),
-          gte(referrals.completedAt, oneWeekAgo)
-        )
+    return asUser(authUser, async (db) => {
+      const user = await selectUserReferralDashboardSelfById(
+        db,
+        canonicalUserId
       );
 
-    const weeklyReferralCount = Number(weeklyCountResult?.count || 0);
+      if (!user) {
+        throw new NotFoundError('User', canonicalUserId);
+      }
 
-    // Check if referrer (current user) is following the referred users
-    const completedUserIds = completedReferralsData
-      .map((r) => r.referredUserId)
-      .filter((id): id is string => id !== null);
-    const pendingUserIds = pendingReferredUsers.map((u) => u.id);
-    const allReferredUserIds = [...completedUserIds, ...pendingUserIds];
-
-    let followingUserIds = new Set<string>();
-    if (allReferredUserIds.length > 0) {
-      const followStatuses = await db
-        .select({
-          followingId: follows.followingId,
-        })
-        .from(follows)
-        .where(
-          and(
-            eq(follows.followerId, canonicalUserId),
-            inArray(follows.followingId, allReferredUserIds)
-          )
+      const completedReferralsData =
+        await selectCompletedReferralsByReferrerIdOrderCompletedDesc(
+          db,
+          canonicalUserId
         );
 
-      followingUserIds = new Set(followStatuses.map((f) => f.followingId));
-    }
+      const completedReferredUserIds = completedReferralsData
+        .map((r) => r.referredUserId)
+        .filter((id): id is string => id !== null);
 
-    // Format completed referred users with follow status
-    const completedReferredUsers = completedReferralsData
-      .filter(
-        (r) => r.referredUserId && completedUsersMap.has(r.referredUserId)
-      )
-      .map((r) => {
-        const userData = completedUsersMap.get(r.referredUserId!)!;
-        return {
-          id: userData.id,
-          username: userData.username,
-          displayName: userData.displayName,
-          profileImageUrl: userData.profileImageUrl,
-          createdAt: userData.createdAt,
-          reputationPoints: userData.reputationPoints,
-          isFollowing: followingUserIds.has(userData.id),
-          joinedAt: r.completedAt,
-          status: 'completed' as const,
-        };
+      const completedReferredUsersData =
+        await selectReferredUsersCompletedSliceByIds(
+          db,
+          completedReferredUserIds
+        );
+
+      const completedUsersMap = new Map(
+        completedReferredUsersData.map((u) => [u.id, u])
+      );
+
+      const pendingReferredUsers =
+        await selectPendingReferredUsersIncompleteByReferrerId(
+          db,
+          canonicalUserId
+        );
+
+      const totalFeesEarned = await sumTradingFeesReferrerFeeByReferrerId(
+        db,
+        canonicalUserId
+      );
+
+      const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const weeklyReferralCount = await countCompletedReferralsForReferrerSince(
+        db,
+        canonicalUserId,
+        oneWeekAgo
+      );
+
+      const completedUserIds = completedReferralsData
+        .map((r) => r.referredUserId)
+        .filter((id): id is string => id !== null);
+      const pendingUserIds = pendingReferredUsers.map((u) => u.id);
+      const allReferredUserIds = [...completedUserIds, ...pendingUserIds];
+
+      const followStatuses = await selectFollowingIdsByFollowerAndFollowingIn(
+        db,
+        canonicalUserId,
+        allReferredUserIds
+      );
+      const followingUserIds = new Set(
+        followStatuses.map((f) => f.followingId)
+      );
+
+      // Format completed referred users with follow status
+      const completedReferredUsers = completedReferralsData
+        .filter(
+          (r) => r.referredUserId && completedUsersMap.has(r.referredUserId)
+        )
+        .map((r) => {
+          const userData = completedUsersMap.get(r.referredUserId!)!;
+          return {
+            id: userData.id,
+            username: userData.username,
+            displayName: userData.displayName,
+            profileImageUrl: userData.profileImageUrl,
+            createdAt: userData.createdAt,
+            reputationPoints: userData.reputationPoints,
+            isFollowing: followingUserIds.has(userData.id),
+            joinedAt: r.completedAt,
+            status: 'completed' as const,
+          };
+        });
+
+      // Format pending referred users
+      const formattedPendingUsers = pendingReferredUsers.map((u) => ({
+        id: u.id,
+        username: u.username,
+        displayName: u.displayName,
+        profileImageUrl: u.profileImageUrl,
+        createdAt: u.createdAt,
+        reputationPoints: u.reputationPoints,
+        isFollowing: followingUserIds.has(u.id),
+        joinedAt: null,
+        status: 'pending' as const,
+        email: u.email,
+        farcasterUsername: u.farcasterUsername,
+        twitterUsername: u.twitterUsername,
+      }));
+
+      // Use username as referral code (without @)
+      const referralCode = user.username || null;
+      const referralUrl = referralCode
+        ? `${process.env.NEXT_PUBLIC_APP_URL || 'https://babylon.market'}?ref=${referralCode}`
+        : null;
+
+      logger.info(
+        'Referrals fetched successfully',
+        {
+          userId: canonicalUserId,
+          completedReferrals: completedReferralsData.length,
+          pendingReferrals: pendingReferredUsers.length,
+        },
+        'GET /api/users/[userId]/referrals'
+      );
+
+      return successResponse({
+        user: {
+          id: user.id,
+          username: user.username,
+          displayName: user.displayName,
+          bio: user.bio,
+          profileImageUrl: user.profileImageUrl,
+          referralCode: referralCode,
+          reputationPoints: user.reputationPoints,
+          totalPoints: Number(user.totalPoints ?? 0),
+          totalFeesEarned: user.totalFeesEarned,
+          pointsAwardedForProfile: user.pointsAwardedForProfile,
+          pointsAwardedForFarcaster: user.pointsAwardedForFarcaster,
+          pointsAwardedForTwitter: user.pointsAwardedForTwitter,
+          pointsAwardedForWallet: user.pointsAwardedForWallet,
+          farcasterUsername: user.farcasterUsername,
+          twitterUsername: user.twitterUsername,
+          walletAddress: user.walletAddress,
+          onChainRegistered: user.onChainRegistered,
+        },
+        stats: {
+          totalReferrals: completedReferralsData.length,
+          pendingReferrals: pendingReferredUsers.length,
+          totalFeesEarned,
+          feeShareRate: 0.5,
+          followingCount: followingUserIds.size,
+          weeklyReferralCount,
+          weeklyLimit: 10,
+        },
+        referredUsers: completedReferredUsers,
+        pendingReferredUsers: formattedPendingUsers,
+        referralUrl,
       });
-
-    // Format pending referred users
-    const formattedPendingUsers = pendingReferredUsers.map((u) => ({
-      id: u.id,
-      username: u.username,
-      displayName: u.displayName,
-      profileImageUrl: u.profileImageUrl,
-      createdAt: u.createdAt,
-      reputationPoints: u.reputationPoints,
-      isFollowing: followingUserIds.has(u.id),
-      joinedAt: null,
-      status: 'pending' as const,
-      email: u.email,
-      farcasterUsername: u.farcasterUsername,
-      twitterUsername: u.twitterUsername,
-    }));
-
-    // Use username as referral code (without @)
-    const referralCode = user.username || null;
-    const referralUrl = referralCode
-      ? `${process.env.NEXT_PUBLIC_APP_URL || 'https://babylon.market'}?ref=${referralCode}`
-      : null;
-
-    logger.info(
-      'Referrals fetched successfully',
-      {
-        userId: canonicalUserId,
-        completedReferrals: completedReferralsData.length,
-        pendingReferrals: pendingReferredUsers.length,
-      },
-      'GET /api/users/[userId]/referrals'
-    );
-
-    return successResponse({
-      user: {
-        id: user.id,
-        username: user.username,
-        displayName: user.displayName,
-        bio: user.bio,
-        profileImageUrl: user.profileImageUrl,
-        referralCode: referralCode,
-        reputationPoints: user.reputationPoints,
-        totalPoints: Number(user.totalPoints ?? 0),
-        totalFeesEarned: user.totalFeesEarned,
-        pointsAwardedForProfile: user.pointsAwardedForProfile,
-        pointsAwardedForFarcaster: user.pointsAwardedForFarcaster,
-        pointsAwardedForTwitter: user.pointsAwardedForTwitter,
-        pointsAwardedForWallet: user.pointsAwardedForWallet,
-        farcasterUsername: user.farcasterUsername,
-        twitterUsername: user.twitterUsername,
-        walletAddress: user.walletAddress,
-        onChainRegistered: user.onChainRegistered,
-      },
-      stats: {
-        totalReferrals: completedReferralsData.length, // Only completed count
-        pendingReferrals: pendingReferredUsers.length, // NEW: Pending count
-        totalFeesEarned,
-        feeShareRate: 0.5, // 50% of fees
-        followingCount: followingUserIds.size,
-        weeklyReferralCount,
-        weeklyLimit: 10,
-      },
-      referredUsers: completedReferredUsers, // Completed users
-      pendingReferredUsers: formattedPendingUsers, // NEW: Pending users
-      referralUrl,
     });
   }
 );

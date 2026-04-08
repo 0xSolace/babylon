@@ -5,8 +5,12 @@
  * Shows IDs for each comment so agent can reference them for replies.
  */
 
-import { and, count, desc, eq, isNull } from '@babylon/db';
-import { comments, db, posts, shares, users } from '@babylon/db/runtime';
+import {
+  countSharesByPostId,
+  selectCommentsForPostDetailWithAuthors,
+  selectPostWithAuthorForAgentDetail,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import { StaticDataRegistry } from '@babylon/engine';
 import type { MessageTag } from '@babylon/shared';
 import type {
@@ -198,21 +202,7 @@ export const checkPostDetailAction: Action = {
     }
 
     try {
-      // Get post with author
-      const [post] = await db
-        .select({
-          id: posts.id,
-          content: posts.content,
-          authorId: posts.authorId,
-          createdAt: posts.createdAt,
-          authorUsername: users.username,
-          authorDisplayName: users.displayName,
-          authorProfileImageUrl: users.profileImageUrl,
-        })
-        .from(posts)
-        .leftJoin(users, eq(posts.authorId, users.id))
-        .where(eq(posts.id, postId))
-        .limit(1);
+      const post = await selectPostWithAuthorForAgentDetail(db, postId);
 
       if (!post) {
         return {
@@ -222,22 +212,10 @@ export const checkPostDetailAction: Action = {
         };
       }
 
-      // Get all comments on this post
-      const postComments = await db
-        .select({
-          id: comments.id,
-          content: comments.content,
-          authorId: comments.authorId,
-          parentCommentId: comments.parentCommentId,
-          createdAt: comments.createdAt,
-          authorUsername: users.username,
-          authorDisplayName: users.displayName,
-          authorProfileImageUrl: users.profileImageUrl,
-        })
-        .from(comments)
-        .leftJoin(users, eq(comments.authorId, users.id))
-        .where(and(eq(comments.postId, postId), isNull(comments.deletedAt)))
-        .orderBy(desc(comments.createdAt));
+      const postComments = await selectCommentsForPostDetailWithAuthors(
+        db,
+        postId
+      );
 
       // Helper to get author info from StaticDataRegistry or user data
       const getAuthorInfo = (
@@ -296,12 +274,7 @@ export const checkPostDetailAction: Action = {
       const commentTree = buildCommentTree(commentsWithAuthor);
       const { formatted: formattedComments } = formatCommentTree(commentTree);
 
-      // Get share count
-      const [shareResult] = await db
-        .select({ count: count() })
-        .from(shares)
-        .where(eq(shares.postId, postId));
-      const shareCount = shareResult?.count ?? 0;
+      const shareCount = await countSharesByPostId(db, postId);
 
       // Get post author info
       const postAuthorInfo = getAuthorInfo(

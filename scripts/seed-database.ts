@@ -12,7 +12,7 @@
  *   bun run scripts/seed-database.ts --stats  # Show database stats
  */
 
-import { closeDatabase } from '@babylon/db/runtime';
+import { closeDatabase } from '@babylon/db/engine-storage';
 
 import { GameBootstrapService } from '@babylon/engine';
 import { logger } from '@babylon/shared';

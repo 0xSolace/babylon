@@ -5,28 +5,20 @@
  * Imported by the /api/feed/stories route (wiring layer).
  */
 
+import type { DrizzleClient } from '@babylon/db';
 import {
-  and,
-  desc,
-  eq,
-  gte,
-  inArray,
-  isNull,
-  lt,
-  lte,
-  not,
-  sql,
+  executeNarrativeFeedEngagementCounts,
+  selectNarrativeFeedAuthorUsersByIds,
+  selectNarrativeFeedRecentPostSlices,
+  selectNarrativeNewMarketCardRows,
+  selectNarrativeOriginalPostsByIds,
+  selectNarrativeQuestionMarketIdsInnerJoin,
+  selectNarrativeQuestionMetaWithArc,
+  selectNarrativeUserLikedPostIds,
+  selectNarrativeUserSharedPostIds,
+  selectStoriesStandaloneBackfillCandidates,
+  selectStoriesTopicLinkedBackfillPosts,
 } from '@babylon/db';
-import {
-  arcStates,
-  db,
-  markets,
-  posts,
-  questions,
-  reactions,
-  shares,
-  users,
-} from '@babylon/db/runtime';
 import {
   dailyTopicService,
   isTextOnTopic,
@@ -111,7 +103,9 @@ export interface StoriesPipelineResult {
   generatedAt: string;
 }
 
-export async function buildStoriesFeed(): Promise<StoriesPipelineResult> {
+export async function buildStoriesFeed(
+  storyDb: DrizzleClient
+): Promise<StoriesPipelineResult> {
   const todaysTopic = await dailyTopicService.getCurrentTopic().catch((err) => {
     logger.warn('Failed to get daily topic', { error: err }, 'StoriesPipeline');
     return null;
@@ -120,32 +114,11 @@ export async function buildStoriesFeed(): Promise<StoriesPipelineResult> {
   const now = new Date();
   const cutoff = new Date(now.getTime() - TWELVE_HOURS_MS);
 
-  const recentPosts = await db
-    .select({
-      id: posts.id,
-      content: posts.content,
-      authorId: posts.authorId,
-      timestamp: posts.timestamp,
-      type: posts.type,
-      articleTitle: posts.articleTitle,
-      fullContent: posts.fullContent,
-      category: posts.category,
-      imageUrl: posts.imageUrl,
-      relatedQuestion: posts.relatedQuestion,
-      originalPostId: posts.originalPostId,
-    })
-    .from(posts)
-    .where(
-      and(
-        isNull(posts.deletedAt),
-        gte(posts.timestamp, cutoff),
-        lte(posts.timestamp, now),
-        isNull(posts.commentOnPostId),
-        isNull(posts.parentCommentId)
-      )
-    )
-    .orderBy(desc(posts.timestamp))
-    .limit(SAFETY_CANDIDATE_LIMIT);
+  const recentPosts = await selectNarrativeFeedRecentPostSlices(storyDb, {
+    cutoff,
+    now,
+    limit: SAFETY_CANDIDATE_LIMIT,
+  });
 
   // ─── Topic-relevant backfill (12h → 7d) ─────────────────────────────────────
   // When fresh content is sparse, fill remaining capacity with older posts that
@@ -159,34 +132,15 @@ export async function buildStoriesFeed(): Promise<StoriesPipelineResult> {
     const backfillCutoff = new Date(now.getTime() - BACKFILL_WINDOW_MS);
 
     // Source 1: Posts linked to questions with today's topicKey
-    const topicLinkedPosts = await db
-      .select({
-        id: posts.id,
-        content: posts.content,
-        authorId: posts.authorId,
-        timestamp: posts.timestamp,
-        type: posts.type,
-        articleTitle: posts.articleTitle,
-        fullContent: posts.fullContent,
-        category: posts.category,
-        imageUrl: posts.imageUrl,
-        relatedQuestion: posts.relatedQuestion,
-        originalPostId: posts.originalPostId,
-      })
-      .from(posts)
-      .innerJoin(questions, eq(posts.relatedQuestion, questions.questionNumber))
-      .where(
-        and(
-          isNull(posts.deletedAt),
-          gte(posts.timestamp, backfillCutoff),
-          lt(posts.timestamp, cutoff),
-          isNull(posts.commentOnPostId),
-          isNull(posts.parentCommentId),
-          eq(questions.topicKey, todaysTopic.topicKey)
-        )
-      )
-      .orderBy(desc(posts.timestamp))
-      .limit(remainingCapacity);
+    const topicLinkedPosts = await selectStoriesTopicLinkedBackfillPosts(
+      storyDb,
+      {
+        backfillCutoff,
+        primaryCutoff: cutoff,
+        topicKey: todaysTopic.topicKey,
+        limit: remainingCapacity,
+      }
+    );
 
     const primaryPostIds = new Set(recentPosts.map((p) => p.id));
     for (const p of topicLinkedPosts) {
@@ -199,33 +153,12 @@ export async function buildStoriesFeed(): Promise<StoriesPipelineResult> {
     // Source 2: Standalone posts (no relatedQuestion) matching topic keywords
     const standaloneCapacity = SAFETY_CANDIDATE_LIMIT - recentPosts.length;
     if (standaloneCapacity > 0) {
-      const standaloneCandidates = await db
-        .select({
-          id: posts.id,
-          content: posts.content,
-          authorId: posts.authorId,
-          timestamp: posts.timestamp,
-          type: posts.type,
-          articleTitle: posts.articleTitle,
-          fullContent: posts.fullContent,
-          category: posts.category,
-          imageUrl: posts.imageUrl,
-          relatedQuestion: posts.relatedQuestion,
-          originalPostId: posts.originalPostId,
-        })
-        .from(posts)
-        .where(
-          and(
-            isNull(posts.deletedAt),
-            gte(posts.timestamp, backfillCutoff),
-            lt(posts.timestamp, cutoff),
-            isNull(posts.commentOnPostId),
-            isNull(posts.parentCommentId),
-            isNull(posts.relatedQuestion)
-          )
-        )
-        .orderBy(desc(posts.timestamp))
-        .limit(standaloneCapacity * 3);
+      const standaloneCandidates =
+        await selectStoriesStandaloneBackfillCandidates(storyDb, {
+          backfillCutoff,
+          primaryCutoff: cutoff,
+          limit: standaloneCapacity * 3,
+        });
 
       let added = 0;
       for (const p of standaloneCandidates) {
@@ -259,73 +192,14 @@ export async function buildStoriesFeed(): Promise<StoriesPipelineResult> {
 
   const postIds = recentPosts.map((p) => p.id);
 
-  // Single CTE for all engagement counts — avoids N separate round-trips
-  const postIdsArray = sql`ARRAY[${sql.join(
-    postIds.map((id) => sql`${id}`),
-    sql`, `
-  )}]::text[]`;
-
-  const engagementRows = await db.execute(sql`
-    WITH
-    target_posts AS (
-      SELECT unnest(${postIdsArray}) AS post_id
-    ),
-    reaction_counts AS (
-      SELECT r."postId" AS post_id, COUNT(*) AS count
-      FROM "Reaction" r
-      INNER JOIN target_posts tp ON r."postId" = tp.post_id
-      WHERE r.type = 'like'
-      GROUP BY r."postId"
-    ),
-    comment_counts AS (
-      SELECT c."postId" AS post_id, COUNT(*) AS count
-      FROM "Comment" c
-      INNER JOIN target_posts tp ON c."postId" = tp.post_id
-      WHERE c."deletedAt" IS NULL
-      GROUP BY c."postId"
-    ),
-    share_counts AS (
-      SELECT s."postId" AS post_id, COUNT(*) AS count
-      FROM "Share" s
-      INNER JOIN target_posts tp ON s."postId" = tp.post_id
-      GROUP BY s."postId"
-    )
-    SELECT
-      tp.post_id,
-      COALESCE(rc.count, 0) AS like_count,
-      COALESCE(cc.count, 0) AS comment_count,
-      COALESCE(sc.count, 0) AS share_count
-    FROM target_posts tp
-    LEFT JOIN reaction_counts rc ON tp.post_id = rc.post_id
-    LEFT JOIN comment_counts cc ON tp.post_id = cc.post_id
-    LEFT JOIN share_counts sc ON tp.post_id = sc.post_id
-  `);
-
-  const reactionMap = new Map<string, number>();
-  const commentMap = new Map<string, number>();
-  const shareMap = new Map<string, number>();
-
-  const engagementResultRows = Array.isArray(engagementRows)
-    ? (engagementRows as Record<string, unknown>[])
-    : [];
-  for (const row of engagementResultRows) {
-    const postId = String(row['post_id'] ?? '');
-    if (!postId) continue;
-    reactionMap.set(postId, Number(row['like_count'] ?? 0));
-    commentMap.set(postId, Number(row['comment_count'] ?? 0));
-    shareMap.set(postId, Number(row['share_count'] ?? 0));
-  }
+  const { reactionMap, commentMap, shareMap } =
+    await executeNarrativeFeedEngagementCounts(storyDb, postIds);
 
   const authorIds = [...new Set(recentPosts.map((p) => p.authorId))];
-  const authorUsers = await db
-    .select({
-      id: users.id,
-      username: users.username,
-      displayName: users.displayName,
-      profileImageUrl: users.profileImageUrl,
-    })
-    .from(users)
-    .where(inArray(users.id, authorIds));
+  const authorUsers = await selectNarrativeFeedAuthorUsersByIds(
+    storyDb,
+    authorIds
+  );
   const userMap = new Map(authorUsers.map((u) => [u.id, u]));
 
   // Repost original posts for PostCard rendering
@@ -349,27 +223,14 @@ export async function buildStoriesFeed(): Promise<StoriesPipelineResult> {
     }
   >();
   if (repostOriginalIds.length > 0) {
-    const originalRows = await db
-      .select({
-        id: posts.id,
-        content: posts.content,
-        authorId: posts.authorId,
-        timestamp: posts.timestamp,
-      })
-      .from(posts)
-      .where(inArray(posts.id, repostOriginalIds));
+    const originalRows = await selectNarrativeOriginalPostsByIds(
+      storyDb,
+      repostOriginalIds
+    );
     const originalAuthorIds = [...new Set(originalRows.map((r) => r.authorId))];
     const originalAuthorUsers =
       originalAuthorIds.length > 0
-        ? await db
-            .select({
-              id: users.id,
-              username: users.username,
-              displayName: users.displayName,
-              profileImageUrl: users.profileImageUrl,
-            })
-            .from(users)
-            .where(inArray(users.id, originalAuthorIds))
+        ? await selectNarrativeFeedAuthorUsersByIds(storyDb, originalAuthorIds)
         : [];
     const originalUserMap = new Map(originalAuthorUsers.map((u) => [u.id, u]));
     for (const r of originalRows) {
@@ -396,18 +257,10 @@ export async function buildStoriesFeed(): Promise<StoriesPipelineResult> {
   ];
   const questionMetaMap = new Map<number, QuestionMeta>();
   if (questionNumbers.length > 0) {
-    const rows = await db
-      .select({
-        questionNumber: questions.questionNumber,
-        text: questions.text,
-        status: questions.status,
-        arcState: arcStates.currentState,
-        resolutionDate: questions.resolutionDate,
-        topicKey: questions.topicKey,
-      })
-      .from(questions)
-      .leftJoin(arcStates, eq(arcStates.questionId, questions.id))
-      .where(inArray(questions.questionNumber, questionNumbers));
+    const rows = await selectNarrativeQuestionMetaWithArc(
+      storyDb,
+      questionNumbers
+    );
     rows.forEach((q) =>
       questionMetaMap.set(q.questionNumber, {
         title: q.text,
@@ -649,17 +502,10 @@ export async function buildStoriesFeed(): Promise<StoriesPipelineResult> {
     .filter((s) => s.questionNumber !== null)
     .map((s) => s.questionNumber as number);
   if (storyQuestionNumbers.length > 0) {
-    const marketRows = await db
-      .select({
-        questionNumber: questions.questionNumber,
-        marketId: markets.id,
-      })
-      .from(questions)
-      .innerJoin(
-        markets,
-        sql`lower(trim(${markets.question})) = lower(trim(${questions.text}))`
-      )
-      .where(inArray(questions.questionNumber, storyQuestionNumbers));
+    const marketRows = await selectNarrativeQuestionMarketIdsInnerJoin(
+      storyDb,
+      storyQuestionNumbers
+    );
     const questionToMarket = new Map(
       marketRows.map((r) => [r.questionNumber, r.marketId])
     );
@@ -681,45 +527,13 @@ export async function buildStoriesFeed(): Promise<StoriesPipelineResult> {
       .filter((qn): qn is number => qn !== null)
   );
 
-  const newMarketQuestions = await db
-    .select({
-      questionNumber: questions.questionNumber,
-      text: questions.text,
-      resolutionDate: questions.resolutionDate,
-      createdAt: questions.createdAt,
-      arcState: arcStates.currentState,
-      marketId: markets.id,
-      yesShares: markets.yesShares,
-      noShares: markets.noShares,
-      topicKey: questions.topicKey,
-      topicLabel: questions.topicLabel,
-    })
-    .from(questions)
-    .leftJoin(arcStates, eq(arcStates.questionId, questions.id))
-    .leftJoin(
-      markets,
-      sql`lower(trim(${markets.question})) = lower(trim(${questions.text}))`
-    )
-    .where(
-      and(
-        eq(questions.status, 'active'),
-        gte(questions.createdAt, newMarketCutoff),
-        lt(
-          questions.resolutionDate,
-          new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
-        ),
-        not(
-          inArray(
-            questions.questionNumber,
-            existingQuestionNumbers.size > 0
-              ? [...existingQuestionNumbers]
-              : [-1]
-          )
-        )
-      )
-    )
-    .orderBy(desc(questions.createdAt))
-    .limit(MAX_NEW_MARKET_CANDIDATES);
+  const newMarketQuestions = await selectNarrativeNewMarketCardRows(storyDb, {
+    newMarketCutoff,
+    resolutionHorizon: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
+    existingQuestionNumbers:
+      existingQuestionNumbers.size > 0 ? [...existingQuestionNumbers] : [],
+    limit: MAX_NEW_MARKET_CANDIDATES,
+  });
 
   for (const question of newMarketQuestions) {
     const hoursSinceOpen =
@@ -827,30 +641,26 @@ export async function buildStoriesFeed(): Promise<StoriesPipelineResult> {
   };
 }
 
-/** Mutates stories in-place with per-user like/share state. Bypasses the shared cache. */
-export async function enrichStoriesForUser(
+/**
+ * Mutates `stories` in-place with per-user like/share state.
+ * Call from `runWithOptionalUserRls(user, …)` so RLS matches the session user.
+ */
+export async function enrichStoriesForUserWithDb(
+  db: DrizzleClient,
   stories: NarrativeStory[],
   postIds: string[],
   userId: string
 ): Promise<void> {
-  const [userLikes, userShares] = await Promise.all([
-    db
-      .select({ postId: reactions.postId })
-      .from(reactions)
-      .where(
-        and(
-          inArray(reactions.postId, postIds),
-          eq(reactions.userId, userId),
-          eq(reactions.type, 'like')
-        )
-      ),
-    db
-      .select({ postId: shares.postId })
-      .from(shares)
-      .where(and(inArray(shares.postId, postIds), eq(shares.userId, userId))),
+  const [likeRows, shareRows] = await Promise.all([
+    selectNarrativeUserLikedPostIds(db, { userId, postIds }),
+    selectNarrativeUserSharedPostIds(db, { userId, postIds }),
   ]);
-  const likedPostIds = new Set(userLikes.map((l) => l.postId));
-  const sharedPostIds = new Set(userShares.map((s) => s.postId));
+  const likedPostIds = new Set(
+    likeRows.map((l) => l.postId).filter((id): id is string => id != null)
+  );
+  const sharedPostIds = new Set(
+    shareRows.map((s) => s.postId).filter((id): id is string => id != null)
+  );
   for (const story of stories) {
     for (const post of story.posts) {
       post.isLiked = likedPostIds.has(post.id);

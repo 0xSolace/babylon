@@ -7,7 +7,7 @@
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import * as actualDb from '@babylon/db';
-import * as actualDbRuntime from '@babylon/db/runtime';
+import * as actualDbRuntime from '@babylon/db/engine-storage';
 import * as actualShared from '@babylon/shared';
 
 // Track mock behavior flags
@@ -70,7 +70,7 @@ const mockDb = {
 
 mock.module('@babylon/db', () => ({ ...actualDb }));
 
-mock.module('@babylon/db/runtime', () => ({
+mock.module('@babylon/db/engine-storage', () => ({
   ...actualDbRuntime,
   db: mockDb,
 }));

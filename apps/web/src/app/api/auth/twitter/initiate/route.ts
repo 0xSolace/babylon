@@ -36,7 +36,7 @@
  */
 
 import { authenticate, withErrorHandling } from '@babylon/api';
-import { db } from '@babylon/db/runtime';
+import { asUser } from '@babylon/db/engine-storage';
 
 import {
   generateSnowflakeId,
@@ -74,16 +74,18 @@ export const GET = withErrorHandling(async function GET(request: NextRequest) {
   const codeChallenge = generateCodeChallenge(codeVerifier);
 
   // Store code verifier temporarily (expires in 10 minutes)
-  const oauthRecord = await db.oAuthState.create({
-    data: {
-      id: await generateSnowflakeId(),
-      userId,
-      state,
-      codeVerifier,
-      returnPath: 'twitter', // Use returnPath to store provider
-      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
-    },
-  });
+  const oauthRecord = await asUser(authUser, async (db) =>
+    db.oAuthState.create({
+      data: {
+        id: await generateSnowflakeId(),
+        userId,
+        state,
+        codeVerifier,
+        returnPath: 'twitter', // Use returnPath to store provider
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      },
+    })
+  );
 
   logger.info(
     'Created OAuth state record',

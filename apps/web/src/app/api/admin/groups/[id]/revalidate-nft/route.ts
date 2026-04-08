@@ -20,15 +20,11 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, eq, inArray } from '@babylon/db';
 import {
-  asSystem,
-  chatParticipants,
-  chats,
-  db,
-  users,
-} from '@babylon/db/runtime';
-
+  selectActiveChatParticipantWalletsByChatId,
+  selectChatByIdForNftRevalidate,
+} from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
@@ -53,10 +49,10 @@ export const POST = withErrorHandling(
       metadata: { action: 'revalidate_nft_access' },
     });
 
-    // Get the chat and verify it's NFT-gated
-    const chat = await db.query.chats.findFirst({
-      where: eq(chats.id, chatId),
-    });
+    const chat = await asSystem(
+      (database) => selectChatByIdForNftRevalidate(database, chatId),
+      'admin-revalidate-nft-chat'
+    );
 
     if (!chat) {
       throw new NotFoundError('Chat', chatId);
@@ -67,39 +63,11 @@ export const POST = withErrorHandling(
     }
 
     // Get all active participants with their wallet addresses
-    const participants = await asSystem(async (database) => {
-      const participantList = await database
-        .select({
-          participantId: chatParticipants.id,
-          userId: chatParticipants.userId,
-        })
-        .from(chatParticipants)
-        .where(
-          and(
-            eq(chatParticipants.chatId, chatId),
-            eq(chatParticipants.isActive, true)
-          )
-        );
-
-      if (participantList.length === 0) return [];
-
-      const userIds = participantList.map((p) => p.userId);
-      const usersList = await database
-        .select({
-          id: users.id,
-          walletAddress: users.walletAddress,
-        })
-        .from(users)
-        .where(inArray(users.id, userIds));
-
-      const usersMap = new Map(usersList.map((u) => [u.id, u]));
-
-      return participantList.map((p) => ({
-        participantId: p.participantId,
-        userId: p.userId,
-        walletAddress: usersMap.get(p.userId)?.walletAddress ?? null,
-      }));
-    }, 'admin-revalidate-nft');
+    const participants = await asSystem(
+      (database) =>
+        selectActiveChatParticipantWalletsByChatId(database, chatId),
+      'admin-revalidate-nft'
+    );
 
     // Check each participant's NFT ownership
     const results = {

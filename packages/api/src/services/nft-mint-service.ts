@@ -11,16 +11,25 @@
  */
 
 import { randomBytes } from 'node:crypto';
-import { and, eq, type Transaction } from '@babylon/db';
 import {
-  db,
-  nftClaims,
-  nftCollection,
-  nftOwnership,
-  nftSnapshot,
-  users,
-} from '@babylon/db/runtime';
-
+  type DrizzleClient,
+  insertNftClaimForMint,
+  insertNftOwnershipForMint,
+  markNftSnapshotMintedForUser,
+  reconcileProtoMonkeysMintInTx,
+  selectNftCollectionConfirmRow,
+  selectNftCollectionPreviewByTokenId,
+  selectNftMetadataByTokenId,
+  selectNftOwnershipIdByToken,
+  selectNftSnapshotForConfirm,
+  selectNftSnapshotForEligibility,
+  selectNftSnapshotMintFields,
+  selectUserPrivyIdsForMint,
+  selectUserPrivyWalletIdOnly,
+  type Transaction,
+  updateNftOwnershipForMint,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import {
   hardhat,
   logger,
@@ -269,14 +278,7 @@ async function getDbUserForMint(dbUserId: string): Promise<{
   privyId: string;
   privyWalletId: string | null;
 }> {
-  const [user] = await db
-    .select({
-      privyId: users.privyId,
-      privyWalletId: users.privyWalletId,
-    })
-    .from(users)
-    .where(eq(users.id, dbUserId))
-    .limit(1);
+  const user = await selectUserPrivyIdsForMint(db, dbUserId);
 
   if (!user?.privyId) {
     throw new ValidationError(
@@ -419,88 +421,16 @@ export async function reconcileOnChainMint(
   const now = new Date();
 
   await db.transaction(async (tx: Transaction) => {
-    // 1. Update NftSnapshot
-    await tx
-      .update(nftSnapshot)
-      .set({
-        hasMinted: true,
-        mintedTokenId,
-        mintedAt: now,
-        mintTxHash: txHash,
-      })
-      .where(
-        and(eq(nftSnapshot.userId, userId), eq(nftSnapshot.hasMinted, false))
-      );
-
-    // 2. Upsert NftOwnership (replace stale record if one exists for this tokenId)
-    const [existingOwnership] = await tx
-      .select({ id: nftOwnership.id })
-      .from(nftOwnership)
-      .where(eq(nftOwnership.tokenId, mintedTokenId))
-      .limit(1);
-
-    if (existingOwnership) {
-      await tx
-        .update(nftOwnership)
-        .set({
-          ownerAddress: normalizedWallet,
-          userId,
-          acquiredAt: now,
-          txHash,
-          blockNumber,
-          updatedAt: now,
-        })
-        .where(eq(nftOwnership.tokenId, mintedTokenId));
-    } else {
-      await tx.insert(nftOwnership).values({
-        id: nanoid(),
-        tokenId: mintedTokenId,
-        ownerAddress: normalizedWallet,
-        userId,
-        acquiredAt: now,
-        txHash,
-        blockNumber,
-        updatedAt: now,
-      });
-    }
-
-    // 3. Upsert NftClaim (replace stale record if one exists for this tokenId)
-    const [snapshotEntry] = await tx
-      .select({ rank: nftSnapshot.rank, points: nftSnapshot.points })
-      .from(nftSnapshot)
-      .where(eq(nftSnapshot.userId, userId))
-      .limit(1);
-
-    const [existingClaim] = await tx
-      .select({ id: nftClaims.id })
-      .from(nftClaims)
-      .where(eq(nftClaims.tokenId, mintedTokenId))
-      .limit(1);
-
-    if (existingClaim) {
-      await tx
-        .update(nftClaims)
-        .set({
-          claimerUserId: userId,
-          claimerAddress: normalizedWallet,
-          claimedAt: now,
-          txHash,
-          snapshotRank: snapshotEntry?.rank ?? null,
-          snapshotPoints: snapshotEntry?.points ?? null,
-        })
-        .where(eq(nftClaims.tokenId, mintedTokenId));
-    } else {
-      await tx.insert(nftClaims).values({
-        id: nanoid(),
-        tokenId: mintedTokenId,
-        claimerUserId: userId,
-        claimerAddress: normalizedWallet,
-        claimedAt: now,
-        txHash,
-        snapshotRank: snapshotEntry?.rank ?? null,
-        snapshotPoints: snapshotEntry?.points ?? null,
-      });
-    }
+    await reconcileProtoMonkeysMintInTx(tx, {
+      userId,
+      normalizedWallet,
+      mintedTokenId,
+      txHash,
+      blockNumber,
+      now,
+      newOwnershipId: nanoid(),
+      newClaimId: nanoid(),
+    });
   });
 
   logger.info(
@@ -565,22 +495,7 @@ function encodeMintCall(
 export async function checkEligibility(
   userId: string
 ): Promise<EligibilityResult> {
-  // Get snapshot entry for this user
-  const [snapshotEntry] = await db
-    .select({
-      id: nftSnapshot.id,
-      userId: nftSnapshot.userId,
-      walletAddress: nftSnapshot.walletAddress,
-      rank: nftSnapshot.rank,
-      points: nftSnapshot.points,
-      snapshotTakenAt: nftSnapshot.snapshotTakenAt,
-      hasMinted: nftSnapshot.hasMinted,
-      mintedTokenId: nftSnapshot.mintedTokenId,
-      mintTxHash: nftSnapshot.mintTxHash,
-    })
-    .from(nftSnapshot)
-    .where(eq(nftSnapshot.userId, userId))
-    .limit(1);
+  const snapshotEntry = await selectNftSnapshotForEligibility(db, userId);
 
   if (!snapshotEntry) {
     return {
@@ -593,16 +508,10 @@ export async function checkEligibility(
 
   // Check if already minted (per DB)
   if (snapshotEntry.hasMinted && snapshotEntry.mintedTokenId !== null) {
-    const [mintedNft] = await db
-      .select({
-        tokenId: nftCollection.tokenId,
-        name: nftCollection.name,
-        thumbnailUrl: nftCollection.thumbnailUrl,
-        imageUrl: nftCollection.imageUrl,
-      })
-      .from(nftCollection)
-      .where(eq(nftCollection.tokenId, snapshotEntry.mintedTokenId))
-      .limit(1);
+    const mintedNft = await selectNftCollectionPreviewByTokenId(
+      db,
+      snapshotEntry.mintedTokenId
+    );
 
     return {
       eligible: true,
@@ -628,11 +537,7 @@ export async function checkEligibility(
   try {
     const { contractAddress, chainId } = getConfig();
     if (contractAddress && isAddress(contractAddress)) {
-      const [dbUser] = await db
-        .select({ privyWalletId: users.privyWalletId })
-        .from(users)
-        .where(eq(users.id, userId))
-        .limit(1);
+      const dbUser = await selectUserPrivyWalletIdOnly(db, userId);
 
       if (dbUser?.privyWalletId) {
         const embeddedWallet = await resolveUserEmbeddedWalletAddress(userId);
@@ -677,27 +582,14 @@ export async function checkEligibility(
           }
 
           // Try to fetch reconciled data (may be stale if reconciliation failed)
-          const [updated] = await db
-            .select({
-              mintedTokenId: nftSnapshot.mintedTokenId,
-              mintTxHash: nftSnapshot.mintTxHash,
-            })
-            .from(nftSnapshot)
-            .where(eq(nftSnapshot.userId, userId))
-            .limit(1);
+          const updated = await selectNftSnapshotMintFields(db, userId);
 
           let mintedNft: EligibilityResult['mintedNft'];
           if (updated?.mintedTokenId) {
-            const [nftData] = await db
-              .select({
-                tokenId: nftCollection.tokenId,
-                name: nftCollection.name,
-                thumbnailUrl: nftCollection.thumbnailUrl,
-                imageUrl: nftCollection.imageUrl,
-              })
-              .from(nftCollection)
-              .where(eq(nftCollection.tokenId, updated.mintedTokenId))
-              .limit(1);
+            const nftData = await selectNftCollectionPreviewByTokenId(
+              db,
+              updated.mintedTokenId
+            );
 
             if (nftData) {
               mintedNft = {
@@ -938,17 +830,7 @@ export async function confirmMint(
 
   // Update database in transaction
   const result = await db.transaction(async (tx: Transaction) => {
-    // Get snapshot entry
-    const [snapshotEntry] = await tx
-      .select({
-        id: nftSnapshot.id,
-        rank: nftSnapshot.rank,
-        points: nftSnapshot.points,
-        hasMinted: nftSnapshot.hasMinted,
-      })
-      .from(nftSnapshot)
-      .where(eq(nftSnapshot.userId, userId))
-      .limit(1);
+    const snapshotEntry = await selectNftSnapshotForConfirm(tx, userId);
 
     if (!snapshotEntry) {
       throw new ValidationError(
@@ -966,75 +848,51 @@ export async function confirmMint(
       );
     }
 
-    // Check if this token ID is already claimed (shouldn't happen, but safety check)
-    const [existingOwnership] = await tx
-      .select({ id: nftOwnership.id })
-      .from(nftOwnership)
-      .where(eq(nftOwnership.tokenId, mintedTokenId))
-      .limit(1);
+    const existingOwnership = await selectNftOwnershipIdByToken(
+      tx,
+      mintedTokenId
+    );
 
     if (existingOwnership) {
-      // Token already has owner in DB - this could be a transfer, update it
-      await tx
-        .update(nftOwnership)
-        .set({
-          ownerAddress: normalizedWallet,
-          userId: userId,
-          acquiredAt: now,
-          txHash: txHash,
-          blockNumber: receipt.blockNumber,
-          updatedAt: now,
-        })
-        .where(eq(nftOwnership.tokenId, mintedTokenId));
+      await updateNftOwnershipForMint(tx, {
+        tokenId: mintedTokenId,
+        normalizedWallet,
+        userId,
+        now,
+        txHash,
+        blockNumber: receipt.blockNumber,
+      });
     } else {
-      // Insert new ownership record
-      await tx.insert(nftOwnership).values({
+      await insertNftOwnershipForMint(tx, {
         id: nanoid(),
         tokenId: mintedTokenId,
-        ownerAddress: normalizedWallet,
-        userId: userId,
-        acquiredAt: now,
-        txHash: txHash,
+        normalizedWallet,
+        userId,
+        now,
+        txHash,
         blockNumber: receipt.blockNumber,
-        updatedAt: now,
       });
     }
 
-    // Insert claim record
-    await tx.insert(nftClaims).values({
+    await insertNftClaimForMint(tx, {
       id: nanoid(),
       tokenId: mintedTokenId,
-      claimerUserId: userId,
-      claimerAddress: normalizedWallet,
-      claimedAt: now,
-      txHash: txHash,
-      snapshotRank: snapshotEntry.rank,
-      snapshotPoints: snapshotEntry.points,
+      userId,
+      normalizedWallet,
+      now,
+      txHash,
+      rank: snapshotEntry.rank,
+      points: snapshotEntry.points,
     });
 
-    // Update snapshot
-    await tx
-      .update(nftSnapshot)
-      .set({
-        hasMinted: true,
-        mintedTokenId: mintedTokenId,
-        mintedAt: now,
-        mintTxHash: txHash,
-      })
-      .where(eq(nftSnapshot.userId, userId));
+    await markNftSnapshotMintedForUser(tx, {
+      userId,
+      mintedTokenId,
+      now,
+      txHash,
+    });
 
-    // Get NFT metadata
-    const [nftData] = await tx
-      .select({
-        tokenId: nftCollection.tokenId,
-        name: nftCollection.name,
-        imageUrl: nftCollection.imageUrl,
-        thumbnailUrl: nftCollection.thumbnailUrl,
-        storyTitle: nftCollection.storyTitle,
-      })
-      .from(nftCollection)
-      .where(eq(nftCollection.tokenId, mintedTokenId))
-      .limit(1);
+    const nftData = await selectNftCollectionConfirmRow(tx, mintedTokenId);
 
     return { snapshotEntry, nftData };
   });
@@ -1069,7 +927,10 @@ export async function confirmMint(
  * @param tokenId - The token ID
  * @returns ERC-721 compatible metadata
  */
-export async function getTokenMetadata(tokenId: number) {
+export async function getTokenMetadata(
+  tokenId: number,
+  client: DrizzleClient = db
+) {
   if (tokenId < 1 || tokenId > MAX_TOKEN_ID) {
     throw new ValidationError(
       'Invalid token ID',
@@ -1078,19 +939,7 @@ export async function getTokenMetadata(tokenId: number) {
     );
   }
 
-  const [nft] = await db
-    .select({
-      tokenId: nftCollection.tokenId,
-      name: nftCollection.name,
-      description: nftCollection.description,
-      imageUrl: nftCollection.imageUrl,
-      attributes: nftCollection.attributes,
-      storyTitle: nftCollection.storyTitle,
-      storyContent: nftCollection.storyContent,
-    })
-    .from(nftCollection)
-    .where(eq(nftCollection.tokenId, tokenId))
-    .limit(1);
+  const nft = await selectNftMetadataByTokenId(client, tokenId);
 
   if (!nft) {
     throw new ValidationError(

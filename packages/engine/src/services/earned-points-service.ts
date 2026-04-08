@@ -6,9 +6,17 @@
  * points for trades.
  */
 
-import { eq, type Transaction } from '@babylon/db';
-import { db, pointsTransactions, users } from '@babylon/db/runtime';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+import {
+  awardBonusPointsAsSystem,
+  awardEarnedPointsForPnLAsSystem,
+  awardEarnedPointsForPnLWithClient,
+  type DrizzleClient,
+  awardBonusPointsWithClient as dbAwardBonusPointsWithClient,
+  syncEarnedPointsFromPnl as dbSyncEarnedPointsFromPnl,
+  listNonActorUserIds,
+  type Transaction,
+} from '@babylon/db';
+import { logger } from '@babylon/shared';
 import { TotalPointsService } from './total-points-service';
 
 /**
@@ -21,16 +29,22 @@ export class EarnedPointsService {
   /** Base reputation points for all users */
   private static readonly BASE_POINTS = 100;
 
-  /**
-   * Calculate total reputation points from component values.
-   * Centralizes the reputation formula to ensure consistency.
-   *
-   * @param invitePoints - Points earned from invites
-   * @param earnedPoints - Points earned from trading P&L
-   * @param bonusPoints - Bonus points from onboarding, events, etc.
-   * @returns Total reputation points
-   */
-  private static calculateReputationPoints(
+  private static readonly earnedPointsDbDeps = {
+    pnlToPoints: (pnl: number) => EarnedPointsService.pnlToPoints(pnl),
+    calculateReputationPoints: (
+      invitePoints: number,
+      earnedPoints: number,
+      bonusPoints: number
+    ) =>
+      EarnedPointsService.totalReputationPoints(
+        invitePoints,
+        earnedPoints,
+        bonusPoints
+      ),
+  } as const;
+
+  /** Exposed for `@babylon/db` earned-points query helpers (same formula as reputation updates). */
+  static totalReputationPoints(
     invitePoints: number,
     earnedPoints: number,
     bonusPoints: number
@@ -80,56 +94,9 @@ export class EarnedPointsService {
    * @throws {Error} If user not found
    */
   static async syncEarnedPointsFromPnL(userId: string): Promise<void> {
-    const result = await db
-      .select({
-        lifetimePnL: users.lifetimePnL,
-        earnedPoints: users.earnedPoints,
-        invitePoints: users.invitePoints,
-        bonusPoints: users.bonusPoints,
-        reputationPoints: users.reputationPoints,
-      })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    const user = result[0];
-
-    if (!user) {
-      throw new Error(`User not found: ${userId}`);
-    }
-
-    const lifetimePnL = Number(user.lifetimePnL);
-    const newEarnedPoints = EarnedPointsService.pnlToPoints(lifetimePnL);
-
-    // Only update if earned points have changed
-    if (newEarnedPoints === user.earnedPoints) {
-      return;
-    }
-
-    // Calculate new total reputation points using centralized helper
-    const newReputationPoints = EarnedPointsService.calculateReputationPoints(
-      user.invitePoints,
-      newEarnedPoints,
-      user.bonusPoints
-    );
-
-    await db
-      .update(users)
-      .set({
-        earnedPoints: newEarnedPoints,
-        reputationPoints: newReputationPoints,
-      })
-      .where(eq(users.id, userId));
-
-    logger.info(
-      'Updated earned points from P&L',
-      {
-        userId,
-        lifetimePnL,
-        earnedPoints: newEarnedPoints,
-        totalPoints: newReputationPoints,
-      },
-      'EarnedPointsService'
+    await dbSyncEarnedPointsFromPnl(
+      userId,
+      EarnedPointsService.earnedPointsDbDeps
     );
   }
 
@@ -157,113 +124,23 @@ export class EarnedPointsService {
     relatedId?: string,
     tx?: Transaction
   ): Promise<number> {
-    const database = tx ?? db;
-    const computedEarnedPoints =
-      EarnedPointsService.pnlToPoints(newLifetimePnL);
-
-    const result = await database
-      .select({
-        earnedPoints: users.earnedPoints,
-        invitePoints: users.invitePoints,
-        bonusPoints: users.bonusPoints,
-        reputationPoints: users.reputationPoints,
-        lifetimePnL: users.lifetimePnL,
-      })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    const user = result[0];
-
-    if (!user) {
-      throw new Error(`User not found: ${userId}`);
-    }
-
-    const currentEarnedPoints = user.earnedPoints;
-    const storedLifetimePnL = Number(user.lifetimePnL);
-
-    // Compute what earnedPoints should be based on the NEW lifetimePnL
-    // The newLifetimePnL was already written to the DB in the same transaction
-    // so storedLifetimePnL should equal newLifetimePnL
-    const earnedPointsDelta = computedEarnedPoints - currentEarnedPoints;
-
-    // Log if there was a pre-existing mismatch (for monitoring purposes)
-    // Points may be out of sync due to concurrent updates or race conditions
-    const expectedPointsFromPreviousPnL = EarnedPointsService.pnlToPoints(
-      storedLifetimePnL - (newLifetimePnL - storedLifetimePnL)
-    );
-    if (
-      expectedPointsFromPreviousPnL !== currentEarnedPoints &&
-      storedLifetimePnL !== newLifetimePnL
-    ) {
-      // storedLifetimePnL should equal newLifetimePnL since we're in the same transaction
-      // If they differ, something unexpected happened
-      logger.warn(
-        'Earned points may have been out of sync (auto-correcting)',
-        {
-          userId,
-          storedLifetimePnL,
-          newLifetimePnL,
-          currentEarnedPoints,
-          computedNewPoints: computedEarnedPoints,
-        },
-        'EarnedPointsService'
-      );
-    }
-
-    if (earnedPointsDelta === 0) {
-      return 0;
-    }
-
-    const newEarnedPoints = computedEarnedPoints;
-    // Calculate new total reputation points using centralized helper
-    const newReputationPoints = EarnedPointsService.calculateReputationPoints(
-      user.invitePoints,
-      newEarnedPoints,
-      user.bonusPoints
-    );
-
-    // Update user and create transaction
-    await database
-      .update(users)
-      .set({
-        earnedPoints: newEarnedPoints,
-        reputationPoints: newReputationPoints,
-      })
-      .where(eq(users.id, userId));
-
-    await database.insert(pointsTransactions).values({
-      id: await generateSnowflakeId(),
-      userId,
-      amount: earnedPointsDelta,
-      pointsBefore: user.reputationPoints,
-      pointsAfter: newReputationPoints,
-      reason: 'trading_pnl',
-      metadata: JSON.stringify({
+    if (tx) {
+      return awardEarnedPointsForPnLWithClient(
+        tx,
+        userId,
+        newLifetimePnL,
         tradeType,
         relatedId,
-        storedLifetimePnL,
-        newLifetimePnL,
-        previousEarnedPoints: currentEarnedPoints,
-        newEarnedPoints,
-        earnedPointsDelta,
-      }),
-    });
-
-    logger.info(
-      'Awarded earned points for P&L',
-      {
-        userId,
-        storedLifetimePnL,
-        newLifetimePnL,
-        earnedPointsDelta,
-        totalEarnedPoints: newEarnedPoints,
-        totalReputationPoints: newReputationPoints,
-      },
-      'EarnedPointsService'
+        EarnedPointsService.earnedPointsDbDeps
+      );
+    }
+    return awardEarnedPointsForPnLAsSystem(
+      userId,
+      newLifetimePnL,
+      tradeType,
+      relatedId,
+      EarnedPointsService.earnedPointsDbDeps
     );
-
-    return earnedPointsDelta;
   }
 
   /**
@@ -280,13 +157,37 @@ export class EarnedPointsService {
    * @returns {Promise<number>} New total bonus points
    * @throws {Error} If points is not a finite non-negative number
    */
+  private static async awardBonusPointsWithClient(
+    client: Transaction | DrizzleClient,
+    userId: string,
+    points: number,
+    reason: string
+  ): Promise<number> {
+    const newBonusPoints = await dbAwardBonusPointsWithClient(
+      client,
+      userId,
+      points,
+      reason,
+      EarnedPointsService.earnedPointsDbDeps
+    );
+
+    TotalPointsService.markDirty(userId).catch((e) =>
+      logger.warn(
+        'Failed to mark user dirty after bonus points',
+        { userId, error: e instanceof Error ? e.message : String(e) },
+        'EarnedPointsService'
+      )
+    );
+
+    return newBonusPoints;
+  }
+
   static async awardBonusPoints(
     userId: string,
     points: number,
     reason: string,
-    tx: Transaction | typeof db = db
+    tx?: Transaction
   ): Promise<number> {
-    // Validate points parameter
     if (!Number.isFinite(points)) {
       throw new Error(
         `Invalid points value: ${points}. Points must be a finite number.`
@@ -298,77 +199,25 @@ export class EarnedPointsService {
       );
     }
 
-    // Early return for zero points - no DB mutation needed.
-    // We intentionally skip fetching bonusPoints here because awarding 0 points
-    // should be a pure no-op. If callers need the current balance, they should
-    // query it separately. This saves a DB round-trip for the common case.
     if (points === 0) {
       return 0;
     }
 
-    const result = await tx
-      .select({
-        earnedPoints: users.earnedPoints,
-        invitePoints: users.invitePoints,
-        bonusPoints: users.bonusPoints,
-        reputationPoints: users.reputationPoints,
-      })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    const user = result[0];
-
-    if (!user) {
-      throw new Error(`User not found: ${userId}`);
-    }
-
-    const newBonusPoints = user.bonusPoints + points;
-
-    // Calculate new total reputation points using centralized helper
-    const newReputationPoints = EarnedPointsService.calculateReputationPoints(
-      user.invitePoints,
-      user.earnedPoints,
-      newBonusPoints
-    );
-
-    // Update user
-    await tx
-      .update(users)
-      .set({
-        bonusPoints: newBonusPoints,
-        reputationPoints: newReputationPoints,
-      })
-      .where(eq(users.id, userId));
-
-    // Create transaction record
-    await tx.insert(pointsTransactions).values({
-      id: await generateSnowflakeId(),
-      userId,
-      amount: points,
-      pointsBefore: user.reputationPoints,
-      pointsAfter: newReputationPoints,
-      reason,
-      metadata: JSON.stringify({
-        pointsAwarded: points,
-        previousBonusPoints: user.bonusPoints,
-        newBonusPoints,
-      }),
-    });
-
-    logger.info(
-      'Awarded bonus points',
-      {
+    if (tx) {
+      return EarnedPointsService.awardBonusPointsWithClient(
+        tx,
         userId,
         points,
-        reason,
-        totalBonusPoints: newBonusPoints,
-        totalReputationPoints: newReputationPoints,
-      },
-      'EarnedPointsService'
-    );
+        reason
+      );
+    }
 
-    // Reputation changed → mark totalPoints dirty for cron recompute
+    const newBonusPoints = await awardBonusPointsAsSystem(
+      userId,
+      points,
+      reason,
+      EarnedPointsService.earnedPointsDbDeps
+    );
     TotalPointsService.markDirty(userId).catch((e) =>
       logger.warn(
         'Failed to mark user dirty after bonus points',
@@ -376,7 +225,6 @@ export class EarnedPointsService {
         'EarnedPointsService'
       )
     );
-
     return newBonusPoints;
   }
 
@@ -389,10 +237,7 @@ export class EarnedPointsService {
     success: number;
     errors: number;
   }> {
-    const usersList = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.isActor, false));
+    const usersList = await listNonActorUserIds();
 
     logger.info(
       `Syncing earned points for ${usersList.length} users`,

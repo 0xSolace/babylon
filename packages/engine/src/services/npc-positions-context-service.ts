@@ -6,10 +6,10 @@
  * - more specific ("you’re coping because you’re long YES on Q12")
  * - more agenda-driven (self-serving narrative consistent with their bags)
  *
- * IMPORTANT: Must work in both PostgreSQL and JSON modes (no raw Drizzle queries).
+ * IMPORTANT: Must work in both PostgreSQL and JSON modes; SQL runs in `@babylon/db` via `loadNpcPositionsContextBundle`.
  */
 
-import { db } from '@babylon/db/runtime';
+import { loadNpcPositionsContextBundle } from '@babylon/db';
 
 export interface PositionsContextOptions {
   maxPredictionPositionsPerActor?: number;
@@ -70,46 +70,8 @@ export async function buildPositionsPromptContextByActorId(
 
   if (actorIds.length === 0) return {};
 
-  const [predictionPositions, perpPositions] = await Promise.all([
-    db.position.findMany({
-      where: { userId: { in: actorIds }, status: 'active' },
-      select: {
-        userId: true,
-        side: true,
-        questionId: true,
-        pnl: true,
-        amount: true,
-        shares: true,
-      },
-    }),
-    db.perpPosition.findMany({
-      where: { userId: { in: actorIds }, closedAt: null },
-      select: {
-        userId: true,
-        ticker: true,
-        side: true,
-        leverage: true,
-        size: true,
-        unrealizedPnL: true,
-        liquidationPrice: true,
-      },
-    }),
-  ]);
-
-  const questionNumbers = Array.from(
-    new Set(
-      predictionPositions
-        .map((p) => p.questionId)
-        .filter((q): q is number => typeof q === 'number')
-    )
-  );
-
-  const questions = questionNumbers.length
-    ? await db.question.findMany({
-        where: { questionNumber: { in: questionNumbers } },
-        select: { questionNumber: true, text: true },
-      })
-    : [];
+  const { predictionPositions, perpPositions, questions } =
+    await loadNpcPositionsContextBundle(actorIds);
 
   const questionMap = new Map<number, string>(
     questions.map((q) => [q.questionNumber, formatQuestionLabel(q)])

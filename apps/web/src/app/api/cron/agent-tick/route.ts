@@ -68,8 +68,8 @@ import {
   verifyCronAuth,
   withErrorHandling,
 } from '@babylon/api';
-import { eq, inArray, type User, type UserAgentConfig } from '@babylon/db';
-import { db, userAgentConfigs, users } from '@babylon/db/runtime';
+import type { User, UserAgentConfig } from '@babylon/db';
+import * as BabylonDb from '@babylon/db';
 import { GROQ_MODELS, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -214,9 +214,9 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
     }
 
     // 3. Check Game status from database
-    const gameState = await db.game.findFirst({
-      where: { isContinuous: true },
-    });
+    const gameState = await BabylonDb.selectContinuousGameStateForCron(
+      'agent-tick-continuous-game'
+    );
 
     // Skip if no continuous game exists
     if (!gameState) {
@@ -293,13 +293,8 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
     let configsMap = new Map<string, UserAgentConfig>();
 
     if (userIds.length > 0) {
-      const [allUsers, allConfigs] = await Promise.all([
-        db.select().from(users).where(inArray(users.id, userIds)),
-        db
-          .select()
-          .from(userAgentConfigs)
-          .where(inArray(userAgentConfigs.userId, userIds)),
-      ]);
+      const { users: allUsers, configs: allConfigs } =
+        await BabylonDb.selectUsersAndAgentConfigsForAgentTickBatch(userIds);
 
       usersMap = new Map(allUsers.map((u) => [u.id, u]));
       configsMap = new Map(allConfigs.map((c) => [c.userId, c]));
@@ -559,14 +554,10 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
         });
 
         // Update agent config status
-        await db
-          .update(userAgentConfigs)
-          .set({
-            lastTickAt: new Date(),
-            status: 'running',
-            updatedAt: new Date(),
-          })
-          .where(eq(userAgentConfigs.userId, eligibleAgent.user.id));
+        await BabylonDb.updateUserAgentConfigLastTickRunningStatus(
+          eligibleAgent.user.id,
+          new Date()
+        );
 
         results.push({
           agentId: eligibleAgent.agentId,

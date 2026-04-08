@@ -6,16 +6,14 @@
  */
 
 import { countTokensSync, truncateToTokenLimitSync } from '@babylon/api';
-import { desc, eq } from '@babylon/db';
 import {
-  db,
-  getDbInstance,
-  markets,
-  perpPositions,
-  positions,
-  users,
-} from '@babylon/db/runtime';
-
+  listOrganizationStatesByPriceDescForWorldContext,
+  selectPerpPositionsByUserIdLimit,
+  selectPositionsByUserIdLimit,
+  selectUnresolvedMarketsOrderCreatedDescLimit,
+  selectUserRowById,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import {
   formatRandomContext,
   generateRandomMarketContext,
@@ -57,12 +55,7 @@ export class AutonomousTradingService {
     const isNpc = !!npcActor;
 
     // Get agent from User table (will be null for NPCs)
-    const agentResult = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
-    const agent = agentResult[0];
+    const agent = await selectUserRowById(db, agentUserId);
 
     // Fallback values for NPCs (who don't have User records)
     const agentDisplayName = isNpc
@@ -73,18 +66,18 @@ export class AutonomousTradingService {
     const config = await getAgentConfig(agentUserId);
 
     // Get agent's positions separately
-    const positionsResult = await db
-      .select()
-      .from(positions)
-      .where(eq(positions.userId, agentUserId))
-      .limit(10);
+    const positionsResult = await selectPositionsByUserIdLimit(
+      db,
+      agentUserId,
+      10
+    );
 
     // Get perp positions for perp-related info
-    const perpPositionsResult = await db
-      .select()
-      .from(perpPositions)
-      .where(eq(perpPositions.userId, agentUserId))
-      .limit(10);
+    const perpPositionsResult = await selectPerpPositionsByUserIdLimit(
+      db,
+      agentUserId,
+      10
+    );
 
     // Get balance - NPCs use ActorState, Users use WalletService
     const balance = isNpc
@@ -92,15 +85,11 @@ export class AutonomousTradingService {
       : await WalletService.getBalance(agentUserId);
 
     // Get active prediction markets
-    const predictionMarkets = await db
-      .select()
-      .from(markets)
-      .where(eq(markets.resolved, false))
-      .orderBy(desc(markets.createdAt))
-      .limit(10);
+    const predictionMarkets =
+      await selectUnresolvedMarketsOrderCreatedDescLimit(db, 10);
 
-    // Get perp market snapshots via the db instance
-    const perpMarkets = await getDbInstance().getOrganizationsByPrice();
+    const perpMarkets =
+      await listOrganizationStatesByPriceDescForWorldContext();
 
     // Get random market context for variety
     const marketContext = await generateRandomMarketContext({

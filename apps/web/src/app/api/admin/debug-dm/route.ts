@@ -52,15 +52,12 @@
  */
 
 import { requireAdmin, successResponse, withErrorHandling } from '@babylon/api';
-import { desc, inArray } from '@babylon/db';
 import {
-  asSystem,
-  chatParticipants,
-  chats,
-  db,
-  messages,
-} from '@babylon/db/runtime';
-
+  selectChatParticipantsByChatIdsForAdminDebug,
+  selectChatsByIdsForAdminDebug,
+  selectMessagesByChatIdsForAdminDebug,
+} from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
@@ -79,21 +76,17 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   logger.info('Debug DM lookup', { userId }, 'GET /api/admin/debug-dm');
 
-  // Get user info (try by ID, username, or privyId)
-  let user = await db.user.findUnique({
-    where: { id: userId },
-    select: {
-      id: true,
-      privyId: true,
-      username: true,
-      displayName: true,
-    },
-  });
-
-  if (!user) {
-    // Try by username
-    user = await db.user.findUnique({
-      where: { username: userId },
+  const {
+    user,
+    participants,
+    chatsList,
+    allParticipants,
+    allMessages,
+    messageCounts,
+    participantUsers,
+  } = await asSystem(async (database) => {
+    let u = await database.user.findUnique({
+      where: { id: userId },
       select: {
         id: true,
         privyId: true,
@@ -101,88 +94,89 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         displayName: true,
       },
     });
-  }
 
-  if (!user) {
-    // Try by privyId
-    user = await db.user.findUnique({
-      where: { privyId: userId },
-      select: {
-        id: true,
-        privyId: true,
-        username: true,
-        displayName: true,
+    if (!u) {
+      u = await database.user.findUnique({
+        where: { username: userId },
+        select: {
+          id: true,
+          privyId: true,
+          username: true,
+          displayName: true,
+        },
+      });
+    }
+
+    if (!u) {
+      u = await database.user.findUnique({
+        where: { privyId: userId },
+        select: {
+          id: true,
+          privyId: true,
+          username: true,
+          displayName: true,
+        },
+      });
+    }
+
+    const resolvedUserId = u?.id || u?.privyId || userId;
+
+    const participantRecords = await database.chatParticipant.findMany({
+      where: {
+        userId: resolvedUserId,
       },
     });
-  }
 
-  // Use the resolved user ID
-  const resolvedUserId = user?.id || user?.privyId || userId;
+    const chatIds = participantRecords.map((p) => p.chatId);
 
-  // Get all ChatParticipant records for this user (bypass RLS)
-  const participants = await db.chatParticipant.findMany({
-    where: {
-      userId: resolvedUserId,
-    },
-  });
+    const chatsListInner = await selectChatsByIdsForAdminDebug(
+      database,
+      chatIds
+    );
 
-  // Get details for each chat using Drizzle query builder
-  const chatIds = participants.map((p) => p.chatId);
+    const allParticipantsInner =
+      await selectChatParticipantsByChatIdsForAdminDebug(database, chatIds);
 
-  const { chatsList, allParticipants, allMessages, messageCounts } =
-    await asSystem(async (database) => {
-      // Get chats
-      const chatsList =
-        chatIds.length > 0
-          ? await database
-              .select()
-              .from(chats)
-              .where(inArray(chats.id, chatIds))
-          : [];
+    const allMessagesInner = await selectMessagesByChatIdsForAdminDebug(
+      database,
+      chatIds
+    );
 
-      // Get all participants for these chats
-      const allParticipants =
-        chatIds.length > 0
-          ? await database
-              .select()
-              .from(chatParticipants)
-              .where(inArray(chatParticipants.chatId, chatIds))
-          : [];
+    const messageCountsInner = await Promise.all(
+      chatIds.map((chatId) =>
+        database.message.count({
+          where: { chatId: { equals: chatId } },
+        })
+      )
+    );
 
-      // Get recent messages for each chat (last 5)
-      const allMessages =
-        chatIds.length > 0
-          ? await database
-              .select()
-              .from(messages)
-              .where(inArray(messages.chatId, chatIds))
-              .orderBy(desc(messages.createdAt))
-          : [];
-
-      // Get message counts for each chat
-      const messageCounts = await Promise.all(
-        chatIds.map((chatId) =>
-          database.message.count({
-            where: { chatId: { equals: chatId } },
+    const participantUserIds = [
+      ...new Set(allParticipantsInner.map((p) => p.userId)),
+    ];
+    const participantUsersInner =
+      participantUserIds.length > 0
+        ? await database.user.findMany({
+            where: {
+              id: { in: participantUserIds },
+            },
+            select: {
+              id: true,
+              username: true,
+              displayName: true,
+            },
           })
-        )
-      );
+        : [];
 
-      return { chatsList, allParticipants, allMessages, messageCounts };
-    }, 'admin-debug-dm');
-
-  // Get all user IDs from participants
-  const participantUserIds = [...new Set(allParticipants.map((p) => p.userId))];
-  const participantUsers = await db.user.findMany({
-    where: {
-      id: { in: participantUserIds },
-    },
-    select: {
-      id: true,
-      username: true,
-      displayName: true,
-    },
-  });
+    return {
+      user: u,
+      participants: participantRecords,
+      chatsList: chatsListInner,
+      allParticipants: allParticipantsInner,
+      allMessages: allMessagesInner,
+      messageCounts: messageCountsInner,
+      participantUsers: participantUsersInner,
+    };
+  }, 'admin-debug-dm');
 
   const usersMap = new Map(participantUsers.map((u) => [u.id, u]));
 

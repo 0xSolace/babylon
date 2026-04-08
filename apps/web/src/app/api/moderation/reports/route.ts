@@ -110,7 +110,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 
-import { db } from '@babylon/db/runtime';
+import { asSystem, asUser } from '@babylon/db/engine-storage';
 import {
   CreateReportSchema,
   GetReportsSchema,
@@ -139,99 +139,100 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     'POST /api/moderation/reports'
   );
 
-  // Validate reported user exists if reporting a user
-  if (data.reportedUserId) {
-    if (data.reportedUserId === authUser.userId) {
-      throw new BusinessLogicError(
-        'Cannot report yourself',
-        'CANNOT_REPORT_SELF'
-      );
-    }
+  const report = await asSystem(async (db) => {
+    // Validate reported user exists if reporting a user
+    if (data.reportedUserId) {
+      if (data.reportedUserId === authUser.userId) {
+        throw new BusinessLogicError(
+          'Cannot report yourself',
+          'CANNOT_REPORT_SELF'
+        );
+      }
 
-    const reportedUser = await db.user.findUnique({
-      where: { id: data.reportedUserId },
-      select: { id: true, isActor: true },
-    });
+      const reportedUser = await db.user.findUnique({
+        where: { id: data.reportedUserId },
+        select: { id: true, isActor: true },
+      });
 
-    if (!reportedUser) {
-      throw new NotFoundError('User', data.reportedUserId);
-    }
+      if (!reportedUser) {
+        throw new NotFoundError('User', data.reportedUserId);
+      }
 
-    // Check for duplicate report (same reporter + reported user + category within 24 hours)
-    const recentReport = await db.report.findFirst({
-      where: {
-        reporterId: authUser.userId,
-        reportedUserId: data.reportedUserId,
-        category: data.category,
-        createdAt: {
-          gte: new Date(Date.now() - 24 * 60 * 60 * 1000),
+      // Check for duplicate report (same reporter + reported user + category within 24 hours)
+      const recentReport = await db.report.findFirst({
+        where: {
+          reporterId: authUser.userId,
+          reportedUserId: data.reportedUserId,
+          category: data.category,
+          createdAt: {
+            gte: new Date(Date.now() - 24 * 60 * 60 * 1000),
+          },
         },
+      });
+
+      if (recentReport) {
+        throw new BusinessLogicError(
+          'You have already reported this user for this reason recently',
+          'DUPLICATE_REPORT'
+        );
+      }
+    }
+
+    // Validate reported post exists if reporting a post
+    if (data.reportedPostId) {
+      const reportedPost = await db.post.findUnique({
+        where: { id: data.reportedPostId },
+        select: { id: true, authorId: true },
+      });
+
+      if (!reportedPost) {
+        throw new NotFoundError('Post', data.reportedPostId);
+      }
+
+      // Check for duplicate report
+      const recentReport = await db.report.findFirst({
+        where: {
+          reporterId: authUser.userId,
+          reportedPostId: data.reportedPostId,
+          category: data.category,
+          createdAt: {
+            gte: new Date(Date.now() - 24 * 60 * 60 * 1000),
+          },
+        },
+      });
+
+      if (recentReport) {
+        throw new BusinessLogicError(
+          'You have already reported this post for this reason recently',
+          'DUPLICATE_REPORT'
+        );
+      }
+    }
+
+    // Determine priority based on category
+    let priority = 'normal';
+    if (['hate_speech', 'violence', 'self_harm'].includes(data.category)) {
+      priority = 'high';
+    } else if (data.category === 'spam') {
+      priority = 'low';
+    }
+
+    return db.report.create({
+      data: {
+        id: await generateSnowflakeId(),
+        reporterId: authUser.userId,
+        reportedUserId: data.reportedUserId || null,
+        reportedPostId: data.reportedPostId || null,
+        reportType: data.reportType,
+        category: data.category,
+        reason: data.reason,
+        evidence: data.evidence || null,
+        priority,
+        status: 'pending',
+        updatedAt: new Date(),
       },
     });
-
-    if (recentReport) {
-      throw new BusinessLogicError(
-        'You have already reported this user for this reason recently',
-        'DUPLICATE_REPORT'
-      );
-    }
-  }
-
-  // Validate reported post exists if reporting a post
-  if (data.reportedPostId) {
-    const reportedPost = await db.post.findUnique({
-      where: { id: data.reportedPostId },
-      select: { id: true, authorId: true },
-    });
-
-    if (!reportedPost) {
-      throw new NotFoundError('Post', data.reportedPostId);
-    }
-
-    // Check for duplicate report
-    const recentReport = await db.report.findFirst({
-      where: {
-        reporterId: authUser.userId,
-        reportedPostId: data.reportedPostId,
-        category: data.category,
-        createdAt: {
-          gte: new Date(Date.now() - 24 * 60 * 60 * 1000),
-        },
-      },
-    });
-
-    if (recentReport) {
-      throw new BusinessLogicError(
-        'You have already reported this post for this reason recently',
-        'DUPLICATE_REPORT'
-      );
-    }
-  }
-
-  // Determine priority based on category
-  let priority = 'normal';
-  if (['hate_speech', 'violence', 'self_harm'].includes(data.category)) {
-    priority = 'high';
-  } else if (data.category === 'spam') {
-    priority = 'low';
-  }
-
-  // Create report
-  const report = await db.report.create({
-    data: {
-      id: await generateSnowflakeId(),
-      reporterId: authUser.userId,
-      reportedUserId: data.reportedUserId || null,
-      reportedPostId: data.reportedPostId || null,
-      reportType: data.reportType,
-      category: data.category,
-      reason: data.reason,
-      evidence: data.evidence || null,
-      priority,
-      status: 'pending',
-      updatedAt: new Date(),
-    },
-  });
+  }, 'moderation-report-create');
 
   logger.info(
     'Report created successfully',
@@ -240,7 +241,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       reporterId: authUser.userId,
       reportType: data.reportType,
       category: data.category,
-      priority,
+      priority: report.priority,
     },
     'POST /api/moderation/reports'
   );
@@ -264,62 +265,64 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       evaluation.reasoning.toLowerCase().includes('csam') ||
       evaluation.reasoning.toLowerCase().includes('child sexual abuse'));
 
-  if (shouldAutoBan && report.reportedUserId) {
-    // Determine if scammer or CSAM based on evaluation
-    const isScammer =
-      evaluation.recommendedActions.includes('mark_scammer') ||
-      evaluation.reasoning.toLowerCase().includes('scam');
-    const isCSAM =
-      evaluation.recommendedActions.includes('mark_csam') ||
-      evaluation.reasoning.toLowerCase().includes('csam') ||
-      evaluation.reasoning.toLowerCase().includes('child sexual abuse');
+  await asSystem(async (db) => {
+    if (shouldAutoBan && report.reportedUserId) {
+      // Determine if scammer or CSAM based on evaluation
+      const isScammer =
+        evaluation.recommendedActions.includes('mark_scammer') ||
+        evaluation.reasoning.toLowerCase().includes('scam');
+      const isCSAM =
+        evaluation.recommendedActions.includes('mark_csam') ||
+        evaluation.reasoning.toLowerCase().includes('csam') ||
+        evaluation.reasoning.toLowerCase().includes('child sexual abuse');
 
-    // Automatically ban the reported user
-    if (report.reportedUserId) {
-      await db.user.update({
-        where: { id: report.reportedUserId },
+      // Automatically ban the reported user
+      if (report.reportedUserId) {
+        await db.user.update({
+          where: { id: report.reportedUserId },
+          data: {
+            isBanned: true,
+            bannedAt: new Date(),
+            bannedReason: `Automated ban from report #${report.id}: ${evaluation.reasoning.substring(0, 200)}`,
+            bannedBy: undefined, // System ban - no specific admin
+            isScammer: isScammer,
+            isCSAM: isCSAM,
+          },
+        });
+      }
+
+      // Update report status
+      await db.report.update({
+        where: { id: report.id },
         data: {
-          isBanned: true,
-          bannedAt: new Date(),
-          bannedReason: `Automated ban from report #${report.id}: ${evaluation.reasoning.substring(0, 200)}`,
-          bannedBy: undefined, // System ban - no specific admin
-          isScammer: isScammer,
-          isCSAM: isCSAM,
+          status: 'resolved',
+          resolution: `User automatically banned: ${evaluation.reasoning.substring(0, 200)}`,
+          resolvedBy: null, // System resolution - no specific admin
+          resolvedAt: new Date(),
+        },
+      });
+
+      logger.info(
+        'User automatically banned from report',
+        {
+          reportId: report.id,
+          reportedUserId: report.reportedUserId,
+          evaluationOutcome: evaluation.outcome,
+          confidence: evaluation.confidence,
+        },
+        'POST /api/moderation/reports'
+      );
+    } else {
+      // Store evaluation but don't auto-ban (low confidence or not scammer/CSAM)
+      await db.report.update({
+        where: { id: report.id },
+        data: {
+          status: 'reviewing',
+          resolution: JSON.stringify(evaluation),
         },
       });
     }
-
-    // Update report status
-    await db.report.update({
-      where: { id: report.id },
-      data: {
-        status: 'resolved',
-        resolution: `User automatically banned: ${evaluation.reasoning.substring(0, 200)}`,
-        resolvedBy: null, // System resolution - no specific admin
-        resolvedAt: new Date(),
-      },
-    });
-
-    logger.info(
-      'User automatically banned from report',
-      {
-        reportId: report.id,
-        reportedUserId: report.reportedUserId,
-        evaluationOutcome: evaluation.outcome,
-        confidence: evaluation.confidence,
-      },
-      'POST /api/moderation/reports'
-    );
-  } else {
-    // Store evaluation but don't auto-ban (low confidence or not scammer/CSAM)
-    await db.report.update({
-      where: { id: report.id },
-      data: {
-        status: 'reviewing',
-        resolution: JSON.stringify(evaluation),
-      },
-    });
-  }
+  }, 'moderation-report-eval-result');
 
   return successResponse({
     success: true,
@@ -354,32 +357,35 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   if (params.category) where.category = params.category;
   if (params.reportType) where.reportType = params.reportType;
 
-  const [reports, total] = await Promise.all([
-    db.report.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      take: params.limit,
-      skip: params.offset,
-      include: {
-        reportedUser: {
-          select: {
-            id: true,
-            username: true,
-            displayName: true,
-            profileImageUrl: true,
+  const { reports, total } = await asUser(authUser, async (db) => {
+    const [rows, count] = await Promise.all([
+      db.report.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: params.limit,
+        skip: params.offset,
+        include: {
+          reportedUser: {
+            select: {
+              id: true,
+              username: true,
+              displayName: true,
+              profileImageUrl: true,
+            },
+          },
+          resolver: {
+            select: {
+              id: true,
+              username: true,
+              displayName: true,
+            },
           },
         },
-        resolver: {
-          select: {
-            id: true,
-            username: true,
-            displayName: true,
-          },
-        },
-      },
-    }),
-    db.report.count({ where }),
-  ]);
+      }),
+      db.report.count({ where }),
+    ]);
+    return { reports: rows, total: count };
+  });
 
   return successResponse({
     reports,

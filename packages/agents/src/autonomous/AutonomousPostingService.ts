@@ -5,9 +5,11 @@
  */
 
 import { countTokensSync, truncateToTokenLimitSync } from '@babylon/api';
-import { desc, eq } from '@babylon/db';
-import { agentTrades, db, posts } from '@babylon/db/runtime';
-
+import {
+  selectAgentTradesByAgentUserIdOrderExecutedDescLimit,
+  selectPostSummariesByAuthorIdOrderCreatedDescLimit,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import {
   characterMappingService,
   formatRandomContext,
@@ -56,23 +58,19 @@ export class AutonomousPostingService {
     const config = await getAgentConfig(agentUserId);
 
     // Get recent agent activity for context
-    const recentTrades = await db
-      .select()
-      .from(agentTrades)
-      .where(eq(agentTrades.agentUserId, agentUserId))
-      .orderBy(desc(agentTrades.executedAt))
-      .limit(5);
+    const recentTrades =
+      await selectAgentTradesByAgentUserIdOrderExecutedDescLimit(
+        db,
+        agentUserId,
+        5
+      );
 
-    const recentPosts = await db
-      .select({
-        id: posts.id,
-        content: posts.content,
-        createdAt: posts.createdAt,
-      })
-      .from(posts)
-      .where(eq(posts.authorId, agentUserId))
-      .orderBy(desc(posts.createdAt))
-      .limit(5);
+    const recentPosts =
+      await selectPostSummariesByAuthorIdOrderCreatedDescLimit(
+        db,
+        agentUserId,
+        5
+      );
 
     // Get random market context for variety
     const marketContext = await generateRandomMarketContext({

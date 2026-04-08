@@ -1,6 +1,9 @@
 import { broadcastToChannel, createNotification } from '@babylon/api';
-import { and, eq, gt, isNotNull, type JsonValue } from '@babylon/db';
-import { db, markets, positions, users } from '@babylon/db/runtime';
+import {
+  type JsonValue,
+  selectResolvedMarketPositionOutcomesForMarketNotify,
+} from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import { logger, type MarketResolvedNotificationData } from '@babylon/shared';
 
 interface ResolvedOutcomeRow {
@@ -33,8 +36,6 @@ function formatPoints(points: number): string {
 export function groupResolvedMarketOutcomes(
   rows: ResolvedOutcomeRow[]
 ): GroupedResolvedOutcome[] {
-  // outcome is intentionally omitted during accumulation — points change as
-  // rows are merged, so outcome is derived once at the end from final points.
   const grouped = new Map<string, Omit<GroupedResolvedOutcome, 'outcome'>>();
 
   for (const row of rows) {
@@ -79,36 +80,18 @@ function buildMessage(entry: GroupedResolvedOutcome): string {
 export async function notifyResolvedMarketOwners(
   marketId: string
 ): Promise<number> {
-  const rows = await db
-    .select({
-      holderId: positions.userId,
-      managedBy: users.managedBy,
-      isAgent: users.isAgent,
-      agentName: users.displayName,
-      marketId: positions.marketId,
-      marketName: markets.question,
-      pnl: positions.pnl,
-    })
-    .from(positions)
-    .innerJoin(markets, eq(markets.id, positions.marketId))
-    .leftJoin(users, eq(users.id, positions.userId))
-    .where(
-      and(
-        eq(positions.marketId, marketId),
-        eq(positions.status, 'resolved'),
-        isNotNull(positions.outcome),
-        isNotNull(positions.pnl),
-        isNotNull(positions.resolvedAt),
-        gt(positions.shares, '0')
-      )
-    );
+  const rows = await asSystem(
+    async (db) =>
+      selectResolvedMarketPositionOutcomesForMarketNotify(db, marketId),
+    'market-resolution-notify-owners'
+  );
 
   const groupedOutcomes = groupResolvedMarketOutcomes(
     rows.map((row) => ({
       holderId: row.holderId,
       ownerUserId: row.isAgent && row.managedBy ? row.managedBy : row.holderId,
       marketId: row.marketId,
-      marketName: row.marketName,
+      marketName: row.marketName ?? '',
       points: Number(row.pnl),
       agentName: row.isAgent ? row.agentName : null,
     }))

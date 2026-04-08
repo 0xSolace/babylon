@@ -23,11 +23,11 @@
 
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import type { A2AMarketPosition } from '@babylon/a2a';
-import { eq } from '@babylon/db';
-import { db, getDbInstance, markets, posts, users } from '@babylon/db/runtime';
-
+import { listAllOrganizationStatesAsSystem } from '@babylon/db';
+import { db, markets, posts, users } from '@babylon/db/engine-storage';
 import { generateSnowflakeId } from '@babylon/shared';
 import dotenv from 'dotenv';
+import { eq } from 'drizzle-orm';
 import { BabylonA2AClient } from '../src/a2a-client';
 
 dotenv.config({ path: '.env.local' });
@@ -106,7 +106,7 @@ describe('Autonomous Agent - Complete E2E Test', () => {
     }
 
     // Find a perpetual market (organization) from database state
-    const orgStates = await getDbInstance().getAllOrganizationStates();
+    const orgStates = await listAllOrganizationStatesAsSystem();
     if (orgStates.length > 0) {
       // Use the first org state id as the ticker (e.g., "Macrohard" becomes "MACR")
       const orgId = orgStates[0]!.id;

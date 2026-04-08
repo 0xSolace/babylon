@@ -21,8 +21,8 @@
  *   --ticks              Ticks per agent (default: 10)
  */
 
-import { count, eq, isNotNull } from '@babylon/db';
-import { db, trajectories } from '@babylon/db/runtime';
+import { db, trajectories } from '@babylon/db/engine-storage';
+import { count, eq, isNotNull } from 'drizzle-orm';
 import { parseArgs } from 'util';
 
 // Parse command line arguments
@@ -112,7 +112,8 @@ async function runPipeline() {
       );
 
       // Get a manager ID (first user in DB or create one)
-      const { users, desc } = await import('@babylon/db');
+      const { users } = await import('@babylon/db/engine-storage');
+      const { desc } = await import('drizzle-orm');
       const managerResult = await db
         .select({ id: users.id })
         .from(users)

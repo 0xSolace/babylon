@@ -5,15 +5,12 @@
  * Used by agent trade notifications and other system DMs.
  */
 
-import { aliasedTable, and, eq, type Transaction } from '@babylon/db';
 import {
-  chatParticipants,
-  chats,
-  db,
-  dmAcceptances,
-  messages,
-  users,
-} from '@babylon/db/runtime';
+  fetchDmChatLookupBetweenUsers,
+  insertDmChatCreationBundle,
+  insertDmServiceMessage,
+  withTransaction,
+} from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 
 /**
@@ -31,25 +28,13 @@ export async function getOrCreateDMChat(
   userA: string,
   userB: string
 ): Promise<string> {
-  // Check if either user is an agent trying to DM their owner
-  // Agents should use Agents chat instead
-  const [userAInfo, userBInfo] = await Promise.all([
-    db
-      .select({ isAgent: users.isAgent, managedBy: users.managedBy })
-      .from(users)
-      .where(eq(users.id, userA))
-      .limit(1),
-    db
-      .select({ isAgent: users.isAgent, managedBy: users.managedBy })
-      .from(users)
-      .where(eq(users.id, userB))
-      .limit(1),
-  ]);
+  const { userAData, userBData, existingChat } =
+    await fetchDmChatLookupBetweenUsers({
+      userA,
+      userB,
+      traceLabel: 'dm-service-pre-create-lookup',
+    });
 
-  const userAData = userAInfo[0];
-  const userBData = userBInfo[0];
-
-  // Block agent-owner DMs (both directions)
   if (userAData?.isAgent && userAData?.managedBy === userB) {
     throw new Error(
       'Agent-owner DMs are not allowed - use Agents chat instead'
@@ -61,73 +46,20 @@ export async function getOrCreateDMChat(
     );
   }
 
-  // Find existing DM chat using a single query with self-join
-  const otherParticipants = aliasedTable(chatParticipants, 'cp2');
-
-  const existingChat = await db
-    .select({ chatId: chatParticipants.chatId })
-    .from(chatParticipants)
-    .innerJoin(chats, eq(chatParticipants.chatId, chats.id))
-    .innerJoin(
-      otherParticipants,
-      eq(chatParticipants.chatId, otherParticipants.chatId)
-    )
-    .where(
-      and(
-        eq(chatParticipants.userId, userA),
-        eq(chatParticipants.isActive, true),
-        eq(chats.isGroup, false),
-        eq(otherParticipants.userId, userB),
-        eq(otherParticipants.isActive, true)
-      )
-    )
-    .limit(1);
-
   if (existingChat.length > 0 && existingChat[0]) {
     return existingChat[0].chatId;
   }
 
-  // Create new DM chat
   const chatId = await generateSnowflakeId();
   const now = new Date();
 
   try {
-    await db.transaction(async (tx: Transaction) => {
-      await tx.insert(chats).values({
-        id: chatId,
-        isGroup: false,
-        createdAt: now,
-        updatedAt: now,
-      });
-
-      // Add both participants
-      await tx.insert(chatParticipants).values([
-        {
-          id: await generateSnowflakeId(),
-          chatId,
-          userId: userA,
-          joinedAt: now,
-          isActive: true,
-        },
-        {
-          id: await generateSnowflakeId(),
-          chatId,
-          userId: userB,
-          joinedAt: now,
-          isActive: true,
-        },
-      ]);
-
-      // Create DMAcceptance record with 'accepted' status
-      // System DMs bypass the acceptance flow
-      await tx.insert(dmAcceptances).values({
-        id: await generateSnowflakeId(),
+    await withTransaction(async (tx) => {
+      await insertDmChatCreationBundle(tx, {
         chatId,
-        userId: userB,
-        otherUserId: userA,
-        status: 'accepted',
-        createdAt: now,
-        acceptedAt: now,
+        userA,
+        userB,
+        now,
       });
     });
 
@@ -135,8 +67,6 @@ export async function getOrCreateDMChat(
 
     return chatId;
   } catch (error) {
-    // Handle race condition - if chat was created by another process
-    // Use Postgres error code 23505 (unique_violation) for reliable detection
     const isUniqueViolation =
       error instanceof Error &&
       'code' in error &&
@@ -148,32 +78,14 @@ export async function getOrCreateDMChat(
         'DMService'
       );
 
-      // Retry lookup
-      const retryOtherParticipants = aliasedTable(
-        chatParticipants,
-        'cp2_retry'
-      );
-      const retryMatch = await db
-        .select({ chatId: chatParticipants.chatId })
-        .from(chatParticipants)
-        .innerJoin(chats, eq(chatParticipants.chatId, chats.id))
-        .innerJoin(
-          retryOtherParticipants,
-          eq(chatParticipants.chatId, retryOtherParticipants.chatId)
-        )
-        .where(
-          and(
-            eq(chatParticipants.userId, userA),
-            eq(chatParticipants.isActive, true),
-            eq(chats.isGroup, false),
-            eq(retryOtherParticipants.userId, userB),
-            eq(retryOtherParticipants.isActive, true)
-          )
-        )
-        .limit(1);
+      const retry = await fetchDmChatLookupBetweenUsers({
+        userA,
+        userB,
+        traceLabel: 'dm-service-retry-lookup',
+      });
 
-      if (retryMatch.length > 0 && retryMatch[0]) {
-        return retryMatch[0].chatId;
+      if (retry.existingChat.length > 0 && retry.existingChat[0]) {
+        return retry.existingChat[0].chatId;
       }
     }
     throw error;
@@ -196,8 +108,8 @@ export async function sendMessageToChat(
   const messageId = await generateSnowflakeId();
   const now = new Date();
 
-  await db.insert(messages).values({
-    id: messageId,
+  await insertDmServiceMessage({
+    messageId,
     chatId,
     senderId,
     content,

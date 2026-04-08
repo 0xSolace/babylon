@@ -1,17 +1,13 @@
 import {
   type DailyTopic,
   type DailyTopicSourceType,
-  desc,
-  eq,
-  generateSnowflakeId,
-  gte,
+  deleteDailyTopicById,
+  fetchDailyTopicByNormalizedDate,
+  fetchPreviousDailyTopicBeforeDate,
+  listParodyHeadlinesForDailyTopicCandidates,
+  listRssHeadlinesForDailyTopicCandidates,
+  upsertDailyTopicRow,
 } from '@babylon/db';
-import {
-  dailyTopics,
-  db,
-  parodyHeadlines,
-  rssHeadlines,
-} from '@babylon/db/runtime';
 import { logger } from '@babylon/shared';
 
 /**
@@ -295,30 +291,17 @@ export function isTextOnTopic(
 }
 
 export class DailyTopicService {
-  private async getRecentRssHeadlines(since: Date) {
-    return db
-      .select()
-      .from(rssHeadlines)
-      .where(gte(rssHeadlines.publishedAt, since))
-      .orderBy(desc(rssHeadlines.publishedAt))
-      .limit(50);
+  private getRecentRssHeadlines(since: Date) {
+    return listRssHeadlinesForDailyTopicCandidates(since, 50);
   }
 
-  private async getRecentParodies(since: Date) {
-    return db
-      .select()
-      .from(parodyHeadlines)
-      .where(gte(parodyHeadlines.generatedAt, since))
-      .orderBy(desc(parodyHeadlines.generatedAt))
-      .limit(25);
+  private getRecentParodies(since: Date) {
+    return listParodyHeadlinesForDailyTopicCandidates(since, 25);
   }
 
   async getTopicForDate(date: Date): Promise<DailyTopicContext | null> {
     const normalizedDate = normalizeTopicDate(date);
-    const topic = await db.dailyTopic.findFirst({
-      where: { date: { equals: normalizedDate } },
-    });
-
+    const topic = await fetchDailyTopicByNormalizedDate(normalizedDate);
     return topic ? toContext(topic) : null;
   }
 
@@ -443,10 +426,8 @@ export class DailyTopicService {
       });
     }
 
-    const previousTopic = await db.dailyTopic.findFirst({
-      where: { date: { lt: normalizedDate } },
-      orderBy: { date: 'desc' },
-    });
+    const previousTopic =
+      await fetchPreviousDailyTopicBeforeDate(normalizedDate);
 
     if (!previousTopic) {
       logger.warn(
@@ -487,7 +468,7 @@ export class DailyTopicService {
     }
 
     if (existing?.id) {
-      await db.delete(dailyTopics).where(eq(dailyTopics.id, existing.id));
+      await deleteDailyTopicById(existing.id);
     }
 
     return this.ensureTopicForDate(normalizedDate);
@@ -520,7 +501,7 @@ export class DailyTopicService {
     const normalizedDate = normalizeTopicDate(date);
     const existing = await this.getTopicForDate(normalizedDate);
     if (existing?.id) {
-      await db.delete(dailyTopics).where(eq(dailyTopics.id, existing.id));
+      await deleteDailyTopicById(existing.id);
     }
 
     return this.ensureTopicForDate(normalizedDate);
@@ -529,41 +510,16 @@ export class DailyTopicService {
   private async upsertTopic(
     input: Omit<DailyTopicContext, 'id'>
   ): Promise<DailyTopicContext> {
-    const updatedAt = new Date();
-    const [topic] = await db
-      .insert(dailyTopics)
-      .values({
-        id: await generateSnowflakeId(),
-        date: input.date,
-        topicKey: input.topicKey,
-        topicLabel: input.topicLabel,
-        summary: input.summary,
-        sourceType: input.sourceType,
-        sourceHeadlineIds: input.sourceHeadlineIds,
-        selectionReason: input.selectionReason,
-        isLocked: input.isLocked,
-        updatedAt,
-      })
-      .onConflictDoUpdate({
-        target: dailyTopics.date,
-        set: {
-          topicKey: input.topicKey,
-          topicLabel: input.topicLabel,
-          summary: input.summary,
-          sourceType: input.sourceType,
-          sourceHeadlineIds: input.sourceHeadlineIds,
-          selectionReason: input.selectionReason,
-          isLocked: input.isLocked,
-          updatedAt,
-        },
-      })
-      .returning();
-
-    if (!topic) {
-      throw new Error(
-        `Failed to store daily topic for ${input.date.toISOString()}`
-      );
-    }
+    const topic = await upsertDailyTopicRow({
+      date: input.date,
+      topicKey: input.topicKey,
+      topicLabel: input.topicLabel,
+      summary: input.summary,
+      sourceType: input.sourceType,
+      sourceHeadlineIds: input.sourceHeadlineIds,
+      selectionReason: input.selectionReason,
+      isLocked: input.isLocked,
+    });
 
     logger.info(
       'Stored daily topic',

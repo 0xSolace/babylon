@@ -13,8 +13,12 @@
 
 import { agentService } from '@babylon/agents';
 import { authenticateUser, withErrorHandling } from '@babylon/api';
-import { desc, eq } from '@babylon/db';
-import { balanceTransactions, db, users } from '@babylon/db/runtime';
+import {
+  selectBalanceTransactionsForUserOrderCreatedDescLimitInTx,
+  selectUserVirtualBalanceInTx,
+  selectUserWalletBalanceStatsInTx,
+} from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import { BABYLON_POINTS_SYMBOL, logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -29,44 +33,38 @@ export const GET = withErrorHandling(async function GET(
   // Verify ownership
   await agentService.getAgent(agentId, user.id);
 
-  // Get agent's trading balance
-  const agentResult = await db
-    .select({
-      virtualBalance: users.virtualBalance,
-      lifetimePnL: users.lifetimePnL,
-      totalDeposited: users.totalDeposited,
-      totalWithdrawn: users.totalWithdrawn,
-    })
-    .from(users)
-    .where(eq(users.id, agentId))
-    .limit(1);
+  const payload = await asUser(user.id, async (tx) => {
+    const agentRow = await selectUserWalletBalanceStatsInTx(tx, agentId);
+    if (!agentRow) {
+      return { ok: false as const };
+    }
 
-  const agent = agentResult[0];
-  if (!agent) {
+    const userResult = await selectUserVirtualBalanceInTx(tx, user.id);
+    const balance = Number(userResult?.virtualBalance ?? 0);
+
+    const txRows =
+      await selectBalanceTransactionsForUserOrderCreatedDescLimitInTx(
+        tx,
+        agentId,
+        50
+      );
+
+    return {
+      ok: true as const,
+      agent: agentRow,
+      userBalance: balance,
+      transactions: txRows,
+    };
+  });
+
+  if (!payload.ok) {
     return NextResponse.json(
       { success: false, error: 'Agent not found' },
       { status: 404 }
     );
   }
 
-  // Get user's trading balance for display
-  const userResult = await db
-    .select({
-      virtualBalance: users.virtualBalance,
-    })
-    .from(users)
-    .where(eq(users.id, user.id))
-    .limit(1);
-
-  const userBalance = Number(userResult[0]?.virtualBalance ?? 0);
-
-  // Get recent trading balance transactions
-  const transactions = await db
-    .select()
-    .from(balanceTransactions)
-    .where(eq(balanceTransactions.userId, agentId))
-    .orderBy(desc(balanceTransactions.createdAt))
-    .limit(50);
+  const { agent, userBalance, transactions } = payload;
 
   return NextResponse.json({
     success: true,
@@ -134,31 +132,23 @@ export const POST = withErrorHandling(async function POST(
       );
     }
 
-    // Get updated balances
-    const agentResult = await db
-      .select({
-        virtualBalance: users.virtualBalance,
-        lifetimePnL: users.lifetimePnL,
-      })
-      .from(users)
-      .where(eq(users.id, agentId))
-      .limit(1);
+    const { agentBalance, ownerBalance } = await asUser(user.id, async (tx) => {
+      const agentStats = await selectUserWalletBalanceStatsInTx(tx, agentId);
+      const userResult = await selectUserVirtualBalanceInTx(tx, user.id);
 
-    const userResult = await db
-      .select({
-        virtualBalance: users.virtualBalance,
-      })
-      .from(users)
-      .where(eq(users.id, user.id))
-      .limit(1);
+      return {
+        agentBalance: {
+          tradingBalance: Number(agentStats?.virtualBalance ?? 0),
+          lifetimePnL: Number(agentStats?.lifetimePnL ?? 0),
+        },
+        ownerBalance: Number(userResult?.virtualBalance ?? 0),
+      };
+    });
 
     return NextResponse.json({
       success: true,
-      agentBalance: {
-        tradingBalance: Number(agentResult[0]?.virtualBalance ?? 0),
-        lifetimePnL: Number(agentResult[0]?.lifetimePnL ?? 0),
-      },
-      userBalance: Number(userResult[0]?.virtualBalance ?? 0),
+      agentBalance,
+      userBalance: ownerBalance,
       message: `${action === 'deposit' ? 'Deposited' : 'Withdrew'} ${BABYLON_POINTS_SYMBOL}${amount.toFixed(2)} successfully`,
     });
   } catch (error) {

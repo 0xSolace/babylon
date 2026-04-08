@@ -1,7 +1,6 @@
-import { createNotification } from '@babylon/api';
-import { and, eq, fetchChatNameById } from '@babylon/db';
-import { chatParticipants, db, users } from '@babylon/db/runtime';
-
+import * as babylonApi from '@babylon/api';
+import * as BabylonDb from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import { logger } from '@babylon/shared';
 
 interface NotifyTeamChatMessageParams {
@@ -23,41 +22,22 @@ export async function notifyTeamChatMessage({
 }: NotifyTeamChatMessageParams): Promise<void> {
   try {
     const [senderRows, participantRows, chatNameRow] = await Promise.all([
-      db
-        .select({
-          displayName: users.displayName,
-          username: users.username,
-        })
-        .from(users)
-        .where(eq(users.id, senderId))
-        .limit(1),
-      db
-        .select({
-          userId: chatParticipants.userId,
-          isAgent: users.isAgent,
-        })
-        .from(chatParticipants)
-        .innerJoin(users, eq(chatParticipants.userId, users.id))
-        .where(
-          and(
-            eq(chatParticipants.chatId, chatId),
-            eq(chatParticipants.isActive, true)
-          )
-        ),
-      fetchChatNameById(chatId),
+      BabylonDb.selectUserDisplayAndUsernameById(db, senderId),
+      BabylonDb.selectActiveTeamChatParticipantsWithUsers(db, chatId),
+      BabylonDb.fetchChatNameById(chatId),
     ]);
 
     const recipientUserIds = participantRows
       .filter((participant) => !participant.isAgent)
-      .map((participant) => participant.userId)
+      .map((participant) => participant.id)
       .filter((userId) => userId !== senderId);
 
     if (recipientUserIds.length === 0) {
       return;
     }
 
-    const sender = senderRows[0];
-    const senderName = sender?.displayName || sender?.username || 'Someone';
+    const senderName =
+      senderRows?.displayName || senderRows?.username || 'Someone';
     const preview =
       messagePreview.length > 50
         ? `${messagePreview.substring(0, 50)}...`
@@ -67,7 +47,7 @@ export async function notifyTeamChatMessage({
 
     await Promise.all(
       recipientUserIds.map((userId) =>
-        createNotification({
+        babylonApi.createNotification({
           userId,
           type: 'system',
           actorId: senderId,

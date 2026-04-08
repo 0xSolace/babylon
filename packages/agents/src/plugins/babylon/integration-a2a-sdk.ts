@@ -11,7 +11,7 @@
 
 import type { AgentCard, Message, Task } from '@a2a-js/sdk';
 import { A2AClient } from '@a2a-js/sdk/client';
-import { db } from '@babylon/db/runtime';
+import * as engineStorage from '@babylon/db/engine-storage';
 
 import { StaticDataRegistry } from '@babylon/engine';
 import type { AgentRuntime, Plugin } from '@elizaos/core';
@@ -127,16 +127,20 @@ async function getCachedAgentIdentity(
   }
 
   // First try User table (USER_CONTROLLED agents)
-  const user = await db.user.findUnique({
-    where: { id: agentUserId },
-    select: {
-      id: true,
-      isAgent: true,
-      walletAddress: true,
-      agent0TokenId: true,
-      displayName: true,
-    },
-  });
+  const user = await engineStorage.asSystem(
+    async (c) =>
+      c.user.findUnique({
+        where: { id: agentUserId },
+        select: {
+          id: true,
+          isAgent: true,
+          walletAddress: true,
+          agent0TokenId: true,
+          displayName: true,
+        },
+      }),
+    'a2a-sdk-agent-identity'
+  );
 
   // Note: checks if agent wallets should auto-create only when explicitly enabled by env var
   if (user && user.isAgent) {
@@ -195,13 +199,17 @@ async function getCachedAgentIdentity(
           // Wallet creation succeeded - refresh user data to get updated walletAddress and agent0TokenId
           // Use separate try/catch so refresh failures don't mask successful wallet creation
           try {
-            const updatedUser = await db.user.findUnique({
-              where: { id: agentUserId },
-              select: {
-                walletAddress: true,
-                agent0TokenId: true,
-              },
-            });
+            const updatedUser = await engineStorage.asSystem(
+              async (c) =>
+                c.user.findUnique({
+                  where: { id: agentUserId },
+                  select: {
+                    walletAddress: true,
+                    agent0TokenId: true,
+                  },
+                }),
+              'a2a-sdk-refresh-after-wallet'
+            );
             if (updatedUser) {
               walletAddress = updatedUser.walletAddress;
               agent0TokenId = updatedUser.agent0TokenId;

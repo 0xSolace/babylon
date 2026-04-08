@@ -12,13 +12,14 @@
  */
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import * as babylonDb from '@babylon/db';
 import * as actualShared from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
 // ─── Mock Setup ──────────────────────────────────────────────────────────────
 
-const MANAGER_USER_ID = 'manager-001';
-const AGENT_USER_ID = 'agent-001';
+const MANAGER_USER_ID = '1234567890123456788';
+const AGENT_USER_ID = '1234567890123456789';
 
 const mockAuthenticateUser = mock(async () => ({
   id: MANAGER_USER_ID,
@@ -67,18 +68,21 @@ mock.module('@babylon/api', () => ({
 }));
 
 mock.module('@babylon/db', () => ({
+  ...babylonDb,
   eq: (a: unknown, b: unknown) => ({ op: 'eq', a, b }),
 }));
 
-mock.module('@babylon/db/runtime', () => ({
-  db: {
-    get select() {
-      return mockDbSelect;
-    },
-    get update() {
-      return mockDbUpdate;
-    },
+const priceAlertsMockDb = {
+  get select() {
+    return mockDbSelect;
   },
+  get update() {
+    return mockDbUpdate;
+  },
+};
+
+mock.module('@babylon/db/engine-storage', () => ({
+  db: priceAlertsMockDb,
   userAgentConfigs: {
     id: 'userAgentConfigs.id',
     userId: 'userAgentConfigs.userId',
@@ -89,6 +93,10 @@ mock.module('@babylon/db/runtime', () => ({
     isAgent: 'users.isAgent',
     managedBy: 'users.managedBy',
   },
+  asUser: async <T>(
+    _user: unknown,
+    op: (c: typeof priceAlertsMockDb) => Promise<T>
+  ) => op(priceAlertsMockDb),
 }));
 
 mock.module('@babylon/shared', () => ({

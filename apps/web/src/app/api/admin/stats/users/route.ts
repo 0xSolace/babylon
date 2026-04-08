@@ -14,7 +14,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 
-import { db } from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 import { logger, toISO, toISOOrNull } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
@@ -110,7 +110,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     with_wallet: string;
   };
 
-  const userStatsRows = await db.$queryRaw<UserStatsRow>`
+  return await asSystem(async (tx) => {
+    const userStatsRows = await tx.$queryRaw<UserStatsRow>`
     SELECT
       COUNT(*)::text as total,
       COUNT(*) FILTER (WHERE NOT "isActor" AND NOT "isAgent")::text as real_users,
@@ -131,183 +132,189 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     FROM "User"
   `;
 
-  // $queryRaw returns an array, get first row
-  const statsRow = Array.isArray(userStatsRows)
-    ? userStatsRows[0]
-    : userStatsRows;
-  const totalUsers = Number(statsRow?.total ?? 0);
-  const realUsers = Number(statsRow?.real_users ?? 0);
-  const actors = Number(statsRow?.actors ?? 0);
-  const agents = Number(statsRow?.agents ?? 0);
-  const bannedUsers = Number(statsRow?.banned_users ?? 0);
-  const adminUsers = Number(statsRow?.admin_users ?? 0);
-  const usersToday = Number(statsRow?.users_today ?? 0);
-  const usersYesterday = Number(statsRow?.users_yesterday ?? 0);
-  const usersThisWeek = Number(statsRow?.users_this_week ?? 0);
-  const usersThisMonth = Number(statsRow?.users_this_month ?? 0);
-  const profileComplete = Number(statsRow?.profile_complete ?? 0);
-  const onChainRegistered = Number(statsRow?.on_chain_registered ?? 0);
-  const withFarcaster = Number(statsRow?.with_farcaster ?? 0);
-  const withTwitter = Number(statsRow?.with_twitter ?? 0);
-  const withDiscord = Number(statsRow?.with_discord ?? 0);
-  const withWallet = Number(statsRow?.with_wallet ?? 0);
+    // $queryRaw returns an array, get first row
+    const statsRow = Array.isArray(userStatsRows)
+      ? userStatsRows[0]
+      : userStatsRows;
+    const totalUsers = Number(statsRow?.total ?? 0);
+    const realUsers = Number(statsRow?.real_users ?? 0);
+    const actors = Number(statsRow?.actors ?? 0);
+    const agents = Number(statsRow?.agents ?? 0);
+    const bannedUsers = Number(statsRow?.banned_users ?? 0);
+    const adminUsers = Number(statsRow?.admin_users ?? 0);
+    const usersToday = Number(statsRow?.users_today ?? 0);
+    const usersYesterday = Number(statsRow?.users_yesterday ?? 0);
+    const usersThisWeek = Number(statsRow?.users_this_week ?? 0);
+    const usersThisMonth = Number(statsRow?.users_this_month ?? 0);
+    const profileComplete = Number(statsRow?.profile_complete ?? 0);
+    const onChainRegistered = Number(statsRow?.on_chain_registered ?? 0);
+    const withFarcaster = Number(statsRow?.with_farcaster ?? 0);
+    const withTwitter = Number(statsRow?.with_twitter ?? 0);
+    const withDiscord = Number(statsRow?.with_discord ?? 0);
+    const withWallet = Number(statsRow?.with_wallet ?? 0);
 
-  // Filtered total only if date range specified
-  const filteredTotal =
-    startDate || endDate
-      ? await db.user.count({ where: combinedFilter })
-      : null;
+    // Filtered total only if date range specified
+    const filteredTotal =
+      startDate || endDate
+        ? await tx.user.count({ where: combinedFilter })
+        : null;
 
-  let timeSeries: Array<{ date: string; signups: number; cumulative: number }> =
-    [];
+    let timeSeries: Array<{
+      date: string;
+      signups: number;
+      cumulative: number;
+    }> = [];
 
-  if (includeTimeSeries) {
-    const timeSeriesStart =
-      startDate ?? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const timeSeriesEnd = endDate ?? new Date();
+    if (includeTimeSeries) {
+      const timeSeriesStart =
+        startDate ?? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const timeSeriesEnd = endDate ?? new Date();
 
-    let dailySignups: Array<{ date: string; count: string }>;
+      let dailySignups: Array<{ date: string; count: string }>;
 
-    if (userType === 'actors') {
-      dailySignups = await db.$queryRaw<{ date: string; count: string }>`
+      if (userType === 'actors') {
+        dailySignups = await tx.$queryRaw<{ date: string; count: string }>`
         SELECT DATE("createdAt") as date, COUNT(*) as count
         FROM "User"
         WHERE "createdAt" >= ${timeSeriesStart} AND "createdAt" <= ${timeSeriesEnd}
           AND "isActor" = true
         GROUP BY DATE("createdAt") ORDER BY date ASC
       `;
-    } else if (userType === 'agents') {
-      dailySignups = await db.$queryRaw<{ date: string; count: string }>`
+      } else if (userType === 'agents') {
+        dailySignups = await tx.$queryRaw<{ date: string; count: string }>`
         SELECT DATE("createdAt") as date, COUNT(*) as count
         FROM "User"
         WHERE "createdAt" >= ${timeSeriesStart} AND "createdAt" <= ${timeSeriesEnd}
           AND "isAgent" = true
         GROUP BY DATE("createdAt") ORDER BY date ASC
       `;
-    } else if (userType === 'real') {
-      dailySignups = await db.$queryRaw<{ date: string; count: string }>`
+      } else if (userType === 'real') {
+        dailySignups = await tx.$queryRaw<{ date: string; count: string }>`
         SELECT DATE("createdAt") as date, COUNT(*) as count
         FROM "User"
         WHERE "createdAt" >= ${timeSeriesStart} AND "createdAt" <= ${timeSeriesEnd}
           AND "isActor" = false AND "isAgent" = false
         GROUP BY DATE("createdAt") ORDER BY date ASC
       `;
-    } else {
-      dailySignups = await db.$queryRaw<{ date: string; count: string }>`
+      } else {
+        dailySignups = await tx.$queryRaw<{ date: string; count: string }>`
         SELECT DATE("createdAt") as date, COUNT(*) as count
         FROM "User"
         WHERE "createdAt" >= ${timeSeriesStart} AND "createdAt" <= ${timeSeriesEnd}
         GROUP BY DATE("createdAt") ORDER BY date ASC
       `;
+      }
+
+      let cumulative = 0;
+      timeSeries = dailySignups.map((row) => {
+        cumulative += Number(row.count);
+        return {
+          date: row.date,
+          signups: Number(row.count),
+          cumulative,
+        };
+      });
     }
 
-    let cumulative = 0;
-    timeSeries = dailySignups.map((row) => {
-      cumulative += Number(row.count);
-      return {
-        date: row.date,
-        signups: Number(row.count),
-        cumulative,
-      };
+    const topReferrers = await tx.user.findMany({
+      where: { ...userTypeFilter, referralCount: { gt: 0 } },
+      orderBy: { referralCount: 'desc' },
+      take: 10,
+      select: {
+        id: true,
+        username: true,
+        displayName: true,
+        profileImageUrl: true,
+        referralCount: true,
+      },
     });
-  }
 
-  const topReferrers = await db.user.findMany({
-    where: { ...userTypeFilter, referralCount: { gt: 0 } },
-    orderBy: { referralCount: 'desc' },
-    take: 10,
-    select: {
-      id: true,
-      username: true,
-      displayName: true,
-      profileImageUrl: true,
-      referralCount: true,
-    },
-  });
+    const recentSignups = await tx.user.findMany({
+      where: combinedFilter,
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+      select: {
+        id: true,
+        username: true,
+        displayName: true,
+        profileImageUrl: true,
+        createdAt: true,
+        onChainRegistered: true,
+        hasFarcaster: true,
+        hasTwitter: true,
+        hasDiscord: true,
+      },
+    });
 
-  const recentSignups = await db.user.findMany({
-    where: combinedFilter,
-    orderBy: { createdAt: 'desc' },
-    take: 10,
-    select: {
-      id: true,
-      username: true,
-      displayName: true,
-      profileImageUrl: true,
-      createdAt: true,
-      onChainRegistered: true,
-      hasFarcaster: true,
-      hasTwitter: true,
-      hasDiscord: true,
-    },
-  });
+    const baseCount =
+      userType === 'actors'
+        ? actors
+        : userType === 'agents'
+          ? agents
+          : userType === 'real'
+            ? realUsers
+            : totalUsers;
 
-  const baseCount =
-    userType === 'actors'
-      ? actors
-      : userType === 'agents'
-        ? agents
-        : userType === 'real'
-          ? realUsers
-          : totalUsers;
-
-  return successResponse({
-    overview: {
-      total: totalUsers,
-      realUsers,
-      actors,
-      agents,
-      banned: bannedUsers,
-      admins: adminUsers,
-      ...(filteredTotal !== null && { filteredTotal }),
-    },
-    signups: {
-      today: usersToday,
-      yesterday: usersYesterday,
-      thisWeek: usersThisWeek,
-      thisMonth: usersThisMonth,
-      growthRate:
-        usersYesterday > 0
-          ? ((usersToday - usersYesterday) / usersYesterday) * 100
-          : 0,
-    },
-    profileMetrics: {
-      profileComplete,
-      profileCompletionRate:
-        baseCount > 0
-          ? Math.round((profileComplete / baseCount) * 1000) / 10
-          : 0,
-      onChainRegistered,
-      onChainRate:
-        baseCount > 0
-          ? Math.round((onChainRegistered / baseCount) * 1000) / 10
-          : 0,
-    },
-    socialConnections: {
-      withFarcaster,
-      withTwitter,
-      withDiscord,
-      withWallet,
-      farcasterRate:
-        baseCount > 0 ? Math.round((withFarcaster / baseCount) * 1000) / 10 : 0,
-      twitterRate:
-        baseCount > 0 ? Math.round((withTwitter / baseCount) * 1000) / 10 : 0,
-      discordRate:
-        baseCount > 0 ? Math.round((withDiscord / baseCount) * 1000) / 10 : 0,
-      walletRate:
-        baseCount > 0 ? Math.round((withWallet / baseCount) * 1000) / 10 : 0,
-    },
-    topReferrers,
-    recentSignups: recentSignups.map((u) => ({
-      ...u,
-      createdAt: toISO(u.createdAt),
-    })),
-    timeSeries,
-    filters: {
-      startDate: toISOOrNull(startDate),
-      endDate: toISOOrNull(endDate),
-      userType,
-      applied: Boolean(startDate || endDate || userType !== 'all'),
-    },
-  });
+    return successResponse({
+      overview: {
+        total: totalUsers,
+        realUsers,
+        actors,
+        agents,
+        banned: bannedUsers,
+        admins: adminUsers,
+        ...(filteredTotal !== null && { filteredTotal }),
+      },
+      signups: {
+        today: usersToday,
+        yesterday: usersYesterday,
+        thisWeek: usersThisWeek,
+        thisMonth: usersThisMonth,
+        growthRate:
+          usersYesterday > 0
+            ? ((usersToday - usersYesterday) / usersYesterday) * 100
+            : 0,
+      },
+      profileMetrics: {
+        profileComplete,
+        profileCompletionRate:
+          baseCount > 0
+            ? Math.round((profileComplete / baseCount) * 1000) / 10
+            : 0,
+        onChainRegistered,
+        onChainRate:
+          baseCount > 0
+            ? Math.round((onChainRegistered / baseCount) * 1000) / 10
+            : 0,
+      },
+      socialConnections: {
+        withFarcaster,
+        withTwitter,
+        withDiscord,
+        withWallet,
+        farcasterRate:
+          baseCount > 0
+            ? Math.round((withFarcaster / baseCount) * 1000) / 10
+            : 0,
+        twitterRate:
+          baseCount > 0 ? Math.round((withTwitter / baseCount) * 1000) / 10 : 0,
+        discordRate:
+          baseCount > 0 ? Math.round((withDiscord / baseCount) * 1000) / 10 : 0,
+        walletRate:
+          baseCount > 0 ? Math.round((withWallet / baseCount) * 1000) / 10 : 0,
+      },
+      topReferrers,
+      recentSignups: recentSignups.map((u) => ({
+        ...u,
+        createdAt: toISO(u.createdAt),
+      })),
+      timeSeries,
+      filters: {
+        startDate: toISOOrNull(startDate),
+        endDate: toISOOrNull(endDate),
+        userType,
+        applied: Boolean(startDate || endDate || userType !== 'all'),
+      },
+    });
+  }, 'admin-stats-users');
 });

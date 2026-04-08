@@ -8,8 +8,7 @@
  * @module services/article-rate-limiter
  */
 
-import { and, eq, gte, isNull, sql } from '@babylon/db';
-import { db, posts } from '@babylon/db/runtime';
+import { countNonDeletedArticlesSince } from '@babylon/db';
 import { logger } from '@babylon/shared';
 
 /**
@@ -127,18 +126,7 @@ export class ArticleRateLimiterService {
   async getRecentArticleCount(): Promise<number> {
     const windowStart = new Date(Date.now() - this.config.windowMs);
 
-    const [result] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(posts)
-      .where(
-        and(
-          eq(posts.type, 'article'),
-          gte(posts.timestamp, windowStart),
-          isNull(posts.deletedAt)
-        )
-      );
-
-    return result?.count ?? 0;
+    return countNonDeletedArticlesSince(windowStart);
   }
 
   /**

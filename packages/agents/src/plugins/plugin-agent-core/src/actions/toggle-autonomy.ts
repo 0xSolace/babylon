@@ -5,8 +5,13 @@
  * Uses agentService.updateAgent() for proper logging and cache management.
  */
 
-import { eq } from '@babylon/db';
-import { agentLogs, db, userAgentConfigs, users } from '@babylon/db/runtime';
+import {
+  insertAgentLogRow,
+  type NewAgentLog,
+  selectUserIdAndIsAgent,
+  upsertUserAgentConfigAutonomyPatch,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import type {
   Action,
   ActionResult,
@@ -166,11 +171,7 @@ export const toggleAutonomyAction: Action = {
     }
 
     try {
-      const [agent] = await db
-        .select({ id: users.id, isAgent: users.isAgent })
-        .from(users)
-        .where(eq(users.id, agentUserId))
-        .limit(1);
+      const agent = await selectUserIdAndIsAgent(db, agentUserId);
 
       if (!agent || !agent.isAgent) {
         return {
@@ -196,29 +197,22 @@ export const toggleAutonomyAction: Action = {
 
       const now = new Date();
 
-      // Atomic upsert config row with autonomy fields
-      await db
-        .insert(userAgentConfigs)
-        .values({
-          id: await generateSnowflakeId(),
-          userId: agentUserId,
-          ...updates,
-          updatedAt: now,
-        })
-        .onConflictDoUpdate({
-          target: userAgentConfigs.userId,
-          set: { ...updates, updatedAt: now },
-        });
+      await upsertUserAgentConfigAutonomyPatch(db, {
+        userId: agentUserId,
+        newRowId: await generateSnowflakeId(),
+        patch: updates,
+        now,
+      });
 
-      // Log the change for observability
-      await db.insert(agentLogs).values({
+      const logRow: NewAgentLog = {
         id: await generateSnowflakeId(),
         agentUserId,
         type: 'system',
         level: 'info',
         message: 'Autonomy configuration updated',
         metadata: { feature, enabled },
-      });
+      };
+      await insertAgentLogRow(db, logRow);
 
       const featureDisplay =
         feature === 'all' ? 'all autonomous features' : `autonomous ${feature}`;

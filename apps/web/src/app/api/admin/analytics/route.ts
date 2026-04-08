@@ -35,22 +35,18 @@
  */
 
 import { requireAdmin, successResponse, withErrorHandling } from '@babylon/api';
-import { and, count, gte, lte, sql } from '@babylon/db';
 import {
-  comments,
-  db,
-  follows,
-  posts,
-  reactions,
-  users,
-} from '@babylon/db/runtime';
-
+  type AdminAnalyticsPeriod,
+  fetchAdminAnalyticsTimeseriesBundle,
+} from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
-type PeriodType = 'day' | 'week' | 'month';
-
-function getDateRange(period: PeriodType): { start: Date; end: Date } {
+function getDateRange(period: AdminAnalyticsPeriod): {
+  start: Date;
+  end: Date;
+} {
   const now = new Date();
   const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
   let start: Date;
@@ -76,7 +72,7 @@ function getDateRange(period: PeriodType): { start: Date; end: Date } {
   return { start, end };
 }
 
-function formatDateKey(date: Date, period: PeriodType): string {
+function formatDateKey(date: Date, period: AdminAnalyticsPeriod): string {
   if (period === 'month') {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
   }
@@ -84,15 +80,17 @@ function formatDateKey(date: Date, period: PeriodType): string {
   return isoDate ?? '';
 }
 
-const VALID_PERIODS: PeriodType[] = ['day', 'week', 'month'];
+const VALID_PERIODS: AdminAnalyticsPeriod[] = ['day', 'week', 'month'];
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
   await requireAdmin(request);
 
   const { searchParams } = new URL(request.url);
   const periodParam = searchParams.get('period') || 'week';
-  const period: PeriodType = VALID_PERIODS.includes(periodParam as PeriodType)
-    ? (periodParam as PeriodType)
+  const period: AdminAnalyticsPeriod = VALID_PERIODS.includes(
+    periodParam as AdminAnalyticsPeriod
+  )
+    ? (periodParam as AdminAnalyticsPeriod)
     : 'week';
 
   logger.info(
@@ -107,131 +105,22 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   // (month=6, week=28, day=7 by date range, but we limit to 200 as safety margin)
   const MAX_DATA_POINTS = 200;
 
-  // Execute all queries in parallel for better performance
-  const [
+  const {
     userSignups,
     postsCreated,
     commentsCreated,
     reactionsCreated,
     followsCreated,
-  ] = await Promise.all([
-    // User signups
-    db
-      .select({
-        date: (period === 'month'
-          ? sql<string>`TO_CHAR(DATE_TRUNC('month', ${users.createdAt}), 'YYYY-MM')`
-          : sql<string>`DATE(${users.createdAt})`
-        ).as('date'),
-        count: count(),
-      })
-      .from(users)
-      .where(and(gte(users.createdAt, start), lte(users.createdAt, end)))
-      .groupBy(
-        period === 'month'
-          ? sql`DATE_TRUNC('month', ${users.createdAt})`
-          : sql`DATE(${users.createdAt})`
-      )
-      .orderBy(
-        period === 'month'
-          ? sql`DATE_TRUNC('month', ${users.createdAt})`
-          : sql`DATE(${users.createdAt})`
-      )
-      .limit(MAX_DATA_POINTS),
-
-    // Posts
-    db
-      .select({
-        date: (period === 'month'
-          ? sql<string>`TO_CHAR(DATE_TRUNC('month', ${posts.createdAt}), 'YYYY-MM')`
-          : sql<string>`DATE(${posts.createdAt})`
-        ).as('date'),
-        count: count(),
-      })
-      .from(posts)
-      .where(and(gte(posts.createdAt, start), lte(posts.createdAt, end)))
-      .groupBy(
-        period === 'month'
-          ? sql`DATE_TRUNC('month', ${posts.createdAt})`
-          : sql`DATE(${posts.createdAt})`
-      )
-      .orderBy(
-        period === 'month'
-          ? sql`DATE_TRUNC('month', ${posts.createdAt})`
-          : sql`DATE(${posts.createdAt})`
-      )
-      .limit(MAX_DATA_POINTS),
-
-    // Comments
-    db
-      .select({
-        date: (period === 'month'
-          ? sql<string>`TO_CHAR(DATE_TRUNC('month', ${comments.createdAt}), 'YYYY-MM')`
-          : sql<string>`DATE(${comments.createdAt})`
-        ).as('date'),
-        count: count(),
-      })
-      .from(comments)
-      .where(and(gte(comments.createdAt, start), lte(comments.createdAt, end)))
-      .groupBy(
-        period === 'month'
-          ? sql`DATE_TRUNC('month', ${comments.createdAt})`
-          : sql`DATE(${comments.createdAt})`
-      )
-      .orderBy(
-        period === 'month'
-          ? sql`DATE_TRUNC('month', ${comments.createdAt})`
-          : sql`DATE(${comments.createdAt})`
-      )
-      .limit(MAX_DATA_POINTS),
-
-    // Reactions
-    db
-      .select({
-        date: (period === 'month'
-          ? sql<string>`TO_CHAR(DATE_TRUNC('month', ${reactions.createdAt}), 'YYYY-MM')`
-          : sql<string>`DATE(${reactions.createdAt})`
-        ).as('date'),
-        count: count(),
-      })
-      .from(reactions)
-      .where(
-        and(gte(reactions.createdAt, start), lte(reactions.createdAt, end))
-      )
-      .groupBy(
-        period === 'month'
-          ? sql`DATE_TRUNC('month', ${reactions.createdAt})`
-          : sql`DATE(${reactions.createdAt})`
-      )
-      .orderBy(
-        period === 'month'
-          ? sql`DATE_TRUNC('month', ${reactions.createdAt})`
-          : sql`DATE(${reactions.createdAt})`
-      )
-      .limit(MAX_DATA_POINTS),
-
-    // Follows
-    db
-      .select({
-        date: (period === 'month'
-          ? sql<string>`TO_CHAR(DATE_TRUNC('month', ${follows.createdAt}), 'YYYY-MM')`
-          : sql<string>`DATE(${follows.createdAt})`
-        ).as('date'),
-        count: count(),
-      })
-      .from(follows)
-      .where(and(gte(follows.createdAt, start), lte(follows.createdAt, end)))
-      .groupBy(
-        period === 'month'
-          ? sql`DATE_TRUNC('month', ${follows.createdAt})`
-          : sql`DATE(${follows.createdAt})`
-      )
-      .orderBy(
-        period === 'month'
-          ? sql`DATE_TRUNC('month', ${follows.createdAt})`
-          : sql`DATE(${follows.createdAt})`
-      )
-      .limit(MAX_DATA_POINTS),
-  ]);
+  } = await asSystem(
+    (tx) =>
+      fetchAdminAnalyticsTimeseriesBundle(tx, {
+        period,
+        start,
+        end,
+        maxDataPoints: MAX_DATA_POINTS,
+      }),
+    'admin-analytics-timeseries'
+  );
 
   // Build unified time-series data
   const dateMap = new Map<

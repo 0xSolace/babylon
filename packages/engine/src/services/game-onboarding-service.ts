@@ -6,13 +6,15 @@
  */
 
 import {
-  and,
-  eq,
+  fetchGameOnboardingNeedsSlice,
+  fetchGameOnboardingRowByUserId,
   type GameOnboardingRow,
   type GameOnboardingState,
   type GameOnboardingStep,
+  getOrCreateGameOnboardingRow,
+  markGameOnboardingSkipped,
+  updateGameOnboardingIfUpdatedAtUnchanged,
 } from '@babylon/db';
-import { db, gameOnboarding } from '@babylon/db/runtime';
 import {
   generateSnowflakeId,
   getNextOnboardingStep,
@@ -112,38 +114,13 @@ export async function getOrCreateOnboarding(
     rewards: [],
   };
 
-  // Attempt insert, do nothing on conflict (userId is unique)
-  // Use RETURNING to detect if the insert actually happened
-  const insertResult = await db
-    .insert(gameOnboarding)
-    .values({
-      id,
-      userId,
-      currentStep: 'welcome',
-      state: initialState,
-      isComplete: false,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .onConflictDoNothing({ target: gameOnboarding.userId })
-    .returning({ insertedId: gameOnboarding.id });
+  const { row, wasCreated } = await getOrCreateGameOnboardingRow({
+    newRowId: id,
+    userId,
+    now,
+    initialState,
+  });
 
-  // If insert returned a row, it was newly created
-  const wasCreated = insertResult.length > 0;
-
-  // Select the row (either just created or already existed)
-  const [row] = await db
-    .select()
-    .from(gameOnboarding)
-    .where(eq(gameOnboarding.userId, userId))
-    .limit(1);
-
-  if (!row) {
-    // This should never happen, but handle gracefully
-    throw new Error(`Failed to get or create onboarding for user ${userId}`);
-  }
-
-  // Log only if this was a new creation (based on insert result, not timestamp comparison)
   if (wasCreated) {
     logger.info(
       `Created game onboarding for user ${userId}`,
@@ -201,21 +178,13 @@ export async function completeOnboardingStep(
   // Update database with optimistic lock check on updatedAt
   // This prevents race conditions where concurrent requests both pass the
   // already-completed check before either writes to the database
-  const result = await db
-    .update(gameOnboarding)
-    .set({
-      currentStep: state.currentStep,
-      state,
-      isComplete,
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(gameOnboarding.userId, userId),
-        eq(gameOnboarding.updatedAt, onboarding.updatedAt)
-      )
-    )
-    .returning();
+  const result = await updateGameOnboardingIfUpdatedAtUnchanged({
+    userId,
+    expectedUpdatedAt: onboarding.updatedAt,
+    currentStep: state.currentStep,
+    state,
+    isComplete,
+  });
 
   // If no rows updated, someone else modified it - retry with fresh data
   if (!result || result.length === 0) {
@@ -334,11 +303,7 @@ export async function getOnboardingStatus(userId: string): Promise<{
   isComplete: boolean;
 } | null> {
   // Query directly without auto-creating - status check shouldn't have side effects
-  const [onboarding] = await db
-    .select()
-    .from(gameOnboarding)
-    .where(eq(gameOnboarding.userId, userId))
-    .limit(1);
+  const onboarding = await fetchGameOnboardingRowByUserId(userId);
 
   if (!onboarding) {
     return null;
@@ -367,14 +332,7 @@ export async function skipOnboarding(userId: string): Promise<void> {
   // Intentionally create record if needed - tracks that user declined onboarding
   const onboarding = await getOrCreateOnboarding(userId);
 
-  await db
-    .update(gameOnboarding)
-    .set({
-      isComplete: true,
-      skippedAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(eq(gameOnboarding.userId, userId));
+  await markGameOnboardingSkipped(userId);
 
   logger.info(
     `User ${userId} skipped onboarding`,
@@ -387,14 +345,7 @@ export async function skipOnboarding(userId: string): Promise<void> {
  * Check if a user needs onboarding
  */
 export async function needsOnboarding(userId: string): Promise<boolean> {
-  const [onboarding] = await db
-    .select({
-      isComplete: gameOnboarding.isComplete,
-      skippedAt: gameOnboarding.skippedAt,
-    })
-    .from(gameOnboarding)
-    .where(eq(gameOnboarding.userId, userId))
-    .limit(1);
+  const onboarding = await fetchGameOnboardingNeedsSlice(userId);
 
   if (!onboarding) {
     return true; // No record = needs onboarding

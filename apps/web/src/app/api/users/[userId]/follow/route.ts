@@ -98,15 +98,18 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, eq } from '@babylon/db';
 import {
-  db,
-  follows,
-  userActorFollows,
-  users,
-  withTransaction,
-} from '@babylon/db/runtime';
-
+  deleteFollowById,
+  deleteUserActorFollowById,
+  insertUserActorFollowReturning,
+  insertUserFollowReturning,
+  selectFollowIdByFollowerAndFollowing,
+  selectFollowIdForUpdateByFollowerAndFollowing,
+  selectUserActorFollowIdByUserAndActor,
+  selectUserFollowTargetDisplaySliceById,
+  selectUserIdAndIsActorById,
+} from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import { StaticDataRegistry } from '@babylon/engine';
 import {
   generateSnowflakeId,
@@ -178,57 +181,43 @@ export const POST = withErrorHandling(
     // If targetUser has isActor flag, treat as actor (not regular user)
     // Also check if targetActor exists (could be actor ID that doesn't match a user)
     if (targetUser && !targetUser.isActor) {
-      // Target is a regular user - use Follow model
-      // Check if already following and create follow inside transaction
-      const newFollow = await withTransaction(async (tx) => {
-        const [existingFollow] = await tx
-          .select({ id: follows.id })
-          .from(follows)
-          .where(
-            and(
-              eq(follows.followerId, user.userId),
-              eq(follows.followingId, targetId)
-            )
-          )
-          .limit(1)
-          .for('update');
+      const { newFollow, targetUserDetails } = await asUser(
+        user,
+        async (db) => {
+          const existingFollow =
+            await selectFollowIdForUpdateByFollowerAndFollowing(
+              db,
+              user.userId,
+              targetId
+            );
 
-        if (existingFollow) {
-          throw new BusinessLogicError(
-            'Already following this user',
-            'ALREADY_FOLLOWING'
-          );
-        }
+          if (existingFollow) {
+            throw new BusinessLogicError(
+              'Already following this user',
+              'ALREADY_FOLLOWING'
+            );
+          }
 
-        const followId = await generateSnowflakeId();
-        const [createdFollow] = await tx
-          .insert(follows)
-          .values({
+          const followId = await generateSnowflakeId();
+          const createdFollow = await insertUserFollowReturning(db, {
             id: followId,
             followerId: user.userId,
             followingId: targetId,
-          })
-          .returning();
+          });
 
-        if (!createdFollow) {
-          throw new InternalServerError('Failed to create follow record');
+          if (!createdFollow) {
+            throw new InternalServerError('Failed to create follow record');
+          }
+
+          const targetUserDetailsRow =
+            await selectUserFollowTargetDisplaySliceById(db, targetId);
+
+          return {
+            newFollow: createdFollow,
+            targetUserDetails: targetUserDetailsRow,
+          };
         }
-
-        return createdFollow;
-      });
-
-      // Get target user details
-      const [targetUserDetails] = await db
-        .select({
-          id: users.id,
-          displayName: users.displayName,
-          username: users.username,
-          profileImageUrl: users.profileImageUrl,
-          bio: users.bio,
-        })
-        .from(users)
-        .where(eq(users.id, targetId))
-        .limit(1);
+      );
 
       // Create notification for the followed user
       await notifyFollow(targetId, user.userId);
@@ -273,42 +262,29 @@ export const POST = withErrorHandling(
         201
       );
     }
-    // Target is an actor (NPC) or user with isActor=true - use UserActorFollow model
-    const [existingUserActorFollow] = await db
-      .select({ id: userActorFollows.id })
-      .from(userActorFollows)
-      .where(
-        and(
-          eq(userActorFollows.userId, user.userId),
-          eq(userActorFollows.actorId, targetId)
-        )
-      )
-      .limit(1);
-
-    if (existingUserActorFollow) {
-      throw new BusinessLogicError(
-        'Already following this actor',
-        'ALREADY_FOLLOWING'
-      );
-    }
-
-    const followId = await generateSnowflakeId();
-
     const actorDetails = StaticDataRegistry.getActor(targetId);
 
-    // Create the follow
-    await db.insert(userActorFollows).values({
-      id: followId,
-      userId: user.userId,
-      actorId: targetId,
-    });
+    const createdFollow = await asUser(user, async (db) => {
+      const existingUserActorFollow =
+        await selectUserActorFollowIdByUserAndActor(db, user.userId, targetId);
 
-    // Fetch the created follow for the response
-    const [createdFollow] = await db
-      .select()
-      .from(userActorFollows)
-      .where(eq(userActorFollows.id, followId))
-      .limit(1);
+      if (existingUserActorFollow) {
+        throw new BusinessLogicError(
+          'Already following this actor',
+          'ALREADY_FOLLOWING'
+        );
+      }
+
+      const followId = await generateSnowflakeId();
+
+      const row = await insertUserActorFollowReturning(db, {
+        id: followId,
+        userId: user.userId,
+        actorId: targetId,
+      });
+
+      return row;
+    });
 
     // Invalidate cache for the user to update following count
     await cachedDb.invalidateUserCache(user.userId).catch((error) => {
@@ -380,27 +356,22 @@ export const DELETE = withErrorHandling(
 
     // If targetUser has isActor flag, treat as actor (not regular user)
     if (targetUser && !targetUser.isActor) {
-      // Target is a regular user - use Follow model
-      const [follow] = await db
-        .select({ id: follows.id })
-        .from(follows)
-        .where(
-          and(
-            eq(follows.followerId, user.userId),
-            eq(follows.followingId, targetId)
-          )
-        )
-        .limit(1);
-
-      if (!follow) {
-        throw new NotFoundError(
-          'Follow relationship',
-          `${user.userId}-${targetId}`
+      await asUser(user, async (db) => {
+        const follow = await selectFollowIdByFollowerAndFollowing(
+          db,
+          user.userId,
+          targetId
         );
-      }
 
-      // Delete follow relationship
-      await db.delete(follows).where(eq(follows.id, follow.id));
+        if (!follow) {
+          throw new NotFoundError(
+            'Follow relationship',
+            `${user.userId}-${targetId}`
+          );
+        }
+
+        await deleteFollowById(db, follow.id);
+      });
 
       // Invalidate caches for both users to update follower/following counts
       await Promise.all([
@@ -430,25 +401,16 @@ export const DELETE = withErrorHandling(
         message: 'Unfollowed successfully',
       });
     }
-    // Target is an actor (NPC) - use UserActorFollow model
-    const [existingUserActorFollow] = await db
-      .select({ id: userActorFollows.id })
-      .from(userActorFollows)
-      .where(
-        and(
-          eq(userActorFollows.userId, user.userId),
-          eq(userActorFollows.actorId, targetId)
-        )
-      )
-      .limit(1);
+    await asUser(user, async (db) => {
+      const existingUserActorFollow =
+        await selectUserActorFollowIdByUserAndActor(db, user.userId, targetId);
 
-    if (!existingUserActorFollow) {
-      throw new NotFoundError('Follow status', `${user.userId}-${targetId}`);
-    }
+      if (!existingUserActorFollow) {
+        throw new NotFoundError('Follow status', `${user.userId}-${targetId}`);
+      }
 
-    await db
-      .delete(userActorFollows)
-      .where(eq(userActorFollows.id, existingUserActorFollow.id));
+      await deleteUserActorFollowById(db, existingUserActorFollow.id);
+    });
 
     // Invalidate cache for the user to update following count
     await cachedDb.invalidateUserCache(user.userId).catch((error) => {
@@ -495,73 +457,57 @@ export const GET = withErrorHandling(
       return successResponse({ isFollowing: false });
     }
 
-    // Check if target is a user
-    const [targetUser] = await db
-      .select({ id: users.id, isActor: users.isActor })
-      .from(users)
-      .where(eq(users.id, targetId))
-      .limit(1);
+    return asUser(authUser, async (db) => {
+      const targetUser = await selectUserIdAndIsActorById(db, targetId);
 
-    // If targetUser has isActor flag, treat as actor (not regular user)
-    if (targetUser && !targetUser.isActor) {
-      // Target is a regular user - check Follow model
-      const [follow] = await db
-        .select({ id: follows.id })
-        .from(follows)
-        .where(
-          and(
-            eq(follows.followerId, authUser.userId),
-            eq(follows.followingId, targetId)
-          )
-        )
-        .limit(1);
+      if (targetUser && !targetUser.isActor) {
+        const follow = await selectFollowIdByFollowerAndFollowing(
+          db,
+          authUser.userId,
+          targetId
+        );
+
+        logger.info(
+          'Follow status checked',
+          { userId: authUser.userId, targetId, isFollowing: !!follow },
+          'GET /api/users/[userId]/follow'
+        );
+
+        return successResponse({
+          isFollowing: !!follow,
+        });
+      }
+
+      const targetActorData = StaticDataRegistry.getActor(targetId);
+
+      if (targetActorData) {
+        const userActorFollow = await selectUserActorFollowIdByUserAndActor(
+          db,
+          authUser.userId,
+          targetId
+        );
+
+        const isFollowing = !!userActorFollow;
+        logger.info(
+          'Actor follow status checked',
+          { userId: authUser.userId, npcId: targetId, isFollowing },
+          'GET /api/users/[userId]/follow'
+        );
+
+        return successResponse({
+          isFollowing,
+        });
+      }
 
       logger.info(
-        'Follow status checked',
-        { userId: authUser.userId, targetId, isFollowing: !!follow },
+        'Follow status checked for non-existent target',
+        { userId: authUser.userId, targetId },
         'GET /api/users/[userId]/follow'
       );
 
       return successResponse({
-        isFollowing: !!follow,
+        isFollowing: false,
       });
-    }
-    // Target might be an actor (NPC) - check static registry
-    const targetActorData = StaticDataRegistry.getActor(targetId);
-
-    if (targetActorData) {
-      const [userActorFollow] = await db
-        .select({ id: userActorFollows.id })
-        .from(userActorFollows)
-        .where(
-          and(
-            eq(userActorFollows.userId, authUser.userId),
-            eq(userActorFollows.actorId, targetId)
-          )
-        )
-        .limit(1);
-
-      const isFollowing = !!userActorFollow;
-      logger.info(
-        'Actor follow status checked',
-        { userId: authUser.userId, npcId: targetId, isFollowing },
-        'GET /api/users/[userId]/follow'
-      );
-
-      return successResponse({
-        isFollowing,
-      });
-    }
-    // Neither user nor actor found - return false for isFollowing
-    // This prevents errors when checking follow status for non-existent profiles
-    logger.info(
-      'Follow status checked for non-existent target',
-      { userId: authUser.userId, targetId },
-      'GET /api/users/[userId]/follow'
-    );
-
-    return successResponse({
-      isFollowing: false,
     });
   }
 );

@@ -57,11 +57,11 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 
-import { db } from '@babylon/db/runtime';
 import { NPCInvestmentManager } from '@babylon/engine';
 import { toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import { runWithOptionalUserRls } from '@/lib/db/run-with-optional-user-rls';
 
 interface RouteParams {
   params: Promise<{
@@ -73,82 +73,84 @@ export const GET = withErrorHandling(async function GET(
   request: NextRequest,
   { params }: RouteParams
 ) {
-  const { error, rateLimitInfo } = await publicRateLimit(request);
+  const { error, rateLimitInfo, user: viewer } = await publicRateLimit(request);
   if (error) return error;
 
   const { actorId } = await params;
 
   const actor = await requireUserByIdentifier(actorId);
 
-  const pool = await db.pool.findFirst({
-    where: {
-      npcActorId: actor.id,
-      isActive: true,
-    },
-  });
+  return runWithOptionalUserRls(viewer, async (db) => {
+    const pool = await db.pool.findFirst({
+      where: {
+        npcActorId: actor.id,
+        isActive: true,
+      },
+    });
 
-  if (!pool) {
-    return NextResponse.json(
-      { error: 'No active pool found for actor' },
-      { status: 404 }
-    );
-  }
+    if (!pool) {
+      return NextResponse.json(
+        { error: 'No active pool found for actor' },
+        { status: 404 }
+      );
+    }
 
-  const metrics = await NPCInvestmentManager.getPortfolioMetrics(pool.id);
+    const metrics = await NPCInvestmentManager.getPortfolioMetrics(pool.id);
 
-  const positions = await db.poolPosition.findMany({
-    where: {
+    const positions = await db.poolPosition.findMany({
+      where: {
+        poolId: pool.id,
+        closedAt: null,
+      },
+      select: {
+        id: true,
+        marketType: true,
+        ticker: true,
+        marketId: true,
+        side: true,
+        size: true,
+        entryPrice: true,
+        currentPrice: true,
+        unrealizedPnL: true,
+        leverage: true,
+        openedAt: true,
+      },
+      orderBy: {
+        openedAt: 'desc',
+      },
+    });
+
+    const formattedPositions = positions.map((pos) => ({
+      id: pos.id,
+      marketType: pos.marketType,
+      ticker: pos.ticker,
+      marketId: pos.marketId,
+      side: pos.side,
+      size: Number.parseFloat(pos.size!.toString()),
+      entryPrice: Number.parseFloat(pos.entryPrice!.toString()),
+      currentPrice: Number.parseFloat(pos.currentPrice!.toString()),
+      unrealizedPnL: Number.parseFloat(pos.unrealizedPnL!.toString()),
+      leverage: pos.leverage,
+      createdAt: toISO(pos.openedAt),
+    }));
+
+    const res = NextResponse.json({
+      success: true,
+      actorId: actor.id,
+      actorName: actor.displayName!,
       poolId: pool.id,
-      closedAt: null,
-    },
-    select: {
-      id: true,
-      marketType: true,
-      ticker: true,
-      marketId: true,
-      side: true,
-      size: true,
-      entryPrice: true,
-      currentPrice: true,
-      unrealizedPnL: true,
-      leverage: true,
-      openedAt: true,
-    },
-    orderBy: {
-      openedAt: 'desc',
-    },
+      portfolio: {
+        totalValue: metrics.totalValue,
+        availableBalance: metrics.availableBalance,
+        unrealizedPnL: metrics.unrealizedPnL,
+        realizedPnL: metrics.realizedPnL,
+        positionCount: metrics.positionCount,
+        utilization: metrics.utilization,
+        riskScore: metrics.riskScore,
+      },
+      positions: formattedPositions,
+    });
+    if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
+    return res;
   });
-
-  const formattedPositions = positions.map((pos) => ({
-    id: pos.id,
-    marketType: pos.marketType,
-    ticker: pos.ticker,
-    marketId: pos.marketId,
-    side: pos.side,
-    size: Number.parseFloat(pos.size!.toString()),
-    entryPrice: Number.parseFloat(pos.entryPrice!.toString()),
-    currentPrice: Number.parseFloat(pos.currentPrice!.toString()),
-    unrealizedPnL: Number.parseFloat(pos.unrealizedPnL!.toString()),
-    leverage: pos.leverage,
-    createdAt: toISO(pos.openedAt),
-  }));
-
-  const res = NextResponse.json({
-    success: true,
-    actorId: actor.id,
-    actorName: actor.displayName!,
-    poolId: pool.id,
-    portfolio: {
-      totalValue: metrics.totalValue,
-      availableBalance: metrics.availableBalance,
-      unrealizedPnL: metrics.unrealizedPnL,
-      realizedPnL: metrics.realizedPnL,
-      positionCount: metrics.positionCount,
-      utilization: metrics.utilization,
-      riskScore: metrics.riskScore,
-    },
-    positions: formattedPositions,
-  });
-  if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
-  return res;
 });

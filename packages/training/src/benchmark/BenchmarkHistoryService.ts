@@ -5,18 +5,18 @@
  */
 
 import {
-  and,
   type BenchmarkResult,
-  desc,
-  eq,
-  gte,
+  insertBenchmarkResultReturningFull,
   type JsonValue,
-  lte,
   type NewBenchmarkResult,
-  type SQL,
-  sql,
+  selectBenchmarkModelSummaryGrouped,
+  selectBenchmarkResultsByHistoryFilters,
+  selectBenchmarkResultsByModelIdRunAtDescLimit,
+  selectBenchmarkResultsByModelOptionalBenchmarkLimit,
+  selectLatestBenchmarkResultByModelAndBenchmarkId,
+  selectLatestBenchmarkResultByModelId,
 } from '@babylon/db';
-import { benchmarkResults, db } from '@babylon/db/runtime';
+import { db } from '@babylon/db/engine-storage';
 import { logger } from '../utils/logger';
 import { generateSnowflakeId } from '../utils/snowflake';
 import type { SimulationMetrics } from './SimulationEngine';
@@ -80,21 +80,14 @@ export class BenchmarkHistoryService {
       createdAt: new Date(),
     };
 
-    const [result] = await db
-      .insert(benchmarkResults)
-      .values(record)
-      .returning();
+    const result = await insertBenchmarkResultReturningFull(db, record);
 
     logger.info('Saved benchmark result', {
-      id: result?.id,
+      id: result.id,
       modelId: input.modelId,
       benchmarkId: input.benchmarkId,
       totalPnl: input.metrics.totalPnl,
     });
-
-    if (!result) {
-      throw new Error('Failed to save benchmark result');
-    }
 
     return result;
   }
@@ -105,34 +98,7 @@ export class BenchmarkHistoryService {
   static async getResults(
     query: BenchmarkHistoryQuery
   ): Promise<BenchmarkResult[]> {
-    const conditions: SQL[] = [];
-
-    if (query.modelId) {
-      conditions.push(eq(benchmarkResults.modelId, query.modelId));
-    }
-
-    if (query.benchmarkId) {
-      conditions.push(eq(benchmarkResults.benchmarkId, query.benchmarkId));
-    }
-
-    if (query.startDate) {
-      conditions.push(gte(benchmarkResults.runAt, query.startDate));
-    }
-
-    if (query.endDate) {
-      conditions.push(lte(benchmarkResults.runAt, query.endDate));
-    }
-
-    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
-
-    const results = await db
-      .select()
-      .from(benchmarkResults)
-      .where(whereClause)
-      .orderBy(desc(benchmarkResults.runAt))
-      .limit(query.limit ?? 100);
-
-    return results;
+    return selectBenchmarkResultsByHistoryFilters(db, query);
   }
 
   /**
@@ -141,14 +107,7 @@ export class BenchmarkHistoryService {
   static async getLatestResult(
     modelId: string
   ): Promise<BenchmarkResult | null> {
-    const [result] = await db
-      .select()
-      .from(benchmarkResults)
-      .where(eq(benchmarkResults.modelId, modelId))
-      .orderBy(desc(benchmarkResults.runAt))
-      .limit(1);
-
-    return result ?? null;
+    return selectLatestBenchmarkResultByModelId(db, modelId);
   }
 
   /**
@@ -158,12 +117,11 @@ export class BenchmarkHistoryService {
     modelId: string,
     limit = 20
   ): Promise<BenchmarkTrendData> {
-    const results = await db
-      .select()
-      .from(benchmarkResults)
-      .where(eq(benchmarkResults.modelId, modelId))
-      .orderBy(desc(benchmarkResults.runAt))
-      .limit(limit);
+    const results = await selectBenchmarkResultsByModelIdRunAtDescLimit(
+      db,
+      modelId,
+      limit
+    );
 
     // Reverse to get chronological order
     const chronological = results.reverse();
@@ -187,18 +145,12 @@ export class BenchmarkHistoryService {
     const comparison = new Map<string, BenchmarkResult[]>();
 
     for (const modelId of modelIds) {
-      const conditions: SQL[] = [eq(benchmarkResults.modelId, modelId)];
-
-      if (benchmarkId) {
-        conditions.push(eq(benchmarkResults.benchmarkId, benchmarkId));
-      }
-
-      const results = await db
-        .select()
-        .from(benchmarkResults)
-        .where(and(...conditions))
-        .orderBy(desc(benchmarkResults.runAt))
-        .limit(10);
+      const results = await selectBenchmarkResultsByModelOptionalBenchmarkLimit(
+        db,
+        modelId,
+        benchmarkId,
+        10
+      );
 
       comparison.set(modelId, results);
     }
@@ -220,21 +172,7 @@ export class BenchmarkHistoryService {
       latestRun: Date;
     }>
   > {
-    const results = await db
-      .select({
-        modelId: benchmarkResults.modelId,
-        runCount: sql<number>`count(*)::int`,
-        avgPnl: sql<number>`avg(${benchmarkResults.totalPnl})`,
-        avgAccuracy: sql<number>`avg(${benchmarkResults.predictionAccuracy})`,
-        avgOptimality: sql<number>`avg(${benchmarkResults.optimalityScore})`,
-        bestPnl: sql<number>`max(${benchmarkResults.totalPnl})`,
-        latestRun: sql<Date>`max(${benchmarkResults.runAt})`,
-      })
-      .from(benchmarkResults)
-      .groupBy(benchmarkResults.modelId)
-      .orderBy(desc(sql`avg(${benchmarkResults.totalPnl})`));
-
-    return results;
+    return selectBenchmarkModelSummaryGrouped(db);
   }
 
   /**
@@ -250,29 +188,18 @@ export class BenchmarkHistoryService {
     baselinePnl: number;
     delta: number;
   } | null> {
-    const [modelResult] = await db
-      .select()
-      .from(benchmarkResults)
-      .where(
-        and(
-          eq(benchmarkResults.modelId, modelId),
-          eq(benchmarkResults.benchmarkId, benchmarkId)
-        )
-      )
-      .orderBy(desc(benchmarkResults.runAt))
-      .limit(1);
+    const modelResult = await selectLatestBenchmarkResultByModelAndBenchmarkId(
+      db,
+      modelId,
+      benchmarkId
+    );
 
-    const [baselineResult] = await db
-      .select()
-      .from(benchmarkResults)
-      .where(
-        and(
-          eq(benchmarkResults.modelId, baselineModelId),
-          eq(benchmarkResults.benchmarkId, benchmarkId)
-        )
-      )
-      .orderBy(desc(benchmarkResults.runAt))
-      .limit(1);
+    const baselineResult =
+      await selectLatestBenchmarkResultByModelAndBenchmarkId(
+        db,
+        baselineModelId,
+        benchmarkId
+      );
 
     if (!modelResult || !baselineResult) {
       return null;

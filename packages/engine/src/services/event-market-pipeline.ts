@@ -12,14 +12,13 @@
  */
 
 import {
-  and,
-  eq,
-  inArray,
+  fetchOrganizationStatesForEventPipeline,
   type PriceModifier,
+  runAddPriceModifierOptimisticLock,
+  runUpdateStockPriceOptimisticLock,
+  runUpdateStockSentimentAtomic,
   type StructuredEventData,
-  sql,
 } from '@babylon/db';
-import { db, organizationState } from '@babylon/db/runtime';
 import { logger, PERP_MARKET_CONFIG } from '@babylon/shared';
 import { secureRandom } from '../utils/entropy';
 import { formatError } from '../utils/error-utils';
@@ -210,14 +209,7 @@ export async function applyEventToMarkets(
   // impression that narrative has no effect.
   if (multiplierByOrgId.size > 0) {
     const orgIds = [...multiplierByOrgId.keys()];
-    const states = await db
-      .select({
-        id: organizationState.id,
-        currentPrice: organizationState.currentPrice,
-        basePrice: organizationState.basePrice,
-      })
-      .from(organizationState)
-      .where(inArray(organizationState.id, orgIds));
+    const states = await fetchOrganizationStatesForEventPipeline(orgIds);
 
     const stateByOrgId = new Map(states.map((s) => [s.id, s]));
 
@@ -351,17 +343,15 @@ export async function addPriceModifier(
   const orgId = resolveTickerToOrgId(stockIdOrTicker) ?? stockIdOrTicker;
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    // Get current state with updatedAt for optimistic locking
-    const [state] = await db
-      .select({
-        activeModifiers: organizationState.activeModifiers,
-        updatedAt: organizationState.updatedAt,
-      })
-      .from(organizationState)
-      .where(eq(organizationState.id, orgId))
-      .limit(1);
+    const outcome = await runAddPriceModifierOptimisticLock({
+      orgId,
+      modifier,
+      minEffect: MIN_EVENT_MULTIPLIER,
+      maxEffect: MAX_EVENT_MULTIPLIER,
+      parseModifiers: parseModifiersSafe,
+    });
 
-    if (!state) {
+    if (outcome.kind === 'not_found') {
       logger.warn(
         `Cannot add modifier: OrganizationState not found for ${stockIdOrTicker}`,
         { stockIdOrTicker, resolvedOrgId: orgId },
@@ -370,54 +360,16 @@ export async function addPriceModifier(
       return;
     }
 
-    // Use Zod validation for safe parsing
-    const now = new Date();
-    const existingModifiers = parseModifiersSafe(state.activeModifiers, {
-      orgId,
-    });
-
-    // Filter expired modifiers and bound effect values
-    const validModifiers: PriceModifier[] = existingModifiers
-      .filter((m) => new Date(m.expiresAt).getTime() > now.getTime())
-      .map((m) => ({
-        ...m,
-        effect: Math.max(
-          MIN_EVENT_MULTIPLIER,
-          Math.min(MAX_EVENT_MULTIPLIER, m.effect)
-        ),
-      }));
-
-    // Add new modifier
-    validModifiers.push(modifier);
-
-    // Update database with optimistic locking
-    const result = await db
-      .update(organizationState)
-      .set({
-        activeModifiers: validModifiers,
-        updatedAt: now,
-      })
-      .where(
-        and(
-          eq(organizationState.id, orgId),
-          eq(organizationState.updatedAt, state.updatedAt)
-        )
-      )
-      .returning({ id: organizationState.id });
-
-    if (result.length > 0) {
-      // Success
+    if (outcome.kind === 'success') {
       return;
     }
 
-    // Optimistic lock conflict - retry
     logger.debug(
       `Optimistic lock conflict adding modifier to ${orgId}, attempt ${attempt + 1}/${MAX_RETRIES}`,
       { orgId, attempt },
       'EventMarketPipeline'
     );
 
-    // Exponential backoff delay before retry
     await backoffDelay(attempt);
   }
 
@@ -502,74 +454,29 @@ export async function updateStockPrice(
   const orgId = resolveTickerToOrgId(stockIdOrTicker) ?? stockIdOrTicker;
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    const [state] = await db
-      .select({
-        basePrice: organizationState.basePrice,
-        sentiment: organizationState.sentiment,
-        activeModifiers: organizationState.activeModifiers,
-        updatedAt: organizationState.updatedAt,
-      })
-      .from(organizationState)
-      .where(eq(organizationState.id, orgId))
-      .limit(1);
+    const outcome = await runUpdateStockPriceOptimisticLock({
+      orgId,
+      minEffect: MIN_EVENT_MULTIPLIER,
+      maxEffect: MAX_EVENT_MULTIPLIER,
+      parseModifiers: parseModifiersSafe,
+      computePrice: calculateCurrentPrice,
+      rng: secureRandom,
+    });
 
-    if (!state || !state.basePrice) {
+    if (outcome.kind === 'missing') {
       return null;
     }
 
-    // Use Zod validation for safe parsing
-    const now = new Date();
-    const storedModifiers = parseModifiersSafe(state.activeModifiers, {
-      orgId,
-    });
-
-    // Clean up expired modifiers and bound effects
-    const activeModifiers = storedModifiers
-      .filter((m) => new Date(m.expiresAt).getTime() > now.getTime())
-      .map((m) => ({
-        ...m,
-        effect: Math.max(
-          MIN_EVENT_MULTIPLIER,
-          Math.min(MAX_EVENT_MULTIPLIER, m.effect)
-        ),
-      }));
-
-    // Calculate new price with production-level random noise
-    const newPrice = calculateCurrentPrice(
-      state.basePrice,
-      state.sentiment ?? 0,
-      activeModifiers,
-      secureRandom
-    );
-
-    // Update database with optimistic locking
-    const result = await db
-      .update(organizationState)
-      .set({
-        currentPrice: newPrice,
-        activeModifiers,
-        updatedAt: now,
-      })
-      .where(
-        and(
-          eq(organizationState.id, orgId),
-          eq(organizationState.updatedAt, state.updatedAt)
-        )
-      )
-      .returning({ id: organizationState.id });
-
-    if (result.length > 0) {
-      return newPrice;
+    if (outcome.kind === 'success') {
+      return outcome.newPrice;
     }
 
-    // Optimistic lock conflict - retry
     logger.debug(
       `Optimistic lock conflict updating price for ${orgId}, attempt ${attempt + 1}/${MAX_RETRIES}`,
       { orgId, attempt },
       'EventMarketPipeline'
     );
 
-    // Exponential backoff delay before retry
     await backoffDelay(attempt);
   }
 
@@ -592,17 +499,12 @@ export async function updateStockSentiment(
   // Resolve ticker to org ID if needed
   const orgId = resolveTickerToOrgId(stockIdOrTicker) ?? stockIdOrTicker;
 
-  // Check if state exists first
-  const [state] = await db
-    .select({
-      id: organizationState.id,
-      sentiment: organizationState.sentiment,
-    })
-    .from(organizationState)
-    .where(eq(organizationState.id, orgId))
-    .limit(1);
+  const sentimentOutcome = await runUpdateStockSentimentAtomic({
+    orgId,
+    sentimentChange,
+  });
 
-  if (!state) {
+  if (sentimentOutcome.kind === 'missing') {
     logger.warn(
       `Cannot update sentiment: OrganizationState not found for ${stockIdOrTicker}`,
       { stockIdOrTicker, resolvedOrgId: orgId },
@@ -611,23 +513,12 @@ export async function updateStockSentiment(
     return;
   }
 
-  const oldSentiment = state.sentiment ?? 0;
-
-  // Use SQL to atomically increment sentiment with bounds
-  await db
-    .update(organizationState)
-    .set({
-      sentiment: sql`GREATEST(-100, LEAST(100, COALESCE(${organizationState.sentiment}, 0) + ${sentimentChange}))`,
-      updatedAt: new Date(),
-    })
-    .where(eq(organizationState.id, orgId));
-
   logger.debug(
     `Updated sentiment for ${stockIdOrTicker}`,
     {
       stockIdOrTicker,
       resolvedOrgId: orgId,
-      oldSentiment,
+      oldSentiment: sentimentOutcome.oldSentiment,
       change: sentimentChange,
     },
     'EventMarketPipeline'

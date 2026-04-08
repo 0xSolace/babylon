@@ -128,7 +128,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 
-import { db } from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 import { AdminReportActionSchema, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
@@ -144,83 +144,90 @@ export const GET = withErrorHandling(
     await requireAdmin(request);
     const { reportId } = await context.params;
 
-    const report = await db.report.findUnique({
-      where: { id: reportId },
-      include: {
-        reporter: {
-          select: {
-            id: true,
-            username: true,
-            displayName: true,
-            profileImageUrl: true,
-            createdAt: true,
-            reputationPoints: true,
+    const { report, relatedReports } = await asSystem(async (tx) => {
+      const reportRow = await tx.report.findUnique({
+        where: { id: reportId },
+        include: {
+          reporter: {
+            select: {
+              id: true,
+              username: true,
+              displayName: true,
+              profileImageUrl: true,
+              createdAt: true,
+              reputationPoints: true,
+            },
+          },
+          reportedUser: {
+            select: {
+              id: true,
+              username: true,
+              displayName: true,
+              profileImageUrl: true,
+              isBanned: true,
+              bannedAt: true,
+              bannedReason: true,
+              createdAt: true,
+              reputationPoints: true,
+            },
+          },
+          resolver: {
+            select: {
+              id: true,
+              username: true,
+              displayName: true,
+            },
           },
         },
-        reportedUser: {
-          select: {
-            id: true,
-            username: true,
-            displayName: true,
-            profileImageUrl: true,
-            isBanned: true,
-            bannedAt: true,
-            bannedReason: true,
-            createdAt: true,
-            reputationPoints: true,
+      });
+
+      if (!reportRow) {
+        return { report: null, relatedReports: [] };
+      }
+
+      const related = await tx.report.findMany({
+        where: {
+          OR: [
+            { reportedUserId: reportRow.reportedUserId || undefined },
+            { reportedPostId: reportRow.reportedPostId || undefined },
+          ],
+          id: { not: reportId },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+        select: {
+          id: true,
+          createdAt: true,
+          updatedAt: true,
+          reason: true,
+          status: true,
+          category: true,
+          resolution: true,
+          resolvedAt: true,
+          priority: true,
+          reportedUserId: true,
+          reportedPostId: true,
+          reportedCommentId: true,
+          reporterId: true,
+          resolvedBy: true,
+        },
+        include: {
+          reporter: {
+            select: {
+              id: true,
+              username: true,
+              displayName: true,
+            },
           },
         },
-        resolver: {
-          select: {
-            id: true,
-            username: true,
-            displayName: true,
-          },
-        },
-      },
-    });
+      });
+
+      return { report: reportRow, relatedReports: related };
+    }, 'admin-report-detail');
 
     if (!report) {
       throw new NotFoundError('Report', reportId);
     }
-
-    // Get related reports for the same user/post
-    const relatedReports = await db.report.findMany({
-      where: {
-        OR: [
-          { reportedUserId: report.reportedUserId || undefined },
-          { reportedPostId: report.reportedPostId || undefined },
-        ],
-        id: { not: reportId },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 10,
-      select: {
-        id: true,
-        createdAt: true,
-        updatedAt: true,
-        reason: true,
-        status: true,
-        category: true,
-        resolution: true,
-        resolvedAt: true,
-        priority: true,
-        reportedUserId: true,
-        reportedPostId: true,
-        reportedCommentId: true,
-        reporterId: true,
-        resolvedBy: true,
-      },
-      include: {
-        reporter: {
-          select: {
-            id: true,
-            username: true,
-            displayName: true,
-          },
-        },
-      },
-    });
 
     // Parse evaluation if it exists
     let evaluation = null;
@@ -289,76 +296,91 @@ export const POST = withErrorHandling(
       'POST /api/admin/reports/[reportId]'
     );
 
-    const report = await db.report.findUnique({
-      where: { id: reportId },
-      select: {
-        id: true,
-        reportedUserId: true,
-        reportedPostId: true,
-        status: true,
-      },
-    });
+    const report = await asSystem(
+      (tx) =>
+        tx.report.findUnique({
+          where: { id: reportId },
+          select: {
+            id: true,
+            reportedUserId: true,
+            reportedPostId: true,
+            status: true,
+          },
+        }),
+      'admin-report-action-load'
+    );
 
     if (!report) {
       throw new NotFoundError('Report', reportId);
     }
 
-    // Handle different actions
     if (action === 'resolve') {
-      await db.report.update({
-        where: { id: reportId },
-        data: {
-          status: 'resolved',
-          resolution,
-          resolvedBy: adminUser.userId,
-          resolvedAt: new Date(),
-        },
-      });
+      await asSystem(
+        (tx) =>
+          tx.report.update({
+            where: { id: reportId },
+            data: {
+              status: 'resolved',
+              resolution,
+              resolvedBy: adminUser.userId,
+              resolvedAt: new Date(),
+            },
+          }),
+        'admin-report-resolve'
+      );
     } else if (action === 'dismiss') {
-      await db.report.update({
-        where: { id: reportId },
-        data: {
-          status: 'dismissed',
-          resolution,
-          resolvedBy: adminUser.userId,
-          resolvedAt: new Date(),
-        },
-      });
+      await asSystem(
+        (tx) =>
+          tx.report.update({
+            where: { id: reportId },
+            data: {
+              status: 'dismissed',
+              resolution,
+              resolvedBy: adminUser.userId,
+              resolvedAt: new Date(),
+            },
+          }),
+        'admin-report-dismiss'
+      );
     } else if (action === 'escalate') {
-      await db.report.update({
-        where: { id: reportId },
-        data: {
-          priority: 'critical',
-          status: 'reviewing',
-          resolution,
-        },
-      });
+      await asSystem(
+        (tx) =>
+          tx.report.update({
+            where: { id: reportId },
+            data: {
+              priority: 'critical',
+              status: 'reviewing',
+              resolution,
+            },
+          }),
+        'admin-report-escalate'
+      );
     } else if (action === 'ban_user') {
       if (!report.reportedUserId) {
         throw new Error('Cannot ban user: no user associated with this report');
       }
 
-      // Ban the reported user
-      await db.user.update({
-        where: { id: report.reportedUserId },
-        data: {
-          isBanned: true,
-          bannedAt: new Date(),
-          bannedReason: `Report #${reportId}: ${resolution}`,
-          bannedBy: adminUser.userId,
-        },
-      });
+      await asSystem(async (tx) => {
+        await tx.user.update({
+          where: { id: report.reportedUserId },
+          data: {
+            isBanned: true,
+            bannedAt: new Date(),
+            bannedReason: `Report #${reportId}: ${resolution}`,
+            bannedBy: adminUser.userId,
+          },
+        });
 
-      // Update report
-      await db.report.update({
-        where: { id: reportId },
-        data: {
-          status: 'resolved',
-          resolution: `User banned: ${resolution}`,
-          resolvedBy: adminUser.userId,
-          resolvedAt: new Date(),
-        },
-      });
+        await tx.report.update({
+          where: { id: reportId },
+          data: {
+            status: 'resolved',
+            resolution: `User banned: ${resolution}`,
+            resolvedBy: adminUser.userId,
+            resolvedAt: new Date(),
+          },
+        });
+      }, 'admin-report-ban-user');
     }
 
     logger.info(

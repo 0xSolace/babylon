@@ -154,11 +154,11 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 
-import { db } from '@babylon/db/runtime';
 import { StaticDataRegistry } from '@babylon/engine';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
+import { runWithOptionalUserRls } from '@/lib/db/run-with-optional-user-rls';
 
 const QuerySchema = z.object({
   limit: z.coerce.number().min(1).max(100).default(50),
@@ -167,391 +167,398 @@ const QuerySchema = z.object({
 });
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
-  const { error, rateLimitInfo } = await publicRateLimit(request);
+  const { error, rateLimitInfo, user } = await publicRateLimit(request);
   if (error) return error;
 
-  // Parse query parameters
-  const { searchParams } = new URL(request.url);
-  const params = QuerySchema.parse({
-    limit: searchParams.get('limit') || '50',
-    offset: searchParams.get('offset') || '0',
-    userId: searchParams.get('userId') || undefined,
-  });
+  return runWithOptionalUserRls(user, async (db) => {
+    // Parse query parameters
+    const { searchParams } = new URL(request.url);
+    const params = QuerySchema.parse({
+      limit: searchParams.get('limit') || '50',
+      offset: searchParams.get('offset') || '0',
+      userId: searchParams.get('userId') || undefined,
+    });
 
-  logger.info('Public trading feed requested', { params }, 'GET /api/trades');
+    logger.info('Public trading feed requested', { params }, 'GET /api/trades');
 
-  const userFilter = params.userId ? { userId: params.userId } : {};
+    const userFilter = params.userId ? { userId: params.userId } : {};
 
-  // Get recent balance transactions (deposits, withdrawals, trades)
-  // Only include market-related transactions (buys/sells)
-  const balanceTransactions = await db.balanceTransaction.findMany({
-    take: params.limit,
-    skip: params.offset,
-    orderBy: { createdAt: 'desc' },
-    where: {
-      ...userFilter,
-      type: {
-        in: [
-          'pred_buy',
-          'pred_sell',
-          'perp_open',
-          'perp_close',
-          'perp_liquidation',
-        ],
-      },
-    },
-  });
-
-  // Get recent point transfers (sent and received)
-  const pointTransfers = await db.pointsTransaction.findMany({
-    take: params.limit,
-    skip: params.offset,
-    orderBy: { createdAt: 'desc' },
-    where: {
-      ...userFilter,
-      reason: {
-        in: ['transfer_sent', 'transfer_received'],
-      },
-    },
-  });
-
-  // Fetch users for balance transactions
-  const balanceUserIds = [
-    ...new Set(balanceTransactions.map((tx) => tx.userId)),
-  ];
-  const balanceUsers = await db.user.findMany({
-    where: { id: { in: balanceUserIds } },
-    select: {
-      id: true,
-      username: true,
-      displayName: true,
-      profileImageUrl: true,
-      isActor: true,
-    },
-  });
-  const balanceUsersMap = new Map(balanceUsers.map((u) => [u.id, u]));
-
-  // Fetch users for point transfers (both sender and recipient)
-  const transferUserIds = new Set<string>();
-  for (const transfer of pointTransfers) {
-    transferUserIds.add(transfer.userId);
-    // Parse metadata to get the other party's ID
-    if (transfer.metadata) {
-      const metadata = JSON.parse(transfer.metadata) as {
-        senderId?: string;
-        recipientId?: string;
-        senderName?: string;
-        recipientName?: string;
-        message?: string;
-      };
-      if (metadata.senderId) transferUserIds.add(metadata.senderId);
-      if (metadata.recipientId) transferUserIds.add(metadata.recipientId);
-    }
-  }
-  const transferUsers = await db.user.findMany({
-    where: { id: { in: Array.from(transferUserIds) } },
-    select: {
-      id: true,
-      username: true,
-      displayName: true,
-      profileImageUrl: true,
-      isActor: true,
-    },
-  });
-  const transferUsersMap = new Map(transferUsers.map((u) => [u.id, u]));
-
-  // Get recent NPC trades (if not filtering by specific user, or if user is an NPC)
-  // Note: npcActorId references Actor.id, not User.id
-  let npcTrades: Awaited<ReturnType<typeof db.npcTrade.findMany>> = [];
-  if (!params.userId) {
-    npcTrades = await db.npcTrade.findMany({
+    // Get recent balance transactions (deposits, withdrawals, trades)
+    // Only include market-related transactions (buys/sells)
+    const balanceTransactions = await db.balanceTransaction.findMany({
       take: params.limit,
       skip: params.offset,
-      orderBy: { executedAt: 'desc' },
+      orderBy: { createdAt: 'desc' },
+      where: {
+        ...userFilter,
+        type: {
+          in: [
+            'pred_buy',
+            'pred_sell',
+            'perp_open',
+            'perp_close',
+            'perp_liquidation',
+          ],
+        },
+      },
     });
-  } else {
-    const actor = StaticDataRegistry.getActor(params.userId);
 
-    if (actor) {
+    // Get recent point transfers (sent and received)
+    const pointTransfers = await db.pointsTransaction.findMany({
+      take: params.limit,
+      skip: params.offset,
+      orderBy: { createdAt: 'desc' },
+      where: {
+        ...userFilter,
+        reason: {
+          in: ['transfer_sent', 'transfer_received'],
+        },
+      },
+    });
+
+    // Fetch users for balance transactions
+    const balanceUserIds = [
+      ...new Set(balanceTransactions.map((tx) => tx.userId)),
+    ];
+    const balanceUsers = await db.user.findMany({
+      where: { id: { in: balanceUserIds } },
+      select: {
+        id: true,
+        username: true,
+        displayName: true,
+        profileImageUrl: true,
+        isActor: true,
+      },
+    });
+    const balanceUsersMap = new Map(balanceUsers.map((u) => [u.id, u]));
+
+    // Fetch users for point transfers (both sender and recipient)
+    const transferUserIds = new Set<string>();
+    for (const transfer of pointTransfers) {
+      transferUserIds.add(transfer.userId);
+      // Parse metadata to get the other party's ID
+      if (transfer.metadata) {
+        const metadata = JSON.parse(transfer.metadata) as {
+          senderId?: string;
+          recipientId?: string;
+          senderName?: string;
+          recipientName?: string;
+          message?: string;
+        };
+        if (metadata.senderId) transferUserIds.add(metadata.senderId);
+        if (metadata.recipientId) transferUserIds.add(metadata.recipientId);
+      }
+    }
+    const transferUsers = await db.user.findMany({
+      where: { id: { in: Array.from(transferUserIds) } },
+      select: {
+        id: true,
+        username: true,
+        displayName: true,
+        profileImageUrl: true,
+        isActor: true,
+      },
+    });
+    const transferUsersMap = new Map(transferUsers.map((u) => [u.id, u]));
+
+    // Get recent NPC trades (if not filtering by specific user, or if user is an NPC)
+    // Note: npcActorId references Actor.id, not User.id
+    let npcTrades: Awaited<ReturnType<typeof db.npcTrade.findMany>> = [];
+    if (!params.userId) {
       npcTrades = await db.npcTrade.findMany({
         take: params.limit,
         skip: params.offset,
         orderBy: { executedAt: 'desc' },
-        where: { npcActorId: params.userId },
+      });
+    } else {
+      const actor = StaticDataRegistry.getActor(params.userId);
+
+      if (actor) {
+        npcTrades = await db.npcTrade.findMany({
+          take: params.limit,
+          skip: params.offset,
+          orderBy: { executedAt: 'desc' },
+          where: { npcActorId: params.userId },
+        });
+      }
+    }
+
+    const npcActorIds = [...new Set(npcTrades.map((t) => t.npcActorId))];
+
+    const usersData =
+      npcActorIds.length > 0
+        ? await db.user.findMany({
+            where: {
+              id: { in: npcActorIds },
+              isActor: true,
+            },
+            select: {
+              id: true,
+              username: true,
+              displayName: true,
+              profileImageUrl: true,
+              isActor: true,
+            },
+          })
+        : [];
+
+    const usersDataMap = new Map(usersData.map((u) => [u.id, u]));
+
+    const actorsMap = new Map<
+      string,
+      {
+        id: string;
+        username: string;
+        displayName: string;
+        profileImageUrl: string | null;
+        isActor: boolean;
+      }
+    >();
+
+    for (const actorId of npcActorIds) {
+      const actor = StaticDataRegistry.getActor(actorId);
+      const user = usersDataMap.get(actorId);
+
+      if (user) {
+        actorsMap.set(actorId, {
+          id: user.id,
+          username:
+            user.username ||
+            user.displayName?.toLowerCase().replace(/\s+/g, '-') ||
+            actorId,
+          displayName: user.displayName || actor?.name || actorId,
+          profileImageUrl: user.profileImageUrl,
+          isActor: true,
+        });
+      } else if (actor) {
+        actorsMap.set(actorId, {
+          id: actor.id,
+          username: actor.name.toLowerCase().replace(/\s+/g, '-'),
+          displayName: actor.name,
+          profileImageUrl: actor.profileImageUrl ?? null,
+          isActor: true,
+        });
+      }
+    }
+
+    // NOTE: Position entries are excluded from the trades feed.
+    // Positions represent cumulative state (total shares, avg price) rather than
+    // discrete trading events. Individual trades are shown via:
+    // - balanceTransactions (pred_buy, pred_sell) for regular users
+    // - npcTrades for NPC actors (includes AI reasoning/sentiment)
+    // This prevents duplicate entries for the same trading activity.
+
+    // Get perp positions for the user (if filtering)
+    let perpPositions: Awaited<ReturnType<typeof db.perpPosition.findMany>> =
+      [];
+    if (params.userId) {
+      perpPositions = await db.perpPosition.findMany({
+        take: params.limit,
+        skip: params.offset,
+        orderBy: { openedAt: 'desc' },
+        where: { userId: params.userId },
+      });
+    } else {
+      // Get recent perp positions from all users
+      perpPositions = await db.perpPosition.findMany({
+        take: params.limit,
+        skip: params.offset,
+        orderBy: { openedAt: 'desc' },
       });
     }
-  }
 
-  const npcActorIds = [...new Set(npcTrades.map((t) => t.npcActorId))];
+    const organizationIds = [
+      ...new Set(perpPositions.map((p) => p.organizationId)),
+    ];
+    const organizationsMap = new Map(
+      organizationIds
+        .map((id) => StaticDataRegistry.getOrganization(id))
+        .filter((o): o is NonNullable<typeof o> => o !== null)
+        .map((o) => [o.id, { id: o.id, name: o.name, type: o.type }])
+    );
 
-  const usersData =
-    npcActorIds.length > 0
-      ? await db.user.findMany({
-          where: {
-            id: { in: npcActorIds },
-            isActor: true,
-          },
-          select: {
-            id: true,
-            username: true,
-            displayName: true,
-            profileImageUrl: true,
-            isActor: true,
-          },
-        })
-      : [];
-
-  const usersDataMap = new Map(usersData.map((u) => [u.id, u]));
-
-  const actorsMap = new Map<
-    string,
-    {
-      id: string;
-      username: string;
-      displayName: string;
-      profileImageUrl: string | null;
-      isActor: boolean;
-    }
-  >();
-
-  for (const actorId of npcActorIds) {
-    const actor = StaticDataRegistry.getActor(actorId);
-    const user = usersDataMap.get(actorId);
-
-    if (user) {
-      actorsMap.set(actorId, {
-        id: user.id,
-        username:
-          user.username ||
-          user.displayName?.toLowerCase().replace(/\s+/g, '-') ||
-          actorId,
-        displayName: user.displayName || actor?.name || actorId,
-        profileImageUrl: user.profileImageUrl,
+    // Fetch users for perp positions
+    const perpUserIds = [...new Set(perpPositions.map((p) => p.userId))];
+    const perpUsers = await db.user.findMany({
+      where: { id: { in: perpUserIds } },
+      select: {
+        id: true,
+        username: true,
+        displayName: true,
+        profileImageUrl: true,
         isActor: true,
-      });
-    } else if (actor) {
-      actorsMap.set(actorId, {
-        id: actor.id,
-        username: actor.name.toLowerCase().replace(/\s+/g, '-'),
-        displayName: actor.name,
-        profileImageUrl: actor.profileImageUrl ?? null,
-        isActor: true,
-      });
-    }
-  }
-
-  // NOTE: Position entries are excluded from the trades feed.
-  // Positions represent cumulative state (total shares, avg price) rather than
-  // discrete trading events. Individual trades are shown via:
-  // - balanceTransactions (pred_buy, pred_sell) for regular users
-  // - npcTrades for NPC actors (includes AI reasoning/sentiment)
-  // This prevents duplicate entries for the same trading activity.
-
-  // Get perp positions for the user (if filtering)
-  let perpPositions: Awaited<ReturnType<typeof db.perpPosition.findMany>> = [];
-  if (params.userId) {
-    perpPositions = await db.perpPosition.findMany({
-      take: params.limit,
-      skip: params.offset,
-      orderBy: { openedAt: 'desc' },
-      where: { userId: params.userId },
+      },
     });
-  } else {
-    // Get recent perp positions from all users
-    perpPositions = await db.perpPosition.findMany({
-      take: params.limit,
-      skip: params.offset,
-      orderBy: { openedAt: 'desc' },
-    });
-  }
+    const perpUsersMap = new Map(perpUsers.map((u) => [u.id, u]));
 
-  const organizationIds = [
-    ...new Set(perpPositions.map((p) => p.organizationId)),
-  ];
-  const organizationsMap = new Map(
-    organizationIds
-      .map((id) => StaticDataRegistry.getOrganization(id))
-      .filter((o): o is NonNullable<typeof o> => o !== null)
-      .map((o) => [o.id, { id: o.id, name: o.name, type: o.type }])
-  );
+    // Fetch prediction markets for pred_buy/pred_sell balance transactions and NPC prediction trades
+    const predictionMarketIds = [
+      ...new Set([
+        ...balanceTransactions
+          .filter(
+            (tx) =>
+              (tx.type === 'pred_buy' || tx.type === 'pred_sell') &&
+              tx.relatedId
+          )
+          .map((tx) => tx.relatedId as string),
+        ...npcTrades
+          .filter((t) => t.marketType === 'prediction' && t.marketId)
+          .map((t) => t.marketId as string),
+      ]),
+    ];
+    const predictionMarkets =
+      predictionMarketIds.length > 0
+        ? await db.market.findMany({
+            where: { id: { in: predictionMarketIds } },
+            select: {
+              id: true,
+              question: true,
+              resolved: true,
+              resolution: true,
+            },
+          })
+        : [];
+    const predictionMarketsMap = new Map(
+      predictionMarkets.map((m) => [m.id, m])
+    );
 
-  // Fetch users for perp positions
-  const perpUserIds = [...new Set(perpPositions.map((p) => p.userId))];
-  const perpUsers = await db.user.findMany({
-    where: { id: { in: perpUserIds } },
-    select: {
-      id: true,
-      username: true,
-      displayName: true,
-      profileImageUrl: true,
-      isActor: true,
-    },
-  });
-  const perpUsersMap = new Map(perpUsers.map((u) => [u.id, u]));
-
-  // Fetch prediction markets for pred_buy/pred_sell balance transactions and NPC prediction trades
-  const predictionMarketIds = [
-    ...new Set([
+    // Merge and sort by timestamp
+    // Filter out balance transactions from NPC actors - they have npcTrades entries instead
+    const allTrades = [
       ...balanceTransactions
-        .filter(
-          (tx) =>
-            (tx.type === 'pred_buy' || tx.type === 'pred_sell') && tx.relatedId
-        )
-        .map((tx) => tx.relatedId as string),
-      ...npcTrades
-        .filter((t) => t.marketType === 'prediction' && t.marketId)
-        .map((t) => t.marketId as string),
-    ]),
-  ];
-  const predictionMarkets =
-    predictionMarketIds.length > 0
-      ? await db.market.findMany({
-          where: { id: { in: predictionMarketIds } },
-          select: {
-            id: true,
-            question: true,
-            resolved: true,
-            resolution: true,
-          },
+        .filter((tx) => {
+          const user = balanceUsersMap.get(tx.userId);
+          return !user?.isActor; // Exclude NPC actors
         })
-      : [];
-  const predictionMarketsMap = new Map(predictionMarkets.map((m) => [m.id, m]));
+        .map((tx) => {
+          const isPrediction =
+            tx.type === 'pred_buy' || tx.type === 'pred_sell';
+          const market =
+            isPrediction && tx.relatedId
+              ? (predictionMarketsMap.get(tx.relatedId) ?? null)
+              : null;
+          return {
+            type: 'balance' as const,
+            id: tx.id,
+            timestamp: tx.createdAt,
+            user: balanceUsersMap.get(tx.userId) || null,
+            amount: tx.amount.toString(),
+            balanceBefore: tx.balanceBefore.toString(),
+            balanceAfter: tx.balanceAfter.toString(),
+            transactionType: tx.type,
+            description: tx.description,
+            relatedId: tx.relatedId,
+            market,
+          };
+        }),
+      ...pointTransfers.map((tx) => {
+        const metadata = tx.metadata
+          ? (JSON.parse(tx.metadata) as {
+              senderId?: string;
+              recipientId?: string;
+              senderName?: string;
+              recipientName?: string;
+              message?: string;
+            })
+          : {};
+        const isSent = tx.reason === 'transfer_sent';
+        const otherPartyId = isSent ? metadata.recipientId : metadata.senderId;
+        const otherPartyName = isSent
+          ? metadata.recipientName
+          : metadata.senderName;
 
-  // Merge and sort by timestamp
-  // Filter out balance transactions from NPC actors - they have npcTrades entries instead
-  const allTrades = [
-    ...balanceTransactions
-      .filter((tx) => {
-        const user = balanceUsersMap.get(tx.userId);
-        return !user?.isActor; // Exclude NPC actors
-      })
-      .map((tx) => {
-        const isPrediction = tx.type === 'pred_buy' || tx.type === 'pred_sell';
-        const market =
-          isPrediction && tx.relatedId
-            ? (predictionMarketsMap.get(tx.relatedId) ?? null)
-            : null;
         return {
-          type: 'balance' as const,
+          type: 'transfer' as const,
           id: tx.id,
           timestamp: tx.createdAt,
-          user: balanceUsersMap.get(tx.userId) || null,
-          amount: tx.amount.toString(),
-          balanceBefore: tx.balanceBefore.toString(),
-          balanceAfter: tx.balanceAfter.toString(),
-          transactionType: tx.type,
-          description: tx.description,
-          relatedId: tx.relatedId,
-          market,
+          user: transferUsersMap.get(tx.userId) || null,
+          otherParty: otherPartyId
+            ? transferUsersMap.get(otherPartyId) || {
+                id: otherPartyId,
+                username: otherPartyName,
+                displayName: otherPartyName,
+                profileImageUrl: null,
+                isActor: false,
+              }
+            : null,
+          amount: tx.amount,
+          pointsBefore: tx.pointsBefore,
+          pointsAfter: tx.pointsAfter,
+          direction: isSent ? ('sent' as const) : ('received' as const),
+          message: metadata.message,
         };
       }),
-    ...pointTransfers.map((tx) => {
-      const metadata = tx.metadata
-        ? (JSON.parse(tx.metadata) as {
-            senderId?: string;
-            recipientId?: string;
-            senderName?: string;
-            recipientName?: string;
-            message?: string;
-          })
-        : {};
-      const isSent = tx.reason === 'transfer_sent';
-      const otherPartyId = isSent ? metadata.recipientId : metadata.senderId;
-      const otherPartyName = isSent
-        ? metadata.recipientName
-        : metadata.senderName;
+      ...npcTrades.map((trade) => {
+        const actor = actorsMap.get(trade.npcActorId);
+        const npcMarket =
+          trade.marketType === 'prediction' && trade.marketId
+            ? (predictionMarketsMap.get(trade.marketId) ?? null)
+            : null;
+        return {
+          type: 'npc' as const,
+          id: trade.id,
+          timestamp: trade.executedAt,
+          user: actor
+            ? {
+                id: actor.id,
+                username: actor.username,
+                displayName: actor.displayName,
+                profileImageUrl: actor.profileImageUrl,
+                isActor: true,
+              }
+            : null,
+          marketType: trade.marketType,
+          ticker: trade.ticker,
+          marketId: trade.marketId,
+          marketQuestion: npcMarket?.question ?? null,
+          action: trade.action,
+          side: trade.side,
+          amount: trade.amount,
+          price: trade.price,
+          sentiment: trade.sentiment,
+          reason: trade.reason,
+        };
+      }),
+      // NOTE: Position entries removed - see comment above about avoiding duplicates
+      ...perpPositions.map((pos) => {
+        const organization = organizationsMap.get(pos.organizationId);
+        return {
+          type: 'perp' as const,
+          id: pos.id,
+          timestamp: pos.openedAt,
+          user: perpUsersMap.get(pos.userId) || null,
+          ticker: pos.ticker,
+          organization: organization
+            ? {
+                id: organization.id,
+                name: organization.name,
+                ticker: pos.ticker, // Use ticker from position since Organization doesn't have it
+              }
+            : null,
+          side: pos.side,
+          entryPrice: pos.entryPrice.toString(),
+          currentPrice: pos.currentPrice.toString(),
+          size: pos.size.toString(),
+          leverage: pos.leverage,
+          unrealizedPnL: pos.unrealizedPnL.toString(),
+          liquidationPrice: pos.liquidationPrice.toString(),
+          closedAt: pos.closedAt,
+        };
+      }),
+    ].filter((trade) => trade.user !== null); // Filter out trades with missing users
 
-      return {
-        type: 'transfer' as const,
-        id: tx.id,
-        timestamp: tx.createdAt,
-        user: transferUsersMap.get(tx.userId) || null,
-        otherParty: otherPartyId
-          ? transferUsersMap.get(otherPartyId) || {
-              id: otherPartyId,
-              username: otherPartyName,
-              displayName: otherPartyName,
-              profileImageUrl: null,
-              isActor: false,
-            }
-          : null,
-        amount: tx.amount,
-        pointsBefore: tx.pointsBefore,
-        pointsAfter: tx.pointsAfter,
-        direction: isSent ? ('sent' as const) : ('received' as const),
-        message: metadata.message,
-      };
-    }),
-    ...npcTrades.map((trade) => {
-      const actor = actorsMap.get(trade.npcActorId);
-      const npcMarket =
-        trade.marketType === 'prediction' && trade.marketId
-          ? (predictionMarketsMap.get(trade.marketId) ?? null)
-          : null;
-      return {
-        type: 'npc' as const,
-        id: trade.id,
-        timestamp: trade.executedAt,
-        user: actor
-          ? {
-              id: actor.id,
-              username: actor.username,
-              displayName: actor.displayName,
-              profileImageUrl: actor.profileImageUrl,
-              isActor: true,
-            }
-          : null,
-        marketType: trade.marketType,
-        ticker: trade.ticker,
-        marketId: trade.marketId,
-        marketQuestion: npcMarket?.question ?? null,
-        action: trade.action,
-        side: trade.side,
-        amount: trade.amount,
-        price: trade.price,
-        sentiment: trade.sentiment,
-        reason: trade.reason,
-      };
-    }),
-    // NOTE: Position entries removed - see comment above about avoiding duplicates
-    ...perpPositions.map((pos) => {
-      const organization = organizationsMap.get(pos.organizationId);
-      return {
-        type: 'perp' as const,
-        id: pos.id,
-        timestamp: pos.openedAt,
-        user: perpUsersMap.get(pos.userId) || null,
-        ticker: pos.ticker,
-        organization: organization
-          ? {
-              id: organization.id,
-              name: organization.name,
-              ticker: pos.ticker, // Use ticker from position since Organization doesn't have it
-            }
-          : null,
-        side: pos.side,
-        entryPrice: pos.entryPrice.toString(),
-        currentPrice: pos.currentPrice.toString(),
-        size: pos.size.toString(),
-        leverage: pos.leverage,
-        unrealizedPnL: pos.unrealizedPnL.toString(),
-        liquidationPrice: pos.liquidationPrice.toString(),
-        closedAt: pos.closedAt,
-      };
-    }),
-  ].filter((trade) => trade.user !== null); // Filter out trades with missing users
+    // Sort by timestamp
+    allTrades.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
-  // Sort by timestamp
-  allTrades.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+    // Limit to requested amount
+    const limitedTrades = allTrades.slice(0, params.limit);
 
-  // Limit to requested amount
-  const limitedTrades = allTrades.slice(0, params.limit);
-
-  const res = successResponse({
-    trades: limitedTrades,
-    total: allTrades.length,
-    hasMore: allTrades.length > params.limit,
+    const res = successResponse({
+      trades: limitedTrades,
+      total: allTrades.length,
+      hasMore: allTrades.length > params.limit,
+    });
+    if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
+    return res;
   });
-  if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
-  return res;
 });

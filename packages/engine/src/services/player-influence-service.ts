@@ -9,8 +9,7 @@
  * process instance, which is acceptable since mention boost is a soft preference.
  */
 
-import { eq } from '@babylon/db';
-import { db, organizations } from '@babylon/db/runtime';
+import { fetchOrganizationIdByTicker } from '@babylon/db';
 import { logger } from '@babylon/shared';
 import { formatError } from '../utils/error-utils';
 import { npcMemoryService } from './npc-memory-service';
@@ -327,20 +326,15 @@ async function getNpcsAffiliatedWith(stockTicker: string): Promise<string[]> {
     return [];
   }
 
-  // Get the organization for this ticker
-  const [org] = await db
-    .select({ id: organizations.id })
-    .from(organizations)
-    .where(eq(organizations.ticker, stockTicker))
-    .limit(1);
+  const orgId = await fetchOrganizationIdByTicker(stockTicker);
 
-  if (!org) {
+  if (!orgId) {
     return [];
   }
 
   // Find actors affiliated with this organization using static data
   const affiliatedActorIds = allActors
-    .filter((actor) => actor.affiliations.includes(org.id))
+    .filter((actor) => actor.affiliations.includes(orgId))
     .map((actor) => actor.id);
 
   return affiliatedActorIds;

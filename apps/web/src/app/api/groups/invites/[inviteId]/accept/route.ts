@@ -12,9 +12,12 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { generateSnowflakeId, sql } from '@babylon/db';
-import { asUser, chatParticipants, groupMembers } from '@babylon/db/runtime';
-
+import {
+  generateSnowflakeId,
+  upsertActiveChatParticipant,
+  upsertActiveGroupMemberAsMember,
+} from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import { GROUP_CONFIG, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
@@ -114,50 +117,22 @@ export const POST = withErrorHandling(
 
       // Upsert GroupMember - use drizzle's onConflictDoUpdate
       // Note: asUser already wraps this in a transaction, so no need for nested transaction
-      await db
-        .insert(groupMembers)
-        .values({
-          id: memberId,
-          groupId: invite.groupId,
-          userId: user.userId,
-          role: 'member',
-          addedBy: invite.invitedBy,
-          joinedAt: now,
-          isActive: true,
-          messageCount: 0,
-          qualityScore: 1.0,
-        })
-        .onConflictDoUpdate({
-          target: [groupMembers.groupId, groupMembers.userId],
-          set: {
-            isActive: true,
-            role: 'member',
-            addedBy: invite.invitedBy,
-            joinedAt: now,
-            kickedAt: sql`NULL`,
-            kickReason: sql`NULL`,
-          },
-        });
+      await upsertActiveGroupMemberAsMember(db, {
+        id: memberId,
+        groupId: invite.groupId,
+        userId: user.userId,
+        addedBy: invite.invitedBy,
+        joinedAt: now,
+      });
 
-      // Upsert ChatParticipant if chat exists
       if (groupChat) {
         const participantId = await generateSnowflakeId();
-        await db
-          .insert(chatParticipants)
-          .values({
-            id: participantId,
-            chatId: groupChat.id,
-            userId: user.userId,
-            joinedAt: now,
-            isActive: true,
-          })
-          .onConflictDoUpdate({
-            target: [chatParticipants.chatId, chatParticipants.userId],
-            set: {
-              isActive: true,
-              joinedAt: now,
-            },
-          });
+        await upsertActiveChatParticipant(db, {
+          id: participantId,
+          chatId: groupChat.id,
+          userId: user.userId,
+          joinedAt: now,
+        });
       }
 
       // Get user's display name for system message

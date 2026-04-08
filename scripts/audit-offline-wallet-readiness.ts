@@ -1,5 +1,5 @@
-import { and, count, desc, eq, isNotNull } from '@babylon/db';
-import { db, users } from '@babylon/db/runtime';
+import { asSystem, users } from '@babylon/db/engine-storage';
+import { and, count, desc, eq, isNotNull } from 'drizzle-orm';
 
 function parseLimitArg(): number {
   const raw = process.argv[2]?.trim();
@@ -12,31 +12,35 @@ function parseLimitArg(): number {
 async function main() {
   const limit = parseLimitArg();
 
-  const [{ totalUsers = 0 }] = await db
-    .select({ totalUsers: count() })
-    .from(users)
-    .where(isNotNull(users.privyId));
+  const { totalUsers, readyUsers, pending } = await asSystem(async (c) => {
+    const [{ totalUsers: tu = 0 }] = await c
+      .select({ totalUsers: count() })
+      .from(users)
+      .where(isNotNull(users.privyId));
 
-  const [{ readyUsers = 0 }] = await db
-    .select({ readyUsers: count() })
-    .from(users)
-    .where(and(isNotNull(users.privyId), eq(users.offlineWalletReady, true)));
+    const [{ readyUsers: ru = 0 }] = await c
+      .select({ readyUsers: count() })
+      .from(users)
+      .where(and(isNotNull(users.privyId), eq(users.offlineWalletReady, true)));
 
-  const pending = await db
-    .select({
-      id: users.id,
-      privyId: users.privyId,
-      privyWalletId: users.privyWalletId,
-      walletAddress: users.walletAddress,
-      offlineWalletReady: users.offlineWalletReady,
-      offlineWalletReadyAt: users.offlineWalletReadyAt,
-      createdAt: users.createdAt,
-      updatedAt: users.updatedAt,
-    })
-    .from(users)
-    .where(and(isNotNull(users.privyId), eq(users.offlineWalletReady, false)))
-    .orderBy(desc(users.createdAt))
-    .limit(limit);
+    const pend = await c
+      .select({
+        id: users.id,
+        privyId: users.privyId,
+        privyWalletId: users.privyWalletId,
+        walletAddress: users.walletAddress,
+        offlineWalletReady: users.offlineWalletReady,
+        offlineWalletReadyAt: users.offlineWalletReadyAt,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+      })
+      .from(users)
+      .where(and(isNotNull(users.privyId), eq(users.offlineWalletReady, false)))
+      .orderBy(desc(users.createdAt))
+      .limit(limit);
+
+    return { totalUsers: tu, readyUsers: ru, pending: pend };
+  }, 'script-audit-offline-wallet-readiness');
 
   const pendingCount = Math.max(totalUsers - readyUsers, 0);
   const readinessPct =

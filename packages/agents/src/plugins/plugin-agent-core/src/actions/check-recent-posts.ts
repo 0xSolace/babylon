@@ -4,8 +4,11 @@
  * Returns recent posts for a user (self or another user by ID).
  */
 
-import { desc, eq } from '@babylon/db';
-import { db, posts, users } from '@babylon/db/runtime';
+import {
+  selectRecentPostsByAuthorId,
+  selectUserDisplayAndUsernameById,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import type {
   Action,
   ActionResult,
@@ -100,14 +103,10 @@ export const checkRecentPostsAction: Action = {
       // Get user info if checking someone else
       let targetName = 'You';
       if (!isSelf) {
-        const [targetUser] = await db
-          .select({
-            displayName: users.displayName,
-            username: users.username,
-          })
-          .from(users)
-          .where(eq(users.id, targetUserId))
-          .limit(1);
+        const targetUser = await selectUserDisplayAndUsernameById(
+          db,
+          targetUserId
+        );
 
         if (!targetUser) {
           return {
@@ -119,16 +118,11 @@ export const checkRecentPostsAction: Action = {
         targetName = targetUser.displayName || targetUser.username || 'User';
       }
 
-      const recentPosts = await db
-        .select({
-          id: posts.id,
-          content: posts.content,
-          createdAt: posts.createdAt,
-        })
-        .from(posts)
-        .where(eq(posts.authorId, targetUserId))
-        .orderBy(desc(posts.createdAt))
-        .limit(limit);
+      const recentPosts = await selectRecentPostsByAuthorId(
+        db,
+        targetUserId,
+        limit
+      );
 
       if (recentPosts.length === 0) {
         return {

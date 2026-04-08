@@ -19,7 +19,7 @@ import {
   expect,
   test,
 } from 'bun:test';
-import { db } from '@babylon/db/runtime';
+import { db } from '@babylon/db/engine-storage';
 
 import { GROUP_CONFIG, generateSnowflakeId } from '@babylon/shared';
 

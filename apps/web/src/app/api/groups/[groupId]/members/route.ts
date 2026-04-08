@@ -19,14 +19,14 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, eq, generateSnowflakeId, sql } from '@babylon/db';
 import {
-  asUser,
-  chatParticipants,
-  groupInvites,
-  groupMembers,
-} from '@babylon/db/runtime';
-
+  generateSnowflakeId,
+  insertGroupInvitePendingRow,
+  reactivateGroupInvitePendingForGroupAndUser,
+  upsertActiveChatParticipant,
+  upsertActiveGroupMemberAsMember,
+} from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
@@ -262,50 +262,23 @@ export const POST = withErrorHandling(
         // AGENT/NPC: Add directly (no invite needed)
         const memberId = await generateSnowflakeId();
 
-        await db
-          .insert(groupMembers)
-          .values({
-            id: memberId,
-            groupId,
-            userId: data.userId,
-            role: 'member',
-            addedBy: user.userId,
-            joinedAt: now,
-            isActive: true,
-            messageCount: 0,
-            qualityScore: 1.0,
-          })
-          .onConflictDoUpdate({
-            target: [groupMembers.groupId, groupMembers.userId],
-            set: {
-              isActive: true,
-              role: 'member',
-              addedBy: user.userId,
-              joinedAt: now,
-              kickedAt: sql`NULL`,
-              kickReason: sql`NULL`,
-            },
-          });
+        await upsertActiveGroupMemberAsMember(db, {
+          id: memberId,
+          groupId,
+          userId: data.userId,
+          addedBy: user.userId,
+          joinedAt: now,
+        });
 
         // Add to chat participants
         if (groupChat) {
           const participantId = await generateSnowflakeId();
-          await db
-            .insert(chatParticipants)
-            .values({
-              id: participantId,
-              chatId: groupChat.id,
-              userId: data.userId,
-              joinedAt: now,
-              isActive: true,
-            })
-            .onConflictDoUpdate({
-              target: [chatParticipants.chatId, chatParticipants.userId],
-              set: {
-                isActive: true,
-                joinedAt: now,
-              },
-            });
+          await upsertActiveChatParticipant(db, {
+            id: participantId,
+            chatId: groupChat.id,
+            userId: data.userId,
+            joinedAt: now,
+          });
 
           // System message for direct add
           await db.message.create({
@@ -327,29 +300,18 @@ export const POST = withErrorHandling(
         const inviteId = existingInvite?.id ?? (await generateSnowflakeId());
 
         if (existingInvite) {
-          // Re-invite: update existing invite back to pending
-          await db
-            .update(groupInvites)
-            .set({
-              invitedBy: user.userId,
-              status: 'pending',
-              invitedAt: now,
-              respondedAt: sql`NULL`,
-            })
-            .where(
-              and(
-                eq(groupInvites.groupId, groupId),
-                eq(groupInvites.invitedUserId, data.userId)
-              )
-            );
+          await reactivateGroupInvitePendingForGroupAndUser(db, {
+            groupId,
+            invitedUserId: data.userId,
+            invitedBy: user.userId,
+            invitedAt: now,
+          });
         } else {
-          // New invite
-          await db.insert(groupInvites).values({
+          await insertGroupInvitePendingRow(db, {
             id: inviteId,
             groupId,
             invitedUserId: data.userId,
             invitedBy: user.userId,
-            status: 'pending',
             invitedAt: now,
           });
         }

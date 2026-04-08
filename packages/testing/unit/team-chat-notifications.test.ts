@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import * as babylonApi from '@babylon/api';
+import * as babylonDb from '@babylon/db';
 import * as actualShared from '@babylon/shared';
 
 const mockCreateNotification = mock(async () => ({ created: true }));
@@ -7,8 +9,28 @@ const mockLogger = {
   warn: mock(),
 };
 
-const selectBuilders: Array<() => { from: (...args: unknown[]) => unknown }> =
-  [];
+/** Minimal fluent shapes matching the mocked select chains in this file. */
+type ParticipantSelectFluent = {
+  from: () => {
+    innerJoin: () => {
+      where: () => Promise<Array<{ id: string; isAgent: boolean }>>;
+    };
+  };
+};
+
+type SenderSelectFluent = {
+  from: () => {
+    where: () => {
+      limit: () => Promise<
+        Array<{ displayName: string | null; username: string | null }>
+      >;
+    };
+  };
+};
+
+const selectBuilders: Array<
+  () => ParticipantSelectFluent | SenderSelectFluent
+> = [];
 
 const mockDbSelect = mock(() => {
   const nextBuilder = selectBuilders.shift();
@@ -20,16 +42,39 @@ const mockDbSelect = mock(() => {
 });
 
 mock.module('@babylon/api', () => ({
+  ...babylonApi,
   createNotification: mockCreateNotification,
 }));
 
 mock.module('@babylon/db', () => ({
+  ...babylonDb,
   and: (...conditions: unknown[]) => conditions,
   eq: (left: unknown, right: unknown) => ({ left, right }),
   fetchChatNameById: mockFetchChatNameById,
+  selectActiveTeamChatParticipantsWithUsers: mock(async () => {
+    const nextBuilder = selectBuilders.shift();
+    if (!nextBuilder) {
+      throw new Error('Unexpected participants select');
+    }
+    return (nextBuilder() as ParticipantSelectFluent)
+      .from()
+      .innerJoin()
+      .where();
+  }),
+  selectUserDisplayAndUsernameById: mock(async () => {
+    const nextBuilder = selectBuilders.shift();
+    if (!nextBuilder) {
+      throw new Error('Unexpected sender select');
+    }
+    const rows = await (nextBuilder() as SenderSelectFluent)
+      .from()
+      .where()
+      .limit();
+    return rows[0];
+  }),
 }));
 
-mock.module('@babylon/db/runtime', () => ({
+mock.module('@babylon/db/engine-storage', () => ({
   db: {
     select: mockDbSelect,
   },
@@ -68,7 +113,7 @@ function queueSenderSelect(
 }
 
 function queueParticipantsSelect(
-  rows: Array<{ userId: string; isAgent: boolean }>
+  rows: Array<{ id: string; isAgent: boolean }>
 ) {
   selectBuilders.push(() => ({
     from: () => ({
@@ -95,9 +140,9 @@ describe('notifyTeamChatMessage', () => {
       { displayName: 'Apex Force', username: 'apexforce890569' },
     ]);
     queueParticipantsSelect([
-      { userId: 'owner-1', isAgent: false },
-      { userId: 'agent-1', isAgent: true },
-      { userId: 'agent-2', isAgent: true },
+      { id: 'owner-1', isAgent: false },
+      { id: 'agent-1', isAgent: true },
+      { id: 'agent-2', isAgent: true },
     ]);
 
     await notifyTeamChatMessage({
@@ -126,8 +171,8 @@ describe('notifyTeamChatMessage', () => {
       { displayName: 'Apex Force', username: 'apexforce890569' },
     ]);
     queueParticipantsSelect([
-      { userId: 'agent-1', isAgent: true },
-      { userId: 'agent-2', isAgent: true },
+      { id: 'agent-1', isAgent: true },
+      { id: 'agent-2', isAgent: true },
     ]);
 
     await notifyTeamChatMessage({
@@ -146,7 +191,7 @@ describe('notifyTeamChatMessage', () => {
     queueSenderSelect([
       { displayName: 'Apex Force', username: 'apexforce890569' },
     ]);
-    queueParticipantsSelect([{ userId: 'owner-1', isAgent: false }]);
+    queueParticipantsSelect([{ id: 'owner-1', isAgent: false }]);
     mockCreateNotification.mockRejectedValueOnce(new Error('db unavailable'));
 
     await notifyTeamChatMessage({

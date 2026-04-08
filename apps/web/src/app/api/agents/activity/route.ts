@@ -10,16 +10,14 @@
  */
 
 import { authenticateUser, withErrorHandling } from '@babylon/api';
-import { desc, eq, inArray } from '@babylon/db';
 import {
-  agentTrades,
-  comments,
-  db,
-  markets,
-  posts,
-  users,
-} from '@babylon/db/runtime';
-
+  selectAgentTradesActivityForAgentsOrderExecutedDescLimit,
+  selectCommentsForAuthorsOrderCreatedDescLimit,
+  selectManagedAgentsDisplayRows,
+  selectMarketQuestionsByIds,
+  selectPostsForAuthorsOrderCreatedDescLimit,
+} from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import { toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -91,15 +89,106 @@ export const GET = withErrorHandling(async function GET(req: NextRequest) {
     type: searchParams.get('type'),
   });
 
-  // Get all agents owned by this user
-  const ownedAgents = await db
-    .select({
-      id: users.id,
-      displayName: users.displayName,
-      profileImageUrl: users.profileImageUrl,
-    })
-    .from(users)
-    .where(eq(users.managedBy, user.id));
+  const {
+    ownedAgents,
+    trades,
+    marketsData,
+    agentPosts,
+    agentComments,
+    mightHaveMore,
+  } = await asUser(user.id, async (tx) => {
+    const agentRows = await selectManagedAgentsDisplayRows(tx, user.id);
+
+    if (agentRows.length === 0) {
+      return {
+        ownedAgents: agentRows,
+        trades: [] as Array<{
+          id: string;
+          agentUserId: string;
+          marketType: string;
+          marketId: string | null;
+          ticker: string | null;
+          action: string;
+          side: string | null;
+          amount: number;
+          price: number;
+          pnl: number | null;
+          reasoning: string | null;
+          executedAt: Date;
+        }>,
+        marketsData: [] as Array<{ id: string; question: string }>,
+        agentPosts: [] as Array<{
+          id: string;
+          authorId: string;
+          content: string;
+          createdAt: Date;
+        }>,
+        agentComments: [] as Array<{
+          id: string;
+          authorId: string;
+          postId: string;
+          content: string;
+          parentCommentId: string | null;
+          createdAt: Date;
+        }>,
+        mightHaveMore: false,
+      };
+    }
+
+    const agentIds = agentRows.map((a) => a.id);
+    let more = false;
+
+    const tradeRows =
+      type === 'all' || type === 'trade'
+        ? await selectAgentTradesActivityForAgentsOrderExecutedDescLimit(
+            tx,
+            agentIds,
+            limit
+          )
+        : [];
+
+    if (tradeRows.length >= limit) more = true;
+
+    const marketIds = [
+      ...new Set(
+        tradeRows
+          .filter((t) => t.marketType === 'prediction' && t.marketId)
+          .map((t) => t.marketId!)
+      ),
+    ];
+
+    const marketRows =
+      marketIds.length > 0
+        ? await selectMarketQuestionsByIds(tx, marketIds)
+        : [];
+
+    const postRows =
+      type === 'all' || type === 'post'
+        ? await selectPostsForAuthorsOrderCreatedDescLimit(tx, agentIds, limit)
+        : [];
+
+    if (postRows.length >= limit) more = true;
+
+    const commentRows =
+      type === 'all' || type === 'comment'
+        ? await selectCommentsForAuthorsOrderCreatedDescLimit(
+            tx,
+            agentIds,
+            limit
+          )
+        : [];
+
+    if (commentRows.length >= limit) more = true;
+
+    return {
+      ownedAgents: agentRows,
+      trades: tradeRows,
+      marketsData: marketRows,
+      agentPosts: postRows,
+      agentComments: commentRows,
+      mightHaveMore: more,
+    };
+  });
 
   if (ownedAgents.length === 0) {
     return NextResponse.json({
@@ -113,7 +202,6 @@ export const GET = withErrorHandling(async function GET(req: NextRequest) {
     });
   }
 
-  const agentIds = ownedAgents.map((a) => a.id);
   const agentMap = new Map(
     ownedAgents.map((a) => [
       a.id,
@@ -127,150 +215,70 @@ export const GET = withErrorHandling(async function GET(req: NextRequest) {
 
   const activities: AgentActivity[] = [];
 
-  // Track if any type returned exactly limit results (might have more in DB)
-  let mightHaveMore = false;
-
-  // Fetch trades if requested
-  if (type === 'all' || type === 'trade') {
-    const trades = await db
-      .select({
-        id: agentTrades.id,
-        agentUserId: agentTrades.agentUserId,
-        marketType: agentTrades.marketType,
-        marketId: agentTrades.marketId,
-        ticker: agentTrades.ticker,
-        action: agentTrades.action,
-        side: agentTrades.side,
-        amount: agentTrades.amount,
-        price: agentTrades.price,
-        pnl: agentTrades.pnl,
-        reasoning: agentTrades.reasoning,
-        executedAt: agentTrades.executedAt,
-      })
-      .from(agentTrades)
-      .where(inArray(agentTrades.agentUserId, agentIds))
-      .orderBy(desc(agentTrades.executedAt))
-      .limit(limit);
-
-    if (trades.length >= limit) mightHaveMore = true;
-
-    // Fetch market questions for prediction trades (deduplicate inline)
-    const marketIds = [
-      ...new Set(
-        trades
-          .filter((t) => t.marketType === 'prediction' && t.marketId)
-          .map((t) => t.marketId!)
-      ),
-    ];
-
-    const marketQuestions = new Map<string, string>();
-    if (marketIds.length > 0) {
-      const marketsData = await db
-        .select({ id: markets.id, question: markets.question })
-        .from(markets)
-        .where(inArray(markets.id, marketIds));
-
-      for (const m of marketsData) {
-        marketQuestions.set(m.id, m.question);
-      }
-    }
-
-    for (const trade of trades) {
-      const agentInfo = agentMap.get(trade.agentUserId);
-      if (!agentInfo) continue;
-
-      activities.push({
-        type: 'trade',
-        id: trade.id,
-        timestamp: toISO(trade.executedAt),
-        agent: agentInfo,
-        data: {
-          tradeId: trade.id,
-          marketType: trade.marketType as 'prediction' | 'perp',
-          marketId: trade.marketId,
-          ticker: trade.ticker,
-          marketQuestion: trade.marketId
-            ? (marketQuestions.get(trade.marketId) ?? null)
-            : null,
-          action: trade.action,
-          side: trade.side,
-          amount: trade.amount,
-          price: trade.price,
-          pnl: trade.pnl,
-          reasoning: trade.reasoning,
-        },
-      });
-    }
+  const marketQuestions = new Map<string, string>();
+  for (const m of marketsData) {
+    marketQuestions.set(m.id, m.question);
   }
 
-  // Fetch posts if requested
-  if (type === 'all' || type === 'post') {
-    const agentPosts = await db
-      .select({
-        id: posts.id,
-        authorId: posts.authorId,
-        content: posts.content,
-        createdAt: posts.createdAt,
-      })
-      .from(posts)
-      .where(inArray(posts.authorId, agentIds))
-      .orderBy(desc(posts.createdAt))
-      .limit(limit);
+  for (const trade of trades) {
+    const agentInfo = agentMap.get(trade.agentUserId);
+    if (!agentInfo) continue;
 
-    if (agentPosts.length >= limit) mightHaveMore = true;
-
-    for (const post of agentPosts) {
-      const agentInfo = agentMap.get(post.authorId);
-      if (!agentInfo) continue;
-
-      activities.push({
-        type: 'post',
-        id: post.id,
-        timestamp: toISO(post.createdAt),
-        agent: agentInfo,
-        data: {
-          postId: post.id,
-          contentPreview: post.content.substring(0, 200),
-        },
-      });
-    }
+    activities.push({
+      type: 'trade',
+      id: trade.id,
+      timestamp: toISO(trade.executedAt),
+      agent: agentInfo,
+      data: {
+        tradeId: trade.id,
+        marketType: trade.marketType as 'prediction' | 'perp',
+        marketId: trade.marketId,
+        ticker: trade.ticker,
+        marketQuestion: trade.marketId
+          ? (marketQuestions.get(trade.marketId) ?? null)
+          : null,
+        action: trade.action,
+        side: trade.side,
+        amount: trade.amount,
+        price: trade.price,
+        pnl: trade.pnl,
+        reasoning: trade.reasoning,
+      },
+    });
   }
 
-  // Fetch comments if requested
-  if (type === 'all' || type === 'comment') {
-    const agentComments = await db
-      .select({
-        id: comments.id,
-        authorId: comments.authorId,
-        postId: comments.postId,
-        content: comments.content,
-        parentCommentId: comments.parentCommentId,
-        createdAt: comments.createdAt,
-      })
-      .from(comments)
-      .where(inArray(comments.authorId, agentIds))
-      .orderBy(desc(comments.createdAt))
-      .limit(limit);
+  for (const post of agentPosts) {
+    const agentInfo = agentMap.get(post.authorId);
+    if (!agentInfo) continue;
 
-    if (agentComments.length >= limit) mightHaveMore = true;
+    activities.push({
+      type: 'post',
+      id: post.id,
+      timestamp: toISO(post.createdAt),
+      agent: agentInfo,
+      data: {
+        postId: post.id,
+        contentPreview: post.content.substring(0, 200),
+      },
+    });
+  }
 
-    for (const comment of agentComments) {
-      const agentInfo = agentMap.get(comment.authorId);
-      if (!agentInfo) continue;
+  for (const comment of agentComments) {
+    const agentInfo = agentMap.get(comment.authorId);
+    if (!agentInfo) continue;
 
-      activities.push({
-        type: 'comment',
-        id: comment.id,
-        timestamp: toISO(comment.createdAt),
-        agent: agentInfo,
-        data: {
-          commentId: comment.id,
-          postId: comment.postId,
-          contentPreview: comment.content.substring(0, 200),
-          parentCommentId: comment.parentCommentId,
-        },
-      });
-    }
+    activities.push({
+      type: 'comment',
+      id: comment.id,
+      timestamp: toISO(comment.createdAt),
+      agent: agentInfo,
+      data: {
+        commentId: comment.id,
+        postId: comment.postId,
+        contentPreview: comment.content.substring(0, 200),
+        parentCommentId: comment.parentCommentId,
+      },
+    });
   }
 
   // Sort all activities by timestamp descending

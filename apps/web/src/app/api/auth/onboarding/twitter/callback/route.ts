@@ -45,7 +45,7 @@
  */
 
 import { withErrorHandling } from '@babylon/api';
-import { db } from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
@@ -231,12 +231,16 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const twitterUser = userData.data;
 
   // Check for duplicate Twitter account
-  const existingUser = await db.user.findFirst({
-    where: {
-      twitterId: twitterUser.id,
-      id: { not: userId },
-    },
-  });
+  const existingUser = await asSystem(
+    async (db) =>
+      db.user.findFirst({
+        where: {
+          twitterId: twitterUser.id,
+          id: { not: userId },
+        },
+      }),
+    'onboarding-twitter-dedupe'
+  );
 
   if (existingUser) {
     logger.warn(

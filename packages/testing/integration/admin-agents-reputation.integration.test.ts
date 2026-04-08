@@ -13,7 +13,7 @@ import {
   expect,
   test,
 } from 'bun:test';
-import { db, userAgentConfigs, users } from '@babylon/db/runtime';
+import { db, userAgentConfigs, users } from '@babylon/db/engine-storage';
 
 import { generateSnowflakeId } from '@babylon/shared';
 

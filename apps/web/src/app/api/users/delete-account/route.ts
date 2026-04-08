@@ -78,23 +78,8 @@
  */
 
 import { authenticate, successResponse, withErrorHandling } from '@babylon/api';
-import { eq, or } from '@babylon/db';
-import {
-  db,
-  feedbacks,
-  followStatuses,
-  groupInvites,
-  groupMembers,
-  poolDeposits,
-  referrals,
-  shareActions,
-  tradingFees,
-  userActorFollows,
-  userInteractions,
-  users,
-  withTransaction,
-} from '@babylon/db/runtime';
-
+import { deleteUserAccountById } from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
@@ -117,24 +102,25 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     'POST /api/users/delete-account'
   );
 
-  // Verify user exists
-  const [user] = await db
-    .select({
-      id: users.id,
-      username: users.username,
-      walletAddress: users.walletAddress,
-      onChainRegistered: users.onChainRegistered,
-      nftTokenId: users.nftTokenId,
-    })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
+  const deleteOutcome = await asSystem(
+    async (db) => deleteUserAccountById(db, userId),
+    'delete-account'
+  );
 
-  if (!user) {
+  if (deleteOutcome.ok) {
+    logger.info(
+      'User account deleted successfully',
+      { userId, username: deleteOutcome.user.username },
+      'POST /api/users/delete-account'
+    );
+  }
+
+  if (!deleteOutcome.ok) {
     return successResponse({ error: 'User not found' }, 404);
   }
 
-  // Important notice about blockchain data
+  const user = deleteOutcome.user;
+
   const blockchainNotice = user.onChainRegistered
     ? {
         blockchain_data_notice:
@@ -143,76 +129,6 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         nft_token_id: user.nftTokenId,
       }
     : null;
-
-  // Perform cascading deletion in a transaction
-  // Note: Many relationships have onDelete: Cascade in schema, cascades handle them
-  await withTransaction(async (tx) => {
-    // Delete related data that doesn't cascade automatically or needs special handling
-
-    // Delete referral relationships - set referredUserId to null
-    await tx
-      .update(referrals)
-      .set({ referredUserId: null })
-      .where(eq(referrals.referredUserId, userId));
-
-    // Delete trading fees where user was referrer (set to null)
-    await tx
-      .update(tradingFees)
-      .set({ referrerId: null })
-      .where(eq(tradingFees.referrerId, userId));
-
-    // Anonymize feedback (preserve for AI training but disconnect from user)
-    await tx
-      .update(feedbacks)
-      .set({ fromUserId: null })
-      .where(eq(feedbacks.fromUserId, userId));
-
-    await tx
-      .update(feedbacks)
-      .set({ toUserId: null })
-      .where(eq(feedbacks.toUserId, userId));
-
-    // Delete user actor follows
-    await tx
-      .delete(userActorFollows)
-      .where(eq(userActorFollows.userId, userId));
-
-    // Delete user interactions
-    await tx
-      .delete(userInteractions)
-      .where(eq(userInteractions.userId, userId));
-
-    // Delete group memberships
-    await tx.delete(groupMembers).where(eq(groupMembers.userId, userId));
-
-    // Delete group invites (both received and sent)
-    await tx
-      .delete(groupInvites)
-      .where(
-        or(
-          eq(groupInvites.invitedUserId, userId),
-          eq(groupInvites.invitedBy, userId)
-        )
-      );
-
-    // Delete follow status
-    await tx.delete(followStatuses).where(eq(followStatuses.userId, userId));
-
-    // Delete share actions
-    await tx.delete(shareActions).where(eq(shareActions.userId, userId));
-
-    // Delete pool deposits
-    await tx.delete(poolDeposits).where(eq(poolDeposits.userId, userId));
-
-    // Finally, delete the user (this will cascade to most other tables)
-    await tx.delete(users).where(eq(users.id, userId));
-
-    logger.info(
-      'User account deleted successfully',
-      { userId, username: user.username },
-      'POST /api/users/delete-account'
-    );
-  });
 
   return successResponse({
     success: true,

@@ -10,8 +10,8 @@
  *   bun run scripts/audit-agent-wallet-readiness.ts --json
  */
 
-import { and, desc, eq } from '@babylon/db';
-import { closeDatabase, db, users } from '@babylon/db/runtime';
+import { closeDatabase, db, users } from '@babylon/db/engine-storage';
+import { and, desc, eq } from 'drizzle-orm';
 import {
   type AgentWalletStateClassification,
   assessAgentWalletState,

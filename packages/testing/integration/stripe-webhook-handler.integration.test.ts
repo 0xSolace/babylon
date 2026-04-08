@@ -11,10 +11,9 @@
 
 import { afterAll, describe, expect, it } from 'bun:test';
 import { PointsService } from '@babylon/api';
-import { eq } from '@babylon/db';
-import { db, pointsTransactions, users } from '@babylon/db/runtime';
-
+import { db, pointsTransactions, users } from '@babylon/db/engine-storage';
 import { generateSnowflakeId } from '@babylon/shared';
+import { eq } from 'drizzle-orm';
 import {
   createChargeRefundedEvent,
   createCheckoutCompletedEvent,

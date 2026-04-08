@@ -76,8 +76,12 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { Decimal, desc, eq, sql } from '@babylon/db';
-import { balanceTransactions, db, users } from '@babylon/db/runtime';
+import {
+  Decimal,
+  insertPointsAwardDepositReturningAdminSlices,
+  selectBalanceTransactionHistorySlicesByUserIdOrderCreatedDesc,
+} from '@babylon/db';
+import { asSystem, asUser } from '@babylon/db/engine-storage';
 import {
   AwardPointsSchema,
   generateSnowflakeId,
@@ -106,34 +110,20 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   const amountDecimal = new Decimal(amount);
   const balanceAfter = Decimal.add(balanceBefore, amountDecimal);
 
-  // Award points by creating a deposit transaction
   const transactionId = await generateSnowflakeId();
-  const [transaction] = await db
-    .insert(balanceTransactions)
-    .values({
-      id: transactionId,
-      userId: user.id,
-      type: 'deposit',
-      amount: amountDecimal.toString(),
-      balanceBefore: balanceBefore.toString(),
-      balanceAfter: balanceAfter.toString(),
-      description: description || reason, // Use custom description if provided, otherwise use reason enum
-    })
-    .returning();
-
-  // Update user's virtual balance
-  const [updatedUser] = await db
-    .update(users)
-    .set({
-      virtualBalance: sql`${users.virtualBalance} + ${amount}`,
-      totalDeposited: sql`${users.totalDeposited} + ${amount}`,
-    })
-    .where(eq(users.id, user.id))
-    .returning({
-      id: users.id,
-      virtualBalance: users.virtualBalance,
-      totalDeposited: users.totalDeposited,
-    });
+  const { transaction, updatedUser } = await asSystem(
+    async (db) =>
+      insertPointsAwardDepositReturningAdminSlices(db, {
+        transactionId,
+        userId: user.id,
+        amount,
+        amountStr: amountDecimal.toString(),
+        balanceBeforeStr: balanceBefore.toString(),
+        balanceAfterStr: balanceAfter.toString(),
+        description: description || reason,
+      }),
+    'points-award-admin'
+  );
 
   logger.info(
     `Successfully awarded ${amount} points`,
@@ -191,19 +181,12 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     );
   }
 
-  // Fetch deposit transactions (points awards)
-  const transactions = await db
-    .select({
-      id: balanceTransactions.id,
-      amount: balanceTransactions.amount,
-      description: balanceTransactions.description,
-      createdAt: balanceTransactions.createdAt,
-      balanceBefore: balanceTransactions.balanceBefore,
-      balanceAfter: balanceTransactions.balanceAfter,
-    })
-    .from(balanceTransactions)
-    .where(eq(balanceTransactions.userId, canonicalUserId))
-    .orderBy(desc(balanceTransactions.createdAt));
+  const transactions = await asUser(authUser, async (db) =>
+    selectBalanceTransactionHistorySlicesByUserIdOrderCreatedDesc(
+      db,
+      canonicalUserId
+    )
+  );
 
   logger.info(
     'Points award history fetched',
@@ -214,7 +197,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   return successResponse({
     transactions: transactions.map((tx) => ({
       id: tx.id,
-      amount: tx.amount.toString(),
+      amount: String(tx.amount),
       reason: tx.description,
       timestamp: tx.createdAt,
       balanceBefore: tx.balanceBefore.toString(),

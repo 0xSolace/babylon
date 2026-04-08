@@ -80,20 +80,17 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, count, desc, eq, gte, inArray, isNull, lte } from '@babylon/db';
 import {
-  comments,
-  db,
-  posts,
-  reactions,
-  shares,
-  users,
-} from '@babylon/db/runtime';
-
+  selectHotFeedAuthorUsersByIds,
+  selectHotFeedEngagementCountsByPostIds,
+  selectHotFeedRecentCandidatePosts,
+  selectHotFeedUserLikesAndSharesByPostIds,
+} from '@babylon/db';
 import { StaticDataRegistry } from '@babylon/engine';
 import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
+import { runWithOptionalUserRls } from '@/lib/db/run-with-optional-user-rls';
 
 const QuerySchema = z.object({
   limit: z.coerce.number().min(1).max(100).default(50),
@@ -246,180 +243,124 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   const result = await getCacheOrFetch(
     cacheKey,
-    async () => {
-      const now = new Date();
-      const twentyFourHoursAgo = new Date(now.getTime() - TWENTY_FOUR_HOURS_MS);
-
-      // Get posts from the last 24 hours that are visible (not deleted, not in future)
-      const recentPosts = await db
-        .select({
-          id: posts.id,
-          content: posts.content,
-          authorId: posts.authorId,
-          timestamp: posts.timestamp,
-          createdAt: posts.createdAt,
-          type: posts.type,
-          articleTitle: posts.articleTitle,
-          fullContent: posts.fullContent,
-          category: posts.category,
-          imageUrl: posts.imageUrl,
-        })
-        .from(posts)
-        .where(
-          and(
-            isNull(posts.deletedAt),
-            gte(posts.timestamp, twentyFourHoursAgo),
-            lte(posts.timestamp, now),
-            // Exclude comments/replies - only top-level posts
-            isNull(posts.commentOnPostId),
-            isNull(posts.parentCommentId)
-          )
-        )
-        .orderBy(desc(posts.timestamp))
-        .limit(MAX_CANDIDATE_POSTS); // Get more than needed to allow for scoring
-
-      if (recentPosts.length === 0) {
-        return {
-          posts: [],
-          postIds: [],
-        };
-      }
-
-      const postIds = recentPosts.map((p) => p.id);
-
-      // Get engagement counts in parallel
-      const [reactionCounts, commentCounts, shareCounts] = await Promise.all([
-        db
-          .select({
-            postId: reactions.postId,
-            count: count(),
-          })
-          .from(reactions)
-          .where(
-            and(inArray(reactions.postId, postIds), eq(reactions.type, 'like'))
-          )
-          .groupBy(reactions.postId),
-        db
-          .select({
-            postId: comments.postId,
-            count: count(),
-          })
-          .from(comments)
-          .where(
-            and(inArray(comments.postId, postIds), isNull(comments.deletedAt))
-          )
-          .groupBy(comments.postId),
-        db
-          .select({
-            postId: shares.postId,
-            count: count(),
-          })
-          .from(shares)
-          .where(inArray(shares.postId, postIds))
-          .groupBy(shares.postId),
-      ]);
-
-      // Create maps for quick lookup
-      const reactionMap = new Map(
-        reactionCounts.map((r) => [r.postId, Number(r.count)])
-      );
-      const commentMap = new Map(
-        commentCounts.map((c) => [c.postId, Number(c.count)])
-      );
-      const shareMap = new Map(
-        shareCounts.map((s) => [s.postId, Number(s.count)])
-      );
-
-      // Get author information
-      const authorIds = [...new Set(recentPosts.map((p) => p.authorId))];
-      const authorUsers = await db
-        .select({
-          id: users.id,
-          username: users.username,
-          displayName: users.displayName,
-          profileImageUrl: users.profileImageUrl,
-        })
-        .from(users)
-        .where(inArray(users.id, authorIds));
-
-      const userMap = new Map(authorUsers.map((u) => [u.id, u]));
-
-      // Calculate hot score for each post and format
-      const scoredPosts = recentPosts.map((post) => {
-        const likeCount = reactionMap.get(post.id) ?? 0;
-        const commentCount = commentMap.get(post.id) ?? 0;
-        const shareCount = shareMap.get(post.id) ?? 0;
-
-        // Validate and convert dates for scoring
-        const validTimestamp = validateDateWithFallback(
-          post.timestamp,
-          'timestamp',
-          post.id
-        );
-        const validCreatedAt = validateDateWithFallback(
-          post.createdAt,
-          'createdAt',
-          post.id
+    async () =>
+      runWithOptionalUserRls(null, async (db) => {
+        const now = new Date();
+        const twentyFourHoursAgo = new Date(
+          now.getTime() - TWENTY_FOUR_HOURS_MS
         );
 
-        const hotScore = calculateHotScore(
-          likeCount,
-          commentCount,
-          shareCount,
-          validTimestamp
-        );
+        const recentPosts = await selectHotFeedRecentCandidatePosts(db, {
+          cutoff: twentyFourHoursAgo,
+          now,
+          limit: MAX_CANDIDATE_POSTS,
+        });
 
-        // Get author details
-        const authorUser = userMap.get(post.authorId);
-        const actorRecord = StaticDataRegistry.getActor(post.authorId);
-
-        let authorName = post.authorId;
-        let authorUsername: string | null = null;
-        let authorProfileImageUrl: string | null = null;
-
-        if (actorRecord) {
-          authorName = actorRecord.name;
-          authorUsername = actorRecord.username || actorRecord.id;
-          authorProfileImageUrl = actorRecord.profileImageUrl || null;
-        } else if (authorUser) {
-          authorName =
-            authorUser.displayName || authorUser.username || post.authorId;
-          authorUsername = authorUser.username;
-          authorProfileImageUrl = authorUser.profileImageUrl;
+        if (recentPosts.length === 0) {
+          return {
+            posts: [],
+            postIds: [],
+          };
         }
 
+        const postIds = recentPosts.map((p) => p.id);
+
+        const engagement = await selectHotFeedEngagementCountsByPostIds(
+          db,
+          postIds
+        );
+
+        const reactionMap = new Map(
+          engagement.likes.map((r) => [r.postId, Number(r.count)])
+        );
+        const commentMap = new Map(
+          engagement.comments.map((c) => [c.postId, Number(c.count)])
+        );
+        const shareMap = new Map(
+          engagement.shares.map((s) => [s.postId, Number(s.count)])
+        );
+
+        const authorIds = [...new Set(recentPosts.map((p) => p.authorId))];
+        const authorUsers = await selectHotFeedAuthorUsersByIds(db, authorIds);
+
+        const userMap = new Map(authorUsers.map((u) => [u.id, u]));
+
+        // Calculate hot score for each post and format
+        const scoredPosts = recentPosts.map((post) => {
+          const likeCount = reactionMap.get(post.id) ?? 0;
+          const commentCount = commentMap.get(post.id) ?? 0;
+          const shareCount = shareMap.get(post.id) ?? 0;
+
+          // Validate and convert dates for scoring
+          const validTimestamp = validateDateWithFallback(
+            post.timestamp,
+            'timestamp',
+            post.id
+          );
+          const validCreatedAt = validateDateWithFallback(
+            post.createdAt,
+            'createdAt',
+            post.id
+          );
+
+          const hotScore = calculateHotScore(
+            likeCount,
+            commentCount,
+            shareCount,
+            validTimestamp
+          );
+
+          // Get author details
+          const authorUser = userMap.get(post.authorId);
+          const actorRecord = StaticDataRegistry.getActor(post.authorId);
+
+          let authorName = post.authorId;
+          let authorUsername: string | null = null;
+          let authorProfileImageUrl: string | null = null;
+
+          if (actorRecord) {
+            authorName = actorRecord.name;
+            authorUsername = actorRecord.username || actorRecord.id;
+            authorProfileImageUrl = actorRecord.profileImageUrl || null;
+          } else if (authorUser) {
+            authorName =
+              authorUser.displayName || authorUser.username || post.authorId;
+            authorUsername = authorUser.username;
+            authorProfileImageUrl = authorUser.profileImageUrl;
+          }
+
+          return {
+            id: post.id,
+            content: post.content,
+            fullContent: post.fullContent,
+            articleTitle: post.articleTitle,
+            category: post.category,
+            imageUrl: post.imageUrl,
+            type: post.type,
+            timestamp: toISOStringStrict(validTimestamp),
+            createdAt: toISOStringStrict(validCreatedAt),
+            authorId: post.authorId,
+            authorName,
+            authorUsername,
+            authorProfileImageUrl,
+            likeCount,
+            commentCount,
+            shareCount,
+            hotScore: Math.round(hotScore * 100) / 100, // Round to 2 decimal places
+          };
+        });
+
+        // Sort by hot score descending
+        scoredPosts.sort((a, b) => b.hotScore - a.hotScore);
+
+        // Take top N
+        const topPosts = scoredPosts.slice(0, params.limit);
+
         return {
-          id: post.id,
-          content: post.content,
-          fullContent: post.fullContent,
-          articleTitle: post.articleTitle,
-          category: post.category,
-          imageUrl: post.imageUrl,
-          type: post.type,
-          timestamp: toISOStringStrict(validTimestamp),
-          createdAt: toISOStringStrict(validCreatedAt),
-          authorId: post.authorId,
-          authorName,
-          authorUsername,
-          authorProfileImageUrl,
-          likeCount,
-          commentCount,
-          shareCount,
-          hotScore: Math.round(hotScore * 100) / 100, // Round to 2 decimal places
+          posts: topPosts,
+          postIds: topPosts.map((p) => p.id),
         };
-      });
-
-      // Sort by hot score descending
-      scoredPosts.sort((a, b) => b.hotScore - a.hotScore);
-
-      // Take top N
-      const topPosts = scoredPosts.slice(0, params.limit);
-
-      return {
-        posts: topPosts,
-        postIds: topPosts.map((p) => p.id),
-      };
-    },
+      }),
     {
       namespace: 'feed',
       ttl: 60, // Cache for 60 seconds
@@ -433,30 +374,17 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   let postsWithUserStatus: HotPost[] | HotPostWithUserStatus[] = result.posts;
 
   if (user?.userId && result.postIds.length > 0) {
-    const [userLikes, userShares] = await Promise.all([
-      db
-        .select({ postId: reactions.postId })
-        .from(reactions)
-        .where(
-          and(
-            inArray(reactions.postId, result.postIds),
-            eq(reactions.userId, user.userId),
-            eq(reactions.type, 'like')
-          )
-        ),
-      db
-        .select({ postId: shares.postId })
-        .from(shares)
-        .where(
-          and(
-            inArray(shares.postId, result.postIds),
-            eq(shares.userId, user.userId)
-          )
-        ),
-    ]);
+    const { likedPostIds: likedIds, sharedPostIds: sharedIds } =
+      await runWithOptionalUserRls(user, async (db) =>
+        selectHotFeedUserLikesAndSharesByPostIds(
+          db,
+          result.postIds,
+          user.userId
+        )
+      );
 
-    const likedPostIds = new Set(userLikes.map((l) => l.postId));
-    const sharedPostIds = new Set(userShares.map((s) => s.postId));
+    const likedPostIds = new Set(likedIds);
+    const sharedPostIds = new Set(sharedIds);
 
     postsWithUserStatus = result.posts.map((post: HotPost) => ({
       ...post,

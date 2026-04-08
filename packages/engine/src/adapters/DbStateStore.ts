@@ -6,14 +6,15 @@
  * via StaticDataRegistry to avoid unnecessary database queries.
  */
 
-import { and, eq, lte } from '@babylon/db';
 import {
-  db,
-  markets,
-  posts,
-  questions,
-  worldEvents,
-} from '@babylon/db/runtime';
+  fetchDbStateStoreActiveMarketRows,
+  fetchDbStateStoreActiveQuestionRows,
+  fetchDbStateStoreQuestionsToResolveRows,
+  insertDbStateStorePostRow,
+  insertDbStateStoreQuestionRow,
+  insertDbStateStoreWorldEventRow,
+  updateDbStateStoreQuestionResolved,
+} from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import type {
   ActiveMarket,
@@ -39,10 +40,7 @@ import { formatError } from '../utils/error-utils';
 
 export class DbStateStore implements GameStateStore {
   async getActiveQuestions(): Promise<ActiveQuestion[]> {
-    const rows = await db
-      .select()
-      .from(questions)
-      .where(eq(questions.status, 'active'));
+    const rows = await fetchDbStateStoreActiveQuestionRows();
 
     return rows.map((q) => ({
       id: q.id,
@@ -56,15 +54,7 @@ export class DbStateStore implements GameStateStore {
   }
 
   async getQuestionsToResolve(beforeTime: Date): Promise<ActiveQuestion[]> {
-    const rows = await db
-      .select()
-      .from(questions)
-      .where(
-        and(
-          eq(questions.status, 'active'),
-          lte(questions.resolutionDate, beforeTime)
-        )
-      );
+    const rows = await fetchDbStateStoreQuestionsToResolveRows(beforeTime);
 
     return rows.map((q) => ({
       id: q.id,
@@ -81,38 +71,23 @@ export class DbStateStore implements GameStateStore {
     const id = await generateSnowflakeId();
     const questionNumber = Date.now() % 100000;
 
-    await db.insert(questions).values({
+    await insertDbStateStoreQuestionRow({
       id,
       questionNumber,
       text: question.text,
-      status: 'active',
-      outcome: false, // Default outcome until resolved
-      rank: 1, // Default rank
       resolutionDate: question.resolutionDate,
-      scenarioId: question.scenarioId ?? 1, // Default to scenario 1 if not provided
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      scenarioId: question.scenarioId ?? 1,
     });
 
     return id;
   }
 
   async resolveQuestion(questionId: string, outcome: boolean): Promise<void> {
-    await db
-      .update(questions)
-      .set({
-        status: 'resolved',
-        outcome,
-        updatedAt: new Date(),
-      })
-      .where(eq(questions.id, questionId));
+    await updateDbStateStoreQuestionResolved(questionId, outcome);
   }
 
   async getActiveMarkets(): Promise<ActiveMarket[]> {
-    const rows = await db
-      .select()
-      .from(markets)
-      .where(eq(markets.resolved, false));
+    const rows = await fetchDbStateStoreActiveMarketRows();
 
     return rows.map((m) => ({
       id: m.id,
@@ -138,7 +113,7 @@ export class DbStateStore implements GameStateStore {
   async createPost(post: PostInput): Promise<string> {
     const id = await generateSnowflakeId();
 
-    await db.insert(posts).values({
+    await insertDbStateStorePostRow({
       id,
       authorId: post.authorId,
       content: post.content,
@@ -169,7 +144,7 @@ export class DbStateStore implements GameStateStore {
   async createEvent(event: EventInput): Promise<string> {
     const id = await generateSnowflakeId();
 
-    await db.insert(worldEvents).values({
+    await insertDbStateStoreWorldEventRow({
       id,
       eventType: event.type,
       description: event.description,
@@ -178,7 +153,6 @@ export class DbStateStore implements GameStateStore {
       visibility: event.visibility,
       pointsToward: event.pointsToward,
       relatedQuestion: event.relatedQuestion,
-      timestamp: new Date(),
     });
 
     return id;

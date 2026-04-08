@@ -6,6 +6,7 @@ import {
 } from '@babylon/api';
 import { getTokenMetadata } from '@babylon/api/services/nft-mint-service';
 import { type NextRequest, NextResponse } from 'next/server';
+import { runWithOptionalUserRls } from '@/lib/db/run-with-optional-user-rls';
 
 /**
  * GET /api/nft/metadata/[tokenId]
@@ -19,7 +20,7 @@ export const GET = withErrorHandling(
     request: NextRequest,
     { params }: { params: Promise<{ tokenId: string }> }
   ) => {
-    const { error, rateLimitInfo } = await publicRateLimit(request);
+    const { error, rateLimitInfo, user } = await publicRateLimit(request);
     if (error) return error;
 
     const { tokenId: tokenIdParam } = await params;
@@ -33,12 +34,14 @@ export const GET = withErrorHandling(
       throw new BadRequestError('Token ID must be between 1 and 100');
     }
 
-    const res = NextResponse.json(await getTokenMetadata(tokenId), {
-      headers: {
-        'Cache-Control': 'public, max-age=3600, stale-while-revalidate=86400',
-      },
+    return runWithOptionalUserRls(user, async (db) => {
+      const res = NextResponse.json(await getTokenMetadata(tokenId, db), {
+        headers: {
+          'Cache-Control': 'public, max-age=3600, stale-while-revalidate=86400',
+        },
+      });
+      if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
+      return res;
     });
-    if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
-    return res;
   }
 );

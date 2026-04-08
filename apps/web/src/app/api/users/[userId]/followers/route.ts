@@ -87,15 +87,14 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, desc, eq, inArray, not } from '@babylon/db';
 import {
-  actorFollows,
-  db,
-  followStatuses,
-  follows,
-  userActorFollows,
-  users,
-} from '@babylon/db/runtime';
+  selectActiveNpcFollowStatusesForUserExcludingUserFollowed,
+  selectActorFollowRelationsByFollowingIdOrderCreatedDesc,
+  selectActorIdsFollowedByUserAndActorIn,
+  selectFollowingIdsByFollowerAndFollowingIn,
+  selectUserActorFollowersJoinedUsersByActorIdOrderCreatedDescLimit,
+  selectUserFollowersJoinedUsersByFollowingIdOrderCreatedDesc,
+} from '@babylon/db';
 import { StaticDataRegistry } from '@babylon/engine';
 import {
   logger,
@@ -104,6 +103,7 @@ import {
   UserIdParamSchema,
 } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+import { runWithOptionalUserRls } from '@/lib/db/run-with-optional-user-rls';
 
 interface FollowerResponse {
   id: string;
@@ -143,204 +143,172 @@ export const GET = withErrorHandling(
     const { actor: targetActor, targetId } =
       await requireTargetByIdentifier(targetIdentifier);
 
-    let followersList: FollowerResponse[] = [];
+    return runWithOptionalUserRls(authUser, async (db) => {
+      let followersList: FollowerResponse[] = [];
 
-    if (targetActor) {
-      // Target is an NPC - get both actor followers and user followers
-      const actorFollowRelations = await db
-        .select({
-          id: actorFollows.id,
-          followerId: actorFollows.followerId,
-          createdAt: actorFollows.createdAt,
-        })
-        .from(actorFollows)
-        .where(eq(actorFollows.followingId, targetId))
-        .orderBy(desc(actorFollows.createdAt));
+      if (targetActor) {
+        // Target is an NPC - get both actor followers and user followers
+        const actorFollowRelations =
+          await selectActorFollowRelationsByFollowingIdOrderCreatedDesc(
+            db,
+            targetId
+          );
 
-      // Enrich with static actor data
-      const actorFollowersList = actorFollowRelations
-        .map((rel) => {
-          const followerActor = StaticDataRegistry.getActor(rel.followerId);
-          if (!followerActor) return null;
-          return {
-            id: rel.id,
-            followerId: rel.followerId,
-            createdAt: rel.createdAt,
-            followerName: followerActor.name,
-            followerUsername: followerActor.username,
-            followerTier: followerActor.tier,
-            followerProfileImageUrl: followerActor.profileImageUrl,
-            followerDescription: followerActor.description,
-          };
-        })
-        .filter((f): f is NonNullable<typeof f> => f !== null);
+        // Enrich with static actor data
+        const actorFollowersList = actorFollowRelations
+          .map((rel) => {
+            const followerActor = StaticDataRegistry.getActor(rel.followerId);
+            if (!followerActor) return null;
+            return {
+              id: rel.id,
+              followerId: rel.followerId,
+              createdAt: rel.createdAt,
+              followerName: followerActor.name,
+              followerUsername: followerActor.username,
+              followerTier: followerActor.tier,
+              followerProfileImageUrl: followerActor.profileImageUrl,
+              followerDescription: followerActor.description,
+            };
+          })
+          .filter((f): f is NonNullable<typeof f> => f !== null);
 
-      const userActorFollowersList = await db
-        .select({
-          id: userActorFollows.id,
-          userId: userActorFollows.userId,
-          createdAt: userActorFollows.createdAt,
-          userDisplayName: users.displayName,
-          userUsername: users.username,
-          userProfileImageUrl: users.profileImageUrl,
-          userBio: users.bio,
-        })
-        .from(userActorFollows)
-        .innerJoin(users, eq(userActorFollows.userId, users.id))
-        .where(eq(userActorFollows.actorId, targetId))
-        .orderBy(desc(userActorFollows.createdAt))
-        .limit(200);
+        const userActorFollowersList =
+          await selectUserActorFollowersJoinedUsersByActorIdOrderCreatedDescLimit(
+            db,
+            targetId,
+            200
+          );
 
-      followersList = [
-        ...actorFollowersList.map((f) => ({
-          id: f.followerId,
-          displayName: f.followerName,
-          username: f.followerUsername || null,
-          profileImageUrl: f.followerProfileImageUrl || null,
-          bio: f.followerDescription || '',
-          followedAt: toISO(f.createdAt),
-          isActor: true,
-          tier: f.followerTier || undefined,
-        })),
-        ...userActorFollowersList.map((f) => ({
-          id: f.userId,
-          displayName: f.userDisplayName || '',
-          username: f.userUsername || null,
-          profileImageUrl: f.userProfileImageUrl || null,
-          bio: f.userBio || '',
-          followedAt: toISO(f.createdAt),
-          isActor: false,
-        })),
-      ].sort(
-        (a, b) =>
-          new Date(b.followedAt).getTime() - new Date(a.followedAt).getTime()
-      );
-    } else {
-      // Target is a regular user
-      const userFollows = await db
-        .select({
-          id: follows.id,
-          followerId: follows.followerId,
-          createdAt: follows.createdAt,
-          followerDisplayName: users.displayName,
-          followerUsername: users.username,
-          followerProfileImageUrl: users.profileImageUrl,
-          followerBio: users.bio,
-        })
-        .from(follows)
-        .innerJoin(users, eq(follows.followerId, users.id))
-        .where(eq(follows.followingId, targetId))
-        .orderBy(desc(follows.createdAt));
-
-      const npcFollowersList = await db
-        .select()
-        .from(followStatuses)
-        .where(
-          and(
-            eq(followStatuses.userId, targetId),
-            eq(followStatuses.isActive, true),
-            not(eq(followStatuses.followReason, 'user_followed'))
-          )
-        )
-        .orderBy(desc(followStatuses.followedAt));
-
-      const npcIds = npcFollowersList.map((f) => f.npcId);
-      const actorMap = new Map(
-        npcIds
-          .map((id) => StaticDataRegistry.getActor(id))
-          .filter((a): a is NonNullable<typeof a> => a !== null)
-          .map((a) => [a.id, a])
-      );
-
-      followersList = [
-        ...userFollows.map((f) => ({
-          id: f.followerId,
-          displayName: f.followerDisplayName || '',
-          username: f.followerUsername || null,
-          profileImageUrl: f.followerProfileImageUrl || null,
-          bio: f.followerBio || '',
-          followedAt: toISO(f.createdAt),
-          isActor: false,
-        })),
-        ...npcFollowersList.map((f) => {
-          const actor = actorMap.get(f.npcId);
-          return {
-            id: f.npcId,
-            displayName: actor?.name || f.npcId,
-            username: actor?.username || null,
-            profileImageUrl: actor?.profileImageUrl || null,
-            bio: actor?.description || '',
-            followedAt: toISO(f.followedAt),
+        followersList = [
+          ...actorFollowersList.map((f) => ({
+            id: f.followerId,
+            displayName: f.followerName,
+            username: f.followerUsername || null,
+            profileImageUrl: f.followerProfileImageUrl || null,
+            bio: f.followerDescription || '',
+            followedAt: toISO(f.createdAt),
             isActor: true,
-            tier: actor?.tier || undefined,
-          };
-        }),
-      ].sort(
-        (a, b) =>
-          new Date(b.followedAt).getTime() - new Date(a.followedAt).getTime()
+            tier: f.followerTier || undefined,
+          })),
+          ...userActorFollowersList.map((f) => ({
+            id: f.userId,
+            displayName: f.userDisplayName || '',
+            username: f.userUsername || null,
+            profileImageUrl: f.userProfileImageUrl || null,
+            bio: f.userBio || '',
+            followedAt: toISO(f.createdAt),
+            isActor: false,
+          })),
+        ].sort(
+          (a, b) =>
+            new Date(b.followedAt).getTime() - new Date(a.followedAt).getTime()
+        );
+      } else {
+        // Target is a regular user
+        const userFollows =
+          await selectUserFollowersJoinedUsersByFollowingIdOrderCreatedDesc(
+            db,
+            targetId
+          );
+
+        const npcFollowersList =
+          await selectActiveNpcFollowStatusesForUserExcludingUserFollowed(
+            db,
+            targetId
+          );
+
+        const npcIds = npcFollowersList.map((f) => f.npcId);
+        const actorMap = new Map(
+          npcIds
+            .map((id) => StaticDataRegistry.getActor(id))
+            .filter((a): a is NonNullable<typeof a> => a !== null)
+            .map((a) => [a.id, a])
+        );
+
+        followersList = [
+          ...userFollows.map((f) => ({
+            id: f.followerId,
+            displayName: f.followerDisplayName || '',
+            username: f.followerUsername || null,
+            profileImageUrl: f.followerProfileImageUrl || null,
+            bio: f.followerBio || '',
+            followedAt: toISO(f.createdAt),
+            isActor: false,
+          })),
+          ...npcFollowersList.map((f) => {
+            const actor = actorMap.get(f.npcId);
+            return {
+              id: f.npcId,
+              displayName: actor?.name || f.npcId,
+              username: actor?.username || null,
+              profileImageUrl: actor?.profileImageUrl || null,
+              bio: actor?.description || '',
+              followedAt: toISO(f.followedAt),
+              isActor: true,
+              tier: actor?.tier || undefined,
+            };
+          }),
+        ].sort(
+          (a, b) =>
+            new Date(b.followedAt).getTime() - new Date(a.followedAt).getTime()
+        );
+      }
+
+      // Check if authenticated user follows each follower (for showing follow/unfollow button state)
+      if (authUser?.userId) {
+        const followerIds = followersList
+          .filter((f) => !f.isActor)
+          .map((f) => f.id);
+        const actorFollowerIds = followersList
+          .filter((f) => f.isActor)
+          .map((f) => f.id);
+
+        // Check which followers the authenticated user follows (using inArray for efficiency)
+        const followedUserIds = new Set<string>();
+        if (followerIds.length > 0) {
+          const userFollowResults =
+            await selectFollowingIdsByFollowerAndFollowingIn(
+              db,
+              authUser.userId,
+              followerIds
+            );
+          for (const f of userFollowResults) {
+            followedUserIds.add(f.followingId);
+          }
+        }
+
+        // Check actor follows (using inArray for efficiency)
+        const followedActorIds = new Set<string>();
+        if (actorFollowerIds.length > 0) {
+          const actorFollowResults =
+            await selectActorIdsFollowedByUserAndActorIn(
+              db,
+              authUser.userId,
+              actorFollowerIds
+            );
+          for (const f of actorFollowResults) {
+            followedActorIds.add(f.actorId);
+          }
+        }
+
+        // Add isMutualFollow to each follower (true if auth user follows them)
+        for (const follower of followersList) {
+          follower.isMutualFollow = follower.isActor
+            ? followedActorIds.has(follower.id)
+            : followedUserIds.has(follower.id);
+        }
+      }
+
+      logger.info(
+        'Followers fetched successfully',
+        { targetId, count: followersList.length, isActor: !!targetActor },
+        'GET /api/users/[userId]/followers'
       );
-    }
 
-    // Check if authenticated user follows each follower (for showing follow/unfollow button state)
-    if (authUser?.userId) {
-      const followerIds = followersList
-        .filter((f) => !f.isActor)
-        .map((f) => f.id);
-      const actorFollowerIds = followersList
-        .filter((f) => f.isActor)
-        .map((f) => f.id);
-
-      // Check which followers the authenticated user follows (using inArray for efficiency)
-      const followedUserIds = new Set<string>();
-      if (followerIds.length > 0) {
-        const userFollowResults = await db
-          .select({ followingId: follows.followingId })
-          .from(follows)
-          .where(
-            and(
-              eq(follows.followerId, authUser.userId),
-              inArray(follows.followingId, followerIds)
-            )
-          );
-        for (const f of userFollowResults) {
-          followedUserIds.add(f.followingId);
-        }
-      }
-
-      // Check actor follows (using inArray for efficiency)
-      const followedActorIds = new Set<string>();
-      if (actorFollowerIds.length > 0) {
-        const actorFollowResults = await db
-          .select({ actorId: userActorFollows.actorId })
-          .from(userActorFollows)
-          .where(
-            and(
-              eq(userActorFollows.userId, authUser.userId),
-              inArray(userActorFollows.actorId, actorFollowerIds)
-            )
-          );
-        for (const f of actorFollowResults) {
-          followedActorIds.add(f.actorId);
-        }
-      }
-
-      // Add isMutualFollow to each follower (true if auth user follows them)
-      for (const follower of followersList) {
-        follower.isMutualFollow = follower.isActor
-          ? followedActorIds.has(follower.id)
-          : followedUserIds.has(follower.id);
-      }
-    }
-
-    logger.info(
-      'Followers fetched successfully',
-      { targetId, count: followersList.length, isActor: !!targetActor },
-      'GET /api/users/[userId]/followers'
-    );
-
-    return successResponse({
-      followers: followersList,
-      count: followersList.length,
+      return successResponse({
+        followers: followersList,
+        count: followersList.length,
+      });
     });
   }
 );

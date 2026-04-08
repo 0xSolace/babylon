@@ -14,8 +14,7 @@
  * @module services/article-persistence
  */
 
-import { eq } from '@babylon/db';
-import { db, posts } from '@babylon/db/runtime';
+import { insertArticlePost, updateArticlePostImageUrl } from '@babylon/db';
 import type { ArticlePersistInput } from '@babylon/shared';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import { formatError } from '../utils/error-utils';
@@ -134,24 +133,10 @@ export async function persistArticle(
 
   try {
     // Insert article into posts table
-    await db.insert(posts).values({
-      id: articleId,
-      type: 'article',
-      content: article.summary,
-      fullContent: article.content,
-      articleTitle: article.title,
-      byline: article.byline ?? undefined,
-      biasScore: article.biasScore ?? undefined,
-      sentiment: article.sentiment ?? undefined,
-      slant: article.slant ?? undefined,
-      category: article.category || 'news',
-      imageUrl: article.imageUrl ?? undefined,
-      authorId: article.authorOrgId,
-      gameId: article.gameId,
-      dayNumber: article.dayNumber,
-      timestamp: article.timestamp ?? now,
+    await insertArticlePost({
+      articleId,
+      article,
       createdAt: now,
-      relatedQuestion: article.relatedQuestion,
     });
 
     logger.debug(
@@ -175,10 +160,7 @@ export async function persistArticle(
         .then(async (imageUrl) => {
           if (imageUrl) {
             try {
-              await db
-                .update(posts)
-                .set({ imageUrl })
-                .where(eq(posts.id, articleId));
+              await updateArticlePostImageUrl(articleId, imageUrl);
               logger.debug(
                 'Article image updated',
                 { articleId, imageUrl: imageUrl.slice(0, 50) },

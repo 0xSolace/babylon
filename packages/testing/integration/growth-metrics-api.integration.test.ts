@@ -14,10 +14,9 @@
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { getDevCredentials } from '@babylon/api';
-import { eq } from '@babylon/db';
-import { db, userSessions, users } from '@babylon/db/runtime';
-
+import { db, userSessions, users } from '@babylon/db/engine-storage';
 import { generateSnowflakeId } from '@babylon/shared';
+import { eq } from 'drizzle-orm';
 import {
   requireAuth as requireAuthShared,
   requireServer as requireServerShared,

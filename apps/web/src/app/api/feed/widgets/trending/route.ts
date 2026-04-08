@@ -74,8 +74,7 @@ import {
   optionalAuth,
   withErrorHandling,
 } from '@babylon/api';
-import { desc, eq } from '@babylon/db';
-import { asPublic, asUser, posts, postTags } from '@babylon/db/runtime';
+import { selectTrendingWidgetRecentPostSamplesByTagId } from '@babylon/db';
 import {
   generateTrendingSummary,
   getCurrentTrendingTags,
@@ -85,6 +84,7 @@ import {
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import { runWithOptionalUserRls } from '@/lib/db/run-with-optional-user-rls';
 
 // Server-side cache with longer TTL
 interface CachedTrendingData {
@@ -146,40 +146,15 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       return [];
     }
 
-    // Optional auth - trending tags are public but RLS still applies
     const authUser: AuthenticatedUser | null = await optionalAuth(
       request
     ).catch(() => null);
 
-    // First, get all trending items with summaries
     const trendingItems: TrendingTag[] = await Promise.all(
       trending.map(async (item) => {
-        const recentPosts =
-          authUser && authUser.userId
-            ? await asUser(authUser, async (db) => {
-                return await db
-                  .select({
-                    postId: postTags.postId,
-                    postContent: posts.content,
-                  })
-                  .from(postTags)
-                  .innerJoin(posts, eq(postTags.postId, posts.id))
-                  .where(eq(postTags.tagId, item.tag.id))
-                  .orderBy(desc(postTags.createdAt))
-                  .limit(3);
-              })
-            : await asPublic(async (db) => {
-                return await db
-                  .select({
-                    postId: postTags.postId,
-                    postContent: posts.content,
-                  })
-                  .from(postTags)
-                  .innerJoin(posts, eq(postTags.postId, posts.id))
-                  .where(eq(postTags.tagId, item.tag.id))
-                  .orderBy(desc(postTags.createdAt))
-                  .limit(3);
-              });
+        const recentPosts = await runWithOptionalUserRls(authUser, async (db) =>
+          selectTrendingWidgetRecentPostSamplesByTagId(db, item.tag.id, 3)
+        );
 
         const postContents = recentPosts.map((pt) => pt.postContent);
 

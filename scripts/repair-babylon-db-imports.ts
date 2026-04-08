@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Fix multiline `import { … } from '@babylon/db'` using brace depth, then split runtime symbols.
+ * Fix multiline `import { … } from '@babylon/db';` using brace depth, then split runtime symbols.
  */
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
@@ -151,7 +151,7 @@ function transformBlock(full: string): string {
   return lines.join('\n');
 }
 
-/** Find all `import {` … `} from '@babylon/db'` spans with correct brace depth */
+/** Find all `import { ` … ` } from '@babylon/db';` spans with correct brace depth */
 function extractDbImportRanges(
   source: string
 ): { start: number; end: number }[] {

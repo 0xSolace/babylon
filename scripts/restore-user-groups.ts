@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 /**
  * Restore User Groups
  *
@@ -10,13 +11,13 @@
  *   bun run scripts/restore-user-groups.ts --user=<user-id>
  */
 
-import { eq, ilike } from '@babylon/db';
-import { db, users } from '@babylon/db/runtime';
+import { db, users } from '@babylon/db/engine-storage';
 import {
   TieredGroupService,
   UserAlphaGroupAssignmentService,
 } from '@babylon/engine';
 import { logger } from '@babylon/shared';
+import { eq, ilike } from 'drizzle-orm';
 
 async function main() {
   const args = process.argv.slice(2);
@@ -151,7 +152,8 @@ async function main() {
 
   // Step 3: Show final state
   console.log('\nStep 3: Final group count...');
-  const { count, groupMembers, groups, and } = await import('@babylon/db');
+  const { groupMembers, groups } = await import('@babylon/db/engine-storage');
+  const { count, and } = await import('drizzle-orm');
   const [groupCount] = await db
     .select({ count: count() })
     .from(groupMembers)

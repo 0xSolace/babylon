@@ -1,10 +1,11 @@
 #!/usr/bin/env bun
+
 /**
  * Test scoring directly
  */
 
-import { and, desc, eq, isNull, not } from '@babylon/db';
-import { db, trajectories } from '@babylon/db/runtime';
+import { db, trajectories } from '@babylon/db/engine-storage';
+import { and, desc, eq, isNull, not } from 'drizzle-orm';
 import { archetypeScoringService } from '../src/scoring';
 
 async function main() {

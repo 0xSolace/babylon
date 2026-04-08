@@ -41,7 +41,7 @@
  */
 
 import { withErrorHandling } from '@babylon/api';
-import { db } from '@babylon/db/runtime';
+import { asPublic } from '@babylon/db/engine-storage';
 import { ImageResponse } from 'next/og';
 import type { NextRequest } from 'next/server';
 
@@ -59,20 +59,22 @@ export const GET = withErrorHandling(async function GET(
 ) {
   const { userId } = await context.params;
 
-  const [user, referralCount] = await Promise.all([
-    db.user.findUnique({
-      where: { id: userId },
-      select: {
-        username: true,
-        displayName: true,
-        profileImageUrl: true,
-        reputationPoints: true,
-      },
-    }),
-    db.referral.count({
-      where: { referrerId: userId },
-    }),
-  ]);
+  const [user, referralCount] = await asPublic(async (db) =>
+    Promise.all([
+      db.user.findUnique({
+        where: { id: userId },
+        select: {
+          username: true,
+          displayName: true,
+          profileImageUrl: true,
+          reputationPoints: true,
+        },
+      }),
+      db.referral.count({
+        where: { referrerId: userId },
+      }),
+    ])
+  );
 
   const displayName = user?.displayName || user?.username || 'A Babylon Trader';
 

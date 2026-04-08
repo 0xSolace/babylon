@@ -5,17 +5,20 @@
  * Replaces the need for manual seeding scripts.
  */
 
-import { eq, generateSnowflakeId, inArray, sql } from '@babylon/db';
 import {
-  actorState,
-  db,
-  games,
-  organizationState,
-  perpMarketSnapshots,
-  pools,
-  rssFeedSources,
-  users,
-} from '@babylon/db/runtime';
+  ensureGameBootstrapContinuousGameRow,
+  ensureGameBootstrapNpcUserRows,
+  ensureGameBootstrapPerpMarketSnapshots,
+  fetchGameBootstrapExistingStateIds,
+  fetchGameBootstrapStatsCounts,
+  insertGameBootstrapActorStateRow,
+  insertGameBootstrapOrganizationStateRow,
+  runGameBootstrapEnsureActorPoolsTransaction,
+  runGameBootstrapEnsureMinimumBalancesTransaction,
+  runGameBootstrapSyncActorTransaction,
+  runGameBootstrapSyncOrganizationTransaction,
+  seedGameBootstrapRssFeedRows,
+} from '@babylon/db';
 import type { ActorTier } from '@babylon/shared';
 import { logger } from '@babylon/shared';
 import { DEFAULT_RSS_SOURCES } from '../config/rss-sources';
@@ -93,10 +96,8 @@ export class GameBootstrapService {
       const staticOrgs = StaticDataRegistry.getAllOrganizations();
 
       // Get existing database state from state tables
-      const [existingActorStates, existingOrgStates] = await Promise.all([
-        db.select({ id: actorState.id }).from(actorState),
-        db.select({ id: organizationState.id }).from(organizationState),
-      ]);
+      const { actorIds: existingActorStates, orgIds: existingOrgStates } =
+        await fetchGameBootstrapExistingStateIds();
       const existingActorIds = new Set(existingActorStates.map((a) => a.id));
       const existingOrgIds = new Set(existingOrgStates.map((o) => o.id));
 
@@ -232,12 +233,10 @@ export class GameBootstrapService {
       tier: actor.tier ?? undefined,
     });
 
-    await db.insert(actorState).values({
+    await insertGameBootstrapActorStateRow({
       id: actor.id,
       tradingBalance: capital.tradingBalance.toString(),
       reputationPoints: capital.reputationPoints,
-      hasPool: false,
-      updatedAt: new Date(),
     });
 
     logger.debug(
@@ -253,40 +252,36 @@ export class GameBootstrapService {
     tier: ActorTier | null;
     domain: string[];
   }): Promise<{ created: boolean; updated: boolean }> {
-    const existing = await db
-      .select({
-        id: actorState.id,
-        tradingBalance: actorState.tradingBalance,
-      })
-      .from(actorState)
-      .where(eq(actorState.id, actor.id))
-      .limit(1);
-
-    if (existing.length === 0) {
-      await this.seedActorState(actor);
-      return { created: true, updated: false };
-    }
-
-    const existingState = existing[0];
-    if (!existingState) return { created: false, updated: false };
+    const capital = CapitalAllocationService.calculateCapital({
+      id: actor.id,
+      name: actor.name,
+      description: undefined,
+      domain: actor.domain,
+      tier: actor.tier ?? undefined,
+    });
 
     const tier = actor.tier || 'C_TIER';
     const minimumBalance =
       MINIMUM_BALANCE_BY_TIER[tier] || DEFAULT_MINIMUM_BALANCE;
-    const currentBalance = Number(existingState.tradingBalance) || 0;
 
-    // Only update balance if below minimum
-    if (currentBalance < minimumBalance) {
-      await db
-        .update(actorState)
-        .set({
-          tradingBalance: minimumBalance.toString(),
-          updatedAt: new Date(),
-        })
-        .where(eq(actorState.id, actor.id));
+    const outcome = await runGameBootstrapSyncActorTransaction({
+      actorId: actor.id,
+      insertIfMissing: {
+        tradingBalance: capital.tradingBalance.toString(),
+        reputationPoints: capital.reputationPoints,
+      },
+      minimumBalanceWhenExists: minimumBalance,
+    });
+
+    if (outcome.created) {
+      logger.debug(
+        `Seeded actor state ${actor.name} with $${capital.tradingBalance}`,
+        { actorId: actor.id },
+        'GameBootstrapService'
+      );
     }
 
-    return { created: false, updated: true };
+    return outcome;
   }
 
   private static async seedOrganizationState(org: {
@@ -294,11 +289,10 @@ export class GameBootstrapService {
     name: string;
     initialPrice: number | null;
   }): Promise<void> {
-    await db.insert(organizationState).values({
+    await insertGameBootstrapOrganizationStateRow({
       id: org.id,
       currentPrice: org.initialPrice,
       basePrice: org.initialPrice ?? 100.0,
-      updatedAt: new Date(),
     });
 
     logger.debug(
@@ -313,127 +307,56 @@ export class GameBootstrapService {
     name: string;
     initialPrice: number | null;
   }): Promise<{ created: boolean; updated: boolean }> {
-    const existing = await db
-      .select({
-        id: organizationState.id,
-        currentPrice: organizationState.currentPrice,
-      })
-      .from(organizationState)
-      .where(eq(organizationState.id, org.id))
-      .limit(1);
+    const outcome = await runGameBootstrapSyncOrganizationTransaction({
+      orgId: org.id,
+      insertIfMissing: {
+        currentPrice: org.initialPrice,
+        basePrice: org.initialPrice ?? 100.0,
+      },
+    });
 
-    if (existing.length === 0) {
-      await this.seedOrganizationState(org);
-      return { created: true, updated: false };
+    if (outcome.created) {
+      logger.debug(
+        `Seeded organization state ${org.name}`,
+        { orgId: org.id },
+        'GameBootstrapService'
+      );
     }
 
-    const existingState = existing[0];
-    if (!existingState) return { created: false, updated: false };
-
-    // Organization state only contains currentPrice - no update needed for static data
-    // Price updates happen via the normal game tick flow
-    return { created: false, updated: false };
+    return outcome;
   }
 
   private static async ensureMinimumBalances(): Promise<{
     count: number;
     totalAmount: number;
   }> {
-    // Get all actor states with their balances
-    const allActorStates = await db
-      .select({
-        id: actorState.id,
-        tradingBalance: actorState.tradingBalance,
-      })
-      .from(actorState);
+    const { count, totalAmount, events } =
+      await runGameBootstrapEnsureMinimumBalancesTransaction({
+        resolveMinimumBalance: (actorId) => {
+          const staticActor = StaticDataRegistry.getActor(actorId);
+          const tier = staticActor?.tier || 'C_TIER';
+          return MINIMUM_BALANCE_BY_TIER[tier] || DEFAULT_MINIMUM_BALANCE;
+        },
+        maxTopUpAmount: MAX_TOP_UP_AMOUNT,
+      });
 
-    let toppedUpCount = 0;
-    let totalTopUp = 0;
-
-    for (const state of allActorStates) {
-      // Get static actor data for tier info
-      const staticActor = StaticDataRegistry.getActor(state.id);
-      const currentBalance = Number(state.tradingBalance) || 0;
-      const tier = staticActor?.tier || 'C_TIER';
-      const minimumBalance =
-        MINIMUM_BALANCE_BY_TIER[tier] || DEFAULT_MINIMUM_BALANCE;
-
-      if (currentBalance < minimumBalance) {
-        const deficit = minimumBalance - currentBalance;
-        const topUpAmount = Math.min(deficit, MAX_TOP_UP_AMOUNT);
-        const newBalance = currentBalance + topUpAmount;
-
-        await db
-          .update(actorState)
-          .set({
-            tradingBalance: newBalance.toString(),
-            updatedAt: new Date(),
-          })
-          .where(eq(actorState.id, state.id));
-
-        toppedUpCount++;
-        totalTopUp += topUpAmount;
-
-        logger.debug(
-          `Topped up ${staticActor?.name ?? state.id}: $${currentBalance} → $${newBalance}`,
-          { actorId: state.id, topUpAmount },
-          'GameBootstrapService'
-        );
-      }
+    for (const ev of events) {
+      const staticActor = StaticDataRegistry.getActor(ev.actorId);
+      logger.debug(
+        `Topped up ${staticActor?.name ?? ev.actorId}: $${ev.previousBalance} → $${ev.newBalance}`,
+        { actorId: ev.actorId, topUpAmount: ev.topUpAmount },
+        'GameBootstrapService'
+      );
     }
 
-    return { count: toppedUpCount, totalAmount: totalTopUp };
+    return { count, totalAmount };
   }
 
   private static async ensureActorPools(): Promise<number> {
-    // Get actor states that don't have pools
-    const actorStatesWithoutPools = await db
-      .select({
-        id: actorState.id,
-        tradingBalance: actorState.tradingBalance,
-      })
-      .from(actorState)
-      .where(eq(actorState.hasPool, false));
-
-    let created = 0;
-
-    for (const state of actorStatesWithoutPools) {
-      const poolId = state.id;
-      const balance = Number(state.tradingBalance) || 10000;
-      const staticActor = StaticDataRegistry.getActor(state.id);
-
-      const existingPool = await db
-        .select({ id: pools.id })
-        .from(pools)
-        .where(eq(pools.id, poolId))
-        .limit(1);
-
-      if (existingPool.length === 0) {
-        await db.insert(pools).values({
-          id: poolId,
-          name: `${staticActor?.name ?? state.id}'s Pool`,
-          npcActorId: state.id,
-          totalValue: balance.toString(),
-          totalDeposits: balance.toString(),
-          availableBalance: balance.toString(),
-          lifetimePnL: '0',
-          performanceFeeRate: 0.05,
-          totalFeesCollected: '0',
-          isActive: true,
-          status: 'ACTIVE',
-          updatedAt: new Date(),
-        });
-
-        await db
-          .update(actorState)
-          .set({ hasPool: true, updatedAt: new Date() })
-          .where(eq(actorState.id, state.id));
-
-        created++;
-      }
-    }
-
-    return created;
+    return runGameBootstrapEnsureActorPoolsTransaction({
+      resolvePoolDisplayName: (actorId) =>
+        StaticDataRegistry.getActor(actorId)?.name ?? actorId,
+    });
   }
 
   /**
@@ -443,44 +366,7 @@ export class GameBootstrapService {
   private static async ensureNpcUsers(
     staticActors: Array<{ id: string; name: string }>
   ): Promise<number> {
-    if (staticActors.length === 0) {
-      return 0;
-    }
-
-    const actorIds = staticActors.map((a) => a.id);
-
-    // Get existing NPC users
-    const existingUsers = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(inArray(users.id, actorIds));
-
-    const existingUserIds = new Set(existingUsers.map((u) => u.id));
-
-    // Create User records for NPCs that don't have them
-    let created = 0;
-    const now = new Date();
-
-    for (const actor of staticActors) {
-      if (existingUserIds.has(actor.id)) {
-        continue;
-      }
-
-      await db.insert(users).values({
-        id: actor.id,
-        displayName: actor.name,
-        username: actor.id, // Use actor ID as username
-        isActor: true,
-        virtualBalance: '10000', // NPCs get starting balance
-        totalDeposited: '10000',
-        totalWithdrawn: '0',
-        lifetimePnL: '0',
-        createdAt: now,
-        updatedAt: now,
-      });
-
-      created++;
-    }
+    const created = await ensureGameBootstrapNpcUserRows(staticActors);
 
     if (created > 0) {
       logger.info(
@@ -494,72 +380,18 @@ export class GameBootstrapService {
   }
 
   private static async ensureGameState(): Promise<boolean> {
-    const existingGame = await db
-      .select()
-      .from(games)
-      .where(eq(games.isContinuous, true))
-      .limit(1);
+    const outcome = await ensureGameBootstrapContinuousGameRow();
 
-    if (existingGame.length === 0) {
-      const now = new Date();
-      const gameId = await generateSnowflakeId();
-
-      await db.insert(games).values({
-        id: gameId,
-        isContinuous: true,
-        isRunning: true,
-        currentDate: now,
-        currentDay: 1,
-        speed: 60000,
-        startedAt: now,
-        updatedAt: now,
-      });
-
+    if (outcome.changed && outcome.reason === 'inserted') {
       logger.info('Game state initialized', undefined, 'GameBootstrapService');
-      return true;
     }
 
-    // Ensure game is running
-    const game = existingGame[0];
-    if (game && !game.isRunning) {
-      await db
-        .update(games)
-        .set({
-          isRunning: true,
-          startedAt: game.startedAt || new Date(),
-          pausedAt: null,
-        })
-        .where(eq(games.id, game.id));
-      return true;
-    }
-
-    return false;
+    return outcome.changed;
   }
 
   /** Seeds rssFeedSources from DEFAULT_RSS_SOURCES (config). WHY config: single place to add/edit feed URLs; runtime enable/disable remains in DB. */
   private static async ensureRSSFeeds(): Promise<number> {
-    let created = 0;
-
-    for (const feed of DEFAULT_RSS_SOURCES) {
-      const existing = await db
-        .select({ id: rssFeedSources.id })
-        .from(rssFeedSources)
-        .where(eq(rssFeedSources.feedUrl, feed.feedUrl))
-        .limit(1);
-
-      if (existing.length === 0) {
-        await db.insert(rssFeedSources).values({
-          id: await generateSnowflakeId(),
-          name: feed.name,
-          feedUrl: feed.feedUrl,
-          category: feed.category,
-          updatedAt: new Date(),
-        });
-        created++;
-      }
-    }
-
-    return created;
+    return seedGameBootstrapRssFeedRows(DEFAULT_RSS_SOURCES);
   }
 
   /**
@@ -567,72 +399,20 @@ export class GameBootstrapService {
    * This is required for the perpetual markets to be tradeable.
    */
   private static async ensurePerpMarketSnapshots(): Promise<number> {
-    let created = 0;
-
-    // Get all organizations with tickers (these are tradeable as perps)
     const staticOrgs = StaticDataRegistry.getAllOrganizations();
-    const tradeableOrgs = staticOrgs.filter((o) => o.ticker);
+    const tradeableOrgs = staticOrgs
+      .filter((o) => o.ticker)
+      .map((o) => ({
+        id: o.id,
+        ticker: o.ticker!,
+        name: o.name,
+        initialPrice: o.initialPrice,
+      }));
 
-    // Get existing perp market snapshots
-    const existingSnapshots = await db
-      .select({ ticker: perpMarketSnapshots.ticker })
-      .from(perpMarketSnapshots);
-    const existingTickers = new Set(existingSnapshots.map((s) => s.ticker));
-
-    // Get organization states for current prices
-    const orgStates = await db.select().from(organizationState);
-    const priceMap = new Map<string, number | null>(
-      orgStates.map((s) => [s.id, s.currentPrice])
-    );
-
-    const now = new Date();
-    const nextFundingTime = new Date(
-      now.getTime() + FUNDING_INTERVAL_MS
-    ).toISOString();
-
-    for (const org of tradeableOrgs) {
-      if (!org.ticker || existingTickers.has(org.ticker)) {
-        continue;
-      }
-
-      // Use current price from state, or initial price, or default
-      const currentPrice = priceMap.get(org.id) ?? org.initialPrice ?? 100;
-
-      await db.insert(perpMarketSnapshots).values({
-        ticker: org.ticker,
-        organizationId: org.id,
-        name: org.name,
-        currentPrice,
-        price24hAgo: currentPrice,
-        price24hAgoUpdatedAt: now,
-        metrics24hResetAt: now,
-        change24h: 0,
-        changePercent24h: 0,
-        high24h: currentPrice,
-        low24h: currentPrice,
-        volume24h: 0,
-        openInterest: 0,
-        fundingRate: {
-          ticker: org.ticker,
-          rate: 0.01, // 1% APR base
-          nextFundingTime,
-          predictedRate: 0.01,
-        },
-        maxLeverage: 100,
-        minOrderSize: 10,
-        markPrice: currentPrice,
-        indexPrice: currentPrice,
-        createdAt: now,
-        updatedAt: now,
-      });
-
-      created++;
-      logger.debug(
-        `Created perp market snapshot for ${org.ticker} (${org.name})`,
-        { ticker: org.ticker, price: currentPrice },
-        'GameBootstrapService'
-      );
-    }
+    const created = await ensureGameBootstrapPerpMarketSnapshots({
+      tradeableOrgs,
+      fundingIntervalMs: FUNDING_INTERVAL_MS,
+    });
 
     if (created > 0) {
       logger.info(
@@ -658,24 +438,17 @@ export class GameBootstrapService {
     rssFeedSources: number;
     perpMarkets: number;
   }> {
-    const [actorCount, orgCount, poolCount, feedCount, perpMarketCount] =
-      await Promise.all([
-        db.select({ count: sql<number>`count(*)` }).from(actorState),
-        db.select({ count: sql<number>`count(*)` }).from(organizationState),
-        db.select({ count: sql<number>`count(*)` }).from(pools),
-        db.select({ count: sql<number>`count(*)` }).from(rssFeedSources),
-        db.select({ count: sql<number>`count(*)` }).from(perpMarketSnapshots),
-      ]);
+    const counts = await fetchGameBootstrapStatsCounts();
 
     return {
-      actors: Number(actorCount[0]?.count ?? 0),
-      organizations: Number(orgCount[0]?.count ?? 0),
-      pools: Number(poolCount[0]?.count ?? 0),
+      actors: counts.actors,
+      organizations: counts.organizations,
+      pools: counts.pools,
       characterMappings: StaticDataRegistry.getAllCharacterMappings().length,
       organizationMappings:
         StaticDataRegistry.getAllOrganizationMappings().length,
-      rssFeedSources: Number(feedCount[0]?.count ?? 0),
-      perpMarkets: Number(perpMarketCount[0]?.count ?? 0),
+      rssFeedSources: counts.rssFeedSources,
+      perpMarkets: counts.perpMarkets,
     };
   }
 }

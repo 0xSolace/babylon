@@ -83,9 +83,8 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-
-import { eq } from '@babylon/db';
-import { db, users } from '@babylon/db/runtime';
+import { updateUserSocialVisibilityByIdReturning } from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import { logger, UserIdParamSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
@@ -120,31 +119,16 @@ export const POST = withErrorHandling(
     const body = await request.json();
     const { platform, visible } = UpdateVisibilityRequestSchema.parse(body);
 
-    // Build update data based on platform
-    const updateData: Partial<typeof users.$inferInsert> = {};
-    switch (platform) {
-      case 'twitter':
-        updateData.showTwitterPublic = visible;
-        break;
-      case 'farcaster':
-        updateData.showFarcasterPublic = visible;
-        break;
-      case 'wallet':
-        updateData.showWalletPublic = visible;
-        break;
-    }
+    const patch =
+      platform === 'twitter'
+        ? { showTwitterPublic: visible }
+        : platform === 'farcaster'
+          ? { showFarcasterPublic: visible }
+          : { showWalletPublic: visible };
 
-    // Update user visibility preference
-    const [updatedUser] = await db
-      .update(users)
-      .set(updateData)
-      .where(eq(users.id, canonicalUserId))
-      .returning({
-        id: users.id,
-        showTwitterPublic: users.showTwitterPublic,
-        showFarcasterPublic: users.showFarcasterPublic,
-        showWalletPublic: users.showWalletPublic,
-      });
+    const updatedUser = await asUser(authUser, async (db) =>
+      updateUserSocialVisibilityByIdReturning(db, canonicalUserId, patch)
+    );
 
     logger.info(
       `User ${canonicalUserId} updated ${platform} visibility to ${visible}`,

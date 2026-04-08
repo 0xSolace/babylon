@@ -58,7 +58,7 @@
  */
 
 import { PointsService, withErrorHandling } from '@babylon/api';
-import { db } from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 
 import { getWaitlistBaseUrl, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
@@ -171,14 +171,18 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   }
 
   // Retrieve PKCE code verifier from database
-  const oauthState = await db.oAuthState.findFirst({
-    where: {
-      state,
-      returnPath: 'twitter', // Provider stored in returnPath
-      userId,
-      expiresAt: { gte: new Date() },
-    },
-  });
+  const oauthState = await asSystem(
+    async (db) =>
+      db.oAuthState.findFirst({
+        where: {
+          state,
+          returnPath: 'twitter', // Provider stored in returnPath
+          userId,
+          expiresAt: { gte: new Date() },
+        },
+      }),
+    'auth-twitter-oauth-state'
+  );
 
   if (!oauthState || !oauthState.codeVerifier) {
     logger.warn(
@@ -214,17 +218,16 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   });
 
   // Clean up OAuth state after use
-  await db.oAuthState
-    .delete({
-      where: { id: oauthState.id },
-    })
-    .catch((error: unknown) => {
-      logger.warn(
-        'Failed to delete OAuth state',
-        { error, stateId: oauthState.id },
-        'TwitterCallback'
-      );
-    });
+  await asSystem(
+    async (db) => db.oAuthState.delete({ where: { id: oauthState.id } }),
+    'auth-twitter-oauth-cleanup'
+  ).catch((error: unknown) => {
+    logger.warn(
+      'Failed to delete OAuth state',
+      { error, stateId: oauthState.id },
+      'TwitterCallback'
+    );
+  });
 
   if (!tokenResponse.ok) {
     const errorData = await tokenResponse.text();
@@ -284,12 +287,16 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const twitterId = twitterUser.id;
 
   // Check if Twitter account is already linked to another user
-  const existingLink = await db.user.findFirst({
-    where: {
-      twitterId,
-      id: { not: userId },
-    },
-  });
+  const existingLink = await asSystem(
+    async (db) =>
+      db.user.findFirst({
+        where: {
+          twitterId,
+          id: { not: userId },
+        },
+      }),
+    'auth-twitter-dedupe'
+  );
 
   if (existingLink) {
     return NextResponse.redirect(
@@ -298,19 +305,23 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   }
 
   // Update user with Twitter info
-  await db.user.update({
-    where: { id: userId },
-    data: {
-      twitterId,
-      twitterUsername,
-      hasTwitter: true,
-      twitterAccessToken: accessToken, // Store encrypted in production
-      twitterRefreshToken: tokenData.refresh_token,
-      twitterTokenExpiresAt: tokenData.expires_in
-        ? new Date(Date.now() + tokenData.expires_in * 1000)
-        : null,
-    },
-  });
+  await asSystem(
+    async (db) =>
+      db.user.update({
+        where: { id: userId },
+        data: {
+          twitterId,
+          twitterUsername,
+          hasTwitter: true,
+          twitterAccessToken: accessToken, // Store encrypted in production
+          twitterRefreshToken: tokenData.refresh_token,
+          twitterTokenExpiresAt: tokenData.expires_in
+            ? new Date(Date.now() + tokenData.expires_in * 1000)
+            : null,
+        },
+      }),
+    'auth-twitter-link'
+  );
 
   // Award points if this is the first time linking Twitter
   const pointsResult = await PointsService.awardTwitterLink(

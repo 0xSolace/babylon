@@ -5,9 +5,8 @@
  */
 
 import { PerpDbAdapter, PerpMarketService } from '@babylon/core/markets/perps';
-import { and, eq, isNull } from '@babylon/db';
-import { db, perpPositions } from '@babylon/db/runtime';
-
+import { selectOpenPerpPositionForUserById } from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import {
   createPerpPriceImpactPort,
   FEE_CONFIG,
@@ -98,18 +97,11 @@ export const closePerpAction: Action = {
     }
 
     try {
-      // Get position
-      const [position] = await db
-        .select()
-        .from(perpPositions)
-        .where(
-          and(
-            eq(perpPositions.id, positionId),
-            eq(perpPositions.userId, agentUserId),
-            isNull(perpPositions.closedAt)
-          )
-        )
-        .limit(1);
+      const position = await selectOpenPerpPositionForUserById(
+        db,
+        positionId,
+        agentUserId
+      );
 
       if (!position) {
         return {

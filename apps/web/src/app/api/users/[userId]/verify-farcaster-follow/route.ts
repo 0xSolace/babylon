@@ -52,8 +52,8 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { eq } from '@babylon/db';
-import { db, users } from '@babylon/db/runtime';
+import { selectUserFarcasterFollowRewardSliceById } from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import { logger, UserIdParamSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
@@ -94,16 +94,9 @@ export const POST = withErrorHandling(
       );
     }
 
-    // Get user's Farcaster info
-    const [user] = await db
-      .select({
-        farcasterUsername: users.farcasterUsername,
-        farcasterFid: users.farcasterFid,
-        pointsAwardedForFarcasterFollow: users.pointsAwardedForFarcasterFollow,
-      })
-      .from(users)
-      .where(eq(users.id, canonicalUserId))
-      .limit(1);
+    const user = await asUser(authUser, async (db) =>
+      selectUserFarcasterFollowRewardSliceById(db, canonicalUserId)
+    );
 
     // VALIDATION 1: Check if user has linked Farcaster account
     if (!user?.farcasterUsername && !user?.farcasterFid) {

@@ -12,13 +12,7 @@
  */
 
 import type { JsonValue } from '@babylon/db';
-import {
-  and,
-  generateSnowflakeId as dbGenerateSnowflakeId,
-  desc,
-  eq,
-  isNull,
-} from '@babylon/db';
+import { generateSnowflakeId as dbGenerateSnowflakeId } from '@babylon/db';
 import {
   closeDatabase,
   db,
@@ -28,6 +22,7 @@ import {
 } from '@babylon/db/runtime';
 import type { GameHistory, GroupMessage } from '@babylon/engine';
 import { GameGenerator, loadActorsData } from '@babylon/engine';
+import { and, desc, eq, isNull } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { getFlag, parseArgs, wantsHelp } from '../lib/args.js';
 import { logger } from '../lib/logger.js';

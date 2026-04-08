@@ -68,23 +68,19 @@ import {
   publicRateLimit,
   withErrorHandling,
 } from '@babylon/api';
-import { and, count, desc, eq, inArray, isNull } from '@babylon/db';
 import {
-  asPublic,
-  asUser,
-  comments,
-  posts,
-  postTags,
-  reactions,
-  shares,
-  tags,
-  users,
-} from '@babylon/db/runtime';
-
+  selectPostCommentCountsGroupedByPostIds,
+  selectPostReactionCountsGroupedByPostIds,
+  selectPostShareCountsGroupedByPostIds,
+  selectPostTagsWithPostsForTagIdsOrderCreatedDescLimit,
+  selectTagsByNames,
+  selectTrendingGroupAuthorRowsByIds,
+} from '@babylon/db';
 import { StaticDataRegistry } from '@babylon/engine';
 import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import { runWithOptionalUserRls } from '@/lib/db/run-with-optional-user-rls';
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
   const {
@@ -125,33 +121,10 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     'GET /api/trending/group'
   );
 
-  // Get tag information by slug (name)
-  const tagsList =
-    authUser && authUser.userId
-      ? await asUser(authUser, async (db) => {
-          return await db
-            .select({
-              id: tags.id,
-              name: tags.name,
-              displayName: tags.displayName,
-              category: tags.category,
-            })
-            .from(tags)
-            .where(inArray(tags.name, tagSlugs));
-        })
-      : await asPublic(async (db) => {
-          return await db
-            .select({
-              id: tags.id,
-              name: tags.name,
-              displayName: tags.displayName,
-              category: tags.category,
-            })
-            .from(tags)
-            .where(inArray(tags.name, tagSlugs));
-        });
+  const tagsList = await runWithOptionalUserRls(authUser, async (db) =>
+    selectTagsByNames(db, tagSlugs)
+  );
 
-  // Extract tag IDs for the post lookup
   const tagIds = tagsList.map((t) => t.id);
 
   if (tagIds.length === 0) {
@@ -162,64 +135,13 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     });
   }
 
-  // Get posts that have any of these tags
-  // Filter out deleted posts to match what users can actually see
-  const postTagRelations =
-    authUser && authUser.userId
-      ? await asUser(authUser, async (db) => {
-          return await db
-            .select({
-              postId: postTags.postId,
-              tagId: postTags.tagId,
-              createdAt: postTags.createdAt,
-              post: {
-                id: posts.id,
-                content: posts.content,
-                authorId: posts.authorId,
-                timestamp: posts.timestamp,
-                type: posts.type,
-                articleTitle: posts.articleTitle,
-                byline: posts.byline,
-                biasScore: posts.biasScore,
-                category: posts.category,
-              },
-            })
-            .from(postTags)
-            .innerJoin(posts, eq(postTags.postId, posts.id))
-            .where(
-              and(inArray(postTags.tagId, tagIds), isNull(posts.deletedAt))
-            )
-            .orderBy(desc(postTags.createdAt))
-            .limit(limit * 2); // Get more to deduplicate
-        })
-      : await asPublic(async (db) => {
-          return await db
-            .select({
-              postId: postTags.postId,
-              tagId: postTags.tagId,
-              createdAt: postTags.createdAt,
-              post: {
-                id: posts.id,
-                content: posts.content,
-                authorId: posts.authorId,
-                timestamp: posts.timestamp,
-                type: posts.type,
-                articleTitle: posts.articleTitle,
-                byline: posts.byline,
-                biasScore: posts.biasScore,
-                category: posts.category,
-              },
-            })
-            .from(postTags)
-            .innerJoin(posts, eq(postTags.postId, posts.id))
-            .where(
-              and(inArray(postTags.tagId, tagIds), isNull(posts.deletedAt))
-            )
-            .orderBy(desc(postTags.createdAt))
-            .limit(limit * 2);
-        });
+  const postTagRelations = await runWithOptionalUserRls(authUser, async (db) =>
+    selectPostTagsWithPostsForTagIdsOrderCreatedDescLimit(db, {
+      tagIds,
+      limit: limit * 2,
+    })
+  );
 
-  // Deduplicate posts (same post might have multiple tags from the group)
   const seenPostIds = new Set<string>();
   const uniquePosts = postTagRelations
     .filter((pt) => {
@@ -231,33 +153,12 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     })
     .slice(0, limit);
 
-  // Get interaction counts for posts
   const postIds = uniquePosts.map((pt) => pt.postId);
 
-  // Get user info for authors
   const authorIds = [...new Set(uniquePosts.map((pt) => pt.post.authorId))];
-  const usersList =
-    authUser && authUser.userId
-      ? await asUser(authUser, async (db) => {
-          return await db
-            .select({
-              id: users.id,
-              username: users.username,
-              displayName: users.displayName,
-            })
-            .from(users)
-            .where(inArray(users.id, authorIds));
-        })
-      : await asPublic(async (db) => {
-          return await db
-            .select({
-              id: users.id,
-              username: users.username,
-              displayName: users.displayName,
-            })
-            .from(users)
-            .where(inArray(users.id, authorIds));
-        });
+  const usersList = await runWithOptionalUserRls(authUser, async (db) =>
+    selectTrendingGroupAuthorRowsByIds(db, authorIds)
+  );
 
   const userMap = new Map(usersList.map((u) => [u.id, u]));
   const actorMap = new Map(
@@ -273,57 +174,33 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       .map((o) => [o.id, { id: o.id, name: o.name }])
   );
 
-  // Get interaction counts using Drizzle's count aggregation
   const [likeCounts, commentCounts, shareCounts] =
     postIds.length > 0
-      ? authUser && authUser.userId
-        ? await asUser(authUser, async (db) => {
-            return await Promise.all([
-              db
-                .select({ postId: reactions.postId, count: count() })
-                .from(reactions)
-                .where(inArray(reactions.postId, postIds))
-                .groupBy(reactions.postId),
-              db
-                .select({ postId: comments.postId, count: count() })
-                .from(comments)
-                .where(inArray(comments.postId, postIds))
-                .groupBy(comments.postId),
-              db
-                .select({ postId: shares.postId, count: count() })
-                .from(shares)
-                .where(inArray(shares.postId, postIds))
-                .groupBy(shares.postId),
-            ]);
-          })
-        : await asPublic(async (db) => {
-            return await Promise.all([
-              db
-                .select({ postId: reactions.postId, count: count() })
-                .from(reactions)
-                .where(inArray(reactions.postId, postIds))
-                .groupBy(reactions.postId),
-              db
-                .select({ postId: comments.postId, count: count() })
-                .from(comments)
-                .where(inArray(comments.postId, postIds))
-                .groupBy(comments.postId),
-              db
-                .select({ postId: shares.postId, count: count() })
-                .from(shares)
-                .where(inArray(shares.postId, postIds))
-                .groupBy(shares.postId),
-            ]);
-          })
+      ? await runWithOptionalUserRls(authUser, async (db) =>
+          Promise.all([
+            selectPostReactionCountsGroupedByPostIds(db, postIds),
+            selectPostCommentCountsGroupedByPostIds(db, postIds),
+            selectPostShareCountsGroupedByPostIds(db, postIds),
+          ])
+        )
       : [[], [], []];
 
-  const likeMap = new Map(likeCounts.map((lc) => [lc.postId, lc.count || 0]));
-  const commentMap = new Map(
-    commentCounts.map((cc) => [cc.postId, cc.count || 0])
+  const likeMap = new Map(
+    likeCounts
+      .filter((lc) => lc.postId != null)
+      .map((lc) => [lc.postId as string, lc.count])
   );
-  const shareMap = new Map(shareCounts.map((sc) => [sc.postId, sc.count || 0]));
+  const commentMap = new Map(
+    commentCounts
+      .filter((cc) => cc.postId != null)
+      .map((cc) => [cc.postId as string, cc.count])
+  );
+  const shareMap = new Map(
+    shareCounts
+      .filter((sc) => sc.postId != null)
+      .map((sc) => [sc.postId as string, sc.count])
+  );
 
-  // Format posts
   const formattedPosts = uniquePosts.map((pt) => {
     const user = userMap.get(pt.post.authorId);
     const actor = actorMap.get(pt.post.authorId);

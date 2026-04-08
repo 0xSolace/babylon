@@ -5,13 +5,22 @@
  * Main entry point for all HuggingFace operations.
  */
 
-import { count, desc, eq, gte, isNotNull } from '@babylon/db';
 import {
-  benchmarkResults,
-  db,
-  trainedModels,
-  trajectories,
-} from '@babylon/db/runtime';
+  countBenchmarkResultsSinceCreatedAt,
+  countBenchmarkResultsTotal,
+  countTrainedModelsTotal,
+  countTrainedModelsWithBenchmarkScore,
+  countTrainedModelsWithHuggingFaceRepo,
+  countTrajectoriesIsTrainingData,
+  countTrajectoriesSinceCreatedAt,
+  countTrajectoriesTotal,
+  selectDistinctHuggingFaceReposFromTrainedModels,
+  selectLatestBenchmarkResultCreatedAt,
+  selectLatestDeployedAtWithHuggingFaceRepo,
+  selectTrainedModelByModelId,
+  updateTrainedModelHuggingFaceRepoByModelId,
+} from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import { ModelBenchmarkService } from '../benchmark/ModelBenchmarkService';
 import { getExportToHuggingFace } from '../dependencies';
 import { logger } from '../utils';
@@ -198,13 +207,7 @@ export class HuggingFaceIntegrationService {
                   'HuggingFaceIntegration'
                 );
 
-                const modelResult = await db
-                  .select()
-                  .from(trainedModels)
-                  .where(eq(trainedModels.modelId, modelId))
-                  .limit(1);
-
-                const model = modelResult[0];
+                const model = await selectTrainedModelByModelId(db, modelId);
 
                 if (model) {
                   const modelName = options.modelNamePrefix
@@ -224,10 +227,11 @@ export class HuggingFaceIntegrationService {
                     result.models.uploaded++;
 
                     // Update model with HuggingFace repo
-                    await db
-                      .update(trainedModels)
-                      .set({ huggingFaceRepo: modelName })
-                      .where(eq(trainedModels.modelId, modelId));
+                    await updateTrainedModelHuggingFaceRepoByModelId(
+                      db,
+                      modelId,
+                      modelName
+                    );
                   } else {
                     result.errors.push(
                       `Model upload ${modelId}: ${uploadResult.error}`
@@ -302,30 +306,18 @@ export class HuggingFaceIntegrationService {
     };
   }> {
     // Get last upload time from database (we could track this)
-    const lastUploadResult = await db
-      .select({ deployedAt: trainedModels.deployedAt })
-      .from(trainedModels)
-      .where(isNotNull(trainedModels.huggingFaceRepo))
-      .orderBy(desc(trainedModels.deployedAt))
-      .limit(1);
+    const lastDeployedAt = await selectLatestDeployedAtWithHuggingFaceRepo(db);
+    const lastUploadTime = lastDeployedAt ?? new Date(0);
 
-    const lastUploadTime = lastUploadResult[0]?.deployedAt || new Date(0);
+    const newBenchmarksCount = await countBenchmarkResultsSinceCreatedAt(
+      db,
+      lastUploadTime
+    );
 
-    // Check for new benchmarks (from benchmark_results table)
-    const newBenchmarksCountResult = await db
-      .select({ count: count() })
-      .from(benchmarkResults)
-      .where(gte(benchmarkResults.createdAt, lastUploadTime));
-
-    const newBenchmarksCount = newBenchmarksCountResult[0]?.count || 0;
-
-    // Check for new trajectories
-    const newTrajectoriesCountResult = await db
-      .select({ count: count() })
-      .from(trajectories)
-      .where(gte(trajectories.createdAt, lastUploadTime));
-
-    const newTrajectoriesCount = newTrajectoriesCountResult[0]?.count || 0;
+    const newTrajectoriesCount = await countTrajectoriesSinceCreatedAt(
+      db,
+      lastUploadTime
+    );
 
     // Check for unbenchmarked models
     const unbenchmarkedModels =
@@ -363,14 +355,13 @@ export class HuggingFaceIntegrationService {
 
     // Check database connection with a simple query
     try {
-      await db.select({ count: count() }).from(trainedModels);
+      await countTrainedModelsTotal(db);
     } catch {
       issues.push('Cannot connect to database');
     }
 
-    // Check BenchmarkResult table exists
     try {
-      await db.select({ count: count() }).from(benchmarkResults);
+      await countBenchmarkResultsTotal(db);
     } catch {
       issues.push(
         'BenchmarkResult table does not exist. Run: npx drizzle-kit push'
@@ -387,31 +378,24 @@ export class HuggingFaceIntegrationService {
     }
 
     // Check for benchmark data
-    const benchmarkCountResult = await db
-      .select({ count: count() })
-      .from(benchmarkResults);
-    if ((benchmarkCountResult[0]?.count || 0) === 0) {
+    const benchmarkCountTotal = await countBenchmarkResultsTotal(db);
+    if (benchmarkCountTotal === 0) {
       warnings.push(
         'No benchmark results in database. Run some benchmarks first.'
       );
     }
 
     // Check for trajectory data
-    const trajectoryCountResult = await db
-      .select({ count: count() })
-      .from(trajectories)
-      .where(eq(trajectories.isTrainingData, true));
-    if ((trajectoryCountResult[0]?.count || 0) === 0) {
+    const trajectoryTrainingCount = await countTrajectoriesIsTrainingData(db);
+    if (trajectoryTrainingCount === 0) {
       warnings.push(
         'No training trajectories in database. Generate with agents or test data.'
       );
     }
 
     // Check for trained models
-    const modelCountResult = await db
-      .select({ count: count() })
-      .from(trainedModels);
-    if ((modelCountResult[0]?.count || 0) === 0) {
+    const modelCountTotal = await countTrainedModelsTotal(db);
+    if (modelCountTotal === 0) {
       warnings.push('No trained models in database.');
     }
 
@@ -431,57 +415,27 @@ export class HuggingFaceIntegrationService {
     models: { total: number; benchmarked: number; deployed: number };
     huggingface: { datasetsPublished: number; modelsPublished: number };
   }> {
-    const benchmarkCountResult = await db
-      .select({ count: count() })
-      .from(benchmarkResults);
-    const benchmarkCount = benchmarkCountResult[0]?.count || 0;
+    const benchmarkCount = await countBenchmarkResultsTotal(db);
 
-    const lastBenchmarkResult = await db
-      .select({ createdAt: benchmarkResults.createdAt })
-      .from(benchmarkResults)
-      .orderBy(desc(benchmarkResults.createdAt))
-      .limit(1);
+    const lastBenchmarkCreatedAt =
+      await selectLatestBenchmarkResultCreatedAt(db);
 
-    const trajectoryTotalResult = await db
-      .select({ count: count() })
-      .from(trajectories);
-    const trajectoryTotal = trajectoryTotalResult[0]?.count || 0;
+    const trajectoryTotal = await countTrajectoriesTotal(db);
 
-    const trajectoryTrainingResult = await db
-      .select({ count: count() })
-      .from(trajectories)
-      .where(eq(trajectories.isTrainingData, true));
-    const trajectoryTraining = trajectoryTrainingResult[0]?.count || 0;
+    const trajectoryTraining = await countTrajectoriesIsTrainingData(db);
 
-    const modelTotalResult = await db
-      .select({ count: count() })
-      .from(trainedModels);
-    const modelTotal = modelTotalResult[0]?.count || 0;
+    const modelTotal = await countTrainedModelsTotal(db);
 
-    const modelBenchmarkedResult = await db
-      .select({ count: count() })
-      .from(trainedModels)
-      .where(isNotNull(trainedModels.benchmarkScore));
-    const modelBenchmarked = modelBenchmarkedResult[0]?.count || 0;
+    const modelBenchmarked = await countTrainedModelsWithBenchmarkScore(db);
 
-    const modelDeployedResult = await db
-      .select({ count: count() })
-      .from(trainedModels)
-      .where(isNotNull(trainedModels.huggingFaceRepo));
-    const modelDeployed = modelDeployedResult[0]?.count || 0;
+    const modelDeployed = await countTrainedModelsWithHuggingFaceRepo(db);
 
-    // Count unique HuggingFace repos
-    const hfRepos = await db
-      .selectDistinctOn([trainedModels.huggingFaceRepo], {
-        huggingFaceRepo: trainedModels.huggingFaceRepo,
-      })
-      .from(trainedModels)
-      .where(isNotNull(trainedModels.huggingFaceRepo));
+    const hfRepos = await selectDistinctHuggingFaceReposFromTrainedModels(db);
 
     return {
       benchmarks: {
         total: benchmarkCount,
-        lastUpload: lastBenchmarkResult[0]?.createdAt,
+        lastUpload: lastBenchmarkCreatedAt,
       },
       trajectories: {
         total: trajectoryTotal,

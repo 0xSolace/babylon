@@ -15,9 +15,14 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-
-import { eq } from '@babylon/db';
-import { db, users } from '@babylon/db/runtime';
+import {
+  selectUserEmailAndVerifiedByUserId,
+  selectUserNotificationEmailPreferencesByUserId,
+  type UserNotificationEmailPreferencePatch,
+  updateUserNotificationEmailPreferencesByIdReturning,
+  updateUserVerifiedEmailByIdReturningEmailSlice,
+} from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import {
   getAllVerifiedEmails,
   logger,
@@ -79,19 +84,9 @@ export const GET = withErrorHandling(
       );
     }
 
-    const [userRecord] = await db
-      .select({
-        email: users.email,
-        emailVerified: users.emailVerified,
-        enabled: users.emailNotificationsEnabled,
-        realtime: users.emailNotificationsRealtime,
-        dailySummary: users.emailNotificationsDailySummary,
-        weeklySummary: users.emailNotificationsWeeklySummary,
-        monthlySummary: users.emailNotificationsMonthlySummary,
-      })
-      .from(users)
-      .where(eq(users.id, canonicalUserId))
-      .limit(1);
+    const userRecord = await asUser(authUser, async (db) =>
+      selectUserNotificationEmailPreferencesByUserId(db, canonicalUserId)
+    );
 
     return successResponse({
       success: true,
@@ -130,14 +125,9 @@ export const POST = withErrorHandling(
     const body = await request.json();
     const payload = UpdateNotificationEmailPreferencesSchema.parse(body);
 
-    const [existingUser] = await db
-      .select({
-        email: users.email,
-        emailVerified: users.emailVerified,
-      })
-      .from(users)
-      .where(eq(users.id, canonicalUserId))
-      .limit(1);
+    const existingUser = await asUser(authUser, async (db) =>
+      selectUserEmailAndVerifiedByUserId(db, canonicalUserId)
+    );
 
     if (!existingUser) {
       throw new BadRequestError('User not found');
@@ -166,24 +156,20 @@ export const POST = withErrorHandling(
         );
       }
 
-      const [updatedEmailUser] = await db
-        .update(users)
-        .set({
-          email: verifiedEmail,
-          emailVerified: true,
-          updatedAt: new Date(),
-        })
-        .where(eq(users.id, canonicalUserId))
-        .returning({
-          email: users.email,
-          emailVerified: users.emailVerified,
-        });
+      const updatedEmailUser = await asUser(authUser, async (db) =>
+        updateUserVerifiedEmailByIdReturningEmailSlice(
+          db,
+          canonicalUserId,
+          verifiedEmail,
+          new Date()
+        )
+      );
 
       effectiveEmail = updatedEmailUser?.email ?? verifiedEmail;
       effectiveEmailVerified = updatedEmailUser?.emailVerified ?? true;
     }
 
-    const updateData: Partial<typeof users.$inferInsert> = {
+    const updateData: UserNotificationEmailPreferencePatch = {
       updatedAt: new Date(),
     };
 
@@ -224,19 +210,13 @@ export const POST = withErrorHandling(
       updateData.emailNotificationsUnsubscribedAt = null;
     }
 
-    const [updatedUser] = await db
-      .update(users)
-      .set(updateData)
-      .where(eq(users.id, canonicalUserId))
-      .returning({
-        email: users.email,
-        emailVerified: users.emailVerified,
-        enabled: users.emailNotificationsEnabled,
-        realtime: users.emailNotificationsRealtime,
-        dailySummary: users.emailNotificationsDailySummary,
-        weeklySummary: users.emailNotificationsWeeklySummary,
-        monthlySummary: users.emailNotificationsMonthlySummary,
-      });
+    const updatedUser = await asUser(authUser, async (db) =>
+      updateUserNotificationEmailPreferencesByIdReturning(
+        db,
+        canonicalUserId,
+        updateData
+      )
+    );
 
     logger.info(
       'Updated notification email preferences',

@@ -71,7 +71,7 @@ import {
   requireUserByIdentifier,
   withErrorHandling,
 } from '@babylon/api';
-import { db } from '@babylon/db/runtime';
+import { asUser } from '@babylon/db/engine-storage';
 
 import { updateFeedbackMetrics } from '@babylon/engine';
 import { generateSnowflakeId, logger } from '@babylon/shared';
@@ -113,19 +113,21 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   }
 
   const now = new Date();
-  const feedback = await db.feedback.create({
-    data: {
-      id: await generateSnowflakeId(),
-      fromUserId: fromUser.id,
-      toUserId: toUser.id,
-      score,
-      comment: body.comment ?? null,
-      category: body.category ?? 'general',
-      interactionType: 'user_to_agent',
-      createdAt: now,
-      updatedAt: now,
-    },
-  });
+  const feedback = await asUser(authUser, async (db) =>
+    db.feedback.create({
+      data: {
+        id: await generateSnowflakeId(),
+        fromUserId: fromUser.id,
+        toUserId: toUser.id,
+        score,
+        comment: body.comment ?? null,
+        category: body.category ?? 'general',
+        interactionType: 'user_to_agent',
+        createdAt: now,
+        updatedAt: now,
+      },
+    })
+  );
 
   logger.info('Feedback submitted successfully', {
     feedbackId: feedback.id,

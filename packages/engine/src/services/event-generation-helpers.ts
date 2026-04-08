@@ -1,5 +1,8 @@
-import { and, desc, gte, inArray, type Question } from '@babylon/db';
-import { db, worldEvents } from '@babylon/db/runtime';
+import {
+  insertWorldEventFromEventGeneration,
+  listWorldEventsForArcPulseLookback,
+  type Question,
+} from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import { ArticleGenerator } from '../ArticleGenerator';
 import type { BabylonLLMClient } from '../llm/openai-client';
@@ -342,7 +345,7 @@ export async function generateEvents(
 
     const eventId = await generateSnowflakeId();
 
-    await db.insert(worldEvents).values({
+    await insertWorldEventFromEventGeneration({
       id: eventId,
       eventType: eventConfig.type,
       description,
@@ -351,7 +354,7 @@ export async function generateEvents(
       visibility,
       gameId: 'continuous',
       dayNumber: safeDayNumber,
-      timestamp: timestamp,
+      timestamp,
       pointsToward,
     });
     eventsCreated++;
@@ -454,19 +457,10 @@ export async function generateArcPulseEventsIfNeeded(
   if (questionNumbers.length === 0) return 0;
 
   const lookbackDate = new Date(timestamp.getTime() - ARC_PULSE_LOOKBACK_MS);
-  const recent = await db
-    .select({
-      relatedQuestion: worldEvents.relatedQuestion,
-      timestamp: worldEvents.timestamp,
-    })
-    .from(worldEvents)
-    .where(
-      and(
-        inArray(worldEvents.relatedQuestion, questionNumbers),
-        gte(worldEvents.timestamp, lookbackDate)
-      )
-    )
-    .orderBy(desc(worldEvents.timestamp));
+  const recent = await listWorldEventsForArcPulseLookback({
+    questionNumbers,
+    lookbackDate,
+  });
 
   const lastEventByQuestion = new Map<number, Date>();
   for (const row of recent) {

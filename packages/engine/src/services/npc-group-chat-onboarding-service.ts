@@ -8,17 +8,11 @@
  * not a pending invite, because pending invites do not appear in the Messages UI.
  */
 
-import { and, count, eq, inArray, isNull, sql } from '@babylon/db';
 import {
-  chatParticipants,
-  chats,
-  db,
-  groupMembers,
-  groups,
-  messages,
-  users,
-} from '@babylon/db/runtime';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+  npcGroupChatOnboardingRead,
+  npcGroupChatOnboardingWrite,
+} from '@babylon/db';
+import { logger } from '@babylon/shared';
 import { pickRandom, type RngFunction } from '../utils/randomization';
 
 function isTestEnvironment(): boolean {
@@ -57,107 +51,32 @@ export async function autoJoinEmptyUsersToNpcGroupChats(
       ? options.userIdAllowlist
       : null;
 
-  // Find real (non-actor), non-banned users with **zero** active group memberships.
-  // (DMs don't count as group membership, which matches the desired behavior.)
-  // IMPORTANT: In test environments, scope to test users only to avoid polluting
-  // shared/dev databases with unintended memberships.
-  const baseUserFilter = and(
-    eq(users.isActor, false),
-    eq(users.isBanned, false),
-    isNull(groupMembers.id)
-  );
-  const userFilter = isTestEnvironment()
-    ? and(baseUserFilter, eq(users.isTest, true))
-    : baseUserFilter;
-  const finalUserFilter = userAllowlist
-    ? and(userFilter, inArray(users.id, userAllowlist))
-    : userFilter;
-
-  const emptyUsers = await db
-    .select({ userId: users.id })
-    .from(users)
-    .leftJoin(
-      groupMembers,
-      and(eq(users.id, groupMembers.userId), eq(groupMembers.isActive, true))
-    )
-    .where(finalUserFilter)
-    .limit(options.batchSize);
-
-  const userIds = emptyUsers.map((u) => u.userId);
-  if (userIds.length === 0) {
-    return 0;
-  }
-
-  // Candidate NPC group chats (exclude NFT-gated chats so new users aren't stuck).
   const chatAllowlist =
     options.chatIdAllowlist && options.chatIdAllowlist.length > 0
       ? options.chatIdAllowlist
       : null;
 
-  const candidateChats = await db
-    .select({
-      chatId: chats.id,
-      groupId: groups.id,
-      groupOwnerId: groups.ownerId,
-      groupMaxMembers: groups.maxMembers,
-    })
-    .from(chats)
-    .innerJoin(groups, eq(groups.id, chats.groupId))
-    .where(
-      and(
-        eq(chats.isGroup, true),
-        eq(groups.type, 'npc'),
-        eq(chats.nftGated, false),
-        ...(chatAllowlist ? [inArray(chats.id, chatAllowlist)] : [])
-      )
-    )
-    .limit(200);
+  const read = await npcGroupChatOnboardingRead({
+    batchSize: options.batchSize,
+    userIdAllowlist: userAllowlist,
+    chatIdAllowlist: chatAllowlist,
+    restrictToTestUsers: isTestEnvironment(),
+  });
 
-  if (candidateChats.length === 0) {
+  if (read.kind === 'no_users') {
+    return 0;
+  }
+
+  if (read.kind === 'no_chats') {
     logger.warn(
       'Auto-join skipped: no NPC group chats available',
-      { userCount: userIds.length },
+      { userCount: read.userCount },
       'NPCGroupChatOnboarding'
     );
     return 0;
   }
 
-  // Prefer chats that already have messages (better demo UX), but fall back if none do.
-  const candidateChatIds = candidateChats.map((c) => c.chatId);
-  const chatsWithMessages =
-    candidateChatIds.length > 0
-      ? await db
-          .select({ chatId: messages.chatId })
-          .from(messages)
-          .where(inArray(messages.chatId, candidateChatIds))
-          .groupBy(messages.chatId)
-      : [];
-
-  const chatsWithMessagesSet = new Set(chatsWithMessages.map((r) => r.chatId));
-  const preferredChats =
-    chatsWithMessagesSet.size > 0
-      ? candidateChats.filter((c) => chatsWithMessagesSet.has(c.chatId))
-      : candidateChats;
-
-  // Compute active participant counts so we don't overfill chats.
-  const preferredChatIds = preferredChats.map((c) => c.chatId);
-  const participantCounts =
-    preferredChatIds.length > 0
-      ? await db
-          .select({ chatId: chatParticipants.chatId, count: count() })
-          .from(chatParticipants)
-          .where(
-            and(
-              inArray(chatParticipants.chatId, preferredChatIds),
-              eq(chatParticipants.isActive, true)
-            )
-          )
-          .groupBy(chatParticipants.chatId)
-      : [];
-
-  const participantCountMap = new Map(
-    participantCounts.map((row) => [row.chatId, row.count])
-  );
+  const { userIds, preferredChats, participantCountMap } = read;
 
   type ChatSlot = {
     chatId: string;
@@ -223,53 +142,7 @@ export async function autoJoinEmptyUsersToNpcGroupChats(
   }
 
   const now = new Date();
-
-  // Upsert membership + participant rows (idempotent)
-  for (const a of assignments) {
-    await db
-      .insert(groupMembers)
-      .values({
-        id: await generateSnowflakeId(),
-        groupId: a.groupId,
-        userId: a.userId,
-        role: 'member',
-        addedBy: a.invitedBy,
-        joinedAt: now,
-        isActive: true,
-        messageCount: 0,
-        qualityScore: 1.0,
-      })
-      .onConflictDoUpdate({
-        target: [groupMembers.groupId, groupMembers.userId],
-        set: {
-          isActive: true,
-          role: 'member',
-          addedBy: a.invitedBy,
-          joinedAt: now,
-          kickedAt: sql`NULL`,
-          kickReason: sql`NULL`,
-        },
-      });
-
-    await db
-      .insert(chatParticipants)
-      .values({
-        id: await generateSnowflakeId(),
-        chatId: a.chatId,
-        userId: a.userId,
-        joinedAt: now,
-        invitedBy: a.invitedBy,
-        isActive: true,
-      })
-      .onConflictDoUpdate({
-        target: [chatParticipants.chatId, chatParticipants.userId],
-        set: {
-          isActive: true,
-          joinedAt: now,
-          invitedBy: a.invitedBy,
-        },
-      });
-  }
+  await npcGroupChatOnboardingWrite(assignments, now);
 
   logger.info(
     'Auto-joined users into NPC group chats (dev demo)',

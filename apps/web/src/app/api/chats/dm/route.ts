@@ -133,7 +133,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { hasBlocked } from '@babylon/db';
-import { asUser } from '@babylon/db/runtime';
+import { asUser } from '@babylon/db/engine-storage';
 
 import {
   DMChatCreateSchema,

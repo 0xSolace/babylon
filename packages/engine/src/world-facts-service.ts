@@ -7,10 +7,19 @@
  * @module services/world-facts-service
  */
 
-import type { WorldFact } from '@babylon/db';
-import { and, desc, eq } from '@babylon/db';
-import { db, worldFacts } from '@babylon/db/runtime';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+import {
+  deleteWorldFactById,
+  fetchWorldFactByCategoryAndKey,
+  fetchWorldFactById,
+  insertDefaultWorldFact,
+  insertDynamicWorldFact,
+  listActiveWorldFactsByCreatedDesc,
+  toggleWorldFactActiveById,
+  updateWorldFactByIdForDefaultSet,
+  updateWorldFactValueById,
+  type WorldFact,
+} from '@babylon/db';
+import { logger } from '@babylon/shared';
 import {
   buildDailyTopicPromptContext,
   dailyTopicService,
@@ -72,12 +81,7 @@ export class WorldFactsService {
       ];
     }
 
-    const facts = await db
-      .select()
-      .from(worldFacts)
-      .where(eq(worldFacts.isActive, true))
-      .orderBy(desc(worldFacts.createdAt))
-      .limit(100);
+    const facts = await listActiveWorldFactsByCreatedDesc(100);
 
     // Randomize order for entropy
     for (let i = facts.length - 1; i > 0; i--) {
@@ -101,12 +105,7 @@ export class WorldFactsService {
       return this.getAllFacts(); // Reuse the mock above
     }
 
-    return db
-      .select()
-      .from(worldFacts)
-      .where(eq(worldFacts.isActive, true))
-      .orderBy(desc(worldFacts.createdAt))
-      .limit(limit);
+    return listActiveWorldFactsByCreatedDesc(limit);
   }
 
   /**
@@ -122,22 +121,7 @@ export class WorldFactsService {
       'WorldFactsService'
     );
 
-    const [fact] = await db
-      .insert(worldFacts)
-      .values({
-        id: await generateSnowflakeId(),
-        category: 'general',
-        key,
-        label,
-        value,
-        source: 'dynamic',
-        priority: 0,
-        lastUpdated: new Date(),
-        updatedAt: new Date(),
-      })
-      .returning();
-
-    return fact!;
+    return insertDynamicWorldFact({ key, label, value });
   }
 
   /**
@@ -147,12 +131,7 @@ export class WorldFactsService {
     category: string,
     key: string
   ): Promise<WorldFact | null> {
-    const [fact] = await db
-      .select()
-      .from(worldFacts)
-      .where(and(eq(worldFacts.category, category), eq(worldFacts.key, key)))
-      .limit(1);
-    return fact || null;
+    return fetchWorldFactByCategoryAndKey(category, key);
   }
 
   /**
@@ -196,64 +175,28 @@ export class WorldFactsService {
     const existing = await this.getFact(defaultCategory, key);
 
     if (existing) {
-      const [updated] = await db
-        .update(worldFacts)
-        .set({
-          label,
-          value,
-          source: 'default',
-          priority: 0,
-          lastUpdated: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(eq(worldFacts.id, existing.id))
-        .returning();
-      return updated!;
-    }
-
-    const [created] = await db
-      .insert(worldFacts)
-      .values({
-        id: await generateSnowflakeId(),
-        category: defaultCategory,
-        key,
+      return updateWorldFactByIdForDefaultSet({
+        id: existing.id,
         label,
         value,
-        source: 'default',
-        priority: 0,
-        lastUpdated: new Date(),
-        updatedAt: new Date(),
-      })
-      .returning();
-    return created!;
+      });
+    }
+
+    return insertDefaultWorldFact({ key, label, value });
   }
 
   /**
    * Update an existing fact by ID
    */
   async updateFactById(id: string, value: string): Promise<WorldFact> {
-    const [existing] = await db
-      .select()
-      .from(worldFacts)
-      .where(eq(worldFacts.id, id))
-      .limit(1);
+    const existing = await fetchWorldFactById(id);
     if (!existing) {
       throw new Error('Fact not found');
     }
 
     const label = this.generateLabel(value);
 
-    const [updated] = await db
-      .update(worldFacts)
-      .set({
-        label,
-        value,
-        lastUpdated: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(worldFacts.id, id))
-      .returning();
-    return updated!;
+    return updateWorldFactValueById({ id, label, value });
   }
 
   /**
@@ -315,26 +258,14 @@ This context reflects the current state of the world. Use these facts to make yo
    * Delete a world fact
    */
   async deleteFact(id: string): Promise<void> {
-    await db.delete(worldFacts).where(eq(worldFacts.id, id));
+    await deleteWorldFactById(id);
   }
 
   /**
    * Toggle fact active status
    */
   async toggleFactActive(id: string): Promise<WorldFact> {
-    const [fact] = await db
-      .select()
-      .from(worldFacts)
-      .where(eq(worldFacts.id, id))
-      .limit(1);
-    if (!fact) throw new Error('Fact not found');
-
-    const [updated] = await db
-      .update(worldFacts)
-      .set({ isActive: !fact.isActive })
-      .where(eq(worldFacts.id, id))
-      .returning();
-    return updated!;
+    return toggleWorldFactActiveById(id);
   }
 
   /**

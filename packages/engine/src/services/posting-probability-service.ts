@@ -6,8 +6,11 @@
  * Entropy > elaborate probability math.
  */
 
-import { type ActorStateRow, desc, eq, gte, inArray } from '@babylon/db';
-import { actorState, db, worldEvents } from '@babylon/db/runtime';
+import {
+  type ActorStateRow,
+  getActorsByIds,
+  getRecentWorldEvents,
+} from '@babylon/db';
 import { type ActorTier } from '@babylon/shared';
 import { NPC_POSTING_CONFIG } from '../config/npc-activity';
 import { secureRandom } from '../utils/entropy';
@@ -277,14 +280,7 @@ export async function getNpcsWithState(
 ): Promise<Map<string, ActorStateRow>> {
   if (actorIds.length === 0) return new Map();
 
-  const states = await db
-    .select()
-    .from(actorState)
-    .where(
-      actorIds.length === 1
-        ? eq(actorState.id, actorIds[0]!)
-        : inArray(actorState.id, actorIds)
-    );
+  const states = await getActorsByIds(actorIds);
 
   const stateMap = new Map<string, ActorStateRow>();
   for (const state of states) {
@@ -377,12 +373,7 @@ export async function getActiveEventsForPosting(): Promise<{
   );
 
   // Fetch recent world events (capped to MAX_RECENT_EVENTS to bound memory/processing)
-  const recentEvents = await db
-    .select()
-    .from(worldEvents)
-    .where(gte(worldEvents.timestamp, cutoff))
-    .orderBy(desc(worldEvents.timestamp))
-    .limit(MAX_RECENT_EVENTS);
+  const recentEvents = await getRecentWorldEvents(cutoff, MAX_RECENT_EVENTS);
 
   // Build active events for posting context
   const activeEvents: PostingContext['activeEvents'] = [];

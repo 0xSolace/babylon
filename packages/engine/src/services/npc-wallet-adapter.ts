@@ -9,11 +9,19 @@
  * lead to negative balances.
  */
 import type { WalletPort } from '@babylon/core/markets/shared';
-import { and, eq, gte, sql, type Transaction } from '@babylon/db';
-import { actorState, db as globalDb } from '@babylon/db/runtime';
+import {
+  type DrizzleClient,
+  npcActorStateAtomicCredit,
+  npcActorStateAtomicCreditAsSystem,
+  npcActorStateAtomicDebit,
+  npcActorStateAtomicDebitAsSystem,
+  selectNpcActorTradingBalance,
+  selectNpcActorTradingBalanceAsSystem,
+  type Transaction,
+} from '@babylon/db';
 import { logger } from '@babylon/shared';
 
-type DbClient = typeof globalDb | Transaction;
+type DbClient = DrizzleClient | Transaction;
 
 /**
  * Creates a WalletPort implementation for NPC actors.
@@ -26,35 +34,60 @@ export function createNpcWalletAdapter(
   actorId: string,
   dbClient?: DbClient
 ): WalletPort {
-  const db = dbClient ?? globalDb;
+  if (dbClient) {
+    const db = dbClient;
+    return {
+      async debit({ amount, reason }: { amount: number; reason: string }) {
+        const result = await npcActorStateAtomicDebit(db, actorId, amount);
+
+        if (result.length === 0) {
+          const actor = await selectNpcActorTradingBalance(db, actorId);
+
+          if (!actor) {
+            throw new Error(`Actor not found: ${actorId}`);
+          }
+
+          const currentBalance = Number(actor.tradingBalance);
+          throw new Error(
+            `Insufficient trading balance: ${currentBalance.toFixed(2)} < ${amount.toFixed(2)} (${reason})`
+          );
+        }
+      },
+
+      async credit({ amount }: { amount: number }) {
+        const result = await npcActorStateAtomicCredit(db, actorId, amount);
+
+        if (result.length === 0) {
+          throw new Error(`Actor not found: ${actorId}`);
+        }
+      },
+
+      async recordPnL({ pnl, reason }: { pnl: number; reason: string }) {
+        logger.debug(
+          'NPC PnL recorded',
+          { actorId, pnl: pnl.toFixed(2), reason },
+          'NpcWalletAdapter'
+        );
+      },
+
+      async getBalance() {
+        const actor = await selectNpcActorTradingBalance(db, actorId);
+
+        if (!actor) {
+          return { balance: 0 };
+        }
+
+        return { balance: Number(actor.tradingBalance) };
+      },
+    };
+  }
 
   return {
     async debit({ amount, reason }: { amount: number; reason: string }) {
-      // Atomic debit: check balance AND update in single statement
-      // This prevents race conditions where concurrent debits could
-      // both pass the balance check and cause negative balance
-      const result = await db
-        .update(actorState)
-        .set({
-          tradingBalance: sql`${actorState.tradingBalance} - ${amount}`,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(actorState.id, actorId),
-            gte(sql<number>`${actorState.tradingBalance}::numeric`, amount)
-          )
-        )
-        .returning({ id: actorState.id });
+      const result = await npcActorStateAtomicDebitAsSystem(actorId, amount);
 
-      // If no rows updated, either actor doesn't exist or insufficient balance
       if (result.length === 0) {
-        // Check if actor exists to provide better error message
-        const [actor] = await db
-          .select({ tradingBalance: actorState.tradingBalance })
-          .from(actorState)
-          .where(eq(actorState.id, actorId))
-          .limit(1);
+        const actor = await selectNpcActorTradingBalanceAsSystem(actorId);
 
         if (!actor) {
           throw new Error(`Actor not found: ${actorId}`);
@@ -68,15 +101,7 @@ export function createNpcWalletAdapter(
     },
 
     async credit({ amount }: { amount: number }) {
-      // Atomic credit using SQL increment
-      const result = await db
-        .update(actorState)
-        .set({
-          tradingBalance: sql`${actorState.tradingBalance} + ${amount}`,
-          updatedAt: new Date(),
-        })
-        .where(eq(actorState.id, actorId))
-        .returning({ id: actorState.id });
+      const result = await npcActorStateAtomicCreditAsSystem(actorId, amount);
 
       if (result.length === 0) {
         throw new Error(`Actor not found: ${actorId}`);
@@ -84,10 +109,6 @@ export function createNpcWalletAdapter(
     },
 
     async recordPnL({ pnl, reason }: { pnl: number; reason: string }) {
-      // For NPCs, we just update the trading balance directly
-      // No separate PnL tracking like user wallets
-      // Log PnL for debugging but don't modify balance here
-      // (credit/debit already handles the balance changes)
       logger.debug(
         'NPC PnL recorded',
         { actorId, pnl: pnl.toFixed(2), reason },
@@ -96,11 +117,7 @@ export function createNpcWalletAdapter(
     },
 
     async getBalance() {
-      const [actor] = await db
-        .select({ tradingBalance: actorState.tradingBalance })
-        .from(actorState)
-        .where(eq(actorState.id, actorId))
-        .limit(1);
+      const actor = await selectNpcActorTradingBalanceAsSystem(actorId);
 
       if (!actor) {
         return { balance: 0 };

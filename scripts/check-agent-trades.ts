@@ -5,8 +5,8 @@
  * Uses safe parameterized queries via Drizzle ORM
  */
 
-import { desc, eq, sql } from '@babylon/db';
-import { agentTrades, db, users } from '@babylon/db/runtime';
+import { agentTrades, db, users } from '@babylon/db/engine-storage';
+import { desc, eq, sql } from 'drizzle-orm';
 
 async function checkAgentTrades() {
   console.log('🔍 Checking recent agent trading activity...\n');

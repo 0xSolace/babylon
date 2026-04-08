@@ -19,22 +19,16 @@
  */
 
 import {
-  and,
-  desc,
-  eq,
-  gte,
+  checkUserOrAgentOwnerInGroupChat,
+  deactivateGroupChatMember,
+  fetchGroupChatInviteChanceContext,
+  fetchGroupChatKickEvaluationData,
+  listActiveGroupMemberUserIdsForChat,
+  listGroupChatIds,
+  listUserGroupChatMembershipRows,
   recordNpcGroupChatInviteTransaction,
+  updateGroupMemberMessageQuality,
 } from '@babylon/db';
-import {
-  chats,
-  db,
-  followStatuses,
-  groupMembers,
-  groups,
-  messages,
-  userInteractions,
-  users,
-} from '@babylon/db/runtime';
 import type { GroupChat } from '@babylon/shared';
 import { notifyGroupChatInvite } from './group-chat-invite-notifier';
 
@@ -126,14 +120,8 @@ export class GroupChatService {
     userId: string,
     npcId: string
   ): Promise<InviteChance> {
-    // Must be followed first
-    const [followStatus] = await db
-      .select()
-      .from(followStatuses)
-      .where(
-        and(eq(followStatuses.userId, userId), eq(followStatuses.npcId, npcId))
-      )
-      .limit(1);
+    const { followStatus, hasNpcGroupMembership, interactionsSinceFollow } =
+      await fetchGroupChatInviteChanceContext({ userId, npcId });
 
     if (!followStatus || !followStatus.isActive) {
       return {
@@ -144,7 +132,6 @@ export class GroupChatService {
       };
     }
 
-    // Check follow duration
     const hoursSinceFollow =
       (Date.now() - followStatus.followedAt.getTime()) / (1000 * 60 * 60);
 
@@ -159,27 +146,7 @@ export class GroupChatService {
       };
     }
 
-    // Check if already in a group with this NPC as owner
-    // Join groups with groupMembers to find active membership
-    const existingMemberships = await db
-      .select({
-        groupId: groups.id,
-        ownerId: groups.ownerId,
-        isActive: groupMembers.isActive,
-      })
-      .from(groupMembers)
-      .innerJoin(groups, eq(groupMembers.groupId, groups.id))
-      .where(
-        and(
-          eq(groupMembers.userId, userId),
-          eq(groups.ownerId, npcId),
-          eq(groups.type, 'npc'),
-          eq(groupMembers.isActive, true)
-        )
-      )
-      .limit(1);
-
-    if (existingMemberships.length > 0) {
+    if (hasNpcGroupMembership) {
       return {
         willInvite: false,
         probability: 0,
@@ -187,18 +154,6 @@ export class GroupChatService {
         reasons: ['Already in a group chat with this NPC'],
       };
     }
-
-    // Get interactions since follow
-    const interactionsSinceFollow = await db
-      .select()
-      .from(userInteractions)
-      .where(
-        and(
-          eq(userInteractions.userId, userId),
-          eq(userInteractions.npcId, npcId),
-          gte(userInteractions.timestamp, followStatus.followedAt)
-        )
-      );
 
     if (
       interactionsSinceFollow.length < GroupChatService.MIN_REPLIES_SINCE_FOLLOW
@@ -213,7 +168,6 @@ export class GroupChatService {
       };
     }
 
-    // Calculate average quality since follow
     const avgQuality =
       interactionsSinceFollow.reduce((sum, i) => sum + i.qualityScore, 0) /
       interactionsSinceFollow.length;
@@ -229,14 +183,11 @@ export class GroupChatService {
       };
     }
 
-    // Get available chats
     const ownedChatId = `${npcId}-owned-chat`;
     const ownedChatName = `${npcId}'s Inner Circle`;
 
-    // Determine which chat type
     const isOwned = Math.random() < GroupChatService.OWNED_CHAT_WEIGHT;
 
-    // Calculate probability based on quality and engagement
     const qualityFactor = avgQuality / GroupChatService.MIN_QUALITY_SCORE;
     const engagementFactor = Math.min(
       interactionsSinceFollow.length /
@@ -309,23 +260,7 @@ export class GroupChatService {
    * Chat.groupId → Group.id relationship
    */
   static async getUserGroupChats(userId: string): Promise<GroupChatData[]> {
-    // Query via Chat.groupId
-    const memberships = await db
-      .select({
-        groupId: groups.id,
-        chatId: chats.id,
-        groupName: groups.name,
-        ownerId: groups.ownerId,
-        type: groups.type,
-        joinedAt: groupMembers.joinedAt,
-      })
-      .from(groupMembers)
-      .innerJoin(groups, eq(groupMembers.groupId, groups.id))
-      .innerJoin(chats, eq(chats.groupId, groups.id))
-      .where(
-        and(eq(groupMembers.userId, userId), eq(groupMembers.isActive, true))
-      )
-      .orderBy(groupMembers.joinedAt);
+    const memberships = await listUserGroupChatMembershipRows(userId);
 
     return memberships.map((m) => ({
       id: m.chatId,
@@ -347,51 +282,7 @@ export class GroupChatService {
    * Chat.groupId → Group.id relationship
    */
   static async isInChat(userId: string, chatId: string): Promise<boolean> {
-    // First check if user is directly a member
-    const [directMembership] = await db
-      .select({ id: groupMembers.id })
-      .from(chats)
-      .innerJoin(groupMembers, eq(chats.groupId, groupMembers.groupId))
-      .where(
-        and(
-          eq(chats.id, chatId),
-          eq(groupMembers.userId, userId),
-          eq(groupMembers.isActive, true)
-        )
-      )
-      .limit(1);
-
-    if (directMembership) {
-      return true;
-    }
-
-    // If not direct member, check if this is an agent with owner membership
-    // Agents inherit their owner's group access for NPC groups
-    const [userRecord] = await db
-      .select({ managedBy: users.managedBy, isAgent: users.isAgent })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    // If user is an agent (has managedBy), check owner's membership
-    if (userRecord?.isAgent && userRecord?.managedBy) {
-      const [ownerMembership] = await db
-        .select({ id: groupMembers.id })
-        .from(chats)
-        .innerJoin(groupMembers, eq(chats.groupId, groupMembers.groupId))
-        .where(
-          and(
-            eq(chats.id, chatId),
-            eq(groupMembers.userId, userRecord.managedBy),
-            eq(groupMembers.isActive, true)
-          )
-        )
-        .limit(1);
-
-      return !!ownerMembership;
-    }
-
-    return false;
+    return checkUserOrAgentOwnerInGroupChat({ userId, chatId });
   }
 
   // ---------------------------------------------------------------------------
@@ -406,12 +297,8 @@ export class GroupChatService {
     userId: string,
     chatId: string
   ): Promise<SweepDecision> {
-    // Find chat to get its groupId
-    const [chat] = await db
-      .select()
-      .from(chats)
-      .where(eq(chats.id, chatId))
-      .limit(1);
+    const { chat, membership, userMessagesNewestFirst } =
+      await fetchGroupChatKickEvaluationData({ userId, chatId });
 
     const baseStats = {
       hoursSinceLastMessage: 0,
@@ -420,7 +307,7 @@ export class GroupChatService {
       totalMessages: 0,
     };
 
-    if (!chat || !chat.groupId) {
+    if (!chat?.groupId) {
       return {
         kickChance: 0,
         reason: 'Group not found',
@@ -428,18 +315,7 @@ export class GroupChatService {
       };
     }
 
-    const [membership] = await db
-      .select()
-      .from(groupMembers)
-      .where(
-        and(
-          eq(groupMembers.groupId, chat.groupId),
-          eq(groupMembers.userId, userId)
-        )
-      )
-      .limit(1);
-
-    if (!membership || !membership.isActive) {
+    if (!membership?.isActive) {
       return {
         kickChance: 0,
         reason: 'Not an active member',
@@ -447,12 +323,7 @@ export class GroupChatService {
       };
     }
 
-    const allMessages = await db
-      .select()
-      .from(messages)
-      .where(and(eq(messages.chatId, chatId), eq(messages.senderId, userId)))
-      .orderBy(desc(messages.createdAt));
-
+    const allMessages = userMessagesNewestFirst;
     const totalMessages = allMessages.length;
     const ticksSinceJoin =
       (Date.now() - membership.joinedAt.getTime()) / (1000 * 60);
@@ -462,7 +333,10 @@ export class GroupChatService {
         return {
           kickChance: GroupChatService.BASE_KICK_PROBABILITY * 100,
           reason: `Never posted after joining (${Math.floor(ticksSinceJoin / 60)} hours ago)`,
-          stats: { ...baseStats, hoursSinceLastMessage: ticksSinceJoin / 60 },
+          stats: {
+            ...baseStats,
+            hoursSinceLastMessage: ticksSinceJoin / 60,
+          },
         };
       }
       return {
@@ -552,29 +426,7 @@ export class GroupChatService {
     chatId: string,
     reason: string
   ): Promise<void> {
-    // Find chat to get its groupId
-    const [chat] = await db
-      .select()
-      .from(chats)
-      .where(eq(chats.id, chatId))
-      .limit(1);
-
-    if (!chat || !chat.groupId) return;
-
-    await db
-      .update(groupMembers)
-      .set({
-        isActive: false,
-        kickReason: reason,
-        kickedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(groupMembers.groupId, chat.groupId),
-          eq(groupMembers.userId, userId),
-          eq(groupMembers.isActive, true)
-        )
-      );
+    await deactivateGroupChatMember({ userId, chatId, reason });
   }
 
   /**
@@ -586,31 +438,16 @@ export class GroupChatService {
     removed: number;
     reasons: Record<string, number>;
   }> {
-    // Find chat to get its groupId
-    const [chat] = await db
-      .select()
-      .from(chats)
-      .where(eq(chats.id, chatId))
-      .limit(1);
+    const rows = await listActiveGroupMemberUserIdsForChat(chatId);
 
-    if (!chat || !chat.groupId) {
+    if (!rows) {
       return { checked: 0, removed: 0, reasons: {} };
     }
-
-    const memberships = await db
-      .select()
-      .from(groupMembers)
-      .where(
-        and(
-          eq(groupMembers.groupId, chat.groupId),
-          eq(groupMembers.isActive, true)
-        )
-      );
 
     let removed = 0;
     const reasons: Record<string, number> = {};
 
-    for (const membership of memberships) {
+    for (const membership of rows) {
       const decision = await GroupChatService.calculateKickChance(
         membership.userId,
         chatId
@@ -629,7 +466,7 @@ export class GroupChatService {
       }
     }
 
-    return { checked: memberships.length, removed, reasons };
+    return { checked: rows.length, removed, reasons };
   }
 
   /**
@@ -640,10 +477,7 @@ export class GroupChatService {
     totalRemoved: number;
     reasonsSummary: Record<string, number>;
   }> {
-    const groupChats = await db
-      .select({ id: chats.id })
-      .from(chats)
-      .where(eq(chats.isGroup, true));
+    const groupChats = await listGroupChatIds();
 
     let totalRemoved = 0;
     const reasonsSummary: Record<string, number> = {};
@@ -669,45 +503,10 @@ export class GroupChatService {
     chatId: string,
     newMessageQuality: number
   ): Promise<void> {
-    // Find chat to get its groupId
-    const [chat] = await db
-      .select()
-      .from(chats)
-      .where(eq(chats.id, chatId))
-      .limit(1);
-
-    if (!chat || !chat.groupId) return;
-
-    const [membership] = await db
-      .select()
-      .from(groupMembers)
-      .where(
-        and(
-          eq(groupMembers.groupId, chat.groupId),
-          eq(groupMembers.userId, userId)
-        )
-      )
-      .limit(1);
-
-    if (!membership) return;
-
-    const totalMessages = membership.messageCount + 1;
-    const newAvgQuality =
-      (membership.qualityScore * membership.messageCount + newMessageQuality) /
-      totalMessages;
-
-    await db
-      .update(groupMembers)
-      .set({
-        messageCount: totalMessages,
-        qualityScore: newAvgQuality,
-        lastMessageAt: new Date(),
-      })
-      .where(
-        and(
-          eq(groupMembers.groupId, chat.groupId),
-          eq(groupMembers.userId, userId)
-        )
-      );
+    await updateGroupMemberMessageQuality({
+      userId,
+      chatId,
+      newMessageQuality,
+    });
   }
 }

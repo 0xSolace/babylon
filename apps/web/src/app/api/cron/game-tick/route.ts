@@ -58,7 +58,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 
-import { asSystem } from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 import {
   BabylonLLMClient,
   bootstrapGameIfNeeded,

@@ -33,10 +33,9 @@ import {
   setDefaultTimeout,
   test,
 } from 'bun:test';
-import { sql } from '@babylon/db';
-import { asSystem } from '@babylon/db/runtime';
-
+import { asSystem } from '@babylon/db/engine-storage';
 import { generateSnowflakeId } from '@babylon/shared';
+import { sql } from 'drizzle-orm';
 import { existsSync, readFileSync } from 'fs';
 
 // Set timeout to 10 minutes for real LLM calls
@@ -134,7 +133,7 @@ describe('Engine Integration Tests (No Mocks)', () => {
     };
 
     // Get baseline counts using raw Drizzle query
-    const { getRawDrizzle } = await import('@babylon/db/runtime');
+    const { getRawDrizzle } = await import('@babylon/db/engine-storage');
     const rawDb = getRawDrizzle();
 
     // Verify database tables exist before running tests
@@ -286,7 +285,7 @@ describe('Engine Integration Tests (No Mocks)', () => {
   test('should have generated news articles (not mocked)', async () => {
     expect(results.tickExecuted).toBe(true);
 
-    const { db } = await import('@babylon/db');
+    const { db } = await import('@babylon/db/engine-storage');
 
     // Get articles created after test start
     const newArticles = await db.post.findMany({
@@ -328,7 +327,7 @@ describe('Engine Integration Tests (No Mocks)', () => {
   test('should have executed NPC trading decisions (not mocked)', async () => {
     expect(results.tickExecuted).toBe(true);
 
-    const { db } = await import('@babylon/db');
+    const { db } = await import('@babylon/db/engine-storage');
 
     const newPositions = await db.poolPosition.findMany({
       where: {
@@ -366,7 +365,7 @@ describe('Engine Integration Tests (No Mocks)', () => {
   test('should have created prediction market questions (not mocked)', async () => {
     expect(results.tickExecuted).toBe(true);
 
-    const { db } = await import('@babylon/db');
+    const { db } = await import('@babylon/db/engine-storage');
 
     // Get questions created after test start
     const newQuestions = await db.question.findMany({
@@ -419,7 +418,7 @@ describe('Engine Integration Tests (No Mocks)', () => {
   test('should have generated world events (not mocked)', async () => {
     expect(results.tickExecuted).toBe(true);
 
-    const { db } = await import('@babylon/db');
+    const { db } = await import('@babylon/db/engine-storage');
 
     // Get events created after test start
     const newEvents = await db.worldEvent.findMany({
@@ -458,7 +457,7 @@ describe('Engine Integration Tests (No Mocks)', () => {
   test('market prices should be reasonable (0-100% for predictions)', async () => {
     expect(results.tickExecuted).toBe(true);
 
-    const { db } = await import('@babylon/db');
+    const { db } = await import('@babylon/db/engine-storage');
 
     const activeMarkets = await db.market.findMany({
       where: {
@@ -620,7 +619,7 @@ describe('Engine Integration Tests (No Mocks)', () => {
   test('should verify engine produces valid outputs for training', async () => {
     expect(results.tickExecuted).toBe(true);
 
-    const { db } = await import('@babylon/db');
+    const { db } = await import('@babylon/db/engine-storage');
 
     console.log('\n🎓 Validating outputs for training readiness...');
 
@@ -638,8 +637,8 @@ describe('Engine Integration Tests (No Mocks)', () => {
     }
 
     // Use raw Drizzle for complex queries
-    const { getRawDrizzle } = await import('@babylon/db/runtime');
-    const { sql: dbSql } = await import('@babylon/db');
+    const { getRawDrizzle } = await import('@babylon/db/engine-storage');
+    const { sql: dbSql } = await import('drizzle-orm');
     const rawDbCheck = getRawDrizzle();
 
     // Use raw SQL to avoid Drizzle count() compatibility issues

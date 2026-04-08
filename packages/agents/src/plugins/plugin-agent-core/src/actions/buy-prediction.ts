@@ -9,7 +9,7 @@ import {
   PredictionMarketService,
 } from '@babylon/core/markets/prediction';
 import type { DrizzleClient, JsonValue } from '@babylon/db';
-import { asUser } from '@babylon/db/runtime';
+import * as engineStorage from '@babylon/db/engine-storage';
 
 import {
   FEE_CONFIG,
@@ -138,7 +138,7 @@ export const buyPredictionAction: Action = {
       const isBuyYes = side === 'YES';
       const sideLabel = isBuyYes ? 'yes' : 'no';
 
-      const result = await asUser(
+      const result = await engineStorage.asUser(
         { userId: agentUserId },
         async (txDb: DrizzleClient) => {
           const service = new PredictionMarketService({

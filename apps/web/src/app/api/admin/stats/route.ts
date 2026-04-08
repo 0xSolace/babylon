@@ -69,7 +69,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 
-import { db } from '@babylon/db/runtime';
+import { asSystem } from '@babylon/db/engine-storage';
 import { StaticDataRegistry } from '@babylon/engine';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
@@ -99,195 +99,172 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const lastMonth = new Date(today);
   lastMonth.setMonth(lastMonth.getMonth() - 1);
 
-  // Run all queries in parallel
-  const [
-    // User counts
-    totalUsers,
-    totalActors,
-    totalRealUsers,
-    bannedUsers,
-    adminUsers,
-    usersToday,
-    usersThisWeek,
-    usersThisMonth,
+  return await asSystem(async (tx) => {
+    const [
+      totalUsers,
+      totalActors,
+      totalRealUsers,
+      bannedUsers,
+      adminUsers,
+      usersToday,
+      usersThisWeek,
+      usersThisMonth,
+      totalMarkets,
+      activeMarkets,
+      resolvedMarkets,
+      totalPositions,
+      totalBalanceTransactions,
+      totalNPCTrades,
+      totalPosts,
+      totalComments,
+      totalReactions,
+      postsToday,
+      totalVirtualBalance,
+      totalDeposited,
+      totalWithdrawn,
+      totalLifetimePnL,
+      totalPools,
+      activePools,
+      totalPoolDeposits,
+      totalReferrals,
+      totalPointsTransactions,
+    ] = await Promise.all([
+      tx.user.count(),
+      StaticDataRegistry.getAllActors().length,
+      tx.user.count({ where: { isActor: false } }),
+      tx.user.count({ where: { isBanned: true } }),
+      tx.user.count({ where: { isAdmin: true } }),
+      tx.user.count({ where: { createdAt: { gte: today } } }),
+      tx.user.count({ where: { createdAt: { gte: lastWeek } } }),
+      tx.user.count({ where: { createdAt: { gte: lastMonth } } }),
+      tx.market.count(),
+      tx.market.count({ where: { resolved: false, endDate: { gte: now } } }),
+      tx.market.count({ where: { resolved: true } }),
+      tx.position.count(),
+      tx.balanceTransaction.count(),
+      tx.npcTrade.count(),
+      tx.post.count(),
+      tx.comment.count(),
+      tx.reaction.count(),
+      tx.post.count({ where: { createdAt: { gte: today } } }),
+      tx.user.aggregate({
+        _sum: { virtualBalance: true },
+      }),
+      tx.user.aggregate({
+        _sum: { totalDeposited: true },
+      }),
+      tx.user.aggregate({
+        _sum: { totalWithdrawn: true },
+      }),
+      tx.user.aggregate({
+        _sum: { lifetimePnL: true },
+      }),
+      tx.pool.count(),
+      tx.pool.count({ where: { isActive: true } }),
+      tx.poolDeposit.count(),
+      tx.referral.count(),
+      tx.pointsTransaction.count(),
+    ]);
 
-    // Market and trading data
-    totalMarkets,
-    activeMarkets,
-    resolvedMarkets,
-    totalPositions,
-    totalBalanceTransactions,
-    totalNPCTrades,
+    const [topUsersByBalance, topUsersByReputation, recentSignups] =
+      await Promise.all([
+        tx.user.findMany({
+          where: { isActor: false },
+          orderBy: { virtualBalance: 'desc' },
+          take: 10,
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            profileImageUrl: true,
+            virtualBalance: true,
+            lifetimePnL: true,
+          },
+        }),
+        tx.user.findMany({
+          where: { isActor: false },
+          orderBy: { reputationPoints: 'desc' },
+          take: 10,
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            profileImageUrl: true,
+            reputationPoints: true,
+          },
+        }),
+        tx.user.findMany({
+          where: { isActor: false },
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            profileImageUrl: true,
+            walletAddress: true,
+            createdAt: true,
+            onChainRegistered: true,
+            hasFarcaster: true,
+            hasTwitter: true,
+          },
+        }),
+      ]);
 
-    // Social engagement
-    totalPosts,
-    totalComments,
-    totalReactions,
-    postsToday,
-
-    // Financial metrics
-    totalVirtualBalance,
-    totalDeposited,
-    totalWithdrawn,
-    totalLifetimePnL,
-
-    // Pools
-    totalPools,
-    activePools,
-    totalPoolDeposits,
-
-    // Referrals and reputation
-    totalReferrals,
-    totalPointsTransactions,
-  ] = await Promise.all([
-    // User counts
-    db.user.count(),
-    StaticDataRegistry.getAllActors().length,
-    db.user.count({ where: { isActor: false } }),
-    db.user.count({ where: { isBanned: true } }),
-    db.user.count({ where: { isAdmin: true } }),
-    db.user.count({ where: { createdAt: { gte: today } } }),
-    db.user.count({ where: { createdAt: { gte: lastWeek } } }),
-    db.user.count({ where: { createdAt: { gte: lastMonth } } }),
-
-    // Market and trading data
-    db.market.count(),
-    db.market.count({ where: { resolved: false, endDate: { gte: now } } }),
-    db.market.count({ where: { resolved: true } }),
-    db.position.count(),
-    db.balanceTransaction.count(),
-    db.npcTrade.count(),
-
-    // Social engagement
-    db.post.count(),
-    db.comment.count(),
-    db.reaction.count(),
-    db.post.count({ where: { createdAt: { gte: today } } }),
-
-    // Financial metrics
-    db.user.aggregate({
-      _sum: { virtualBalance: true },
-    }),
-    db.user.aggregate({
-      _sum: { totalDeposited: true },
-    }),
-    db.user.aggregate({
-      _sum: { totalWithdrawn: true },
-    }),
-    db.user.aggregate({
-      _sum: { lifetimePnL: true },
-    }),
-
-    // Pools
-    db.pool.count(),
-    db.pool.count({ where: { isActive: true } }),
-    db.poolDeposit.count(),
-
-    // Referrals and reputation
-    db.referral.count(),
-    db.pointsTransaction.count(),
-  ]);
-
-  // Get top users by balance
-  const topUsersByBalance = await db.user.findMany({
-    where: { isActor: false },
-    orderBy: { virtualBalance: 'desc' },
-    take: 10,
-    select: {
-      id: true,
-      username: true,
-      displayName: true,
-      profileImageUrl: true,
-      virtualBalance: true,
-      lifetimePnL: true,
-    },
-  });
-
-  // Get top users by reputation
-  const topUsersByReputation = await db.user.findMany({
-    where: { isActor: false },
-    orderBy: { reputationPoints: 'desc' },
-    take: 10,
-    select: {
-      id: true,
-      username: true,
-      displayName: true,
-      profileImageUrl: true,
-      reputationPoints: true,
-    },
-  });
-
-  // Get recent signups
-  const recentSignups = await db.user.findMany({
-    where: { isActor: false },
-    orderBy: { createdAt: 'desc' },
-    take: 10,
-    select: {
-      id: true,
-      username: true,
-      displayName: true,
-      profileImageUrl: true,
-      walletAddress: true,
-      createdAt: true,
-      onChainRegistered: true,
-      hasFarcaster: true,
-      hasTwitter: true,
-    },
-  });
-
-  return successResponse({
-    users: {
-      total: totalUsers,
-      actors: totalActors,
-      realUsers: totalRealUsers,
-      banned: bannedUsers,
-      admins: adminUsers,
-      signups: {
-        today: usersToday,
-        thisWeek: usersThisWeek,
-        thisMonth: usersThisMonth,
+    return successResponse({
+      users: {
+        total: totalUsers,
+        actors: totalActors,
+        realUsers: totalRealUsers,
+        banned: bannedUsers,
+        admins: adminUsers,
+        signups: {
+          today: usersToday,
+          thisWeek: usersThisWeek,
+          thisMonth: usersThisMonth,
+        },
       },
-    },
-    markets: {
-      total: totalMarkets,
-      active: activeMarkets,
-      resolved: resolvedMarkets,
-      positions: totalPositions,
-    },
-    trading: {
-      balanceTransactions: totalBalanceTransactions,
-      npcTrades: totalNPCTrades,
-    },
-    social: {
-      posts: totalPosts,
-      postsToday: postsToday,
-      comments: totalComments,
-      reactions: totalReactions,
-    },
-    financial: {
-      totalVirtualBalance:
-        totalVirtualBalance._sum?.virtualBalance?.toString() || '0',
-      totalDeposited: totalDeposited._sum?.totalDeposited?.toString() || '0',
-      totalWithdrawn: totalWithdrawn._sum?.totalWithdrawn?.toString() || '0',
-      totalLifetimePnL: totalLifetimePnL._sum?.lifetimePnL?.toString() || '0',
-    },
-    pools: {
-      total: totalPools,
-      active: activePools,
-      deposits: totalPoolDeposits,
-    },
-    engagement: {
-      referrals: totalReferrals,
-      pointsTransactions: totalPointsTransactions,
-    },
-    topUsers: {
-      byBalance: topUsersByBalance.map((u) => ({
-        ...u,
-        virtualBalance: u.virtualBalance.toString(),
-        lifetimePnL: u.lifetimePnL.toString(),
-      })),
-      byReputation: topUsersByReputation,
-    },
-    recentSignups,
-  });
+      markets: {
+        total: totalMarkets,
+        active: activeMarkets,
+        resolved: resolvedMarkets,
+        positions: totalPositions,
+      },
+      trading: {
+        balanceTransactions: totalBalanceTransactions,
+        npcTrades: totalNPCTrades,
+      },
+      social: {
+        posts: totalPosts,
+        postsToday: postsToday,
+        comments: totalComments,
+        reactions: totalReactions,
+      },
+      financial: {
+        totalVirtualBalance:
+          totalVirtualBalance._sum?.virtualBalance?.toString() || '0',
+        totalDeposited: totalDeposited._sum?.totalDeposited?.toString() || '0',
+        totalWithdrawn: totalWithdrawn._sum?.totalWithdrawn?.toString() || '0',
+        totalLifetimePnL: totalLifetimePnL._sum?.lifetimePnL?.toString() || '0',
+      },
+      pools: {
+        total: totalPools,
+        active: activePools,
+        deposits: totalPoolDeposits,
+      },
+      engagement: {
+        referrals: totalReferrals,
+        pointsTransactions: totalPointsTransactions,
+      },
+      topUsers: {
+        byBalance: topUsersByBalance.map((u) => ({
+          ...u,
+          virtualBalance: u.virtualBalance.toString(),
+          lifetimePnL: u.lifetimePnL.toString(),
+        })),
+        byReputation: topUsersByReputation,
+      },
+      recentSignups,
+    });
+  }, 'admin-stats-dashboard');
 });

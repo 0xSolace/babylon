@@ -80,10 +80,10 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 
-import { db } from '@babylon/db/runtime';
 import { getReputationBreakdown } from '@babylon/engine';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import { runWithOptionalUserRls } from '@/lib/db/run-with-optional-user-rls';
 
 interface RouteParams {
   params: Promise<{
@@ -95,7 +95,7 @@ export const GET = withErrorHandling(async function GET(
   request: NextRequest,
   { params }: RouteParams
 ) {
-  const { error, rateLimitInfo } = await publicRateLimit(request);
+  const { error, rateLimitInfo, user: viewer } = await publicRateLimit(request);
   if (error) return error;
 
   const { userId } = await params;
@@ -104,30 +104,41 @@ export const GET = withErrorHandling(async function GET(
 
   await getReputationBreakdown(user.id);
 
-  const metrics = await db.agentPerformanceMetrics.findUnique({
-    where: { userId: user.id },
-    select: {
-      gamesPlayed: true,
-      gamesWon: true,
-      averageGameScore: true,
-      winRate: true,
-      totalFeedbackCount: true,
-      averageFeedbackScore: true,
-      reputationScore: true,
-      trustLevel: true,
-      lastActivityAt: true,
-    },
-  });
+  const { metrics, rank, totalUsers } = await runWithOptionalUserRls(
+    viewer,
+    async (db) => {
+      const metricsRow = await db.agentPerformanceMetrics.findUnique({
+        where: { userId: user.id },
+        select: {
+          gamesPlayed: true,
+          gamesWon: true,
+          averageGameScore: true,
+          winRate: true,
+          totalFeedbackCount: true,
+          averageFeedbackScore: true,
+          reputationScore: true,
+          trustLevel: true,
+          lastActivityAt: true,
+        },
+      });
 
-  const rank = await db.agentPerformanceMetrics.count({
-    where: {
-      reputationScore: {
-        gt: metrics!.reputationScore,
-      },
-    },
-  });
+      const rankCount = await db.agentPerformanceMetrics.count({
+        where: {
+          reputationScore: {
+            gt: metricsRow!.reputationScore,
+          },
+        },
+      });
 
-  const totalUsers = await db.agentPerformanceMetrics.count();
+      const total = await db.agentPerformanceMetrics.count();
+
+      return {
+        metrics: metricsRow,
+        rank: rankCount,
+        totalUsers: total,
+      };
+    }
+  );
 
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);

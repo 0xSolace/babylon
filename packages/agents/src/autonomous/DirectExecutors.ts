@@ -22,32 +22,40 @@ import {
   PredictionMarketService,
 } from '@babylon/core/markets/prediction';
 import {
-  aliasedTable,
-  and,
-  eq,
+  type DrizzleClient,
+  deleteFollowByFollowerAndFollowingReturningId,
   fetchChatNameById,
-  gte,
-  isNull,
+  insertCommentRowForDirectExecutor,
+  insertDirectExecutorDmChatBundle,
+  insertFollowOnConflictDoNothingReturningId,
+  insertMessageRow,
+  insertPostRowForDirectExecutor,
+  insertReactionLikeOnConflictDoNothingReturningId,
+  insertShareAndOptionalQuotePostInTransaction,
   type JsonValue,
-  sql,
+  npcActorStateAtomicCredit,
+  npcActorStateAtomicDebit,
+  selectActorStateIdOnlyById,
+  selectChatIdById,
+  selectChatParticipantUserIdsByChatId,
+  selectCommentIdById,
+  selectDmChatIdBetweenUsers,
+  selectExistingDirectCommentReply,
+  selectExistingDirectTopLevelComment,
+  selectNpcActorTradingBalance,
+  selectOpenPerpPositionByUserIdTicker,
+  selectPostIdById,
+  selectPostRepostSliceById,
+  selectShareIdByUserIdAndPostId,
+  selectUserDisplayAndUsernameById,
+  selectUserIdAndIsActorById,
+  selectUserIdOnlyById,
+  selectUserManagedByById,
+  type Transaction,
 } from '@babylon/db';
-import {
-  actorState,
-  asSystem,
-  asUser,
-  chatParticipants,
-  chats,
-  comments,
-  db,
-  dmAcceptances,
-  follows,
-  messages,
-  perpPositions,
-  posts,
-  reactions,
-  shares,
-  users,
-} from '@babylon/db/runtime';
+import * as engineStorage from '@babylon/db/engine-storage';
+
+const db = engineStorage.db;
 
 import {
   createPerpPriceImpactPort,
@@ -84,14 +92,8 @@ async function getAgentDisplayName(agentUserId: string): Promise<string> {
     return npcActor.name;
   }
 
-  // Query user table for display name
-  const [agent] = await db
-    .select({ displayName: users.displayName })
-    .from(users)
-    .where(eq(users.id, agentUserId))
-    .limit(1);
-
-  return agent?.displayName ?? 'Agent';
+  const row = await selectUserDisplayAndUsernameById(db, agentUserId);
+  return row?.displayName ?? 'Agent';
 }
 
 const SHARE_LIKE_MAX_INTEGER = 10;
@@ -121,19 +123,7 @@ function createPerpWalletAdapter(isNpc: boolean) {
         relatedId?: string;
       }) => {
         // Atomic debit with balance check to prevent negative balance
-        const result = await db
-          .update(actorState)
-          .set({
-            tradingBalance: sql`${actorState.tradingBalance} - ${amt}`,
-            updatedAt: new Date(),
-          })
-          .where(
-            and(
-              eq(actorState.id, uid),
-              gte(sql<number>`${actorState.tradingBalance}::numeric`, amt)
-            )
-          )
-          .returning({ id: actorState.id });
+        const result = await npcActorStateAtomicDebit(db, uid, amt);
 
         if (result.length === 0) {
           throw new Error(`Insufficient NPC balance for perp trade: $${amt}`);
@@ -149,13 +139,7 @@ function createPerpWalletAdapter(isNpc: boolean) {
         description?: string;
         relatedId?: string;
       }) => {
-        await db
-          .update(actorState)
-          .set({
-            tradingBalance: sql`${actorState.tradingBalance} + ${amt}`,
-            updatedAt: new Date(),
-          })
-          .where(eq(actorState.id, uid));
+        await npcActorStateAtomicCredit(db, uid, amt);
       },
       recordPnL: async (_args: {
         userId: string;
@@ -166,11 +150,7 @@ function createPerpWalletAdapter(isNpc: boolean) {
         // NPCs don't track PnL
       },
       getBalance: async (uid: string) => {
-        const [actor] = await db
-          .select({ tradingBalance: actorState.tradingBalance })
-          .from(actorState)
-          .where(eq(actorState.id, uid))
-          .limit(1);
+        const actor = await selectNpcActorTradingBalance(db, uid);
         return {
           balance: Number(actor?.tradingBalance ?? 10000),
           totalDeposited: 0,
@@ -244,7 +224,7 @@ interface DeferredPnLRecord {
  */
 function createPredictionWalletAdapter(
   isNpc: boolean,
-  txDb?: Parameters<Parameters<typeof asUser>[1]>[0],
+  txDb?: DrizzleClient | Transaction,
   deferredPnL?: DeferredPnLRecord[]
 ) {
   if (isNpc) {
@@ -262,19 +242,7 @@ function createPredictionWalletAdapter(
         description?: string;
         relatedId?: string;
       }) => {
-        const result = await txDb
-          .update(actorState)
-          .set({
-            tradingBalance: sql`${actorState.tradingBalance} - ${amt}`,
-            updatedAt: new Date(),
-          })
-          .where(
-            and(
-              eq(actorState.id, uid),
-              gte(sql<number>`${actorState.tradingBalance}::numeric`, amt)
-            )
-          )
-          .returning({ id: actorState.id });
+        const result = await npcActorStateAtomicDebit(txDb, uid, amt);
 
         if (result.length === 0) {
           throw new Error(
@@ -292,13 +260,7 @@ function createPredictionWalletAdapter(
         description?: string;
         relatedId?: string;
       }) => {
-        await txDb
-          .update(actorState)
-          .set({
-            tradingBalance: sql`${actorState.tradingBalance} + ${amt}`,
-            updatedAt: new Date(),
-          })
-          .where(eq(actorState.id, uid));
+        await npcActorStateAtomicCredit(txDb, uid, amt);
       },
       recordPnL: async (_args: {
         userId: string;
@@ -309,11 +271,7 @@ function createPredictionWalletAdapter(
         // NPCs don't track PnL
       },
       getBalance: async (uid: string) => {
-        const [actor] = await txDb
-          .select({ tradingBalance: actorState.tradingBalance })
-          .from(actorState)
-          .where(eq(actorState.id, uid))
-          .limit(1);
+        const actor = await selectNpcActorTradingBalance(txDb, uid);
         return {
           balance: Number(actor?.tradingBalance ?? 0),
           totalDeposited: 0,
@@ -530,11 +488,7 @@ export async function executeDirectTrade(
   // Get current balance
   let balance = 0;
   if (isNpc) {
-    const [actor] = await db
-      .select({ tradingBalance: actorState.tradingBalance })
-      .from(actorState)
-      .where(eq(actorState.id, agentUserId))
-      .limit(1);
+    const actor = await selectNpcActorTradingBalance(db, agentUserId);
     balance = Number(actor?.tradingBalance ?? 0);
   } else {
     const walletBalance = await WalletService.getBalance(agentUserId);
@@ -671,7 +625,7 @@ async function executePredictionTrade(params: {
   const sideLabel = isBuyYes ? 'yes' : 'no';
 
   const tradeOperation = async (
-    txDb: Parameters<Parameters<typeof asUser>[1]>[0]
+    txDb: Parameters<Parameters<typeof engineStorage.asUser>[1]>[0]
   ) => {
     const service = new PredictionMarketService({
       db: new PredictionDbAdapter(txDb),
@@ -719,8 +673,8 @@ async function executePredictionTrade(params: {
   };
 
   const result = isNpc
-    ? await asSystem(tradeOperation, 'npc_prediction_trade')
-    : await asUser({ userId: agentUserId }, tradeOperation);
+    ? await engineStorage.asSystem(tradeOperation, 'npc_prediction_trade')
+    : await engineStorage.asUser({ userId: agentUserId }, tradeOperation);
 
   // Record in AgentTrade
   await agentPnLService.recordTrade({
@@ -780,7 +734,7 @@ async function executePredictionSell(params: {
   const deferredPnL: DeferredPnLRecord[] = [];
 
   const sellOperation = async (
-    txDb: Parameters<Parameters<typeof asUser>[1]>[0]
+    txDb: Parameters<Parameters<typeof engineStorage.asUser>[1]>[0]
   ) => {
     const adapter = new PredictionDbAdapter(txDb);
     const service = new PredictionMarketService({
@@ -866,8 +820,8 @@ async function executePredictionSell(params: {
   };
 
   const { sellResult, sharesToSell } = isNpc
-    ? await asSystem(sellOperation, 'npc_prediction_sell')
-    : await asUser({ userId: agentUserId }, sellOperation);
+    ? await engineStorage.asSystem(sellOperation, 'npc_prediction_sell')
+    : await engineStorage.asUser({ userId: agentUserId }, sellOperation);
 
   // Process deferred PnL records AFTER transaction completes (avoids nested transaction deadlocks)
   for (const pnlRecord of deferredPnL) {
@@ -960,9 +914,9 @@ async function executePerpTrade(params: {
 
   // Execute with appropriate context
   if (isNpc) {
-    await asSystem(perpTradeOperation, 'npc_perp_trade');
+    await engineStorage.asSystem(perpTradeOperation, 'npc_perp_trade');
   } else {
-    await asUser({ userId: agentUserId }, perpTradeOperation);
+    await engineStorage.asUser({ userId: agentUserId }, perpTradeOperation);
   }
 
   // Record trade
@@ -1003,18 +957,11 @@ async function executeClosePerpPosition(params: {
 }): Promise<DirectTradeResult> {
   const { agentUserId, ticker, reasoning, isNpc, agentManagedBy } = params;
 
-  // Find the open position for this ticker
-  const [existingPosition] = await db
-    .select()
-    .from(perpPositions)
-    .where(
-      and(
-        eq(perpPositions.userId, agentUserId),
-        eq(perpPositions.ticker, ticker),
-        isNull(perpPositions.closedAt)
-      )
-    )
-    .limit(1);
+  const existingPosition = await selectOpenPerpPositionByUserIdTicker(
+    db,
+    agentUserId,
+    ticker
+  );
 
   if (!existingPosition) {
     return {
@@ -1049,8 +996,8 @@ async function executeClosePerpPosition(params: {
 
   // Execute with appropriate context and capture the result
   const closeResult = isNpc
-    ? await asSystem(closeOperation, 'npc_perp_close')
-    : await asUser({ userId: agentUserId }, closeOperation);
+    ? await engineStorage.asSystem(closeOperation, 'npc_perp_close')
+    : await engineStorage.asUser({ userId: agentUserId }, closeOperation);
 
   // Use the realized P&L from the service (computed with actual exit price)
   // This is more accurate than recalculating from potentially stale position data
@@ -1150,7 +1097,7 @@ export async function executeDirectPost(
   const postId = await generateSnowflakeId();
   const now = new Date();
 
-  await db.insert(posts).values({
+  await insertPostRowForDirectExecutor(db, {
     id: postId,
     content: cleanContent,
     authorId: agentUserId,
@@ -1219,31 +1166,19 @@ export async function executeDirectComment(
 
   const cleanContent = content.trim();
 
-  // Verify post exists
-  const [post] = await db
-    .select({ id: posts.id })
-    .from(posts)
-    .where(eq(posts.id, postId))
-    .limit(1);
+  const post = await selectPostIdById(db, postId);
 
   if (!post) {
     return { success: false, error: `Post not found: ${postId}` };
   }
 
-  // DEDUPLICATION CHECK: Prevent duplicate comments
   if (parentCommentId) {
-    // Replying to a specific comment - check if agent already replied to this comment
-    const [existingReply] = await db
-      .select({ id: comments.id })
-      .from(comments)
-      .where(
-        and(
-          eq(comments.postId, postId),
-          eq(comments.authorId, agentUserId),
-          eq(comments.parentCommentId, parentCommentId)
-        )
-      )
-      .limit(1);
+    const existingReply = await selectExistingDirectCommentReply(
+      db,
+      postId,
+      agentUserId,
+      parentCommentId
+    );
 
     if (existingReply) {
       logger.info(
@@ -1258,11 +1193,7 @@ export async function executeDirectComment(
     }
 
     // Verify parent comment exists
-    const [parentComment] = await db
-      .select({ id: comments.id })
-      .from(comments)
-      .where(eq(comments.id, parentCommentId))
-      .limit(1);
+    const parentComment = await selectCommentIdById(db, parentCommentId);
 
     if (!parentComment) {
       return {
@@ -1271,18 +1202,11 @@ export async function executeDirectComment(
       };
     }
   } else {
-    // Top-level comment - check if agent already commented on this post
-    const [existingComment] = await db
-      .select({ id: comments.id })
-      .from(comments)
-      .where(
-        and(
-          eq(comments.postId, postId),
-          eq(comments.authorId, agentUserId),
-          isNull(comments.parentCommentId)
-        )
-      )
-      .limit(1);
+    const existingComment = await selectExistingDirectTopLevelComment(
+      db,
+      postId,
+      agentUserId
+    );
 
     if (existingComment) {
       logger.info(
@@ -1306,7 +1230,7 @@ export async function executeDirectComment(
   const commentId = await generateSnowflakeId();
   const now = new Date();
 
-  await db.insert(comments).values({
+  await insertCommentRowForDirectExecutor(db, {
     id: commentId,
     content: cleanContent,
     postId,
@@ -1388,11 +1312,7 @@ export async function executeDirectMessage(
   if (!chatId && recipientId) {
     // Check if agent is trying to DM their owner - not allowed
     // Agents should communicate with owners through Agents (team chat)
-    const [agent] = await db
-      .select({ managedBy: users.managedBy })
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
+    const agent = await selectUserManagedByById(db, agentUserId);
 
     if (agent?.managedBy === recipientId) {
       return {
@@ -1402,48 +1322,24 @@ export async function executeDirectMessage(
     }
 
     // Check if recipient exists
-    const [recipient] = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.id, recipientId))
-      .limit(1);
+    const recipient = await selectUserIdOnlyById(db, recipientId);
 
     if (!recipient) {
-      // Try searching actorState for NPCs
-      const [npc] = await db
-        .select({ id: actorState.id })
-        .from(actorState)
-        .where(eq(actorState.id, recipientId))
-        .limit(1);
+      const npc = await selectActorStateIdOnlyById(db, recipientId);
 
       if (!npc) {
         return { success: false, error: `Recipient not found: ${recipientId}` };
       }
     }
 
-    // Find existing DM chat using a single query with self-join
-    // Join chatParticipants (for agent) -> chats -> chatParticipants alias (for recipient)
-    const recipientParticipants = aliasedTable(chatParticipants, 'cp2');
+    const existingDm = await selectDmChatIdBetweenUsers(
+      db,
+      agentUserId,
+      recipientId
+    );
 
-    const existingChat = await db
-      .select({ chatId: chatParticipants.chatId })
-      .from(chatParticipants)
-      .innerJoin(chats, eq(chatParticipants.chatId, chats.id))
-      .innerJoin(
-        recipientParticipants,
-        eq(chatParticipants.chatId, recipientParticipants.chatId)
-      )
-      .where(
-        and(
-          eq(chatParticipants.userId, agentUserId),
-          eq(chats.isGroup, false),
-          eq(recipientParticipants.userId, recipientId)
-        )
-      )
-      .limit(1);
-
-    if (existingChat.length > 0 && existingChat[0]) {
-      chatId = existingChat[0].chatId;
+    if (existingDm) {
+      chatId = existingDm.chatId;
     }
 
     // If still no chatId, create new DM
@@ -1452,42 +1348,43 @@ export async function executeDirectMessage(
       const now = new Date();
 
       try {
-        await db.transaction(async (tx) => {
-          await tx.insert(chats).values({
-            id: chatId!,
-            isGroup: false,
-            createdAt: now,
-            updatedAt: now,
-          });
+        const participantAgentId = await generateSnowflakeId();
+        const participantRecipientId = await generateSnowflakeId();
+        const dmAcceptanceId = await generateSnowflakeId();
 
-          // Add both participants
-          await tx.insert(chatParticipants).values([
-            {
-              id: await generateSnowflakeId(),
-              chatId: chatId!,
-              userId: agentUserId,
-              joinedAt: now,
-              isActive: true,
+        await db.transaction(async (tx) => {
+          await insertDirectExecutorDmChatBundle(tx, {
+            chat: {
+              id: chatId!,
+              isGroup: false,
+              createdAt: now,
+              updatedAt: now,
             },
-            {
-              id: await generateSnowflakeId(),
+            participants: [
+              {
+                id: participantAgentId,
+                chatId: chatId!,
+                userId: agentUserId,
+                joinedAt: now,
+                isActive: true,
+              },
+              {
+                id: participantRecipientId,
+                chatId: chatId!,
+                userId: recipientId,
+                joinedAt: now,
+                isActive: true,
+              },
+            ],
+            dmAcceptance: {
+              id: dmAcceptanceId,
               chatId: chatId!,
               userId: recipientId,
-              joinedAt: now,
-              isActive: true,
+              otherUserId: agentUserId,
+              status: 'accepted',
+              createdAt: now,
+              acceptedAt: now,
             },
-          ]);
-
-          // Create DMAcceptance record with 'accepted' status
-          // Agent-initiated DMs bypass the acceptance flow since agents are automated
-          await tx.insert(dmAcceptances).values({
-            id: await generateSnowflakeId(),
-            chatId: chatId!,
-            userId: recipientId, // The recipient
-            otherUserId: agentUserId, // The agent initiating
-            status: 'accepted', // Auto-accepted for agent-initiated DMs
-            createdAt: now,
-            acceptedAt: now, // Mark as accepted immediately
           });
         });
 
@@ -1504,31 +1401,14 @@ export async function executeDirectMessage(
             { agentUserId, recipientId },
             'DirectExecutors'
           );
-          // Retry with the same optimized single query
-          const retryRecipientParticipants = aliasedTable(
-            chatParticipants,
-            'cp2_retry'
+          const retryMatch = await selectDmChatIdBetweenUsers(
+            db,
+            agentUserId,
+            recipientId
           );
 
-          const retryMatch = await db
-            .select({ chatId: chatParticipants.chatId })
-            .from(chatParticipants)
-            .innerJoin(chats, eq(chatParticipants.chatId, chats.id))
-            .innerJoin(
-              retryRecipientParticipants,
-              eq(chatParticipants.chatId, retryRecipientParticipants.chatId)
-            )
-            .where(
-              and(
-                eq(chatParticipants.userId, agentUserId),
-                eq(chats.isGroup, false),
-                eq(retryRecipientParticipants.userId, recipientId)
-              )
-            )
-            .limit(1);
-
-          if (retryMatch.length > 0 && retryMatch[0]) {
-            chatId = retryMatch[0].chatId;
+          if (retryMatch) {
+            chatId = retryMatch.chatId;
           } else {
             throw error; // Re-throw if we still can't find the chat
           }
@@ -1548,11 +1428,7 @@ export async function executeDirectMessage(
 
   // Verify chat exists (if provided directly)
   if (providedChatId) {
-    const [chat] = await db
-      .select({ id: chats.id })
-      .from(chats)
-      .where(eq(chats.id, chatId))
-      .limit(1);
+    const chat = await selectChatIdById(db, chatId);
 
     if (!chat) {
       return { success: false, error: `Chat not found: ${chatId}` };
@@ -1568,7 +1444,7 @@ export async function executeDirectMessage(
   const messageId = await generateSnowflakeId();
   const now = new Date();
 
-  await db.insert(messages).values({
+  await insertMessageRow(db, {
     id: messageId,
     chatId,
     senderId: agentUserId,
@@ -1629,10 +1505,10 @@ export async function executeDirectMessage(
   // Notify group chat members for offline/push notifications
   // Only for group messages (no recipientId means it's a group chat message)
   if (!recipientId && chatId) {
-    const participantRows = await db
-      .select({ userId: chatParticipants.userId })
-      .from(chatParticipants)
-      .where(eq(chatParticipants.chatId, chatId));
+    const participantRows = await selectChatParticipantUserIdsByChatId(
+      db,
+      chatId
+    );
     const recipientIds = participantRows
       .map((p) => p.userId)
       .filter((id) => id !== agentUserId);
@@ -1684,11 +1560,7 @@ export async function executeDirectFollow(
     return { success: false, error: 'Cannot follow yourself' };
   }
 
-  const [targetUser] = await db
-    .select({ id: users.id, isActor: users.isActor })
-    .from(users)
-    .where(eq(users.id, cleanTargetUserId))
-    .limit(1);
+  const targetUser = await selectUserIdAndIsActorById(db, cleanTargetUserId);
 
   if (!targetUser) {
     return { success: false, error: `User not found: ${cleanTargetUserId}` };
@@ -1709,15 +1581,11 @@ export async function executeDirectFollow(
   );
 
   const followId = await generateSnowflakeId();
-  const insertResult = await db
-    .insert(follows)
-    .values({
-      id: followId,
-      followerId: agentUserId,
-      followingId: cleanTargetUserId,
-    })
-    .onConflictDoNothing()
-    .returning({ id: follows.id });
+  const insertResult = await insertFollowOnConflictDoNothingReturningId(db, {
+    id: followId,
+    followerId: agentUserId,
+    followingId: cleanTargetUserId,
+  });
 
   const followed = insertResult.length > 0;
 
@@ -1758,17 +1626,16 @@ export async function executeDirectUnfollow(
     return { success: false, error: 'Cannot unfollow yourself' };
   }
 
-  const [targetUser] = await db
-    .select({ id: users.id, isActor: users.isActor })
-    .from(users)
-    .where(eq(users.id, cleanTargetUserId))
-    .limit(1);
+  const targetUserUnfollow = await selectUserIdAndIsActorById(
+    db,
+    cleanTargetUserId
+  );
 
-  if (!targetUser) {
+  if (!targetUserUnfollow) {
     return { success: false, error: `User not found: ${cleanTargetUserId}` };
   }
 
-  if (targetUser.isActor) {
+  if (targetUserUnfollow.isActor) {
     return {
       success: false,
       error:
@@ -1782,15 +1649,11 @@ export async function executeDirectUnfollow(
     'DirectExecutors'
   );
 
-  const deletedRows = await db
-    .delete(follows)
-    .where(
-      and(
-        eq(follows.followerId, agentUserId),
-        eq(follows.followingId, cleanTargetUserId)
-      )
-    )
-    .returning({ id: follows.id });
+  const deletedRows = await deleteFollowByFollowerAndFollowingReturningId(
+    db,
+    agentUserId,
+    cleanTargetUserId
+  );
 
   const wasFollowing = deletedRows.length > 0;
 
@@ -1826,14 +1689,9 @@ export async function executeDirectLike(
 ): Promise<DirectLikeResult> {
   const { agentUserId, postId } = params;
 
-  // Verify post exists
-  const [post] = await db
-    .select({ id: posts.id })
-    .from(posts)
-    .where(eq(posts.id, postId))
-    .limit(1);
+  const postLike = await selectPostIdById(db, postId);
 
-  if (!post) {
+  if (!postLike) {
     return { success: false, error: `Post not found: ${postId}` };
   }
 
@@ -1848,19 +1706,17 @@ export async function executeDirectLike(
   // Use onConflictDoNothing to handle race conditions and prevent duplicate likes atomically
   // This relies on a unique index on (userId, postId, type) for the reactions table
   // No pre-check needed - the insert handles duplicates automatically
-  const insertResult = await db
-    .insert(reactions)
-    .values({
+  const insertResult = await insertReactionLikeOnConflictDoNothingReturningId(
+    db,
+    {
       id: reactionId,
       postId,
       userId: agentUserId,
       type: 'like',
       createdAt: new Date(),
-    })
-    .onConflictDoNothing()
-    .returning({ id: reactions.id });
+    }
+  );
 
-  // Determine if a new row was created or it already existed
   const alreadyLiked = insertResult.length === 0;
   logger.info(
     `[DirectExecutor] Post ${alreadyLiked ? 'already liked' : 'liked'}: ${postId}`,
@@ -1887,17 +1743,7 @@ export async function executeDirectRepost(
 ): Promise<DirectRepostResult> {
   const { agentUserId, postId, comment } = params;
 
-  // Verify post exists
-  const [post] = await db
-    .select({
-      id: posts.id,
-      authorId: posts.authorId,
-      content: posts.content,
-      originalPostId: posts.originalPostId,
-    })
-    .from(posts)
-    .where(eq(posts.id, postId))
-    .limit(1);
+  const post = await selectPostRepostSliceById(db, postId);
 
   if (!post) {
     return { success: false, error: `Post not found: ${postId}` };
@@ -1907,16 +1753,10 @@ export async function executeDirectRepost(
   let targetPostId = postId;
 
   if (isPureRepost(post)) {
-    const [resolvedPost] = await db
-      .select({
-        id: posts.id,
-        authorId: posts.authorId,
-        content: posts.content,
-        originalPostId: posts.originalPostId,
-      })
-      .from(posts)
-      .where(eq(posts.id, post.originalPostId))
-      .limit(1);
+    const resolvedPost = await selectPostRepostSliceById(
+      db,
+      post.originalPostId
+    );
 
     if (!resolvedPost) {
       return {
@@ -1953,26 +1793,26 @@ export async function executeDirectRepost(
 
     // Use transaction to ensure atomicity of share and quote post
     await db.transaction(async (tx) => {
-      // Create share record
-      await tx.insert(shares).values({
-        id: shareId,
-        userId: agentUserId,
-        postId: targetPostId,
-        createdAt: now,
-      });
-
-      // If there's a quote comment, create a quote post (min 3 chars like comments)
-      if (hasQuote && quotePostId) {
-        await tx.insert(posts).values({
-          id: quotePostId,
-          content: comment!.trim(),
-          authorId: agentUserId,
-          originalPostId: targetPostId,
-          type: 'repost',
-          timestamp: now,
+      await insertShareAndOptionalQuotePostInTransaction(tx, {
+        share: {
+          id: shareId,
+          userId: agentUserId,
+          postId: targetPostId,
           createdAt: now,
-        });
-      }
+        },
+        quotePost:
+          hasQuote && quotePostId
+            ? {
+                id: quotePostId,
+                content: comment!.trim(),
+                authorId: agentUserId,
+                originalPostId: targetPostId,
+                type: 'repost',
+                timestamp: now,
+                createdAt: now,
+              }
+            : undefined,
+      });
     });
 
     logger.info(
@@ -1996,13 +1836,11 @@ export async function executeDirectRepost(
       (error as Error).message?.includes('unique constraint');
 
     if (isUniqueConstraint) {
-      const [share] = await db
-        .select({ id: shares.id })
-        .from(shares)
-        .where(
-          and(eq(shares.postId, targetPostId), eq(shares.userId, agentUserId))
-        )
-        .limit(1);
+      const share = await selectShareIdByUserIdAndPostId(
+        db,
+        agentUserId,
+        targetPostId
+      );
 
       if (!share?.id) {
         throw new Error(

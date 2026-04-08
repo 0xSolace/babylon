@@ -141,7 +141,7 @@ mock.module('@babylon/db', async () => ({
   isSimulationMode: () => false,
 }));
 
-mock.module('@babylon/db/runtime', () => ({
+mock.module('@babylon/db/engine-storage', () => ({
   ...actualDbRuntime,
   db: mockDb,
   getDbInstance: () => mockDb,

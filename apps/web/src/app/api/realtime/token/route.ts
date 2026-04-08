@@ -4,8 +4,11 @@ import {
   type RealtimeChannel,
   withErrorHandling,
 } from '@babylon/api';
-import { and, eq, inArray } from '@babylon/db';
-import { chatParticipants, db, users } from '@babylon/db/runtime';
+import {
+  selectActiveChatParticipantChatIdsForUser,
+  selectManagedAgentIdsForOwnerInList,
+} from '@babylon/db';
+import { asUser } from '@babylon/db/engine-storage';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -73,18 +76,14 @@ export const POST = withErrorHandling(async function POST(
   const allowedChatIds = new Set<string>();
 
   if (derivedChatIds.length > 0) {
-    const allowedChats = await db
-      .select({ chatId: chatParticipants.chatId })
-      .from(chatParticipants)
-      .where(
-        and(
-          eq(chatParticipants.userId, user.userId),
-          eq(chatParticipants.isActive, true),
-          inArray(chatParticipants.chatId, derivedChatIds)
-        )
-      );
-    for (const c of allowedChats) {
-      allowedChatIds.add(c.chatId);
+    const allowedChatIdsList = await asUser(user, async (db) =>
+      selectActiveChatParticipantChatIdsForUser(db, {
+        userId: user.userId,
+        chatIds: derivedChatIds,
+      })
+    );
+    for (const c of allowedChatIdsList) {
+      allowedChatIds.add(c);
     }
   }
 
@@ -119,20 +118,15 @@ export const POST = withErrorHandling(async function POST(
   const allowedAgentIds = new Set<string>();
 
   if (derivedAgentIds.length > 0) {
-    // Single query: fetch agents that match requested IDs AND are owned by this user
-    const ownedAgents = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(
-        and(
-          inArray(users.id, derivedAgentIds),
-          eq(users.managedBy, user.userId),
-          eq(users.isAgent, true)
-        )
-      );
+    const ownedAgentIds = await asUser(user, async (db) =>
+      selectManagedAgentIdsForOwnerInList(db, {
+        ownerUserId: user.userId,
+        agentUserIds: derivedAgentIds,
+      })
+    );
 
-    for (const agent of ownedAgents) {
-      allowedAgentIds.add(agent.id);
+    for (const agentId of ownedAgentIds) {
+      allowedAgentIds.add(agentId);
     }
   }
 

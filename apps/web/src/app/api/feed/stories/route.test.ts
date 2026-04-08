@@ -2,8 +2,13 @@ import { beforeEach, describe, expect, it, mock } from 'bun:test';
 import type { NextRequest } from 'next/server';
 
 const mockBuildStoriesFeed = mock();
-const mockEnrichStoriesForUser = mock();
+const mockEnrichStoriesForUserWithDb = mock();
 const mockPublicRateLimit = mock();
+
+const mockRunWithOptionalUserRls = mock(
+  async <T>(_auth: unknown, fn: (db: unknown) => Promise<T>): Promise<T> =>
+    fn({})
+);
 
 // Cache simulation: getCacheOrFetch returns the SAME object reference on every
 // call within the TTL window, which is the root cause of the race condition
@@ -38,9 +43,13 @@ mock.module('@babylon/api', () => ({
     handler,
 }));
 
+mock.module('@/lib/db/run-with-optional-user-rls', () => ({
+  runWithOptionalUserRls: mockRunWithOptionalUserRls,
+}));
+
 mock.module('./pipeline', () => ({
   buildStoriesFeed: mockBuildStoriesFeed,
-  enrichStoriesForUser: mockEnrichStoriesForUser,
+  enrichStoriesForUserWithDb: mockEnrichStoriesForUserWithDb,
 }));
 
 const { GET } = await import('./route');
@@ -102,7 +111,12 @@ beforeEach(() => {
   mockBuildStoriesFeed.mockReset();
   mockPublicRateLimit.mockReset();
   mockGetCacheOrFetch.mockReset();
-  mockEnrichStoriesForUser.mockReset();
+  mockRunWithOptionalUserRls.mockReset();
+  mockRunWithOptionalUserRls.mockImplementation(
+    async <T>(_auth: unknown, fn: (db: unknown) => Promise<T>): Promise<T> =>
+      fn({})
+  );
+  mockEnrichStoriesForUserWithDb.mockReset();
 
   mockGetCacheOrFetch.mockImplementation(
     async <T>(_key: string, fetchFn: () => Promise<T>) => {
@@ -119,9 +133,10 @@ describe('GET /api/feed/stories', () => {
     mockPublicRateLimit.mockResolvedValue(makeAuthRateLimit('user-A'));
     mockBuildStoriesFeed.mockResolvedValue(makePipelineResult());
 
-    // enrichStoriesForUser mutates the stories array it receives in-place
-    mockEnrichStoriesForUser.mockImplementation(
+    // enrichStoriesForUserWithDb mutates the stories array it receives in-place
+    mockEnrichStoriesForUserWithDb.mockImplementation(
       (
+        _db: unknown,
         stories: Array<{
           posts: Array<{ isLiked: boolean; isShared: boolean }>;
         }>
@@ -156,8 +171,9 @@ describe('GET /api/feed/stories', () => {
 
     // Simulate user-A who liked post-1 only
     mockPublicRateLimit.mockResolvedValue(makeAuthRateLimit('user-A'));
-    mockEnrichStoriesForUser.mockImplementation(
+    mockEnrichStoriesForUserWithDb.mockImplementation(
       (
+        _db: unknown,
         stories: Array<{
           posts: Array<{ id: string; isLiked: boolean; isShared: boolean }>;
         }>
@@ -178,8 +194,9 @@ describe('GET /api/feed/stories', () => {
 
     // Simulate user-B who liked post-2 only
     mockPublicRateLimit.mockResolvedValue(makeAuthRateLimit('user-B'));
-    mockEnrichStoriesForUser.mockImplementation(
+    mockEnrichStoriesForUserWithDb.mockImplementation(
       (
+        _db: unknown,
         stories: Array<{
           posts: Array<{ id: string; isLiked: boolean; isShared: boolean }>;
         }>
@@ -207,7 +224,7 @@ describe('GET /api/feed/stories', () => {
     const response = await GET(makeRequest());
     const payload = await response.json();
 
-    expect(mockEnrichStoriesForUser).not.toHaveBeenCalled();
+    expect(mockEnrichStoriesForUserWithDb).not.toHaveBeenCalled();
     expect(payload.stories[0].posts[0].isLiked).toBe(false);
   });
 

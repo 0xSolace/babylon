@@ -12,7 +12,7 @@ import {
   applyRevokeNftGatedChatMembership,
   fetchChatNameById,
 } from '@babylon/db';
-import { db } from '@babylon/db/runtime';
+import { db } from '@babylon/db/engine-storage';
 import { logger } from '@babylon/shared';
 
 import { notifyNftAccessRevoked } from './notification-service';

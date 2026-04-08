@@ -61,19 +61,31 @@ import {
   publicRateLimit,
   withErrorHandling,
 } from '@babylon/api';
-import { and, count, eq, inArray } from '@babylon/db';
 import {
-  asPublic,
-  asUser,
-  comments,
-  reactions,
-  shares,
-  users,
-} from '@babylon/db/runtime';
+  selectPostCommentCountsGroupedByPostIds,
+  selectPostIdsLikedByUser,
+  selectPostIdsSharedByUser,
+  selectPostLikeReactionCountsGroupedByPostIds,
+  selectPostShareCountsGroupedByPostIds,
+  selectTrendingAuthorUserRowsByIds,
+} from '@babylon/db';
 import { getPostsByTag, StaticDataRegistry } from '@babylon/engine';
 import { toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import { runWithOptionalUserRls } from '@/lib/db/run-with-optional-user-rls';
+
+function toPostCountMap(
+  rows: { postId: string | null; count: number }[]
+): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const r of rows) {
+    if (r.postId !== null && r.postId !== undefined) {
+      m.set(r.postId, r.count);
+    }
+  }
+  return m;
+}
 
 export const GET = withErrorHandling(async function GET(
   request: NextRequest,
@@ -122,124 +134,38 @@ export const GET = withErrorHandling(async function GET(
   const usersList =
     authorIds.length === 0
       ? []
-      : authUser && authUser.userId
-        ? await asUser(authUser, async (dbClient) => {
-            return await dbClient
-              .select({
-                id: users.id,
-                username: users.username,
-                displayName: users.displayName,
-                profileImageUrl: users.profileImageUrl,
-                isActor: users.isActor,
-              })
-              .from(users)
-              .where(inArray(users.id, authorIds));
-          })
-        : await asPublic(async (dbClient) => {
-            return await dbClient
-              .select({
-                id: users.id,
-                username: users.username,
-                displayName: users.displayName,
-                profileImageUrl: users.profileImageUrl,
-                isActor: users.isActor,
-              })
-              .from(users)
-              .where(inArray(users.id, authorIds));
-          });
+      : await runWithOptionalUserRls(authUser, async (dbClient) =>
+          selectTrendingAuthorUserRowsByIds(dbClient, authorIds)
+        );
 
   const userMap = new Map(usersList.map((u) => [u.id, u]));
 
   const [likeCounts, commentCounts, shareCounts] =
     postIds.length > 0
-      ? authUser && authUser.userId
-        ? await asUser(authUser, async (dbClient) => {
-            return await Promise.all([
-              dbClient
-                .select({ postId: reactions.postId, count: count() })
-                .from(reactions)
-                .where(
-                  and(
-                    inArray(reactions.postId, postIds),
-                    eq(reactions.type, 'like')
-                  )
-                )
-                .groupBy(reactions.postId),
-              dbClient
-                .select({ postId: comments.postId, count: count() })
-                .from(comments)
-                .where(inArray(comments.postId, postIds))
-                .groupBy(comments.postId),
-              dbClient
-                .select({ postId: shares.postId, count: count() })
-                .from(shares)
-                .where(inArray(shares.postId, postIds))
-                .groupBy(shares.postId),
-            ]);
-          })
-        : await asPublic(async (dbClient) => {
-            return await Promise.all([
-              dbClient
-                .select({ postId: reactions.postId, count: count() })
-                .from(reactions)
-                .where(
-                  and(
-                    inArray(reactions.postId, postIds),
-                    eq(reactions.type, 'like')
-                  )
-                )
-                .groupBy(reactions.postId),
-              dbClient
-                .select({ postId: comments.postId, count: count() })
-                .from(comments)
-                .where(inArray(comments.postId, postIds))
-                .groupBy(comments.postId),
-              dbClient
-                .select({ postId: shares.postId, count: count() })
-                .from(shares)
-                .where(inArray(shares.postId, postIds))
-                .groupBy(shares.postId),
-            ]);
-          })
+      ? await runWithOptionalUserRls(authUser, async (dbClient) =>
+          Promise.all([
+            selectPostLikeReactionCountsGroupedByPostIds(dbClient, postIds),
+            selectPostCommentCountsGroupedByPostIds(dbClient, postIds),
+            selectPostShareCountsGroupedByPostIds(dbClient, postIds),
+          ])
+        )
       : [[], [], []];
 
-  const likeMap = new Map(
-    likeCounts.map((lc) => [lc.postId, lc.count ?? 0] as const)
-  );
-  const commentMap = new Map(
-    commentCounts.map((cc) => [cc.postId, cc.count ?? 0] as const)
-  );
-  const shareMap = new Map(
-    shareCounts.map((sc) => [sc.postId, sc.count ?? 0] as const)
-  );
+  const likeMap = toPostCountMap(likeCounts);
+  const commentMap = toPostCountMap(commentCounts);
+  const shareMap = toPostCountMap(shareCounts);
 
   let likedPostIds = new Set<string>();
   let sharedPostIds = new Set<string>();
   if (authUser?.userId && postIds.length > 0) {
-    await asUser(authUser, async (dbClient) => {
-      const uid = authUser.userId;
+    const uid = authUser.userId;
+    await runWithOptionalUserRls(authUser, async (dbClient) => {
       const [likes, userShares] = await Promise.all([
-        dbClient
-          .select({ postId: reactions.postId })
-          .from(reactions)
-          .where(
-            and(
-              inArray(reactions.postId, postIds),
-              eq(reactions.userId, uid),
-              eq(reactions.type, 'like')
-            )
-          ),
-        dbClient
-          .select({ postId: shares.postId })
-          .from(shares)
-          .where(and(inArray(shares.postId, postIds), eq(shares.userId, uid))),
+        selectPostIdsLikedByUser(dbClient, { postIds, userId: uid }),
+        selectPostIdsSharedByUser(dbClient, { postIds, userId: uid }),
       ]);
-      likedPostIds = new Set(
-        likes
-          .map((l) => l.postId)
-          .filter((id): id is string => id !== null && id !== undefined)
-      );
-      sharedPostIds = new Set(userShares.map((s) => s.postId));
+      likedPostIds = new Set(likes);
+      sharedPostIds = new Set(userShares);
     });
   }
 

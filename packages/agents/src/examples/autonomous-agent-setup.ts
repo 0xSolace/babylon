@@ -5,8 +5,8 @@
  * with the new batch processing and dashboard system.
  */
 
-import { eq } from '@babylon/db';
-import { db, users } from '@babylon/db/runtime';
+import { selectUserRowById } from '@babylon/db';
+import { db } from '@babylon/db/engine-storage';
 import type { Character } from '@elizaos/core';
 import { AgentRuntime, ModelType } from '@elizaos/core';
 import { autonomousCoordinator } from '../autonomous';
@@ -28,11 +28,7 @@ export async function setupBasicAutonomousAgent(agentUserId: string): Promise<{
   runtime: AgentRuntime;
 }> {
   // 1. Load agent from database
-  const [user] = await db
-    .select()
-    .from(users)
-    .where(eq(users.id, agentUserId))
-    .limit(1);
+  const user = await selectUserRowById(db, agentUserId);
 
   if (!user) {
     throw new Error('Agent not found');

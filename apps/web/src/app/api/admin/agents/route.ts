@@ -74,8 +74,8 @@ import {
   requireAdmin,
   withErrorHandling,
 } from '@babylon/api';
-import { and, count, desc, eq, gte } from '@babylon/db';
-import { agentLogs, db, userAgentConfigs, users } from '@babylon/db/runtime';
+import { fetchAdminAgentsListDashboardData } from '@babylon/db';
+import { asSystem } from '@babylon/db/engine-storage';
 
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -96,64 +96,34 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
     resourceType: 'agents',
     metadata: { action: 'view_all_agents' },
   });
-  // Get all agents with their configs
-  const agentsWithConfigs = await db
-    .select({
-      user: users,
-      config: userAgentConfigs,
-    })
-    .from(users)
-    .leftJoin(userAgentConfigs, eq(users.id, userAgentConfigs.userId))
-    .where(eq(users.isAgent, true))
-    .orderBy(desc(userAgentConfigs.lastTickAt));
+  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+  const {
+    agentsWithConfigs,
+    performanceMetrics,
+    creators,
+    logCounts,
+    errorCounts,
+  } = await asSystem(
+    (tx) => fetchAdminAgentsListDashboardData(tx, oneDayAgo),
+    'admin-agents-list'
+  );
 
   const agents = agentsWithConfigs.map((a) => a.user);
   const configMap = new Map(
     agentsWithConfigs.filter((a) => a.config).map((a) => [a.user.id, a.config!])
   );
 
-  // Get performance metrics for all agents
-  const agentIds = agents.map((a) => a.id);
-  const performanceMetrics = await db.agentPerformanceMetrics.findMany({
-    where: { userId: { in: agentIds } },
-  });
   const metricsMap = new Map(performanceMetrics.map((m) => [m.userId, m]));
 
-  // Get creator names
-  const creatorIds = agents.map((a) => a.managedBy).filter(Boolean) as string[];
-  const creators = await db.user.findMany({
-    where: { id: { in: creatorIds } },
-    select: { id: true, displayName: true, username: true },
-  });
   const creatorMap = new Map(
     creators.map((c) => [c.id, c.displayName || c.username])
   );
 
-  // Get recent logs count for each agent (last 24 hours)
-  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const logCounts = await db
-    .select({
-      agentUserId: agentLogs.agentUserId,
-      _count: count(),
-    })
-    .from(agentLogs)
-    .where(gte(agentLogs.createdAt, oneDayAgo))
-    .groupBy(agentLogs.agentUserId);
   const logCountMap = new Map(
     logCounts.map((l) => [l.agentUserId, Number(l._count)])
   );
 
-  // Get error counts
-  const errorCounts = await db
-    .select({
-      agentUserId: agentLogs.agentUserId,
-      _count: count(),
-    })
-    .from(agentLogs)
-    .where(
-      and(gte(agentLogs.createdAt, oneDayAgo), eq(agentLogs.level, 'error'))
-    )
-    .groupBy(agentLogs.agentUserId);
   const errorCountMap = new Map(
     errorCounts.map((e) => [e.agentUserId, Number(e._count)])
   );
