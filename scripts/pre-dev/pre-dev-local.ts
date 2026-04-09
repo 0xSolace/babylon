@@ -300,19 +300,29 @@ if (needsSeed || userCount === 0) {
 }
 
 // 9. Start Steward auth service (optional — requires ../steward sibling directory)
-const stewardSiblingExists = existsSync(join(process.cwd(), '..', 'steward', 'Dockerfile'));
+const stewardSiblingExists = existsSync(
+  join(process.cwd(), '..', 'steward', 'Dockerfile')
+);
 
 if (!stewardSiblingExists) {
-  console.warn('⚠️  ../steward not found — Steward auth service will not start.');
-  console.warn('   Clone https://github.com/Steward-Fi/steward as a sibling to enable auth.');
+  console.warn(
+    '⚠️  ../steward not found — Steward auth service will not start.'
+  );
+  console.warn(
+    '   Clone https://github.com/Steward-Fi/steward as a sibling to enable auth.'
+  );
 } else {
   const stewardRunning =
-    await $`docker ps --filter name=${STEWARD_CONTAINER} --format "{{.Names}}"`.quiet().text();
+    await $`docker ps --filter name=${STEWARD_CONTAINER} --format "{{.Names}}"`
+      .quiet()
+      .text();
 
   if (stewardRunning.trim() !== STEWARD_CONTAINER) {
     console.info('Starting Steward auth service...');
     await dockerComposeUp('steward')
-      .then(() => console.info('✅ Steward container started, waiting for health...'))
+      .then(() =>
+        console.info('✅ Steward container started, waiting for health...')
+      )
       .catch(() => console.warn('⚠️  Steward start failed (auth may not work)'));
 
     // Wait up to 60s for Steward's /health endpoint
@@ -321,15 +331,22 @@ if (!stewardSiblingExists) {
       const ok = await fetch('http://localhost:3200/health')
         .then((r) => r.ok)
         .catch(() => false);
-      if (ok) { stewardReady = true; break; }
+      if (ok) {
+        stewardReady = true;
+        break;
+      }
       await new Promise((resolve) => setTimeout(resolve, 2000));
     }
 
     if (stewardReady) {
       console.info('✅ Steward is ready at http://localhost:3200');
-      console.info('   Run "bun run steward:init" once to provision the babylon tenant.');
+      console.info(
+        '   Run "bun run steward:init" once to provision the babylon tenant.'
+      );
     } else {
-      console.warn('⚠️  Steward did not become healthy within 60s — check logs with:');
+      console.warn(
+        '⚠️  Steward did not become healthy within 60s — check logs with:'
+      );
       console.warn(`   docker logs ${STEWARD_CONTAINER}`);
     }
   } else {

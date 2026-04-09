@@ -133,32 +133,15 @@ import {
   authenticateWithDbUser,
   ConflictError,
   cachedDb,
-  getPrivyClient,
   InternalServerError,
-  ReputationService,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, db, eq, ne, or, sql, users } from '@babylon/db';
-import {
-  checkForAdminEmail,
-  getAllVerifiedEmails,
-  logger,
-  type PrivyUserWithEmails,
-  toISO,
-  toISOOrNull,
-} from '@babylon/shared';
-import type { User as PrivyUser } from '@privy-io/server-auth';
+import { db, eq, or, sql, users } from '@babylon/db';
+import { logger, toISO, toISOOrNull } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
-import {
-  extractPrivyIdentitySnapshot,
-  type PrivyIdentitySnapshot,
-  shouldSyncMissingPrivyIdentity,
-} from '@/lib/auth/privyIdentitySync';
 import { getOptionalProfileStats } from '@/lib/users/profile-stats';
 import { POST as updateProfilePOST } from '../[userId]/update-profile/route';
-
-type PrivyUserWithWallets = PrivyUser & PrivyUserWithEmails;
 
 const userSelectFields = {
   id: users.id,
@@ -257,203 +240,6 @@ type UserSelectResult = {
   updatedAt: Date;
   gameGuideCompletedAt: Date | null;
 };
-
-async function syncMissingPrivyIdentityFields(
-  dbUser: UserSelectResult,
-  privyIdentity: PrivyIdentitySnapshot
-): Promise<{
-  user: UserSelectResult;
-  newlyLinked: Array<'farcaster' | 'twitter' | 'telegram'>;
-}> {
-  const updateData: Partial<typeof users.$inferInsert> = {};
-  const newlyLinked: Array<'farcaster' | 'twitter' | 'telegram'> = [];
-
-  if ((!dbUser.email || !dbUser.emailVerified) && privyIdentity.email) {
-    updateData.email = privyIdentity.email;
-    updateData.emailVerified = true;
-  }
-
-  if (!dbUser.hasFarcaster && privyIdentity.farcasterFid) {
-    const [existingFarcasterUser] = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(
-        and(
-          eq(users.farcasterFid, privyIdentity.farcasterFid),
-          ne(users.id, dbUser.id)
-        )
-      )
-      .limit(1);
-
-    if (existingFarcasterUser) {
-      logger.warn(
-        'Privy Farcaster identity already linked to another user, skipping sync',
-        {
-          userId: dbUser.id,
-          farcasterFid: privyIdentity.farcasterFid,
-          conflictingUserId: existingFarcasterUser.id,
-        },
-        'GET /api/users/me'
-      );
-    } else {
-      updateData.hasFarcaster = true;
-      updateData.farcasterFid = privyIdentity.farcasterFid;
-      if (privyIdentity.farcasterUsername) {
-        updateData.farcasterUsername = privyIdentity.farcasterUsername;
-      }
-      newlyLinked.push('farcaster');
-    }
-  }
-
-  if (!dbUser.hasTwitter && privyIdentity.twitterId) {
-    const [existingTwitterUser] = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(
-        and(
-          eq(users.twitterId, privyIdentity.twitterId),
-          ne(users.id, dbUser.id)
-        )
-      )
-      .limit(1);
-
-    if (existingTwitterUser) {
-      logger.warn(
-        'Privy X identity already linked to another user, skipping sync',
-        {
-          userId: dbUser.id,
-          twitterId: privyIdentity.twitterId,
-          conflictingUserId: existingTwitterUser.id,
-        },
-        'GET /api/users/me'
-      );
-    } else {
-      updateData.hasTwitter = true;
-      updateData.twitterId = privyIdentity.twitterId;
-      if (privyIdentity.twitterUsername) {
-        updateData.twitterUsername = privyIdentity.twitterUsername;
-      }
-      newlyLinked.push('twitter');
-    }
-  }
-
-  if (!dbUser.hasTelegram && privyIdentity.telegramUserId) {
-    const [existingTelegramUser] = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(
-        and(
-          eq(users.telegramId, privyIdentity.telegramUserId),
-          ne(users.id, dbUser.id)
-        )
-      )
-      .limit(1);
-
-    if (existingTelegramUser) {
-      logger.warn(
-        'Privy Telegram identity already linked to another user, skipping sync',
-        {
-          userId: dbUser.id,
-          telegramUserId: privyIdentity.telegramUserId,
-          conflictingUserId: existingTelegramUser.id,
-        },
-        'GET /api/users/me'
-      );
-    } else {
-      updateData.hasTelegram = true;
-      updateData.telegramId = privyIdentity.telegramUserId;
-      updateData.telegramVerifiedAt = new Date();
-      if (privyIdentity.telegramUsername) {
-        updateData.telegramUsername = privyIdentity.telegramUsername;
-      }
-      newlyLinked.push('telegram');
-    }
-  }
-
-  if (Object.keys(updateData).length === 0) {
-    return { user: dbUser, newlyLinked };
-  }
-
-  const oldPrivyId = dbUser.privyId;
-
-  const [updatedUser] = await db
-    .update(users)
-    .set({
-      ...updateData,
-      updatedAt: new Date(),
-    })
-    .where(eq(users.id, dbUser.id))
-    .returning(userSelectFields);
-
-  const finalUser = updatedUser ?? dbUser;
-
-  // Refresh identifier + user caches after any Privy identity sync (email/social fields).
-  // Always invalidate: privyId may be unchanged while other cached user fields change.
-  await cachedDb.invalidateUserIdentifierCaches(
-    {
-      id: finalUser.id,
-      privyId: finalUser.privyId,
-      username: finalUser.username,
-    },
-    oldPrivyId !== finalUser.privyId && oldPrivyId
-      ? { privyId: oldPrivyId }
-      : undefined
-  );
-
-  return {
-    user: finalUser,
-    newlyLinked,
-  };
-}
-
-async function awardPointsForNewPrivyIdentityLinks(
-  userId: string,
-  newlyLinked: Array<'farcaster' | 'twitter' | 'telegram'>,
-  privyIdentity: PrivyIdentitySnapshot
-): Promise<void> {
-  for (const platform of newlyLinked) {
-    let pointsResult: Awaited<
-      ReturnType<typeof ReputationService.awardFarcasterLink>
-    >;
-    if (platform === 'farcaster') {
-      pointsResult = await ReputationService.awardFarcasterLink(
-        userId,
-        privyIdentity.farcasterUsername ?? undefined
-      );
-    } else if (platform === 'telegram') {
-      pointsResult = await ReputationService.awardTelegramLink(
-        userId,
-        privyIdentity.telegramUsername ?? undefined
-      );
-    } else {
-      pointsResult = await ReputationService.awardTwitterLink(
-        userId,
-        privyIdentity.twitterUsername ?? undefined
-      );
-    }
-
-    if (!pointsResult.success) {
-      logger.warn(
-        'Points service did not award points for Privy identity link',
-        { userId, platform },
-        'GET /api/users/me'
-      );
-      continue;
-    }
-
-    await ReputationService.checkAndQualifyReferral(userId).catch((error) => {
-      logger.warn(
-        'Failed to check referral qualification after Privy identity sync',
-        {
-          userId,
-          platform,
-          error: error instanceof Error ? error.message : String(error),
-        },
-        'GET /api/users/me'
-      );
-    });
-  }
-}
 
 function buildUserResponse(
   dbUser: UserSelectResult,
@@ -585,8 +371,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const authUser = await authenticate(request);
   const privyId = authUser.privyId ?? authUser.userId;
   const canonicalUserId = authUser.dbUserId ?? authUser.userId;
-  const shouldForcePrivyIdentitySync =
-    request.headers.get('x-sync-privy-identities') === '1';
 
   // Extract referralCode from query params (passed from frontend)
   const { searchParams } = new URL(request.url);
@@ -598,59 +382,42 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     'GET /api/users/me'
   );
 
+  // Phase 2: Look up user by stewardId first, fall back to privyId for legacy users
+  const stewardId =
+    authUser.userId !== authUser.privyId ? authUser.userId : undefined;
   let [dbUser] = await db
     .select(userSelectFields)
     .from(users)
-    .where(eq(users.privyId, privyId))
+    .where(
+      stewardId ? eq(users.stewardId, stewardId) : eq(users.privyId, privyId)
+    )
     .limit(1);
 
+  // Fallback: try the other identifier if first lookup missed
+  if (!dbUser && stewardId) {
+    [dbUser] = await db
+      .select(userSelectFields)
+      .from(users)
+      .where(eq(users.privyId, privyId))
+      .limit(1);
+  }
+
   // Create minimal user record on first authentication
+  // Phase 2: auth-middleware creates the user via ensureUserFromSteward before
+  // this route runs, so this block should rarely be hit for Steward users.
   if (!dbUser) {
-    // Fetch user data from Privy to get email and social accounts
-    let email: string | null = null;
-    let farcasterUsername: string | null = null;
-    let farcasterFid: string | null = null;
-    let twitterUsername: string | null = null;
-    let twitterId: string | null = null;
-    let telegramUserId: string | null = null;
-    let telegramUsername: string | null = null;
-
-    const privyClient = getPrivyClient();
-    const privyUser = (await privyClient.getUser(
-      privyId
-    )) as PrivyUserWithWallets;
-
-    email = getAllVerifiedEmails(privyUser)[0] ?? null;
-
-    // Extract Farcaster info
-    if (privyUser.farcaster) {
-      farcasterUsername = privyUser.farcaster.username ?? null;
-      farcasterFid = privyUser.farcaster.fid
-        ? String(privyUser.farcaster.fid)
-        : null;
-    }
-
-    // Extract Twitter info
-    if (privyUser.twitter) {
-      twitterUsername = privyUser.twitter.username ?? null;
-      twitterId = privyUser.twitter.subject ?? null;
-    }
-
-    // Extract Telegram info
-    if (privyUser.telegram) {
-      telegramUserId = privyUser.telegram.telegramUserId ?? null;
-      telegramUsername = privyUser.telegram.username ?? null;
-    }
+    // Use only data available from the authenticated session — no Privy call
+    const email: string | null = authUser.email ?? null;
+    const farcasterUsername: string | null = null;
+    const farcasterFid: string | null = null;
+    const twitterUsername: string | null = null;
+    const twitterId: string | null = null;
+    const telegramUserId: string | null = null;
+    const telegramUsername: string | null = null;
 
     logger.info(
-      'Fetched Privy user data for new user',
-      {
-        privyId,
-        hasEmail: !!email,
-        hasFarcaster: !!farcasterUsername,
-        hasTwitter: !!twitterUsername,
-        hasTelegram: !!telegramUserId,
-      },
+      'Creating minimal user for new Steward user',
+      { privyId, email },
       'GET /api/users/me'
     );
 
@@ -914,20 +681,16 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       'GET /api/users/me'
     );
 
-    // Check if user should be auto-promoted to admin based on email domain
-    // SECURITY: Requires email verification (Privy emails are verified by design)
-    // Check ALL linked emails, not just the primary one (handles users who linked admin email later)
-    const { adminEmail, allVerifiedEmails } = checkForAdminEmail(privyUser);
+    // Phase 2: Admin check uses the email from auth session (Steward verifies email ownership)
+    const adminDomain = process.env.ADMIN_EMAIL_DOMAIN?.trim();
+    const adminEmail: string | null =
+      email && adminDomain && email.endsWith(`@${adminDomain}`) ? email : null;
     const shouldBeAdmin = adminEmail !== null;
 
     if (shouldBeAdmin) {
       logger.info(
         'Auto-promoting user to admin based on verified email domain',
-        {
-          privyId,
-          emailDomain: adminEmail?.split('@')[1] ?? null,
-          emailCount: allVerifiedEmails.length,
-        },
+        { privyId, emailDomain: adminEmail?.split('@')[1] ?? null },
         'GET /api/users/me'
       );
     }
@@ -1010,78 +773,27 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     throw new InternalServerError('Failed to create or find user record');
   }
 
-  const needsPrivyIdentitySync =
-    shouldForcePrivyIdentitySync &&
-    shouldSyncMissingPrivyIdentity({
-      hasFarcaster: dbUser.hasFarcaster,
-      hasTwitter: dbUser.hasTwitter,
-      hasTelegram: dbUser.hasTelegram,
-      email: dbUser.email,
-      emailVerified: dbUser.emailVerified,
-    });
+  // Phase 2: Privy identity sync removed. Social identities are synced at login time.
   const needsAdminPromotionCheck = !dbUser.isAdmin;
 
-  if (needsPrivyIdentitySync || needsAdminPromotionCheck) {
-    const privyClient = getPrivyClient();
-    const privyUser = (await privyClient.getUser(
-      privyId
-    )) as PrivyUserWithWallets;
-    const privyIdentity = extractPrivyIdentitySnapshot(privyUser);
-
-    if (needsPrivyIdentitySync) {
-      const syncResult = await syncMissingPrivyIdentityFields(
-        dbUser,
-        privyIdentity
+  if (needsAdminPromotionCheck) {
+    const adminDomain = process.env.ADMIN_EMAIL_DOMAIN?.trim();
+    if (
+      adminDomain &&
+      dbUser.email &&
+      dbUser.email.endsWith(`@${adminDomain}`)
+    ) {
+      logger.info(
+        'Auto-promoting existing user to admin based on verified email domain',
+        { userId: dbUser.id, emailDomain: adminDomain },
+        'GET /api/users/me'
       );
-      dbUser = syncResult.user;
-
-      if (syncResult.newlyLinked.length > 0) {
-        logger.info(
-          'Synced missing social identities from Privy',
-          {
-            userId: dbUser.id,
-            newlyLinked: syncResult.newlyLinked,
-            farcasterFid: privyIdentity.farcasterFid,
-            twitterId: privyIdentity.twitterId,
-          },
-          'GET /api/users/me'
-        );
-      }
-
-      await awardPointsForNewPrivyIdentityLinks(
-        dbUser.id,
-        syncResult.newlyLinked,
-        privyIdentity
-      );
-    }
-
-    // Auto-promote existing users to admin if they have a verified admin domain email.
-    // This ensures users who later link/verify a company email get admin access.
-    if (needsAdminPromotionCheck) {
-      const { adminEmail, allVerifiedEmails } = checkForAdminEmail(privyUser);
-      const shouldBeAdmin = adminEmail !== null;
-
-      if (shouldBeAdmin) {
-        logger.info(
-          'Auto-promoting existing user to admin based on verified email domain',
-          {
-            userId: dbUser.id,
-            emailDomain: adminEmail?.split('@')[1] ?? null,
-            emailCount: allVerifiedEmails.length,
-          },
-          'GET /api/users/me'
-        );
-
-        const [updatedUser] = await db
-          .update(users)
-          .set({ isAdmin: true, updatedAt: new Date() })
-          .where(eq(users.id, dbUser.id))
-          .returning(userSelectFields);
-
-        if (updatedUser) {
-          dbUser = updatedUser;
-        }
-      }
+      const [updatedUser] = await db
+        .update(users)
+        .set({ isAdmin: true, updatedAt: new Date() })
+        .where(eq(users.id, dbUser.id))
+        .returning(userSelectFields);
+      if (updatedUser) dbUser = updatedUser;
     }
   }
 

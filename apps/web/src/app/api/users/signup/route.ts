@@ -92,7 +92,6 @@ import {
   ConflictError,
   cachedDb,
   getHashedClientIp,
-  getPrivyClient,
   InternalServerError,
   isReferralCodeAvailableForUser,
   notifyNewAccount,
@@ -117,15 +116,12 @@ import {
 import { UserAlphaGroupAssignmentService } from '@babylon/engine';
 import type { OnboardingProfilePayload } from '@babylon/shared';
 import {
-  checkForAdminEmail,
   generateSnowflakeId,
   logger,
   OnboardingProfileSchema,
   POINTS,
-  type PrivyUserWithEmails,
   toISO,
 } from '@babylon/shared';
-import type { User as PrivyUser } from '@privy-io/server-auth';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { trackServerEvent } from '@/lib/posthog/server';
@@ -142,8 +138,6 @@ interface SignupRequestBody {
   tosAccepted?: boolean;
   privacyPolicyAccepted?: boolean;
 }
-
-type PrivyIdentityUser = PrivyUser & PrivyUserWithEmails;
 
 const SignupSchema = OnboardingProfileSchema.extend({
   identityToken: z
@@ -177,32 +171,14 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   // Capture and hash IP address for self-referral detection
   const registrationIpHash = getHashedClientIp(request.headers);
 
-  // Fetch identity data from Privy if token provided
+  // Phase 2: Privy identity token replaced by Steward. Social usernames come
+  // from the user's profile payload or are populated at social login time.
   let identityFarcasterUsername: string | undefined;
   let identityTwitterUsername: string | undefined;
-  let adminEmailResult: ReturnType<typeof checkForAdminEmail> = {
-    adminEmail: null,
-    allVerifiedEmails: [],
+  const adminEmailResult = {
+    adminEmail: null as string | null,
+    allVerifiedEmails: [] as string[],
   };
-
-  if (identityToken) {
-    const privyClient = getPrivyClient();
-    const identityUser = (await privyClient.getUserFromIdToken(
-      identityToken
-    )) as PrivyIdentityUser;
-
-    identityFarcasterUsername = identityUser.farcaster?.username ?? undefined;
-    identityTwitterUsername = identityUser.twitter?.username ?? undefined;
-    // SECURITY: Get verified emails from Privy, not from user input
-    // Check ALL linked emails to support users who linked admin email after initial signup
-    adminEmailResult = checkForAdminEmail(identityUser);
-  } else {
-    logger.info(
-      'Signup received no identity token; proceeding with provided payload only',
-      undefined,
-      'POST /api/users/signup'
-    );
-  }
 
   // Check for imported social data from onboarding flow
   const importedTwitter = parsedProfile.importedFrom === 'twitter';

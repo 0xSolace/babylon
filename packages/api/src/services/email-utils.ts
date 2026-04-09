@@ -1,9 +1,4 @@
-import {
-  getAllVerifiedEmails,
-  logger,
-  type PrivyUserWithEmails,
-} from '@babylon/shared';
-import { getPrivyClient } from '../auth-middleware';
+import { logger } from '@babylon/shared';
 import { getNotificationEmailFromEnv } from '../env';
 
 export interface ParsedEmailAddress {
@@ -168,23 +163,15 @@ export async function resolveRecipientEmail(
     return profileEmail;
   }
 
-  if (recipient.privyId) {
-    try {
-      const privyUser = (await getPrivyClient().getUser(
-        recipient.privyId
-      )) as PrivyUserWithEmails;
-      const verifiedEmails = getAllVerifiedEmails(privyUser);
-      const privyEmail = normalizeEmail(verifiedEmails[0]);
-      if (privyEmail) {
-        return privyEmail;
-      }
-    } catch (error) {
-      logger.warn(
-        'Failed to resolve recipient email from Privy',
-        { userId: recipient.id, error: String(error) },
-        callerTag
-      );
-    }
+  // Phase 2: Privy user lookup removed. Email is now stored directly in Babylon's
+  // users.email column (populated by Steward at login time).
+  // If we reach this point without an email, log and return null.
+  if (!profileEmail) {
+    logger.debug(
+      'Could not resolve recipient email — no email in DB record',
+      { userId: recipient.id },
+      callerTag
+    );
   }
 
   return null;

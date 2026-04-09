@@ -1,14 +1,22 @@
 /**
  * API Authentication Middleware
  *
- * @description Middleware for authenticating API requests. Supports both Privy
- * user authentication (via tokens/cookies) and agent session tokens. Provides
- * helper functions for authentication, optional authentication, and error responses.
+ * Authenticates requests using Steward-issued JWTs (HS256, issuer: "steward").
+ * The JWT is read from the `steward-token` httpOnly cookie (preferred) or the
+ * `Authorization: Bearer <token>` header (fallback for agents / external clients).
+ *
+ * User lookup chain (in order):
+ *   1. Fast path:  WHERE stewardId = payload.userId
+ *   2. Email bridge: unlinked user found by email → sets stewardId
+ *   3. New user:   ensureUserFromSteward() creates the record
+ *
+ * Dev bypass: x-dev-user-id header OR dev-user:<userId> Bearer token.
+ * Test DID:  steward:test:<userId> Bearer token (integration tests).
  */
 
-import { db, eq, users } from '@babylon/db';
+import { and, db, eq, isNull, users } from '@babylon/db';
 import { type AuthenticatedUser } from '@babylon/shared';
-import { PrivyClient } from '@privy-io/server-auth';
+import { jwtVerify } from 'jose';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { verifyAgentSession } from './agent-auth';
@@ -16,153 +24,183 @@ import {
   DEV_USER_ID_COOKIE_NAME,
   extractDevUserIdFromBearerToken,
 } from './dev-credentials';
-import { getPrivyAppIdFromEnv, getTrimmedEnv } from './env';
 import {
   AuthenticationError,
   isAuthenticationError,
   ServiceUnavailableError,
 } from './errors';
+import { ensureUserFromSteward } from './users/ensure-user';
 
-// Re-export types from shared for backwards compatibility
 export type { AuthenticatedUser } from '@babylon/shared';
 export { extractErrorMessage } from '@babylon/shared';
-
-// Re-export from errors for backwards compatibility
 export { AuthenticationError, isAuthenticationError };
 
-// Lazy initialization of Privy client to prevent build-time errors
-let privyClient: PrivyClient | null = null;
+// ─── Steward JWT verification ─────────────────────────────────────────────────
 
-/** @internal Reset singleton for testing only */
-export function _resetPrivyClientForTesting(): void {
-  privyClient = null;
-}
+const STEWARD_INTERNAL_EMAIL_SUFFIX = '@id.steward.internal';
 
-export function getPrivyClient(): PrivyClient {
-  if (!privyClient) {
-    const privyAppId = getPrivyAppIdFromEnv();
-    const privyAppSecret = getTrimmedEnv('PRIVY_APP_SECRET');
-
-    if (!privyAppId || !privyAppSecret) {
-      throw new Error('Privy credentials not configured');
+function getStewardJwtSecret(): Uint8Array {
+  const secret = process.env.STEWARD_JWT_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new ServiceUnavailableError('STEWARD_JWT_SECRET is not configured');
     }
-
-    privyClient = new PrivyClient(privyAppId, privyAppSecret);
+    // Dev fallback matches Steward's own dev default
+    return new TextEncoder().encode('dev-jwt-secret-change-in-prod');
   }
-  return privyClient;
+  return new TextEncoder().encode(secret);
 }
 
-/**
- * Authenticate request and return user info
- *
- * @description Authenticates an API request by checking for authentication tokens.
- * With HTTP-only cookies enabled, the privy-token cookie is preferred over the
- * Authorization header because the cookie is automatically managed and refreshed
- * by Privy. Falls back to Authorization header for backwards compatibility with
- * agents or external clients that may still use header-based auth.
- *
- * Token Priority:
- * 1. privy-token cookie (preferred - auto-refreshed by Privy)
- * 2. Authorization Bearer header (fallback for agents/external clients)
- *
- * @param {NextRequest} request - Next.js request object
- * @returns {Promise<AuthenticatedUser>} Authenticated user information
- * @throws {AuthenticationError} If authentication fails
- *
- * @see https://docs.privy.io/guide/react/configuration/cookies
- */
+interface StewardJwtPayload {
+  userId: string;
+  tenantId?: string;
+  email?: string;
+  address?: string;
+  fid?: number;
+  telegramId?: string;
+  [key: string]: unknown;
+}
+
+async function verifyStewardToken(token: string): Promise<StewardJwtPayload> {
+  const { payload } = await jwtVerify(token, getStewardJwtSecret(), {
+    issuer: 'steward',
+    algorithms: ['HS256'],
+  });
+  if (!payload['userId'] || typeof payload['userId'] !== 'string') {
+    throw new AuthenticationError('Steward JWT missing userId claim');
+  }
+  return payload as unknown as StewardJwtPayload;
+}
+
+// ─── User lookup chain ────────────────────────────────────────────────────────
+
+const USER_SELECT = {
+  id: users.id,
+  stewardId: users.stewardId,
+  privyId: users.privyId,
+  email: users.email,
+  isAdmin: users.isAdmin,
+  isAgent: users.isAgent,
+} as const;
+
+async function resolveUserFromStewardPayload(
+  payload: StewardJwtPayload
+): Promise<AuthenticatedUser> {
+  const { userId: stewardUserId, email } = payload;
+
+  // 1. Fast path: already linked
+  const [byId] = await db
+    .select(USER_SELECT)
+    .from(users)
+    .where(eq(users.stewardId, stewardUserId))
+    .limit(1);
+
+  if (byId) {
+    return toAuthUser(byId);
+  }
+
+  // 2. Email bridge: Babylon user exists but hasn't logged in via Steward yet.
+  //    Only match on real emails — skip synthetic @id.steward.internal addresses.
+  const isRealEmail =
+    email &&
+    typeof email === 'string' &&
+    !email.endsWith(STEWARD_INTERNAL_EMAIL_SUFFIX);
+
+  if (isRealEmail) {
+    const [byEmail] = await db
+      .select(USER_SELECT)
+      .from(users)
+      .where(and(eq(users.email, email), isNull(users.stewardId)))
+      .limit(1);
+
+    if (byEmail) {
+      await db
+        .update(users)
+        .set({ stewardId: stewardUserId })
+        .where(eq(users.id, byEmail.id));
+      return toAuthUser({ ...byEmail, stewardId: stewardUserId });
+    }
+  }
+
+  // 3. New user: first-ever login via Steward for this user
+  const newUser = await ensureUserFromSteward(
+    stewardUserId,
+    isRealEmail ? email : undefined
+  );
+  return toAuthUser(newUser);
+}
+
+interface DbUserRow {
+  id: string;
+  stewardId: string | null;
+  privyId: string | null;
+  email: string | null;
+  isAdmin: boolean;
+  isAgent: boolean;
+}
+
+function toAuthUser(dbUser: DbUserRow): AuthenticatedUser {
+  return {
+    userId: dbUser.id,
+    dbUserId: dbUser.id,
+    privyId: dbUser.privyId ?? dbUser.stewardId ?? dbUser.id,
+    email: dbUser.email ?? undefined,
+    isAdmin: dbUser.isAdmin,
+    isAgent: dbUser.isAgent,
+  };
+}
+
+// ─── authenticate ─────────────────────────────────────────────────────────────
+
 export async function authenticate(
   request: NextRequest
 ): Promise<AuthenticatedUser> {
+  // ── Dev bypass: x-dev-user-id header / cookie ──────────────────────────────
   if (process.env.NODE_ENV !== 'production') {
     const devUserId =
       request.headers.get('x-dev-user-id') ??
       request.cookies.get(DEV_USER_ID_COOKIE_NAME)?.value;
     if (devUserId) {
       const [dbUser] = await db
-        .select({
-          id: users.id,
-          privyId: users.privyId,
-          walletAddress: users.walletAddress,
-          email: users.email,
-          isAdmin: users.isAdmin,
-          isAgent: users.isAgent,
-        })
+        .select(USER_SELECT)
         .from(users)
         .where(eq(users.id, devUserId))
         .limit(1);
-
-      if (!dbUser) {
-        throw new AuthenticationError('Development user not found');
-      }
-
-      return {
-        userId: dbUser.id,
-        dbUserId: dbUser.id,
-        privyId: dbUser.privyId ?? dbUser.id,
-        walletAddress: dbUser.walletAddress ?? undefined,
-        email: dbUser.email ?? undefined,
-        isAdmin: dbUser.isAdmin,
-        isAgent: dbUser.isAgent,
-      };
+      if (!dbUser) throw new AuthenticationError('Development user not found');
+      return toAuthUser(dbUser);
     }
   }
 
+  // ── Extract token ──────────────────────────────────────────────────────────
+  // steward-token httpOnly cookie is preferred (set by POST /api/auth/session).
+  // Authorization: Bearer falls back for agents and external API clients.
+  const cookieToken = request.cookies.get('steward-token')?.value;
   const authHeader = request.headers.get('authorization');
-  let token: string | undefined;
-
-  // With HTTP-only cookies enabled, prefer the cookie over the Authorization header.
-  const cookieToken = request.cookies.get('privy-token')?.value;
-
-  if (cookieToken) {
-    token = cookieToken;
-  } else if (authHeader?.startsWith('Bearer ')) {
-    token = authHeader.substring(7);
-  }
+  const headerToken = authHeader?.startsWith('Bearer ')
+    ? authHeader.slice(7)
+    : undefined;
+  const token = cookieToken ?? headerToken;
 
   if (!token) {
-    throw new AuthenticationError(
-      'Missing or invalid authorization header or cookie'
-    );
+    throw new AuthenticationError('Missing authentication token');
   }
 
-  const devBearerUserId =
-    process.env.NODE_ENV !== 'production'
-      ? extractDevUserIdFromBearerToken(token)
-      : null;
-
-  if (devBearerUserId) {
-    const [dbUser] = await db
-      .select({
-        id: users.id,
-        privyId: users.privyId,
-        walletAddress: users.walletAddress,
-        email: users.email,
-        isAdmin: users.isAdmin,
-        isAgent: users.isAgent,
-      })
-      .from(users)
-      .where(eq(users.id, devBearerUserId))
-      .limit(1);
-
-    if (!dbUser) {
-      throw new AuthenticationError('Development user not found');
+  // ── Dev Bearer: dev-user:<userId> ──────────────────────────────────────────
+  if (process.env.NODE_ENV !== 'production') {
+    const devBearerUserId = extractDevUserIdFromBearerToken(token);
+    if (devBearerUserId) {
+      const [dbUser] = await db
+        .select(USER_SELECT)
+        .from(users)
+        .where(eq(users.id, devBearerUserId))
+        .limit(1);
+      if (!dbUser) throw new AuthenticationError('Development user not found');
+      return toAuthUser(dbUser);
     }
-
-    return {
-      userId: dbUser.id,
-      dbUserId: dbUser.id,
-      privyId: dbUser.privyId ?? dbUser.id,
-      walletAddress: dbUser.walletAddress ?? undefined,
-      email: dbUser.email ?? undefined,
-      isAdmin: dbUser.isAdmin,
-      isAgent: dbUser.isAgent,
-    };
   }
 
-  // Local dev convenience: allow using a test user's Privy DID directly as the
-  // Bearer token (used by API integration tests). Disabled by default in prod.
-  const allowTestPrivyDidAuth =
+  // ── Integration test DID: steward:test:<userId> ────────────────────────────
+  const allowTestAuth =
     process.env.ALLOW_TEST_PRIVY_DID_AUTH !== undefined
       ? ['true', '1', 'yes', 'on'].includes(
           process.env.ALLOW_TEST_PRIVY_DID_AUTH.toLowerCase()
@@ -170,47 +208,27 @@ export async function authenticate(
       : process.env.NODE_ENV === 'development' ||
         process.env.NODE_ENV === 'test';
 
-  if (allowTestPrivyDidAuth && token.startsWith('did:privy:test')) {
-    // Fast-path: our test Privy DIDs are of the form `did:privy:test-${userId}`,
-    // where `userId` is the DB user id (snowflake). Avoid a DB read when possible.
-    if (token.startsWith('did:privy:test-')) {
-      const embeddedUserId = token.slice('did:privy:test-'.length);
-      const isSnowflakeId = /^\d{15,20}$/.test(embeddedUserId);
-      if (isSnowflakeId) {
-        return {
-          userId: embeddedUserId,
-          dbUserId: embeddedUserId,
-          privyId: token,
-          walletAddress: undefined,
-          email: undefined,
-          isAgent: false,
-        };
-      }
+  if (allowTestAuth && token.startsWith('steward:test:')) {
+    const embeddedUserId = token.slice('steward:test:'.length);
+    if (/^\d{15,20}$/.test(embeddedUserId)) {
+      // Fast path — snowflake ID embedded directly
+      return {
+        userId: embeddedUserId,
+        dbUserId: embeddedUserId,
+        privyId: embeddedUserId,
+        isAgent: false,
+      };
     }
-
-    const dbUserResult = await db
-      .select({ id: users.id, walletAddress: users.walletAddress })
+    const [dbUser] = await db
+      .select(USER_SELECT)
       .from(users)
-      .where(eq(users.privyId, token))
+      .where(eq(users.id, embeddedUserId))
       .limit(1);
-    const dbUser = dbUserResult[0];
-
-    if (!dbUser) {
-      throw new AuthenticationError('Test user not found');
-    }
-
-    return {
-      userId: dbUser.id,
-      dbUserId: dbUser.id,
-      privyId: token,
-      walletAddress: dbUser.walletAddress ?? undefined,
-      email: undefined,
-      isAgent: false,
-    };
+    if (!dbUser) throw new AuthenticationError('Test user not found');
+    return toAuthUser(dbUser);
   }
 
-  // Try agent session authentication first (faster)
-  // Wrap in try-catch so store errors (e.g. Redis) don't leak as 500
+  // ── Agent session token ────────────────────────────────────────────────────
   try {
     const agentSession = await verifyAgentSession(token);
     if (agentSession) {
@@ -221,141 +239,58 @@ export async function authenticate(
       };
     }
   } catch {
-    // Agent session lookup failed (e.g. Redis down) — fall through to Privy auth
+    // Agent session lookup failed (e.g. Redis down) — fall through to Steward JWT
   }
 
-  // Try Privy authentication
-  let privy: PrivyClient;
+  // ── Steward JWT verification ───────────────────────────────────────────────
+  let payload: StewardJwtPayload;
   try {
-    privy = getPrivyClient();
-  } catch {
-    throw new ServiceUnavailableError(
-      'Authentication service unavailable. Please try again later.'
+    payload = await verifyStewardToken(token);
+  } catch (err) {
+    if (isAuthenticationError(err)) throw err;
+
+    const msg = err instanceof Error ? err.message.toLowerCase() : '';
+    if (msg.includes('exp') || msg.includes('expired')) {
+      throw new AuthenticationError(
+        'Authentication token has expired. Please sign in again.'
+      );
+    }
+    throw new AuthenticationError(
+      'Invalid authentication token. Please sign in again.'
     );
   }
 
-  // Get the Authorization header token as a potential fallback
-  const authHeaderToken = authHeader?.startsWith('Bearer ')
-    ? authHeader.substring(7)
-    : undefined;
-
-  // If we're using the cookie token and there's also an auth header token,
-  // we should try the cookie first but fall back to the header if it fails.
-  // This handles the case where the cookie is from a different Privy app
-  // (e.g., stale cookies from a different environment on localhost).
-  const tokensToTry =
-    cookieToken && authHeaderToken && cookieToken !== authHeaderToken
-      ? [token, authHeaderToken]
-      : [token];
-
-  let lastError: Error | undefined;
-
-  for (const tokenToVerify of tokensToTry) {
-    try {
-      const claims = await privy.verifyAuthToken(tokenToVerify);
-
-      const dbUserResult = await db
-        .select({
-          id: users.id,
-          walletAddress: users.walletAddress,
-          isAdmin: users.isAdmin,
-        })
-        .from(users)
-        .where(eq(users.privyId, claims.userId))
-        .limit(1);
-      const dbUser = dbUserResult[0];
-
-      const authedUser: AuthenticatedUser = {
-        userId: dbUser?.id ?? claims.userId,
-        dbUserId: dbUser?.id,
-        privyId: claims.userId,
-        walletAddress: dbUser?.walletAddress ?? undefined,
-        email: undefined,
-        isAdmin: dbUser?.isAdmin ?? false,
-        isAgent: false,
-      };
-
-      return authedUser;
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message.toLowerCase() : '';
-      const isExpiredTokenError =
-        errorMessage.includes('token expired') ||
-        errorMessage.includes('exp mismatch');
-
-      if (isExpiredTokenError) {
-        // If this isn't the last token to try, continue to the next one
-        if (tokensToTry.indexOf(tokenToVerify) < tokensToTry.length - 1) {
-          continue;
-        }
-        throw new AuthenticationError(
-          'Authentication token has expired. Please refresh your session.'
-        );
-      }
-
-      lastError = error as Error;
-      // If this isn't the last token to try, continue to the next one
-      if (tokensToTry.indexOf(tokenToVerify) < tokensToTry.length - 1) {
-        continue;
-      }
-    }
-  }
-
-  // If we get here, all tokens failed verification.
-  // Always normalize verification failures to AuthenticationError so malformed
-  // or garbage JWTs produce a clean 401 instead of bubbling a provider error as 500.
-  if (lastError instanceof AuthenticationError) {
-    throw lastError;
-  }
-
-  throw new AuthenticationError(
-    'Invalid authentication token. Please sign in again.',
-    {
-      reason: lastError instanceof Error ? lastError.message : 'unknown',
-    }
-  );
+  return resolveUserFromStewardPayload(payload);
 }
 
-/**
- * Authenticate and require that the user has a database record
- */
+// ─── authenticateWithDbUser ───────────────────────────────────────────────────
+
 export async function authenticateWithDbUser(
   request: NextRequest
 ): Promise<AuthenticatedUser & { dbUserId: string }> {
   const authUser = await authenticate(request);
-
   if (!authUser.dbUserId) {
     throw new AuthenticationError(
       'User profile not found. Please complete onboarding first.'
     );
   }
-
   return authUser as AuthenticatedUser & { dbUserId: string };
 }
 
-/**
- * Optional authentication - returns user if authenticated, null otherwise
- */
+// ─── optionalAuth ─────────────────────────────────────────────────────────────
+
 export async function optionalAuth(
   request: NextRequest
 ): Promise<AuthenticatedUser | null> {
+  const cookieToken = request.cookies.get('steward-token')?.value;
   const authHeader = request.headers.get('authorization');
-  let token: string | undefined;
+  const headerToken = authHeader?.startsWith('Bearer ')
+    ? authHeader.slice(7)
+    : undefined;
+  const token = cookieToken ?? headerToken;
 
-  // Prefer cookie over header
-  const cookieToken = request.cookies.get('privy-token')?.value;
+  if (!token) return null;
 
-  if (cookieToken) {
-    token = cookieToken;
-  } else if (authHeader?.startsWith('Bearer ')) {
-    token = authHeader.substring(7);
-  }
-
-  if (!token) {
-    return null;
-  }
-
-  // Wrap in try-catch so store errors (e.g. Redis) return null instead of 500
   try {
     const agentSession = await verifyAgentSession(token);
     if (agentSession) {
@@ -366,133 +301,66 @@ export async function optionalAuth(
       };
     }
   } catch {
-    // Agent session lookup failed (e.g. Redis down) — fall through to Privy auth
+    // fall through
   }
 
-  // Try Privy authentication - return null on failure (optional auth)
-  let privy: PrivyClient;
   try {
-    privy = getPrivyClient();
+    const payload = await verifyStewardToken(token);
+    return resolveUserFromStewardPayload(payload);
   } catch {
     return null;
   }
-
-  // Get the Authorization header token as a potential fallback
-  const authHeaderToken = authHeader?.startsWith('Bearer ')
-    ? authHeader.substring(7)
-    : undefined;
-
-  // If we're using the cookie token and there's also an auth header token,
-  // we should try the cookie first but fall back to the header if it fails.
-  // This handles the case where the cookie is from a different Privy app
-  // (e.g., stale cookies from a different environment on localhost).
-  const tokensToTry =
-    cookieToken && authHeaderToken && cookieToken !== authHeaderToken
-      ? [token, authHeaderToken]
-      : [token];
-
-  for (const tokenToVerify of tokensToTry) {
-    try {
-      const claims = await privy.verifyAuthToken(tokenToVerify);
-
-      const dbUserResult = await db
-        .select({
-          id: users.id,
-          walletAddress: users.walletAddress,
-          isAdmin: users.isAdmin,
-        })
-        .from(users)
-        .where(eq(users.privyId, claims.userId))
-        .limit(1);
-      const dbUser = dbUserResult[0];
-
-      return {
-        userId: dbUser?.id ?? claims.userId,
-        dbUserId: dbUser?.id,
-        privyId: claims.userId,
-        walletAddress: dbUser?.walletAddress ?? undefined,
-        email: undefined,
-        isAdmin: dbUser?.isAdmin ?? false,
-        isAgent: false,
-      };
-    } catch {
-      // If this isn't the last token to try, continue to the next one
-      if (tokensToTry.indexOf(tokenToVerify) < tokensToTry.length - 1) {
-        continue;
-      }
-      // For optional auth, return null on final failure
-      return null;
-    }
-  }
-
-  return null;
 }
 
-/**
- * Optional authentication from headers - for use when NextRequest is not available
- */
+// ─── optionalAuthFromHeaders ──────────────────────────────────────────────────
+
 export async function optionalAuthFromHeaders(
   headers: Headers
 ): Promise<AuthenticatedUser | null> {
   const authHeader = headers.get('authorization');
+  if (!authHeader?.startsWith('Bearer ')) return null;
+  const token = authHeader.slice(7);
 
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.substring(7);
-
-  // Wrap in try-catch so store errors (e.g. Redis) return null instead of 500
   try {
     const agentSession = await verifyAgentSession(token);
     if (agentSession) {
-      return {
-        userId: agentSession.agentId,
-        isAgent: true,
-      };
+      return { userId: agentSession.agentId, isAgent: true };
     }
   } catch {
-    // Agent session lookup failed (e.g. Redis down) — fall through to Privy auth
+    // fall through
   }
 
-  // Try Privy authentication - return null on failure (optional auth)
   try {
-    const privy = getPrivyClient();
-    const claims = await privy.verifyAuthToken(token);
-
-    return {
-      userId: claims.userId,
-      walletAddress: undefined,
-      email: undefined,
-      isAgent: false,
-    };
+    const payload = await verifyStewardToken(token);
+    return resolveUserFromStewardPayload(payload);
   } catch {
-    // For optional auth, return null on failure
     return null;
   }
 }
 
-/**
- * Standard auth error response helper
- */
+// ─── helpers ──────────────────────────────────────────────────────────────────
+
 export function authErrorResponse(message = 'Unauthorized') {
   return NextResponse.json({ error: message }, { status: 401 });
 }
 
-/**
- * Authenticate user from request (convenience wrapper)
- *
- * @description Authenticates a user from a Next.js request and returns user
- * information with an additional 'id' alias for userId.
- *
- * @param {NextRequest} req - Next.js request object
- * @returns {Promise<AuthenticatedUser & { id: string }>} Authenticated user information
- * @throws {AuthenticationError} If authentication fails
- */
 export async function authenticateUser(req: NextRequest) {
   const authUser = await authenticate(req);
-  return {
-    id: authUser.userId,
-    ...authUser,
-  };
+  return { id: authUser.userId, ...authUser };
+}
+
+// ─── Legacy Privy client export (no-op — kept for import compatibility) ───────
+// Any code still importing getPrivyClient() will compile but get an error at
+// runtime to surface remaining usages during Phase 2 migration.
+
+/** @deprecated — use Steward JWT verification instead */
+export function getPrivyClient(): never {
+  throw new Error(
+    '[Phase 2] getPrivyClient() has been removed. Use Steward JWT verification.'
+  );
+}
+
+/** @internal Reset for testing only — no-op in Phase 2 */
+export function _resetPrivyClientForTesting(): void {
+  /* no-op */
 }

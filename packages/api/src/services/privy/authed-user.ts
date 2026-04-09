@@ -1,18 +1,19 @@
+/**
+ * @deprecated Use auth-middleware.ts directly for Steward JWT authentication.
+ *
+ * This module is kept for backward compatibility. The Privy-specific functions
+ * are replaced with Steward JWT equivalents. callers should migrate to using
+ * authenticate() from auth-middleware.ts.
+ */
+
 import { db, eq, users } from '@babylon/db';
-import { getPrivyClient } from '../../auth-middleware';
+import { jwtVerify } from 'jose';
 import { AuthenticationError } from '../../errors';
 
-function safeDecodeJwtPayload(token: string): Record<string, unknown> | null {
-  try {
-    const parts = token.split('.');
-    if (parts.length < 2) return null;
-    const payload = parts[1];
-    if (!payload) return null;
-    const padded = payload + '='.repeat((4 - (payload.length % 4)) % 4);
-    return JSON.parse(atob(padded)) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
+function getStewardSecret(): Uint8Array {
+  return new TextEncoder().encode(
+    process.env.STEWARD_JWT_SECRET ?? 'dev-jwt-secret-change-in-prod'
+  );
 }
 
 export type AuthedPrivyUserContext = {
@@ -21,81 +22,58 @@ export type AuthedPrivyUserContext = {
   isAdmin: boolean;
 };
 
-type PrivyTokenBundle = {
-  primary: string;
-  fallback?: string;
-};
-
-function isInvalidPrivyAuthTokenError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  const msg = error.message.toLowerCase();
-  // Keep this conservative: only retry on token-shaped failures.
-  return (
-    msg.includes('invalid jwt token provided') ||
-    msg.includes('jwt expired') ||
-    msg.includes('token expired') ||
-    msg.includes('expired')
-  );
-}
-
+/**
+ * @deprecated Use authenticate() from auth-middleware.ts.
+ * Verifies a Steward JWT and returns user context.
+ */
 export async function getAuthedUserContextFromPrivyToken(
-  privyToken: string
+  token: string
 ): Promise<AuthedPrivyUserContext> {
-  if (!privyToken) {
-    throw new AuthenticationError('Missing Privy token');
-  }
+  if (!token) throw new AuthenticationError('Missing token');
 
-  const privy = getPrivyClient();
-  const claims = await privy.verifyAuthToken(privyToken);
+  let userId: string;
+  try {
+    const { payload } = await jwtVerify(token, getStewardSecret(), {
+      issuer: 'steward',
+      algorithms: ['HS256'],
+    });
+    userId = String(payload['userId'] ?? '');
+    if (!userId) throw new Error('missing userId');
+  } catch {
+    throw new AuthenticationError('Invalid or expired Steward token');
+  }
 
   const [dbUser] = await db
-    .select({
-      id: users.id,
-      isAdmin: users.isAdmin,
-    })
+    .select({ id: users.id, isAdmin: users.isAdmin })
     .from(users)
-    .where(eq(users.privyId, claims.userId))
+    .where(eq(users.stewardId, userId))
     .limit(1);
 
-  if (!dbUser) {
-    throw new AuthenticationError('User not found');
-  }
+  if (!dbUser) throw new AuthenticationError('User not found');
 
   return {
-    privyId: claims.userId,
+    privyId: userId,
     dbUserId: dbUser.id,
     isAdmin: dbUser.isAdmin ?? false,
   };
 }
 
 /**
- * Like `getAuthedUserContextFromPrivyToken`, but retries once with a fallback token
- * if the primary token is rejected as invalid/expired.
+ * @deprecated Use authenticate() from auth-middleware.ts.
  */
 export async function getAuthedUserContextFromPrivyTokenBundle({
   primary,
   fallback,
-}: PrivyTokenBundle): Promise<AuthedPrivyUserContext> {
-  if (fallback && fallback.trim() === primary.trim()) {
-    return getAuthedUserContextFromPrivyToken(primary);
-  }
-
-  const primarySub = safeDecodeJwtPayload(primary)?.sub ?? null;
-  const fallbackSub = fallback
-    ? (safeDecodeJwtPayload(fallback)?.sub ?? null)
-    : null;
-  const canFallback =
-    Boolean(fallback) &&
-    Boolean(primarySub) &&
-    Boolean(fallbackSub) &&
-    primarySub === fallbackSub;
-
+}: {
+  primary: string;
+  fallback?: string;
+}): Promise<AuthedPrivyUserContext> {
   try {
     return await getAuthedUserContextFromPrivyToken(primary);
-  } catch (error) {
-    if (canFallback && fallback && isInvalidPrivyAuthTokenError(error)) {
+  } catch (err) {
+    if (fallback && fallback !== primary) {
       return getAuthedUserContextFromPrivyToken(fallback);
     }
-    throw error;
+    throw err;
   }
 }

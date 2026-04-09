@@ -38,7 +38,10 @@ if (existsSync(envPath)) {
       const eqIdx = trimmed.indexOf('=');
       if (eqIdx > 0) {
         const key = trimmed.slice(0, eqIdx).trim();
-        const val = trimmed.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, '');
+        const val = trimmed
+          .slice(eqIdx + 1)
+          .trim()
+          .replace(/^["']|["']$/g, '');
         if (!process.env[key]) process.env[key] = val;
       }
     }
@@ -50,11 +53,15 @@ if (existsSync(envPath)) {
 const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID ?? '';
 const PRIVY_APP_SECRET = process.env.PRIVY_APP_SECRET ?? '';
 const STEWARD_API_URL = process.env.STEWARD_API_URL ?? 'http://localhost:3200';
-const PLATFORM_KEY = (process.env.STEWARD_PLATFORM_KEYS ?? '').split(',')[0].trim();
+const PLATFORM_KEY = (process.env.STEWARD_PLATFORM_KEYS ?? '')
+  .split(',')[0]
+  .trim();
 const DRY_RUN = process.argv.includes('--dry-run');
 
 if (!PRIVY_APP_ID || !PRIVY_APP_SECRET) {
-  console.error('❌ NEXT_PUBLIC_PRIVY_APP_ID and PRIVY_APP_SECRET are required.');
+  console.error(
+    '❌ NEXT_PUBLIC_PRIVY_APP_ID and PRIVY_APP_SECRET are required.'
+  );
   console.error('   Find them in your Privy dashboard → Settings → API Keys.');
   process.exit(1);
 }
@@ -92,7 +99,9 @@ interface EmaillessUser {
 
 // ─── Phase A: Export Privy users ─────────────────────────────────────────────
 
-const basicAuth = Buffer.from(`${PRIVY_APP_ID}:${PRIVY_APP_SECRET}`).toString('base64');
+const basicAuth = Buffer.from(`${PRIVY_APP_ID}:${PRIVY_APP_SECRET}`).toString(
+  'base64'
+);
 
 console.info('\n📥 Phase A: Exporting users from Privy Admin API...');
 
@@ -142,26 +151,37 @@ function getFarcasterFid(user: PrivyUser): number | null {
 }
 function getFarcasterUsername(user: PrivyUser): string | null {
   const fc = user.linked_accounts.find((a) => a.type === 'farcaster');
-  return fc ? String((fc as { username?: string }).username ?? '') || null : null;
+  return fc
+    ? String((fc as { username?: string }).username ?? '') || null
+    : null;
 }
 function getTwitterUsername(user: PrivyUser): string | null {
   const tw = user.linked_accounts.find((a) => a.type === 'twitter_oauth');
-  return tw ? String((tw as { username?: string }).username ?? '') || null : null;
+  return tw
+    ? String((tw as { username?: string }).username ?? '') || null
+    : null;
 }
 function getTelegramId(user: PrivyUser): string | null {
   const tg = user.linked_accounts.find((a) => a.type === 'telegram');
-  return tg ? String((tg as { telegram_user_id?: string }).telegram_user_id ?? '') || null : null;
+  return tg
+    ? String((tg as { telegram_user_id?: string }).telegram_user_id ?? '') ||
+        null
+    : null;
 }
 function getTelegramUsername(user: PrivyUser): string | null {
   const tg = user.linked_accounts.find((a) => a.type === 'telegram');
-  return tg ? String((tg as { username?: string }).username ?? '') || null : null;
+  return tg
+    ? String((tg as { username?: string }).username ?? '') || null
+    : null;
 }
 
 const withEmail = allPrivyUsers.filter((u) => getUserEmail(u) !== null);
 const withoutEmail = allPrivyUsers.filter((u) => getUserEmail(u) === null);
 
 console.info(`   With email:    ${withEmail.length}`);
-console.info(`   Without email: ${withoutEmail.length} (social-only, linked at runtime)`);
+console.info(
+  `   Without email: ${withoutEmail.length} (social-only, linked at runtime)`
+);
 
 // ─── Phase B: Pre-seed email users in Steward ─────────────────────────────────
 
@@ -207,7 +227,9 @@ for (const user of withEmail) {
 
   if (!data.ok) {
     failed++;
-    console.warn(`\n   ⚠️  Failed to seed ${email}: ${data.error ?? 'unknown error'}`);
+    console.warn(
+      `\n   ⚠️  Failed to seed ${email}: ${data.error ?? 'unknown error'}`
+    );
   } else if (data.data?.isNew) {
     seeded++;
   } else {
@@ -244,9 +266,13 @@ const manifestPath = join(migrationsDir, 'privy-emailless-users.json');
 
 if (!DRY_RUN) {
   writeFileSync(manifestPath, JSON.stringify(emaillessManifest, null, 2));
-  console.info(`✅ Wrote ${emaillessManifest.length} email-less users to migrations/privy-emailless-users.json`);
+  console.info(
+    `✅ Wrote ${emaillessManifest.length} email-less users to migrations/privy-emailless-users.json`
+  );
 } else {
-  console.info(`✅ Dry run: would write ${emaillessManifest.length} entries to migrations/privy-emailless-users.json`);
+  console.info(
+    `✅ Dry run: would write ${emaillessManifest.length} entries to migrations/privy-emailless-users.json`
+  );
 }
 
 // ─── Summary ──────────────────────────────────────────────────────────────────
@@ -254,7 +280,9 @@ if (!DRY_RUN) {
 console.info('\n' + '='.repeat(60));
 console.info('Migration summary:');
 console.info(`  Total Privy users:    ${allPrivyUsers.length}`);
-console.info(`  Pre-seeded in Steward: ${DRY_RUN ? `${seeded} (dry run)` : seeded}`);
+console.info(
+  `  Pre-seeded in Steward: ${DRY_RUN ? `${seeded} (dry run)` : seeded}`
+);
 console.info(`  Social-only (manifest): ${emaillessManifest.length}`);
 console.info('');
 console.info('Next steps:');

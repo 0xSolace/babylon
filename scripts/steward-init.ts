@@ -27,7 +27,10 @@ if (existsSync(envPath)) {
       const eqIdx = trimmed.indexOf('=');
       if (eqIdx > 0) {
         const key = trimmed.slice(0, eqIdx).trim();
-        const val = trimmed.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, '');
+        const val = trimmed
+          .slice(eqIdx + 1)
+          .trim()
+          .replace(/^["']|["']$/g, '');
         if (!process.env[key]) process.env[key] = val;
       }
     }
@@ -60,7 +63,9 @@ const healthOk = await fetch(`${STEWARD_API_URL}/health`)
 
 if (!healthOk) {
   console.error(`❌ Steward is not reachable at ${STEWARD_API_URL}`);
-  console.error('   Make sure it is running: bun run dev (or docker compose up steward)');
+  console.error(
+    '   Make sure it is running: bun run dev (or docker compose up steward)'
+  );
   process.exit(1);
 }
 
@@ -83,7 +88,9 @@ const data = (await res.json()) as {
 if (res.status === 409) {
   console.info('ℹ️  Tenant "babylon" already exists in Steward.');
   console.info('   The API key is not re-returned for security.');
-  console.info('   If you lost the key, check your existing .env for STEWARD_TENANT_API_KEY.');
+  console.info(
+    '   If you lost the key, check your existing .env for STEWARD_TENANT_API_KEY.'
+  );
   process.exit(0);
 }
 

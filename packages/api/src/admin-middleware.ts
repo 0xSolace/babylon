@@ -29,10 +29,10 @@ import {
   ROLE_PERMISSIONS,
   users,
 } from '@babylon/db';
-import { checkForAdminEmail, logger } from '@babylon/shared';
+import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import type { AuthenticatedUser } from './auth-middleware';
-import { authenticate, getPrivyClient } from './auth-middleware';
+import { authenticate } from './auth-middleware';
 import {
   DEV_ADMIN_TOKEN_COOKIE_NAME,
   getDevAdminUser,
@@ -58,7 +58,7 @@ export interface AuthenticatedAdminUser extends AuthenticatedUser {
  */
 export async function getAdminRole(
   userId: string,
-  privyId?: string
+  _privyId?: string
 ): Promise<{ role: AdminRoleType | null; permissions: AdminPermission[] }> {
   // Check the adminRoles table first - only non-revoked roles
   const [adminRole] = await db
@@ -81,45 +81,27 @@ export async function getAdminRole(
   const [user] = await db
     .select({
       isAdmin: users.isAdmin,
-      privyId: users.privyId,
+      email: users.email,
     })
     .from(users)
     .where(eq(users.id, userId))
     .limit(1);
 
   // Backward compatibility: Check isAdmin flag for legacy admins
-  // NOTE: isAdmin flag now grants ADMIN role, not SUPER_ADMIN
-  // SUPER_ADMIN must be explicitly granted via AdminRole table
   if (user?.isAdmin) {
     return { role: 'ADMIN', permissions: ROLE_PERMISSIONS.ADMIN };
   }
 
-  // Check admin email domain - fetch verified email directly from Privy for security
-  // This ensures we're using Privy's verified email, not a potentially tampered database value
-  // Check ALL linked emails, not just the primary one (handles users who linked admin email later)
+  // Check admin email domain using the DB email (Steward verifies email ownership)
   const adminDomain = process.env.ADMIN_EMAIL_DOMAIN?.trim();
-  const effectivePrivyId = privyId ?? user?.privyId;
-
-  if (adminDomain && effectivePrivyId) {
-    const privyClient = getPrivyClient();
-    const privyUser = await privyClient.getUser(effectivePrivyId);
-
-    // Check all verified emails including linkedAccounts
-    const { adminEmail, allVerifiedEmails } = checkForAdminEmail(privyUser);
-
-    if (adminEmail) {
+  if (adminDomain && user?.email) {
+    const emailDomain = user.email.split('@')[1]?.toLowerCase();
+    if (emailDomain && emailDomain === adminDomain.toLowerCase()) {
       logger.info(
-        'Auto-promoting user to ADMIN via verified Privy email domain',
-        {
-          userId,
-          emailDomain: adminEmail.split('@')[1] ?? null,
-          emailCount: allVerifiedEmails.length,
-          privyId: effectivePrivyId,
-        },
+        'Auto-promoting user to ADMIN via verified email domain',
+        { userId, emailDomain },
         'getAdminRole'
       );
-      // Grant ADMIN role (not SUPER_ADMIN) for email domain matches
-      // SUPER_ADMIN must be explicitly granted via AdminRole table
       return { role: 'ADMIN', permissions: ROLE_PERMISSIONS.ADMIN };
     }
   }
