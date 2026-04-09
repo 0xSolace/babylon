@@ -240,6 +240,9 @@ export const users = pgTable(
     appealReviewedAt: timestamp('appealReviewedAt', { mode: 'date' }),
     falsePositiveHistory: json('falsePositiveHistory').$type<JsonValue>(),
     privyId: text('privyId').unique(),
+    // Steward auth user ID (UUID). Set at first Steward login.
+    // Coexists with privyId during migration; privyId will be dropped in Phase 3.
+    stewardId: text('stewardId').unique(),
     registrationBlockNumber: bigint('registrationBlockNumber', {
       mode: 'bigint',
     }),
