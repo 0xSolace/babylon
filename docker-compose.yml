@@ -151,7 +151,7 @@ services:
       STEWARD_PLATFORM_KEYS: ${STEWARD_PLATFORM_KEYS:-dev-platform-key}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       EMAIL_FROM: ${EMAIL_FROM:-login@babylon.social}
-      APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      APP_URL: ${STEWARD_APP_URL:-http://localhost:3000}
       PASSKEY_RP_NAME: Babylon
       PASSKEY_RP_ID: localhost
       PASSKEY_ORIGIN: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
@@ -165,11 +165,11 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:3200/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3200/health | grep -q ok || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 8
-      start_period: 45s
+      start_period: 30s
 
 volumes:
   postgres_data:

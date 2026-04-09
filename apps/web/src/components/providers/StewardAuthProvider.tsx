@@ -85,7 +85,20 @@ export function StewardAuthProvider({
     async (token: string, refreshToken?: string) => {
       setIsLoading(true);
       try {
-        // Sync the token to the server via httpOnly cookie
+        // For OAuth / Farcaster / Telegram callbacks we receive the JWT externally.
+        // The SDK's private storage key is 'steward_session_token' in localStorage.
+        // Writing there and then calling getSession() syncs the SDK without
+        // needing access to private members.
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem('steward_session_token', token);
+          if (refreshToken) {
+            localStorage.setItem('steward_refresh_token', refreshToken);
+          }
+        }
+        // Immediately update React session state so useAuth sees the new session
+        setSession(stewardAuth.getSession());
+
+        // Sync the token to the server-side httpOnly cookie
         await fetch('/api/auth/session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -96,7 +109,7 @@ export function StewardAuthProvider({
         setIsLoading(false);
       }
     },
-    []
+    [stewardAuth]
   );
 
   return (
