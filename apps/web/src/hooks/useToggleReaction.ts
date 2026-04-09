@@ -7,10 +7,10 @@
  * Provides optimistic UI updates, SSE echo suppression, and automatic rollback on failure.
  */
 
-import { usePrivy } from '@privy-io/react-auth';
 import { useCallback } from 'react';
 import { toast } from 'sonner';
 import type { MessageReactionSummary } from '@/components/chats/types';
+import { useAuth } from '@/hooks/useAuth';
 import { useAuthStore } from '@/stores/authStore';
 import type { ChatMessage } from './useChatMessages';
 
@@ -68,7 +68,7 @@ export function useToggleReaction({
   markPendingReactionDelta,
 }: UseToggleReactionOptions) {
   const { user } = useAuthStore();
-  const { getAccessToken } = usePrivy();
+  const { getAccessToken } = useAuth();
 
   const toggleReaction = useCallback(
     async (messageId: string, emoji: string, currentlyReactedByMe: boolean) => {

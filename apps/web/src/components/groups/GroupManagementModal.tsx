@@ -1,7 +1,9 @@
-'use client';
+import { useAuth } from '@/hooks/useAuth';
+
+('use client');
 
 import { cn, logger } from '@babylon/shared';
-import { usePrivy } from '@privy-io/react-auth';
+
 import {
   Crown,
   Loader2,
@@ -100,7 +102,7 @@ export function GroupManagementModal({
   onGroupUpdated,
   onGroupRemoved,
 }: GroupManagementModalProps) {
-  const { getAccessToken } = usePrivy();
+  const { getAccessToken } = useAuth();
   const { user } = useAuthStore();
   const [groupDetails, setGroupDetails] = useState<GroupDetails | null>(null);
   const [loading, setLoading] = useState(false);

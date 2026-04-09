@@ -1,7 +1,7 @@
 'use client';
 
 import { cn, logger } from '@babylon/shared';
-import { usePrivy } from '@privy-io/react-auth';
+
 import {
   AlertCircle,
   CheckCircle2,
@@ -47,7 +47,7 @@ export function BuyPointsModal({
   onSuccess: _onSuccess,
 }: BuyPointsModalProps) {
   const { user } = useAuth();
-  const { getAccessToken } = usePrivy();
+  const { getAccessToken } = useAuth();
 
   const [amountUSD, setAmountUSD] = useState('10');
   const [step, setStep] = useState<PaymentStep>('input');

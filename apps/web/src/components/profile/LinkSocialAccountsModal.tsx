@@ -1,14 +1,9 @@
 'use client';
 
-import { cn, getAllVerifiedEmails, logger } from '@babylon/shared';
-import { useLinkAccount, usePrivy } from '@privy-io/react-auth';
+import { cn, logger } from '@babylon/shared';
 import { Check, ExternalLink, Mail, Shield, X as XIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import {
-  isLinkEmailAlreadyLinkedError,
-  isLinkEmailFlowCancellationError,
-} from '@/components/profile/link-email-utils';
 import { useTelegramMiniApp } from '@/components/providers/TelegramMiniAppProvider';
 import { useAuth } from '@/hooks/useAuth';
 import { getAuthToken } from '@/lib/auth';
@@ -52,51 +47,35 @@ export function LinkSocialAccountsModal({
   onClose,
 }: LinkSocialAccountsModalProps) {
   const { user, setUser } = useAuthStore();
-  const { user: privyUser, linkTelegram: privyLinkTelegram } = usePrivy();
-  const { refresh } = useAuth();
+  const { refresh: _refresh } = useAuth();
   const { isMiniApp, linkAccount: linkTelegramSeamless } = useTelegramMiniApp();
   const [linking, setLinking] = useState<string | null>(null);
   const [confirmUnlinkTwitter, setConfirmUnlinkTwitter] = useState(false);
   const [unlinkingTwitter, setUnlinkingTwitter] = useState(false);
 
-  // Only treat the email as verified/linked when Privy holds it — the stored
-  // user.email may be unverified (e.g. imported from a previous auth method).
-  const privyEmail =
-    privyUser?.email?.address?.trim() ||
-    getAllVerifiedEmails(privyUser)[0] ||
-    null;
+  // Phase 2: Email comes from Babylon user record (set by Steward at login)
+  const privyEmail = user?.email ?? null;
 
-  const { linkEmail, linkFarcaster } = useLinkAccount({
-    onSuccess: ({ linkedAccount }) => {
-      setLinking(null);
-      void refresh();
-      const linkedType = String(linkedAccount.type);
-      if (linkedType === 'farcaster' || linkedType === 'farcaster_account') {
-        toast.success('Farcaster account linked successfully!');
-      } else if (linkedType === 'telegram') {
-        toast.success('Telegram account linked!');
-      } else {
-        toast.success('Email linked successfully');
-      }
-      onClose();
-    },
-    onError: (error) => {
-      setLinking(null);
-      if (isLinkEmailFlowCancellationError(error)) return;
-      if (isLinkEmailAlreadyLinkedError(error)) {
-        void refresh();
-        toast.info('An email is already linked to this account.');
-        onClose();
-        return;
-      }
-      logger.error(
-        'Failed to link account via Privy',
-        { error: String(error) },
-        'LinkSocialAccountsModal'
-      );
-      toast.error('Failed to link account. Please try again.');
-    },
-  });
+  // Phase 2: Social linking flows are handled via OAuth/SIWF redirects
+  // These stubs maintain API compatibility while Steward linking is implemented
+  const linkEmail = () => {
+    logger.info(
+      'Email linking via Steward — not yet implemented in UI',
+      {},
+      'LinkSocialAccountsModal'
+    );
+    toast.info(
+      'Email linking coming soon. Please sign in with your email directly.'
+    );
+  };
+  const linkFarcaster = () => {
+    logger.info(
+      'Farcaster linking via SIWF — not yet implemented in UI',
+      {},
+      'LinkSocialAccountsModal'
+    );
+    toast.info('Farcaster linking coming soon.');
+  };
 
   useEffect(() => {
     if (isOpen) return;
@@ -183,9 +162,9 @@ export function LinkSocialAccountsModal({
         toast.error('Unable to link Telegram. Please try again.');
       }
     } else {
-      // Outside Telegram — use Privy's standard link flow (shows modal).
-      // Success/error handled by useLinkAccount onSuccess/onError callbacks.
-      privyLinkTelegram();
+      // Phase 2: Telegram linking outside mini-app — not yet implemented
+      setLinking(null);
+      toast.info('Open Babylon in Telegram to link your Telegram account.');
     }
   };
 

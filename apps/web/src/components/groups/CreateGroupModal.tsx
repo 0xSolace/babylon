@@ -1,10 +1,11 @@
 'use client';
 
 import { cn, GROUP_CONFIG, getCurrentChainId, logger } from '@babylon/shared';
-import { usePrivy } from '@privy-io/react-auth';
+
 import { Check, Loader2, Search, Shield, Users, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Avatar } from '@/components/shared/Avatar';
+import { useAuth } from '@/hooks/useAuth';
 import { useAuthStore } from '@/stores/authStore';
 
 /**
@@ -50,7 +51,7 @@ export function CreateGroupModal({
   onClose,
   onGroupCreated,
 }: CreateGroupModalProps) {
-  const { getAccessToken } = usePrivy();
+  const { getAccessToken } = useAuth();
   const { user } = useAuthStore();
   const [groupName, setGroupName] = useState('');
   const [searchQuery, setSearchQuery] = useState('');

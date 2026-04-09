@@ -1,6 +1,7 @@
-'use client';
+import { useAuth } from '@/hooks/useAuth';
 
-import { usePrivy } from '@privy-io/react-auth';
+('use client');
+
 import { Check, Loader2, Users, X } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -55,7 +56,7 @@ export function GroupInviteCard({
   onAccepted,
   onDeclined,
 }: GroupInviteCardProps) {
-  const { getAccessToken } = usePrivy();
+  const { getAccessToken } = useAuth();
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<'pending' | 'accepted' | 'declined'>(
     'pending'

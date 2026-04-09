@@ -18,8 +18,8 @@
  */
 
 import { logger } from '@babylon/shared';
-import { usePrivy } from '@privy-io/react-auth';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useAuth } from '@/hooks/useAuth';
 import {
   type Channel,
   type ConnectionState,
@@ -503,7 +503,7 @@ export function useSSE(options: SSEHookOptions = {}): SSEHookReturn {
     maxReconnectAttempts = 5,
   } = options;
 
-  const { getAccessToken, authenticated } = usePrivy();
+  const { getAccessToken, authenticated } = useAuth();
 
   // Connection state - initialized to match SSR
   const [connectionState, setConnectionState] =

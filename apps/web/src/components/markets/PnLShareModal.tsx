@@ -1,4 +1,6 @@
-'use client';
+import { useAuth } from '@/hooks/useAuth';
+
+('use client');
 
 import {
   BABYLON_POINTS_SYMBOL,
@@ -6,7 +8,7 @@ import {
   logger,
   trackExternalShare,
 } from '@babylon/shared';
-import { usePrivy } from '@privy-io/react-auth';
+
 import { Download, LogOut, Twitter, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -112,7 +114,7 @@ export function PnLShareModal({
   category = 'perps',
   user,
 }: PnLShareModalProps) {
-  const { getAccessToken } = usePrivy();
+  const { getAccessToken } = useAuth();
   const [isDownloading, setIsDownloading] = useState(false);
   const [sharing, setSharing] = useState<'twitter' | 'farcaster' | null>(null);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
