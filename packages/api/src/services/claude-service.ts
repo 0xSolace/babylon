@@ -14,13 +14,29 @@ export async function callClaudeDirect(params: {
   temperature?: number;
   maxTokens?: number;
 }): Promise<string> {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    throw new Error('ANTHROPIC_API_KEY not set');
+  const elizacloudKey = process.env.ELIZACLOUD_API_KEY;
+  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+
+  if (!elizacloudKey && !anthropicKey) {
+    throw new Error(
+      'No API key configured for Claude — set ELIZACLOUD_API_KEY or ANTHROPIC_API_KEY'
+    );
   }
 
-  const anthropic = new Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY,
-  });
+  let anthropic: Anthropic;
+  if (elizacloudKey) {
+    const base = (
+      process.env.ELIZACLOUD_API_URL || 'https://api.elizacloud.com'
+    ).replace(/\/$/, '');
+    anthropic = new Anthropic({
+      apiKey: elizacloudKey,
+      baseURL: `${base}/anthropic/v1`,
+    });
+  } else {
+    anthropic = new Anthropic({
+      apiKey: anthropicKey!,
+    });
+  }
 
   const model = params.model || 'claude-sonnet-4-5';
 

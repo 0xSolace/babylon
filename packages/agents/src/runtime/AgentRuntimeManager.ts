@@ -1061,7 +1061,10 @@ export class AgentRuntimeManager {
       style: parseStyle(),
       plugins: [],
       settings: {
-        // GROQ configuration (always available)
+        // ElizaCloud unified inference (takes priority in direct-groq.ts and plugins)
+        ELIZACLOUD_API_KEY: process.env.ELIZACLOUD_API_KEY || '',
+        ELIZACLOUD_API_URL: process.env.ELIZACLOUD_API_URL || '',
+        // GROQ configuration (used when ELIZACLOUD_API_KEY is not set)
         GROQ_API_KEY: process.env.GROQ_API_KEY || '',
         GROQ_LARGE_MODEL: GROQ_MODELS.PRO.modelId,
         GROQ_SMALL_MODEL: GROQ_MODELS.FREE.modelId,
@@ -1082,6 +1085,13 @@ export class AgentRuntimeManager {
       'AgentRuntimeManager'
     );
 
+    const hasGroqAccess = !!(
+      process.env.GROQ_API_KEY || process.env.ELIZACLOUD_API_KEY
+    );
+    const hasOpenAIAccess = !!(
+      process.env.OPENAI_API_KEY || process.env.ELIZACLOUD_API_KEY
+    );
+
     // Create runtime with groq, experience, trajectory logger, and agent core plugins
     // Type cast plugins to ensure compatibility across different @elizaos/core versions
     const plugins: Plugin[] = [
@@ -1089,9 +1099,9 @@ export class AgentRuntimeManager {
       // experiencePlugin as Plugin,
       trajectoryLoggerPlugin as Plugin,
       // Conditionally add LLM plugins based on available API keys
-      ...(process.env.GROQ_API_KEY ? [groqPlugin as Plugin] : []),
+      ...(hasGroqAccess ? [groqPlugin as Plugin] : []),
       ...(process.env.ANTHROPIC_API_KEY ? [anthropicPlugin as Plugin] : []),
-      ...(process.env.OPENAI_API_KEY ? [openaiPlugin as Plugin] : []),
+      ...(hasOpenAIAccess ? [openaiPlugin as Plugin] : []),
     ];
 
     const runtimeConfig = {
@@ -1421,16 +1431,22 @@ export class AgentRuntimeManager {
 
     // Create runtime with standard plugins
     // NPCs use GROQ only - skip OpenAI/Anthropic to avoid API validation spam during bootstrap
+    const hasGroqAccess = !!(
+      process.env.GROQ_API_KEY || process.env.ELIZACLOUD_API_KEY
+    );
+    const hasOpenAIAccess = !!(
+      process.env.OPENAI_API_KEY || process.env.ELIZACLOUD_API_KEY
+    );
     const plugins: Plugin[] = [
       agentCorePlugin as Plugin,
       trajectoryLoggerPlugin as Plugin,
-      // GROQ is always available for NPCs
-      ...(process.env.GROQ_API_KEY ? [groqPlugin as Plugin] : []),
+      // GROQ (or ElizaCloud) is always available for NPCs
+      ...(hasGroqAccess ? [groqPlugin as Plugin] : []),
       // Only load Anthropic/OpenAI for non-NPC agents to avoid validation spam
       ...(!isNpc && process.env.ANTHROPIC_API_KEY
         ? [anthropicPlugin as Plugin]
         : []),
-      ...(!isNpc && process.env.OPENAI_API_KEY ? [openaiPlugin as Plugin] : []),
+      ...(!isNpc && hasOpenAIAccess ? [openaiPlugin as Plugin] : []),
     ];
 
     const runtimeConfig = {
@@ -1498,7 +1514,10 @@ export class AgentRuntimeManager {
    */
   private getModelSettings(): Record<string, string> {
     return {
-      // GROQ configuration (always available)
+      // ElizaCloud unified inference (takes priority over direct provider keys)
+      ELIZACLOUD_API_KEY: process.env.ELIZACLOUD_API_KEY || '',
+      ELIZACLOUD_API_URL: process.env.ELIZACLOUD_API_URL || '',
+      // GROQ configuration (used when ELIZACLOUD_API_KEY is not set)
       // Keys must match what groq.ts plugin looks up via runtime.getSetting()
       GROQ_API_KEY: process.env.GROQ_API_KEY || '',
       GROQ_BASE_URL: process.env.GROQ_BASE_URL || '',
@@ -1680,11 +1699,14 @@ export class AgentRuntimeManager {
     // Plugins for coordinator - uses userCorePlugin instead of agentCorePlugin
     // Note: openaiPlugin is intentionally omitted for coordinator as it uses read-only
     // actions (userCorePlugin) and doesn't require the full capabilities of OpenAI models.
-    // The coordinator relies on Groq/Anthropic for cost efficiency with its limited scope.
+    // The coordinator relies on Groq/ElizaCloud/Anthropic for cost efficiency with its limited scope.
+    const hasGroqAccessCoordinator = !!(
+      process.env.GROQ_API_KEY || process.env.ELIZACLOUD_API_KEY
+    );
     const plugins: Plugin[] = [
       userCorePlugin as Plugin, // Limited actions for coordinator
       trajectoryLoggerPlugin as Plugin,
-      ...(process.env.GROQ_API_KEY ? [groqPlugin as Plugin] : []),
+      ...(hasGroqAccessCoordinator ? [groqPlugin as Plugin] : []),
       ...(process.env.ANTHROPIC_API_KEY ? [anthropicPlugin as Plugin] : []),
     ];
 
