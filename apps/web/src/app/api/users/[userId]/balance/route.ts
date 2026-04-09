@@ -72,6 +72,7 @@ import {
 } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import { sanitizeForJson } from '@/lib/json/sanitize';
 
 /**
  * GET Handler for User Balance
@@ -168,11 +169,13 @@ export const GET = withErrorHandling(
       'GET /api/users/[userId]/balance'
     );
 
-    return successResponse({
-      balance: balanceInfo.virtualBalance,
-      totalDeposited: balanceInfo.totalDeposited,
-      totalWithdrawn: balanceInfo.totalWithdrawn,
-      lifetimePnL: balanceInfo.lifetimePnL,
-    });
+    return successResponse(
+      sanitizeForJson({
+        balance: balanceInfo.virtualBalance,
+        totalDeposited: balanceInfo.totalDeposited,
+        totalWithdrawn: balanceInfo.totalWithdrawn,
+        lifetimePnL: balanceInfo.lifetimePnL,
+      })
+    );
   }
 );

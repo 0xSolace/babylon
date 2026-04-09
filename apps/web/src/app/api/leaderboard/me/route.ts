@@ -6,6 +6,7 @@ import {
 } from '@babylon/api';
 import { LeaderboardQuerySchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+import { sanitizeForJson } from '@/lib/json/sanitize';
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
   const authUser = await authenticate(request);
@@ -27,9 +28,11 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     pageSize
   );
 
-  return successResponse({
-    success: true,
-    leaderboardType,
-    currentUser,
-  });
+  return successResponse(
+    sanitizeForJson({
+      success: true,
+      leaderboardType,
+      currentUser,
+    })
+  );
 });
