@@ -7,6 +7,7 @@
  * DELETE — Clears steward-token and steward-refresh cookies (logout).
  */
 
+import { withErrorHandling } from '@babylon/api';
 import { jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
@@ -24,7 +25,7 @@ function getStewardJwtSecret(): Uint8Array {
   return new TextEncoder().encode(secret);
 }
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandling(async (req: NextRequest) => {
   let body: { token?: string; refreshToken?: string };
   try {
     body = (await req.json()) as typeof body;
@@ -79,11 +80,11 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ ok: true, userId });
-}
+});
 
-export async function DELETE() {
+export const DELETE = withErrorHandling(async () => {
   const cookieStore = await cookies();
   cookieStore.delete('steward-token');
   cookieStore.delete('steward-refresh');
   return NextResponse.json({ ok: true });
-}
+});

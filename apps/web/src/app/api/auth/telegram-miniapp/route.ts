@@ -15,6 +15,7 @@
  */
 
 import { createHmac } from 'node:crypto';
+import { withErrorHandling } from '@babylon/api';
 import { db, eq, users } from '@babylon/db';
 import { generateSnowflakeId } from '@babylon/shared';
 import { SignJWT } from 'jose';
@@ -88,7 +89,7 @@ async function mintToken(
     .sign(STEWARD_JWT_SECRET);
 }
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandling(async (req: NextRequest) => {
   const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
   if (!BOT_TOKEN) {
     return NextResponse.json(
@@ -179,4 +180,4 @@ export async function POST(req: NextRequest) {
 
   const token = await mintToken(stewardUserId, telegramId);
   return NextResponse.json({ ok: true, token });
-}
+});

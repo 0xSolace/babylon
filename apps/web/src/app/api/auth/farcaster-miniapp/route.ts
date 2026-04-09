@@ -15,6 +15,7 @@
  *   4. Client POSTs to /api/auth/session to set httpOnly cookie
  */
 
+import { withErrorHandling } from '@babylon/api';
 import { db, eq, users } from '@babylon/db';
 import { generateSnowflakeId } from '@babylon/shared';
 import { createClient } from '@farcaster/quick-auth';
@@ -61,7 +62,7 @@ async function mintToken(stewardUserId: string, fid: number): Promise<string> {
     .sign(STEWARD_JWT_SECRET);
 }
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandling(async (req: NextRequest) => {
   let body: { token?: string };
   try {
     body = (await req.json()) as typeof body;
@@ -139,4 +140,4 @@ export async function POST(req: NextRequest) {
 
   const token = await mintToken(stewardUserId, fid);
   return NextResponse.json({ ok: true, token });
-}
+});
