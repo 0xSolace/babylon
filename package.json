@@ -84,6 +84,8 @@
     "report:realism": "bun run scripts/market-realism-report.ts",
     "report:training-quality": "bun run scripts/training-data-quality.ts",
     "report:training-viz": "bun run scripts/training-data-viz.ts",
+    "steward:init": "bun run scripts/steward-init.ts",
+    "steward:migrate": "bun run scripts/migrate-privy-to-steward.ts",
     "inspect:context": "bun run scripts/context-inspector.ts",
     "find:duplicates": "bun run scripts/find-duplicates.ts"
   },
