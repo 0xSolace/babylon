@@ -1,6 +1,6 @@
 /**
  * Game guide slide content.
- * Edit this file to update the onboarding slides shown in GameGuideModal.
+ * Edit this file to update the onboarding tour on `/onboarding` (guide phase).
  */
 export interface GameGuideSlide {
   title: string;

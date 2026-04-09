@@ -13,7 +13,7 @@ import {
   parseAgentPresetProfileIndex,
   TOTAL_AGENT_DEFAULT_PROFILE_PICTURES,
 } from '@babylon/shared';
-import { Loader2, Wallet } from 'lucide-react';
+import { Check, Loader2, Wallet, X as XIcon } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 import {
@@ -326,9 +326,13 @@ export function AgentCreate({
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Your Balance</span>
-                  <span className="font-medium font-mono">
-                    {balanceLoading ? '...' : balance.toLocaleString()} pts
-                  </span>
+                  {balanceLoading ? (
+                    <span className="h-4 w-16 animate-pulse rounded bg-muted" />
+                  ) : (
+                    <span className="font-medium font-mono">
+                      {balance.toLocaleString()} pts
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -427,7 +431,10 @@ export function AgentCreate({
             )}
           >
             {isCreating ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Creating…
+              </>
             ) : (
               'Create Agent'
             )}
@@ -437,17 +444,63 @@ export function AgentCreate({
     </div>
   );
 
+  // Step progress indicator (shared by steps 2 + 3)
+  const stepProgress = (
+    <div className="mx-auto flex w-full max-w-xs items-center justify-center gap-3 py-0">
+      {[
+        { s: Step.Profile, label: 'Profile' },
+        { s: Step.Prompts, label: 'Prompts' },
+        { s: Step.Settings, label: 'Settings' },
+      ].map(({ s, label }, i, arr) => (
+        <div key={s} className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <div
+              className={cn(
+                'flex h-6 w-6 items-center justify-center rounded-full font-medium text-xs transition-all',
+                currentStep === s
+                  ? 'bg-[#0066FF] text-white'
+                  : currentStep > s
+                    ? 'bg-green-500 text-white'
+                    : 'bg-muted text-muted-foreground'
+              )}
+            >
+              {currentStep > s ? (
+                <Check className="h-3.5 w-3.5" />
+              ) : (
+                String(i + 1)
+              )}
+            </div>
+            <span className="hidden text-muted-foreground text-xs sm:inline">
+              {label}
+            </span>
+          </div>
+          {i < arr.length - 1 && (
+            <div
+              className={cn(
+                'h-0.5 w-6 rounded-full transition-colors',
+                currentStep > s ? 'bg-green-500' : 'bg-muted'
+              )}
+            />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+
   // Modal wrapper with fixed header/footer pattern
   const modalContent = (
     <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-0 backdrop-blur-sm md:p-4">
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="agent-create-title"
         className="relative flex h-full w-full flex-col bg-background md:h-auto md:max-h-[90vh] md:w-auto md:min-w-[600px] md:max-w-3xl md:rounded-lg md:border md:border-border"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header - fixed */}
         <div className="shrink-0 border-border border-b px-4 py-3 sm:px-6 sm:py-4">
           <div className="flex items-center justify-between">
-            <h2 className="font-bold text-lg">
+            <h2 id="agent-create-title" className="font-bold text-lg">
               {currentStep === Step.Prompts
                 ? 'Configure Prompts'
                 : 'Agent Settings'}
@@ -458,20 +511,7 @@ export function AgentCreate({
                 className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 aria-label="Close"
               >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
+                <XIcon className="h-5 w-5" />
               </button>
             )}
           </div>
@@ -483,7 +523,8 @@ export function AgentCreate({
         </div>
 
         {/* Footer - fixed */}
-        <div className="shrink-0 border-border border-t px-4 py-3 sm:px-6 sm:py-4">
+        <div className="shrink-0 space-y-3 border-border border-t px-4 py-3 sm:px-6 sm:py-4">
+          {stepProgress}
           {stepActions}
         </div>
       </div>

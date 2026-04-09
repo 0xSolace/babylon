@@ -236,15 +236,48 @@ export function AgentSetupModal({
     isCheckingUsername ||
     isUploading;
 
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  // Escape to close
+  useEffect(() => {
+    if (!isOpen || hideCloseButton) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, hideCloseButton, onClose]);
+
+  // Focus first focusable element on open
+  useEffect(() => {
+    if (!isOpen || !dialogRef.current) return;
+    const firstFocusable = dialogRef.current.querySelector<HTMLElement>(
+      'input, button:not([disabled]), textarea, select, [tabindex]:not([tabindex="-1"])'
+    );
+    firstFocusable?.focus();
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-0 backdrop-blur-sm md:p-4">
-      <div className="relative flex h-full w-full flex-col bg-background md:h-auto md:max-h-[90vh] md:w-auto md:min-w-[600px] md:max-w-3xl md:rounded-lg md:border md:border-border">
+    <div
+      className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-0 backdrop-blur-sm md:p-4"
+      onClick={!hideCloseButton ? onClose : undefined}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="agent-setup-title"
+        className="relative flex h-full w-full flex-col bg-background md:h-auto md:max-h-[90vh] md:w-auto md:min-w-[600px] md:max-w-3xl md:rounded-lg md:border md:border-border"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header - fixed */}
         <div className="shrink-0 border-border border-b px-4 py-3 sm:px-6 sm:py-4">
           <div className="flex items-center justify-between">
-            <h2 className="font-bold text-lg">Set Up Your Agent</h2>
+            <h2 id="agent-setup-title" className="font-bold text-lg">
+              Set Up Your Agent
+            </h2>
             {!hideCloseButton && (
               <button
                 onClick={onClose}
@@ -272,11 +305,15 @@ export function AgentSetupModal({
                 <button
                   type="button"
                   onClick={() => cycleBanner('prev')}
+                  aria-label="Previous banner"
                   className="rounded-full bg-background/90 p-1.5 hover:bg-background sm:p-2"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
-                <label className="cursor-pointer rounded-full bg-background/90 p-1.5 hover:bg-background sm:p-2">
+                <label
+                  className="cursor-pointer rounded-full bg-background/90 p-1.5 hover:bg-background sm:p-2"
+                  aria-label="Upload banner image"
+                >
                   <Upload className="h-4 w-4" />
                   <input
                     ref={coverInputRef}
@@ -289,6 +326,7 @@ export function AgentSetupModal({
                 <button
                   type="button"
                   onClick={() => cycleBanner('next')}
+                  aria-label="Next banner"
                   className="rounded-full bg-background/90 p-1.5 hover:bg-background sm:p-2"
                 >
                   <ChevronRight className="h-4 w-4" />
@@ -308,11 +346,15 @@ export function AgentSetupModal({
                   <button
                     type="button"
                     onClick={() => cycleProfilePicture('prev')}
+                    aria-label="Previous avatar"
                     className="rounded-full bg-background/90 p-1 hover:bg-background sm:p-1.5"
                   >
                     <ChevronLeft className="h-3 w-3 sm:h-4 sm:w-4" />
                   </button>
-                  <label className="cursor-pointer rounded-full bg-background/90 p-1 hover:bg-background sm:p-1.5">
+                  <label
+                    className="cursor-pointer rounded-full bg-background/90 p-1 hover:bg-background sm:p-1.5"
+                    aria-label="Upload avatar"
+                  >
                     <Upload className="h-3 w-3 sm:h-4 sm:w-4" />
                     <input
                       ref={profileInputRef}
@@ -325,6 +367,7 @@ export function AgentSetupModal({
                   <button
                     type="button"
                     onClick={() => cycleProfilePicture('next')}
+                    aria-label="Next avatar"
                     className="rounded-full bg-background/90 p-1 hover:bg-background sm:p-1.5"
                   >
                     <ChevronRight className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -496,29 +539,24 @@ export function AgentSetupModal({
 
         {/* Footer - fixed */}
         <div className="shrink-0 border-border border-t px-4 py-3 sm:px-6 sm:py-4">
-          <div className="flex gap-3">
-            <span
-              className="pointer-events-none flex-1 rounded-lg border border-transparent px-4 py-2.5 font-medium text-transparent sm:py-3"
-              aria-hidden="true"
-            >
-              Back
-            </span>
-            <button
-              onClick={handleContinue}
-              disabled={isContinueDisabled}
-              className={cn(
-                'flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 font-medium transition-all sm:py-3',
-                'bg-[#0066FF] text-primary-foreground hover:bg-[#2952d9]',
-                'disabled:cursor-not-allowed disabled:opacity-50'
-              )}
-            >
-              {isUploading ? (
+          <button
+            onClick={handleContinue}
+            disabled={isContinueDisabled}
+            className={cn(
+              'flex w-full items-center justify-center gap-2 rounded-xl px-4 py-4 font-semibold transition-all',
+              'bg-[#0066FF] text-primary-foreground hover:bg-[#0055DD] hover:shadow-lg active:scale-[0.98]',
+              'disabled:cursor-not-allowed disabled:opacity-50'
+            )}
+          >
+            {isUploading ? (
+              <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                'Continue'
-              )}
-            </button>
-          </div>
+                Uploading…
+              </>
+            ) : (
+              'Continue'
+            )}
+          </button>
         </div>
       </div>
     </div>
