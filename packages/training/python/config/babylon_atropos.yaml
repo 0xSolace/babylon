@@ -22,9 +22,10 @@ env:
   rollout_server_url: "http://localhost:8000"
   
   # Training steps and batching
-  total_steps: 1000
+  # Extended for longer training runs (10x default for convergence)
+  total_steps: 10000
   batch_size: 16
-  steps_per_eval: 100
+  steps_per_eval: 500
   max_batches_offpolicy: 3
   
   # Sequence length
