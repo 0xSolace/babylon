@@ -172,3 +172,7 @@ packages/training/python/*.logpackages/training/python/shared_model_checkpoints/
 
 # Model checkpoints
 packages/training/python/shared_model_checkpoints/
+
+# User migration exports (contain PII — never commit)
+migrations/privy-export.json
+migrations/privy-emailless-users.json
