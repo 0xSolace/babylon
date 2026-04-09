@@ -40,6 +40,12 @@ interface CacheEntry<T> {
 // In-memory fallback cache (for when Redis is unavailable)
 const memoryCache = new Map<string, CacheEntry<unknown>>();
 
+function serializeCacheValue(value: unknown): string {
+  return JSON.stringify(value, (_key, nestedValue) =>
+    typeof nestedValue === 'bigint' ? nestedValue.toString() : nestedValue
+  );
+}
+
 /**
  * Cache key prefixes for different data types
  *
@@ -320,7 +326,7 @@ export async function setCache<T>(
   const fullKey = options.namespace ? `${options.namespace}:${key}` : key;
   const ttl = options.ttl || 300;
 
-  const serialized = JSON.stringify(value);
+  const serialized = serializeCacheValue(value);
   const client = getRedisClient();
 
   if (client) {
@@ -705,7 +711,7 @@ export async function setCacheBatch<T>(
 
       for (const [key, value] of entriesArray) {
         const fullKey = options.namespace ? `${options.namespace}:${key}` : key;
-        const serialized = JSON.stringify(value);
+        const serialized = serializeCacheValue(value);
         pipeline.set(fullKey, serialized, 'EX', ttl);
       }
 
