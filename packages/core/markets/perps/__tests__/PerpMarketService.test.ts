@@ -118,6 +118,12 @@ class InMemoryPerpDb implements PerpDbPort {
     return pos ? { ...pos } : null;
   }
 
+  async lockOpenPositionById(id: string): Promise<PerpPositionRecord | null> {
+    const pos = this.positions.get(id);
+    if (!pos || pos.closedAt) return null;
+    return { ...pos };
+  }
+
   async transaction<T>(fn: (tx: PerpDbPort) => Promise<T>): Promise<T> {
     // In-memory mock just runs the function directly
     return fn(this);
@@ -167,7 +173,7 @@ class InMemoryPerpDb implements PerpDbPort {
     >
   ): Promise<void> {
     const pos = this.positions.get(positionId);
-    if (!pos) return;
+    if (!pos || pos.closedAt) return;
     this.positions.set(positionId, {
       ...pos,
       ...updates,
@@ -189,7 +195,7 @@ class InMemoryPerpDb implements PerpDbPort {
     >
   ): Promise<void> {
     const pos = this.positions.get(positionId);
-    if (!pos) return;
+    if (!pos || pos.closedAt) return;
     this.positions.set(positionId, {
       ...pos,
       closedAt: updates.closedAt ?? new Date(),
@@ -495,6 +501,28 @@ describe('PerpMarketService', () => {
     const m = markets[0]!;
     expect(m.volume24h).toBeCloseTo(150, 4); // open 100 + close 50
     expect(m.openInterest).toBeCloseTo(50, 4); // remaining
+  });
+
+  it('rejects partial close below the market minimum order size', async () => {
+    const open = await service.openPosition({
+      userId: 'u1',
+      ticker: 'ABC',
+      side: 'long',
+      size: 100,
+      leverage: 10,
+    });
+
+    await expect(
+      service.closePosition({
+        userId: 'u1',
+        positionId: open.positionId,
+        percentage: 0.05,
+      })
+    ).rejects.toThrow(/minimum order size/);
+
+    const pos = await db.getPositionById(open.positionId);
+    expect(pos?.closedAt).toBeNull();
+    expect(pos?.size).toBeCloseTo(100, 4);
   });
 
   it('slippage protection rejects open if price deviation exceeds max', async () => {

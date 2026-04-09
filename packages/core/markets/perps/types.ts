@@ -73,6 +73,11 @@ export interface PerpDbPort {
     userId: string,
     ticker: string
   ): Promise<PerpPositionRecord | null>;
+  /**
+   * Lock and return an open position row for mutation.
+   * Returns null if the position does not exist or is already closed.
+   */
+  lockOpenPositionById(id: string): Promise<PerpPositionRecord | null>;
   upsertPosition(
     position: Omit<PerpPositionRecord, 'id'> & { id?: string }
   ): Promise<PerpPositionRecord>;

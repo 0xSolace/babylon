@@ -601,209 +601,215 @@ export class PerpMarketService {
    * @param input.maxSlippage - Maximum price deviation from entry. Rejects if exceeded.
    */
   async closePosition(input: PerpCloseInput): Promise<PerpTradeResult> {
-    const position = await this.db.getPositionById(input.positionId);
-    if (!position) {
-      throw new Error(`Position not found: ${input.positionId}`);
-    }
-    if (position.userId !== input.userId) {
-      throw new Error('Not your position');
-    }
-    if (position.closedAt) {
-      throw new Error('Position already closed');
-    }
-
-    const markets = await this.db.listMarkets();
-    const market = markets.find((m) => m.ticker === position.ticker);
-    if (!market) {
-      throw new Error(
-        `Market not found for position ticker ${position.ticker}`
-      );
-    }
-
-    // Determine close percentage (default to full close)
-    const closePercentage = Math.min(1, Math.max(0, input.percentage ?? 1));
-    if (closePercentage <= 0) {
-      throw new Error('Close percentage must be greater than 0');
-    }
-
-    const closeSize = position.size * closePercentage;
-    const remainingSize = position.size - closeSize;
-    const isFullClose = remainingSize < 0.01; // Treat tiny remainders as full close
-
-    const requestedExitPrice =
-      input.exitPriceOverride ??
-      this.getCloseExecutionQuote(market, position.side, closeSize)
-        .executionPrice;
-
-    // Reject non-finite or extreme prices to prevent NaN/Infinity PnL
-    if (!Number.isFinite(requestedExitPrice) || requestedExitPrice <= 0) {
-      throw new Error(
-        `Invalid exit price for ${position.ticker}: ${requestedExitPrice}. Cannot close position.`
-      );
-    }
-
-    // Slippage protection: reject if execution price deviates too far from mark price
-    // This protects against executing at a price that differs significantly from fair value
-    if (input.maxSlippage !== undefined && input.maxSlippage > 0) {
-      // Use mark price as the reference (more stable), falling back to position's tracked price
-      const referencePrice = market.markPrice ?? market.currentPrice;
-      const priceDeviation =
-        Math.abs(requestedExitPrice - referencePrice) / referencePrice;
-      if (priceDeviation > input.maxSlippage) {
+    const settlement = await this.db.transaction(async (tx) => {
+      const position = await tx.lockOpenPositionById(input.positionId);
+      if (!position) {
         throw new Error(
-          `Slippage exceeded: execution price ${requestedExitPrice.toFixed(2)} deviates ` +
-            `${(priceDeviation * 100).toFixed(2)}% from mark price ${referencePrice.toFixed(2)} ` +
-            `(max allowed: ${(input.maxSlippage * 100).toFixed(2)}%)`
+          `Position not found or already closed: ${input.positionId}`
         );
       }
-    }
+      if (position.userId !== input.userId) {
+        throw new Error('Not your position');
+      }
 
-    // BF-75: determine average-fill execution price up front so persistence,
-    // events, and response all use the same close price.
-    const closeImpact = await this.previewCloseImpact({
-      ticker: position.ticker,
-      exitPrice: requestedExitPrice,
-      side: position.side,
-      closeSize,
+      const markets = await tx.listMarkets();
+      const market = markets.find((m) => m.ticker === position.ticker);
+      if (!market) {
+        throw new Error(
+          `Market not found for position ticker ${position.ticker}`
+        );
+      }
+
+      const closePercentage = Math.min(1, Math.max(0, input.percentage ?? 1));
+      if (closePercentage <= 0) {
+        throw new Error('Close percentage must be greater than 0');
+      }
+
+      const closeSize = position.size * closePercentage;
+      const remainingSize = position.size - closeSize;
+      const isFullClose = remainingSize < 0.01;
+      const minOrderSize = market.minOrderSize ?? DEFAULT_MIN_ORDER_SIZE;
+      if (!isFullClose && closeSize < minOrderSize) {
+        throw new Error(
+          `Partial close below minimum order size (${minOrderSize})`
+        );
+      }
+
+      const requestedExitPrice =
+        input.exitPriceOverride ??
+        this.getCloseExecutionQuote(market, position.side, closeSize)
+          .executionPrice;
+
+      if (!Number.isFinite(requestedExitPrice) || requestedExitPrice <= 0) {
+        throw new Error(
+          `Invalid exit price for ${position.ticker}: ${requestedExitPrice}. Cannot close position.`
+        );
+      }
+
+      if (input.maxSlippage !== undefined && input.maxSlippage > 0) {
+        const referencePrice = market.markPrice ?? market.currentPrice;
+        const priceDeviation =
+          Math.abs(requestedExitPrice - referencePrice) / referencePrice;
+        if (priceDeviation > input.maxSlippage) {
+          throw new Error(
+            `Slippage exceeded: execution price ${requestedExitPrice.toFixed(2)} deviates ` +
+              `${(priceDeviation * 100).toFixed(2)}% from mark price ${referencePrice.toFixed(2)} ` +
+              `(max allowed: ${(input.maxSlippage * 100).toFixed(2)}%)`
+          );
+        }
+      }
+
+      const closeImpact = await this.previewCloseImpact({
+        ticker: position.ticker,
+        exitPrice: requestedExitPrice,
+        side: position.side,
+        closeSize,
+      });
+      const exitPrice = closeImpact?.avgExitPrice ?? requestedExitPrice;
+
+      const { pnl } = calculateUnrealizedPnL(
+        position.entryPrice,
+        exitPrice,
+        position.side,
+        closeSize
+      );
+      const proportionalFunding = position.fundingPaid * closePercentage;
+      const realizedPnL = pnl - proportionalFunding;
+      const marginPaid = closeSize / position.leverage;
+      const grossSettlement = marginPaid + realizedPnL;
+      const fee = this.calculateFee(closeSize);
+      const netSettlement = Math.max(0, grossSettlement - fee);
+      const now = this.deps.clock?.now() ?? new Date();
+
+      if (isFullClose) {
+        await tx.closePosition(position.id, {
+          currentPrice: exitPrice,
+          closedAt: now,
+          realizedPnL: (position.realizedPnL ?? 0) + realizedPnL,
+          unrealizedPnL: 0,
+          unrealizedPnLPercent: 0,
+        });
+      } else {
+        const remainingFunding = position.fundingPaid - proportionalFunding;
+        const { pnl: remainingPnl, pnlPercent: remainingPnlPercent } =
+          calculateUnrealizedPnL(
+            position.entryPrice,
+            exitPrice,
+            position.side,
+            remainingSize
+          );
+        await tx.updateOpenPosition(position.id, {
+          size: remainingSize,
+          fundingPaid: remainingFunding,
+          currentPrice: exitPrice,
+          unrealizedPnL: remainingPnl,
+          unrealizedPnLPercent: remainingPnlPercent,
+          lastUpdated: now,
+        });
+      }
+
+      const newOpenInterest = Math.max(0, market.openInterest - closeSize);
+      await tx.updateMarketStats(position.ticker, {
+        openInterest: newOpenInterest,
+        volume24h: market.volume24h + closeSize,
+      });
+
+      return {
+        closeImpact,
+        closePercentage,
+        closeSize,
+        exitPrice,
+        fee,
+        isFullClose,
+        marginPaid,
+        market,
+        netSettlement,
+        newOpenInterest,
+        now,
+        position,
+        requestedExitPrice,
+        realizedPnL,
+        remainingSize,
+      };
     });
-    const exitPrice = closeImpact?.avgExitPrice ?? requestedExitPrice;
 
-    // Calculate PnL for the portion being closed
-    const { pnl } = calculateUnrealizedPnL(
-      position.entryPrice,
-      exitPrice,
-      position.side,
-      closeSize
-    );
-    // Proportional funding paid for the closed portion
-    const proportionalFunding = position.fundingPaid * closePercentage;
-    const realizedPnL = pnl - proportionalFunding;
-    const marginPaid = closeSize / position.leverage;
-    const grossSettlement = marginPaid + realizedPnL;
-    const fee = this.calculateFee(closeSize);
-    const netSettlement = Math.max(0, grossSettlement - fee);
-
-    if (netSettlement > 0) {
+    if (settlement.netSettlement > 0) {
       await this.deps.wallet.credit({
         userId: input.userId,
-        amount: netSettlement,
-        reason: isFullClose ? 'perp_close' : 'perp_partial_close',
-        description: `${isFullClose ? 'Close' : `Partial close ${(closePercentage * 100).toFixed(0)}%`} ${position.leverage}x ${position.side} ${position.ticker}`,
-        relatedId: position.id,
+        amount: settlement.netSettlement,
+        reason: settlement.isFullClose ? 'perp_close' : 'perp_partial_close',
+        description: `${settlement.isFullClose ? 'Close' : `Partial close ${(settlement.closePercentage * 100).toFixed(0)}%`} ${settlement.position.leverage}x ${settlement.position.side} ${settlement.position.ticker}`,
+        relatedId: settlement.position.id,
       });
     }
 
     await this.deps.wallet.recordPnL({
       userId: input.userId,
-      // Net realized PnL excluding margin (which is principal) and including any
-      // fee actually collected (bounded by the settlement clamp).
-      pnl: netSettlement - marginPaid,
-      reason: isFullClose ? 'perp_close' : 'perp_partial_close',
-      relatedId: position.id,
+      pnl: settlement.netSettlement - settlement.marginPaid,
+      reason: settlement.isFullClose ? 'perp_close' : 'perp_partial_close',
+      relatedId: settlement.position.id,
     });
 
-    const now = this.deps.clock?.now() ?? new Date();
-
-    if (isFullClose) {
-      // Full close: mark position as closed
-      await this.db.closePosition(position.id, {
-        currentPrice: exitPrice,
-        closedAt: now,
-        realizedPnL: (position.realizedPnL ?? 0) + realizedPnL,
-        unrealizedPnL: 0,
-        unrealizedPnLPercent: 0,
-      });
-    } else {
-      // Partial close: reduce position size and funding
-      const remainingFunding = position.fundingPaid - proportionalFunding;
-      const { pnl: remainingPnl, pnlPercent: remainingPnlPercent } =
-        calculateUnrealizedPnL(
-          position.entryPrice,
-          exitPrice,
-          position.side,
-          remainingSize
-        );
-      await this.db.updateOpenPosition(position.id, {
-        size: remainingSize,
-        fundingPaid: remainingFunding,
-        currentPrice: exitPrice,
-        unrealizedPnL: remainingPnl,
-        unrealizedPnLPercent: remainingPnlPercent,
-        lastUpdated: now,
-      });
-    }
-
-    // OI decreases by the closed portion
-    const newOpenInterest = Math.max(0, market.openInterest - closeSize);
-
-    // Run market stats update and balance query in parallel — they're
-    // independent of each other and both depend only on the settlement above.
-    const [, balanceResult] = await Promise.all([
-      this.db.updateMarketStats(position.ticker, {
-        openInterest: newOpenInterest,
-        volume24h: market.volume24h + closeSize,
-      }),
-      this.deps.wallet.getBalance(input.userId),
-    ]);
+    const balanceResult = await this.deps.wallet.getBalance(input.userId);
 
     // Fee bookkeeping: retries + optional outbox (see processFeeWithRetry).
     void this.processFeeWithRetry(
       {
         userId: input.userId,
-        amount: closeSize,
+        amount: settlement.closeSize,
         type: 'perp_close',
-        relatedId: position.ticker,
-        positionId: position.id,
+        relatedId: settlement.position.ticker,
+        positionId: settlement.position.id,
       },
-      { ticker: position.ticker }
+      { ticker: settlement.position.ticker }
     ).catch(() => {
       // Error already logged in processFeeWithRetry; catch to prevent unhandled rejection
     });
 
     // Apply market-level post-close impact after settlement to keep the close
     // path fail-safe (position is already settled if this step fails).
-    const postCloseMarketPrice = closeImpact
-      ? await this.applyPostCloseMarketImpact(position.ticker)
+    const postCloseMarketPrice = settlement.closeImpact
+      ? await this.applyPostCloseMarketImpact(settlement.position.ticker)
       : undefined;
 
     // For partial closes, re-mark remaining position to the post-impact price.
     if (
-      !isFullClose &&
+      !settlement.isFullClose &&
       postCloseMarketPrice !== undefined &&
       Number.isFinite(postCloseMarketPrice) &&
-      Math.abs(postCloseMarketPrice - exitPrice) > MIN_IMPACT_DELTA
+      Math.abs(postCloseMarketPrice - settlement.exitPrice) > MIN_IMPACT_DELTA
     ) {
       const { pnl: markedPnl, pnlPercent: markedPnlPercent } =
         calculateUnrealizedPnL(
-          position.entryPrice,
+          settlement.position.entryPrice,
           postCloseMarketPrice,
-          position.side,
-          remainingSize
+          settlement.position.side,
+          settlement.remainingSize
         );
 
-      await this.db.updateOpenPosition(position.id, {
+      await this.db.updateOpenPosition(settlement.position.id, {
         currentPrice: postCloseMarketPrice,
         unrealizedPnL: markedPnl,
         unrealizedPnLPercent: markedPnlPercent,
-        lastUpdated: now,
+        lastUpdated: settlement.now,
       });
     }
 
     const result: PerpTradeResult = {
-      positionId: position.id,
-      ticker: position.ticker,
-      side: position.side,
-      size: closeSize,
-      leverage: position.leverage,
-      entryPrice: position.entryPrice,
-      exitPrice,
-      liquidationPrice: position.liquidationPrice,
-      realizedPnL,
-      feePaid: fee,
-      marginPaid,
+      positionId: settlement.position.id,
+      ticker: settlement.position.ticker,
+      side: settlement.position.side,
+      size: settlement.closeSize,
+      leverage: settlement.position.leverage,
+      entryPrice: settlement.position.entryPrice,
+      exitPrice: settlement.exitPrice,
+      liquidationPrice: settlement.position.liquidationPrice,
+      realizedPnL: settlement.realizedPnL,
+      feePaid: settlement.fee,
+      marginPaid: settlement.marginPaid,
       balance: balanceResult.balance,
-      remainingSize: isFullClose ? 0 : remainingSize,
-      fullyClosed: isFullClose,
+      remainingSize: settlement.isFullClose ? 0 : settlement.remainingSize,
+      fullyClosed: settlement.isFullClose,
     };
 
     // Broadcast trade event for real-time UI updates.
@@ -811,32 +817,32 @@ export class PerpMarketService {
     // to avoid blocking the response.
     this.emitTradeEvent({
       type: 'perp_trade',
-      action: isFullClose ? 'close' : 'partial_close',
-      ticker: position.ticker,
-      side: position.side,
-      size: closeSize,
-      leverage: position.leverage,
-      entryPrice: position.entryPrice,
-      exitPrice,
-      positionId: position.id,
-      realizedPnL,
-      openInterest: newOpenInterest,
-      volume24h: market.volume24h + closeSize,
+      action: settlement.isFullClose ? 'close' : 'partial_close',
+      ticker: settlement.position.ticker,
+      side: settlement.position.side,
+      size: settlement.closeSize,
+      leverage: settlement.position.leverage,
+      entryPrice: settlement.position.entryPrice,
+      exitPrice: settlement.exitPrice,
+      positionId: settlement.position.id,
+      realizedPnL: settlement.realizedPnL,
+      openInterest: settlement.newOpenInterest,
+      volume24h: settlement.market.volume24h + settlement.closeSize,
       timestamp: (this.deps.clock?.now() ?? new Date()).toISOString(),
     }).catch(() => {
       // Error already logged in emitTradeEvent; catch to prevent unhandled rejection
     });
 
-    if (closeImpact) {
+    if (settlement.closeImpact) {
       logger.info(
-        `Exit price adjusted to avg fill: ${requestedExitPrice.toFixed(2)} → ${exitPrice.toFixed(2)} (delta: ${closeImpact.deltaImpact.toFixed(4)})`,
+        `Exit price adjusted to avg fill: ${settlement.requestedExitPrice.toFixed(2)} → ${settlement.exitPrice.toFixed(2)} (delta: ${settlement.closeImpact.deltaImpact.toFixed(4)})`,
         {
-          positionId: position.id,
-          ticker: position.ticker,
-          side: position.side,
-          requestedExitPrice,
-          avgExitPrice: exitPrice,
-          deltaImpact: closeImpact.deltaImpact,
+          positionId: settlement.position.id,
+          ticker: settlement.position.ticker,
+          side: settlement.position.side,
+          requestedExitPrice: settlement.requestedExitPrice,
+          avgExitPrice: settlement.exitPrice,
+          deltaImpact: settlement.closeImpact.deltaImpact,
           postCloseMarketPrice,
         },
         'PerpService'
