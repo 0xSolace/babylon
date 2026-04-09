@@ -65,11 +65,21 @@ import {
   renderPrompt,
 } from '@babylon/engine';
 import { config } from 'dotenv';
-import { access, mkdir, writeFile } from 'fs/promises';
-import OpenAI from 'openai';
+import { access, mkdir, rm, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { z } from 'zod';
 import { logger } from './lib/logger.js';
+
+// ─── CLI flags ────────────────────────────────────────────────────────────────
+//
+// --force           Delete existing images and regenerate everything
+// --actor <id>      Only process images for a single actor (partial regeneration)
+// --org <id>        Only process images for a single organization
+//
+// Examples:
+//   bun run images -- --force
+//   bun run images -- --actor ailon-musk
+//   bun run images -- --org org-openagi
 
 // Load environment variables
 config();
@@ -424,7 +434,33 @@ async function processQueue(
  * 5. Processes jobs concurrently (max 3)
  * 6. Reports statistics
  */
+async function deleteIfExists(filePath: string): Promise<void> {
+  try {
+    await rm(filePath, { force: true });
+  } catch {
+    // ignore
+  }
+}
+
 async function main() {
+  // Parse CLI flags
+  const args = process.argv.slice(2);
+  const forceRegenerate = args.includes('--force');
+  const actorIdx = args.indexOf('--actor');
+  const orgIdx = args.indexOf('--org');
+  const filterActorId = actorIdx !== -1 ? args[actorIdx + 1] : undefined;
+  const filterOrgId = orgIdx !== -1 ? args[orgIdx + 1] : undefined;
+
+  if (filterActorId) {
+    logger.info(`Filtering to single actor: ${filterActorId}`);
+  }
+  if (filterOrgId) {
+    logger.info(`Filtering to single organization: ${filterOrgId}`);
+  }
+  if (forceRegenerate) {
+    logger.info('--force: existing images will be deleted and regenerated');
+  }
+
   logger.info('Checking actor and organization images...');
   logger.info(`Model: gpt-image-1.5 | Quality: high | Format: jpeg`);
 
@@ -466,12 +502,39 @@ async function main() {
   let skippedCount = 0;
   const jobs: ImageJob[] = [];
 
+  // Determine which actors/orgs to process
+  const actorsToProcess = filterActorId
+    ? actorsDb.actors.filter((a) => a.id === filterActorId)
+    : actorsDb.actors;
+  const orgsToProcess = filterOrgId
+    ? actorsDb.organizations.filter((o) => o.id === filterOrgId)
+    : filterActorId
+      ? [] // --actor implies skip orgs unless --org also specified
+      : actorsDb.organizations;
+
+  if (filterActorId && actorsToProcess.length === 0) {
+    logger.error(`No actor found with id "${filterActorId}"`);
+    logger.info(
+      'Available actor ids: ' +
+        actorsDb.actors
+          .map((a) => a.id)
+          .slice(0, 10)
+          .join(', ') +
+        '...'
+    );
+    process.exit(1);
+  }
+
   // Build job queue for actor profile pictures
-  logger.info(`Checking ${actorsDb.actors.length} actor profile pictures...`);
-  for (const actor of actorsDb.actors) {
+  logger.info(`Checking ${actorsToProcess.length} actor profile pictures...`);
+  for (const actor of actorsToProcess) {
     const imagePath = join(actorsImagesDir, `${actor.id}.jpg`);
 
-    if (!forceRegenerate && (await fileExists(imagePath))) {
+    if (forceRegenerate) {
+      await deleteIfExists(imagePath);
+    }
+
+    if (await fileExists(imagePath)) {
       skippedCount++;
     } else {
       jobs.push({
@@ -485,11 +548,15 @@ async function main() {
   }
 
   // Build job queue for actor banners
-  logger.info(`Checking ${actorsDb.actors.length} actor banners...`);
-  for (const actor of actorsDb.actors) {
+  logger.info(`Checking ${actorsToProcess.length} actor banners...`);
+  for (const actor of actorsToProcess) {
     const bannerPath = join(actorsBannersDir, `${actor.id}.jpg`);
 
-    if (!forceRegenerate && (await fileExists(bannerPath))) {
+    if (forceRegenerate) {
+      await deleteIfExists(bannerPath);
+    }
+
+    if (await fileExists(bannerPath)) {
       skippedCount++;
     } else {
       jobs.push({
@@ -503,13 +570,15 @@ async function main() {
   }
 
   // Build job queue for organization logos
-  logger.info(
-    `Checking ${actorsDb.organizations.length} organization logos...`
-  );
-  for (const org of actorsDb.organizations) {
+  logger.info(`Checking ${orgsToProcess.length} organization logos...`);
+  for (const org of orgsToProcess) {
     const imagePath = join(orgsImagesDir, `${org.id}.jpg`);
 
-    if (!forceRegenerate && (await fileExists(imagePath))) {
+    if (forceRegenerate) {
+      await deleteIfExists(imagePath);
+    }
+
+    if (await fileExists(imagePath)) {
       skippedCount++;
     } else {
       jobs.push({
@@ -523,13 +592,15 @@ async function main() {
   }
 
   // Build job queue for organization banners
-  logger.info(
-    `Checking ${actorsDb.organizations.length} organization banners...`
-  );
-  for (const org of actorsDb.organizations) {
+  logger.info(`Checking ${orgsToProcess.length} organization banners...`);
+  for (const org of orgsToProcess) {
     const bannerPath = join(orgsBannersDir, `${org.id}.jpg`);
 
-    if (!forceRegenerate && (await fileExists(bannerPath))) {
+    if (forceRegenerate) {
+      await deleteIfExists(bannerPath);
+    }
+
+    if (await fileExists(bannerPath)) {
       skippedCount++;
     } else {
       jobs.push({
@@ -547,7 +618,7 @@ async function main() {
   );
 
   if (jobs.length === 0) {
-    logger.info('All images already exist!');
+    logger.info('All images already exist! Use --force to regenerate.');
     return;
   }
 
@@ -561,10 +632,8 @@ async function main() {
     generated: result.generated,
     failed: result.failed,
     skipped: skippedCount,
-    totalActors: actorsDb.actors.length,
-    totalOrganizations: actorsDb.organizations.length,
-    totalPossibleImages:
-      actorsDb.actors.length * 2 + actorsDb.organizations.length * 2,
+    totalActors: actorsToProcess.length,
+    totalOrganizations: orgsToProcess.length,
   });
 }
 

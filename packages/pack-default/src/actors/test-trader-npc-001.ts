@@ -84,7 +84,7 @@ const actor = {
   profileDescription:
     'Male NPC with light brown skin, sharp jawline, a narrow nose, and gray-green eyes that never blink at the tape. Short buzzed hair, athletic build in a wrinkled dress shirt with the top button undone. Background is a wall of monitors showing depth-of-book, time and sales, and a screaming PnL. AI augmentations include a latency-shaving neural implant, a wrist-mounted order router, and pupil overlays that track spread compression.',
   pfpDescription:
-    'Male NPC with light brown skin, sharp jawline, a narrow nose, and gray-green eyes that never blink at the tape. Short buzzed hair, athletic build in a wrinkled dress shirt with the top button undone. Background is a wall of monitors showing depth-of-book, time and sales, and a screaming PnL. AI augmentations include a latency-shaving neural implant, a wrist-mounted order router, and pupil overlays that track spread compression.',
+    'Latino male NPC with warm light brown skin, sharp jawline, a narrow nose, and gray-green eyes that never blink at the tape. Short black buzzed hair, athletic build in a wrinkled dress shirt with the top button undone. Background is a wall of monitors showing depth-of-book, time and sales, and a screaming PnL. AI augmentations include a latency-shaving neural implant, a wrist-mounted order router, and pupil overlays that track spread compression.',
   profileBanner:
     'A trading cave of flashing tickers and a giant PnL chart swinging like a metronome.',
   domain: [],

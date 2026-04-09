@@ -57,7 +57,7 @@ function buildTextToImagePrompt(
     'A cute 3D-rendered monkey mascot character: soft rounded shapes, expressive eyes, subtle smile, plush-toy / collectible-figure aesthetic.',
     'Clean simple background (soft gradient or light studio), no clutter.',
     hint,
-    'Family-friendly, no text, no logos, no watermarks, no real human faces.',
+    'Family-friendly. No text, no labels, no numbers, no letters, no logos, no watermarks, no real human faces.',
   ].join(' ');
 }
 
@@ -69,7 +69,7 @@ function buildEditPrompt(params: GenerateAgentMonkeyAvatarParams): string {
     'different fur tones or markings, face shape, eye style, expression, or a small accessory (hat, collar, glasses) — not a copy.',
     'Square head-and-shoulders composition, centered, soft clean background.',
     hint,
-    'No text, no logos, no watermarks, family-friendly.',
+    'No text, no labels, no numbers, no letters, no logos, no watermarks, family-friendly.',
   ].join(' ');
 }
 
