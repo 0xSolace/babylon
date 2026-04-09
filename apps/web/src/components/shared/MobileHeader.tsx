@@ -27,6 +27,7 @@ import {
   fetchMobileHeaderPointsSnapshot,
   isAbortError,
 } from '@/components/shared/mobileHeaderPoints';
+import { useEmbedMode } from '@/contexts/EmbedContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useUnreadMessages } from '@/hooks/useUnreadMessages';
 import { useUnreadNotifications } from '@/hooks/useUnreadNotifications';
@@ -57,10 +58,11 @@ function MobileHeaderContent() {
   const { totalUnread: unreadMessages } = useUnreadMessages();
   const { unreadCount: unreadNotifications } = useUnreadNotifications();
 
-  // Hide mobile header when WAITLIST_MODE is enabled on home page
+  // Hide mobile header when embedded or WAITLIST_MODE on home page
   const isWaitlistMode = process.env.NEXT_PUBLIC_WAITLIST_MODE === 'true';
   const isHomePage = pathname === '/';
-  const shouldHide = isWaitlistMode && isHomePage;
+  const { isEmbedded } = useEmbedMode();
+  const shouldHide = isEmbedded || (isWaitlistMode && isHomePage);
 
   // All hooks must be called before any conditional returns
   useEffect(() => {

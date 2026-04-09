@@ -21,6 +21,7 @@ import { SessionHeartbeatProvider } from '@/hooks/useSessionHeartbeat';
 import { getBrowserDevAuthSession } from '@/lib/auth/dev-auth';
 import { hydrateChatCacheFromIndexedDB } from '@/lib/chat/hydrateChatCache';
 import { useAuthStore } from '@/stores/authStore';
+import { EmbedModeProvider } from '@/contexts/EmbedContext';
 import { DiscordActivityProvider } from './DiscordActivityProvider';
 import { FarcasterMiniAppProvider } from './FarcasterMiniAppProvider';
 import { GameGuideProvider } from './GameGuideProvider';
@@ -320,6 +321,7 @@ export function Providers({
                     <QueryClientProvider client={queryClient}>
                       <GamePlaybackManager />
                       <ChatCacheHydrator />
+                      <EmbedModeProvider>
                       <FarcasterMiniAppProvider>
                         <TelegramMiniAppProvider>
                           <DiscordActivityProvider>
@@ -348,6 +350,7 @@ export function Providers({
                           </DiscordActivityProvider>
                         </TelegramMiniAppProvider>
                       </FarcasterMiniAppProvider>
+                      </EmbedModeProvider>
                     </QueryClientProvider>
                   </FontSizeProvider>
                 </TooltipProvider>
@@ -427,6 +430,7 @@ export function Providers({
                     <GamePlaybackManager />
                     <ChatCacheHydrator />
                     <ThemedPrivyProvider>
+                      <EmbedModeProvider>
                       <FarcasterMiniAppProvider>
                         <TelegramMiniAppProvider>
                           <DiscordActivityProvider>
@@ -461,6 +465,7 @@ export function Providers({
                           </DiscordActivityProvider>
                         </TelegramMiniAppProvider>
                       </FarcasterMiniAppProvider>
+                      </EmbedModeProvider>
                     </ThemedPrivyProvider>
                   </QueryClientProvider>
                 </FontSizeProvider>

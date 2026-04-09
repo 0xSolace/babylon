@@ -30,6 +30,7 @@ import { Avatar } from '@/components/shared/Avatar';
 import { BabylonIcon } from '@/components/shared/icons/BabylonIcon';
 import { BabylonFullLogo } from '@/components/shared/icons/BabylonLogo';
 import { HouseIcon } from '@/components/shared/icons/HouseIcon';
+import { useEmbedMode } from '@/contexts/EmbedContext';
 import { useAuth } from '@/hooks/useAuth';
 import { usePostHog } from '@/hooks/usePostHog';
 import { useUnreadMessages } from '@/hooks/useUnreadMessages';
@@ -104,10 +105,11 @@ function SidebarContent() {
     };
   }, [fetchPortfolio, refresh]);
 
-  // Hide sidebar when WAITLIST_MODE is enabled on home page
+  // Hide sidebar when WAITLIST_MODE is enabled on home page, or in embed mode
   const isWaitlistMode = process.env.NEXT_PUBLIC_WAITLIST_MODE === 'true';
   const isHomePage = pathname === '/';
-  const shouldHideSidebar = isWaitlistMode && isHomePage;
+  const { isEmbedded } = useEmbedMode();
+  const shouldHideSidebar = isEmbedded || (isWaitlistMode && isHomePage);
 
   // Check if user is admin from the user object
   const isAdmin = user?.isAdmin ?? false;

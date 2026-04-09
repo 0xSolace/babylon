@@ -3,6 +3,7 @@
 import { cn } from '@babylon/shared';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
+import { useEmbedMode } from '@/contexts/EmbedContext';
 import { useAuth } from '@/hooks/useAuth';
 
 function hasDesktopRightRail(pathname: string | null): boolean {
@@ -43,7 +44,8 @@ function FeedAuthBannerContent() {
   // Hide when WAITLIST_MODE is enabled on home page (unless ?dev=true)
   const isWaitlistMode = process.env.NEXT_PUBLIC_WAITLIST_MODE === 'true';
   const isHomePage = pathname === '/';
-  const shouldHide = isWaitlistMode && isHomePage && !isDevMode;
+  const { isEmbedded } = useEmbedMode();
+  const shouldHide = isEmbedded || (isWaitlistMode && isHomePage && !isDevMode);
   const rightRailDesktop = hasDesktopRightRail(pathname);
 
   // If should be hidden, don't render anything
