@@ -68,6 +68,7 @@ import { config } from 'dotenv';
 import { access, mkdir, rm, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { z } from 'zod';
+import { parseFlagValue } from './cli-utils.js';
 import { logger } from './lib/logger.js';
 
 // ─── CLI flags ────────────────────────────────────────────────────────────────
@@ -446,10 +447,8 @@ async function main() {
   // Parse CLI flags
   const args = process.argv.slice(2);
   const forceRegenerate = args.includes('--force');
-  const actorIdx = args.indexOf('--actor');
-  const orgIdx = args.indexOf('--org');
-  const filterActorId = actorIdx !== -1 ? args[actorIdx + 1] : undefined;
-  const filterOrgId = orgIdx !== -1 ? args[orgIdx + 1] : undefined;
+  const filterActorId = parseFlagValue(args, '--actor');
+  const filterOrgId = parseFlagValue(args, '--org');
 
   if (filterActorId) {
     logger.info(`Filtering to single actor: ${filterActorId}`);
@@ -518,6 +517,19 @@ async function main() {
       'Available actor ids: ' +
         actorsDb.actors
           .map((a) => a.id)
+          .slice(0, 10)
+          .join(', ') +
+        '...'
+    );
+    process.exit(1);
+  }
+
+  if (filterOrgId && orgsToProcess.length === 0) {
+    logger.error(`No organization found with id "${filterOrgId}"`);
+    logger.info(
+      'Available org ids: ' +
+        actorsDb.organizations
+          .map((o) => o.id)
           .slice(0, 10)
           .join(', ') +
         '...'

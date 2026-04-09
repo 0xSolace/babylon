@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { fal } from '@fal-ai/client';
 
 // ── Subjects (animals, mythical creatures, characters) ───────────────
-const SUBJECTS = [
+export const SUBJECTS = [
   // Animals — dignified and striking
   'a cat',
   'a wolf',
@@ -116,7 +116,7 @@ const THEMES = [
 ];
 
 // ── Art styles — polished, not meme-y ────────────────────────────────
-const STYLES = [
+export const STYLES = [
   '3D Pixar render',
   'hand-drawn ink illustration',
   'digital concept art',
@@ -154,7 +154,7 @@ interface PfpSpec {
   prompt: string;
 }
 
-function buildPrompt(
+export function buildPrompt(
   subject: string,
   background: string,
   theme: string,
