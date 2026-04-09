@@ -1,17 +1,16 @@
 """
 Verifiable Reward Functions for GRPO Training
 
-Implements binary verifiable rewards based on ScamBench's deterministic scorer,
-following the RLVR methodology (Wen et al., 2025). Key insight: binary rewards
-with GRPO implicitly incentivize correct reasoning chains without explicit CoT
-supervision. Our ScamBench scorer provides the verifiable signal.
+Implements continuous verifiable rewards based on ScamBench's deterministic scorer,
+following the RLVR methodology (Wen et al., 2025). ScamBench provides the verifiable
+signal; rewards are continuous (fraction of safe stages + analysis quality) to ensure
+dense gradient signal for GRPO.
 
 The reward is:
-    R(y) = 1 if (resistant AND contained), else 0
+    R(y) = 0.75 * (safe_stages / total_stages + 0.2*all_safe) + 0.25 * analysis
 
-This maps directly to the RLVR paper's binary correctness signal.
 GRPO then computes group-relative advantages:
-    A(y_i) = (R(y_i) - mean(R)) / std(R)
+    A(y_i) = (R(y_i) - mean(R)) / max(std(R), eps)
 
 Which pushes probability mass toward responses that resist AND contain.
 """
@@ -88,7 +87,7 @@ class GRPOGroup:
     advantages: list[float] = field(default_factory=list)
 
     def compute_advantages(self) -> None:
-        """Compute GRPO advantages: (R - mean) / std per the RLVR paper."""
+        """Compute GRPO advantages: (R - mean) / max(std, eps) per the RLVR paper."""
         rewards = [v.reward for v in self.verifications]
         n = len(rewards)
         if n == 0:
@@ -97,13 +96,13 @@ class GRPOGroup:
 
         mean_r = sum(rewards) / n
         var_r = sum((r - mean_r) ** 2 for r in rewards) / max(n, 1)
-        std_r = var_r**0.5
+        std_r = max(var_r**0.5, 1e-4)
 
-        if std_r < 1e-8:
-            # All same reward → zero advantage (no gradient signal)
-            self.advantages = [0.0] * n
-        else:
-            self.advantages = [(r - mean_r) / std_r for r in rewards]
+        # Clip advantages to [-3, 3] to prevent exploding gradients
+        # when std is very small but nonzero
+        self.advantages = [
+            max(-3.0, min(3.0, (r - mean_r) / std_r)) for r in rewards
+        ]
 
 
 def expected_threat_family(

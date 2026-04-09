@@ -14,18 +14,18 @@ from src.training.atropos_trainer import (
 
 
 class TestAtroposTrainingConfig:
-    def test_default_optimizer_is_adamw(self) -> None:
+    def test_default_optimizer_is_apollo(self) -> None:
         config = AtroposTrainingConfig()
-        assert config.optimizer == "adamw"
+        assert config.optimizer == "apollo"
 
-    def test_kondo_defaults_disabled(self) -> None:
+    def test_kondo_defaults_enabled(self) -> None:
         config = AtroposTrainingConfig()
-        assert config.use_kondo is False
+        assert config.use_kondo is True
         assert config.kondo_gate_rate == 0.3
 
-    def test_turboquant_defaults_disabled(self) -> None:
+    def test_turboquant_defaults_enabled(self) -> None:
         config = AtroposTrainingConfig()
-        assert config.use_turboquant is False
+        assert config.use_turboquant is True
 
     def test_apollo_config(self) -> None:
         config = AtroposTrainingConfig(
