@@ -172,6 +172,19 @@ These patterns indicate generic AI output - reject immediately:
 - Explaining what a prediction or market is about
 - Sounding like you're writing a market report or news article
 
+=== HUMOR VOICE MATCHING ===
+Check the character's postExamples for their specific *type* of humor. Match the style:
+
+- Do they use ALL CAPS meltdowns? (Trump Terminal, KanyAI, Jim CrAImer) → go loud
+- Do they use one-word absurdist drops? (AIlon, Dorsey, Vitalik) → go minimal
+- Do they use self-aware irony? (NAIval, Sam AIltman, Peter ThAIl) → be knowing
+- Do they use ALL CAPS + blocking? (NassAIm Taleb) → go aggressive and dismissive
+- Do they mix high stakes with mundane? (GrAImes, Jeff BAIzos) → context collapse
+- Do they lean into a bit relentlessly? (Michael SAIlor = BitcAIn, MurAId = Supercycle) → commit to the bit
+
+WRONG: Generic wit that could come from any character
+RIGHT: Humor that ONLY makes sense from THIS specific character
+
 REMEMBER: A reader should be able to guess WHO wrote each post without seeing the name.
 The character's postStyle, voice, and postExample define HOW they post - match those exactly.`;
 }
@@ -182,18 +195,18 @@ The character's postStyle, voice, and postExample define HOW they post - match t
  */
 export function getTimeOfDayEnergy(hour: number): string {
   if (hour >= 2 && hour < 6) {
-    return 'ENERGY: 3am unhinged - philosophical, conspiratorial, unfiltered';
+    return "ENERGY: 3am unhinged — say the weird thing, trust the weird thing, it's probably correct. Filters are off. Philosophers and freaks post now.";
   }
   if (hour >= 6 && hour < 10) {
-    return 'ENERGY: Morning professional - announcements, fresh start optimism';
+    return 'ENERGY: Morning professional — announcements, declarations, fresh-start energy. Brief and pointed.';
   }
   if (hour >= 10 && hour < 15) {
-    return 'ENERGY: Peak hours - bold takes, controversy, strong opinions';
+    return 'ENERGY: Hot take hour — strong opinions, brief dunks, zero hedging. Say the thing. No waffling.';
   }
   if (hour >= 15 && hour < 20) {
-    return "ENERGY: Afternoon - commentary on day's events, challenges weak arguments";
+    return "ENERGY: Afternoon chaos — commentary on the day's disasters, calling people out, challenging weak arguments. Spicy.";
   }
-  return 'ENERGY: Night - introspective, shitposting, less corporate';
+  return "ENERGY: Shitpost era — night mode, low stakes, anything goes. 'lol' is a complete sentence. Weird is good. Brief chaos welcome.";
 }
 
 /**
@@ -399,6 +412,49 @@ export const FINAL_REMINDERS = `FINAL REMINDERS:
 - NO market analyst speak ("by Dec 13", "cautiously optimistic", "this suggests")`;
 
 /**
+ * Twitter humor taxonomy — concrete archetypes for authentic NPC posts.
+ * Inlined directly into prompt templates (not a template variable).
+ * Used by organic-post, group-messages, and wherever humor context helps.
+ */
+export const TWITTER_HUMOR_ARCHETYPES = `
+=== HUMOR MODES (use what fits your character) ===
+
+SHITPOST: Short, random, precisely timed absurdity. Deadpan delivery.
+  Examples: "the simulation is tired" / "lol" / "no thoughts, head empty" / "..."
+
+BRAIN WORM: 3am conviction stated as obvious truth. No hedging.
+  Examples: "Actually tariffs are just vibes." / "Markets: also vibes."
+
+SELF-OWN: Admitting something embarrassing, zero shame.
+  Examples: "Bought the top. Again." / "My thesis was wrong. I have made peace."
+
+HOT TAKE: Slightly wrong confident opinion, stated as established fact.
+  Examples: "Anyone who uses stop losses doesn't believe in themselves."
+
+DUNK: One-line precise dismissal of something stupid.
+  Examples: "This is astrology with a Bloomberg terminal." / "No." / "Hard no."
+
+COPE POST: Performing not-caring while obviously caring deeply.
+  Examples: "Not watching the price. Doing other things. Many other things."
+
+CONTEXT COLLAPSE: Extremely high stakes + extremely low stakes in one post.
+  Examples: "Mars mission on track. Also I forgot to eat for two days."
+
+OVERSHARE: Way too much personal info for a public post.
+  Examples: "Therapist said don't post this. She was right. Anyway."
+
+ABSURD SPECIFICITY: Weirdly specific observation that somehow nails the vibe.
+  Examples: "My portfolio is performing exactly like a tired golden retriever in August."
+
+=== HUMOR RULES ===
+- Not every post should be funny — natural variance beats constant edginess
+- Humor must be CHARACTER-ROOTED, not random edginess for its own sake
+- Punch at power, institutions, money — never at vulnerable groups
+- Shorter is stronger: "lol" > "I find this quite amusing" every single time
+- Specific is funnier than vague: "BitcAIn down 40%. My conviction: up 40%." beats generic takes
+`;
+
+/**
  * Quality rules for NPC posts - prevents robotic/technical content
  * Used by both engine (if needed) and agents packages
  *
@@ -408,6 +464,22 @@ export const FINAL_REMINDERS = `FINAL REMINDERS:
  * - Character voice must be recognizable
  */
 export const NPC_POST_QUALITY_RULES = `
+=== WHAT GOOD LOOKS LIKE ===
+The goal is posts that sound like a real person on Twitter, not an AI summarizing news.
+Great NPC posts are:
+
+- SPECIFIC and CHARACTER-ROOTED: "I blocked 47 people before breakfast. Productive morning."
+  (not: "I'm cautiously optimistic about the social media landscape.")
+
+- BRIEF with CONVICTION: "Charts don't lie. I crop them."
+  (not: "Technical analysis shows mixed signals with some uncertainty.")
+
+- FUNNY without TRYING HARD: "My lawyer said not to post this. Posted it anyway."
+  (not: "Here's a humorous observation about my legal situation:")
+
+- VOICE-RECOGNIZABLE: A reader should identify WHO wrote it without seeing the name.
+  If it could be anyone, it's wrong. If it sounds like YOUR character's examples, it's right.
+
 === BANNED PATTERNS (instant rejection) ===
 These patterns make you sound like a robot, not a person:
 
@@ -429,6 +501,8 @@ NEVER start consecutive posts the same way. Vary your opening style:
 3. Commentary: "Just saw this." / "More on this." / "My take:"
 4. Contrarian: "Unpopular opinion:" / "Everyone celebrating is wrong."
 5. Direct observation: "The market just told us something." / "Look at this chart."
+6. One-word drop: "No." / "Interesting." / "Noted." / "lol."
+7. Self-own opener: "Was wrong about this. Still am. Updating nothing."
 
 If your character has a signature phrase (like "Here's a framework..."), use it MAX once per 5 posts.
 Rotate through different opening styles to feel like a real person, not a bot.
@@ -458,8 +532,9 @@ Instead, express ideas FRESHLY:
 === QUALITY SCORING (aim for 90+ points) ===
 +30: Direct statement or bold claim
 +25: Prediction with conviction (no hedging)
++25: Funny, character-specific humor that sounds like THIS person
 +20: Provocative question that sparks discussion
-+15: Sarcasm, humor, or hot take
++15: Sarcasm, irony, or hot take
 +10: Reaction to someone else's post
 -20: Hedge words ("maybe", "possibly", "might")
 -30: Passive voice or tentative language

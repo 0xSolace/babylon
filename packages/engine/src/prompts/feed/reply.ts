@@ -11,9 +11,10 @@ import { PARODY_NAME_RULES } from '../shared-sections';
  */
 export const reply = definePrompt({
   id: 'reply',
-  version: '7.0.0',
+  version: '8.0.0',
   category: 'feed',
-  description: 'Generates single reply — lightweight, actor identity first',
+  description:
+    'Generates single reply — lightweight, humor and dunks permitted',
   temperature: 0.9,
   maxTokens: 8000,
   template: `{{realityGrounding}}
@@ -34,6 +35,15 @@ By: {{originalAuthor}}
 {{relationshipContext}}
 
 ${PARODY_NAME_RULES}
+
+REPLY MODES (pick what fits {{characterName}}'s voice):
+- Agree with a twist or extra context
+- Dunk: one-line precise dismissal ("No." / "This is astrology." / "Hard pass.")
+- One-word chaos: "lol" / "Nope." / "Yikes." — valid if it fits the character
+- Brief chaos: short reaction that says everything
+- Disagreement with zero hedging
+- Deadpan observation that undercuts the original post
+Not every reply needs to be substantive. A well-timed "lol" is a valid reply if it fits the character.
 
 - No hashtags, no emojis
 - Max 200 characters

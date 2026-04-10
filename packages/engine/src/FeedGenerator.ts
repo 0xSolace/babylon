@@ -4585,6 +4585,7 @@ ${voiceContext}
     },
     timestamp: Date
   ): Promise<{ content: string; sentiment: number; energy: number }> {
+    const hour = timestamp.getHours();
     const formattedTime = timestamp.toLocaleString('en-US', {
       weekday: 'long',
       month: 'long',
@@ -4610,6 +4611,7 @@ ${voiceContext}
         actor.description || actor.role || 'industry professional',
       emotionalContext,
       atmosphereContext,
+      timeEnergy: getTimeOfDayEnergy(hour),
       recentEventsContext: '',
       ...buildFilteredWorldContext(
         StaticDataRegistry.getActor(actor.id) ?? { domain: [] },
