@@ -189,6 +189,13 @@ export function renderPrompt(
 
       // Group messages batch (optional - voice reference built at call site)
       'actorVoiceReference',
+
+      // Organic/ambient post context vars (optional - may not always have running bits)
+      'runningBitContext',
+      'domainContext',
+      'domainHints',
+      'timeEnergy',
+      'targetRecentActivity',
     ],
   } = options;
 
