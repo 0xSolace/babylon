@@ -7,6 +7,7 @@
 // Context gathering
 export {
   getAgentGroupChats,
+  getAgentMemory,
   getAgentOwnPosts,
   getAgentPositions,
   getAgentSocialGraph,
