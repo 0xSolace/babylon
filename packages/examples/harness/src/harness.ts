@@ -7,6 +7,7 @@
 import { HarnessA2AClient } from './a2a-client';
 import { getArchetype } from './archetypes';
 import type {
+  A2AClientInterface,
   ActionResult,
   AgentContext,
   AgentDecision,
@@ -34,7 +35,7 @@ interface AgentInstance {
   agent: TrainableAgent;
   archetypeId: string;
   instanceId: number;
-  client: HarnessA2AClient;
+  client: A2AClientInterface;
   trajectory: Trajectory;
 }
 
@@ -67,10 +68,26 @@ export class AgentHarness {
             keyIndex = 0; // Wrap around if we run out of keys
           }
 
-          const client = new HarnessA2AClient({
-            baseUrl: this.config.a2aUrl,
-            privateKey: ANVIL_PRIVATE_KEYS[keyIndex],
-          });
+          // Build client: use clientFactory if provided, else default HarnessA2AClient
+          let client: A2AClientInterface;
+          if (this.config.clientFactory) {
+            client = this.config.clientFactory(instanceId);
+          } else {
+            const harnessClient = new HarnessA2AClient({
+              baseUrl: this.config.a2aUrl,
+              privateKey: ANVIL_PRIVATE_KEYS[keyIndex],
+            });
+            // Register with A2A server (best-effort — already registered is fine)
+            try {
+              await harnessClient.register(
+                `${agent.name}-${archetype.id}-${i}`,
+                `${archetype.description} (${agent.language})`
+              );
+            } catch {
+              // ignored
+            }
+            client = harnessClient;
+          }
 
           // Initialize agent with archetype
           await agent.initialize({
@@ -80,16 +97,6 @@ export class AgentHarness {
             name: `${agent.name}-${archetype.id}-${i}`,
             tickInterval: this.config.tickInterval,
           });
-
-          // Register with A2A
-          try {
-            await client.register(
-              `${agent.name}-${archetype.id}-${i}`,
-              `${archetype.description} (${agent.language})`
-            );
-          } catch {
-            // Ignore already registered errors
-          }
 
           const trajectory: Trajectory = {
             id: `traj-${Date.now()}-${instanceId}`,
@@ -123,7 +130,7 @@ export class AgentHarness {
   }
 
   /**
-   * Execute a single tick for an instance
+   * Execute a single tick for an instance, returning a step even on error.
    */
   private async executeTick(
     instance: AgentInstance,
@@ -343,14 +350,46 @@ export class AgentHarness {
   }
 
   /**
-   * Run a batch of instances in parallel
+   * Run a batch of instances in parallel, capturing per-instance errors.
    */
   private async runBatch(
     batch: AgentInstance[],
-    tick: number
+    tick: number,
+    errors: string[]
   ): Promise<TrajectoryStep[]> {
-    const promises = batch.map((instance) => this.executeTick(instance, tick));
-    return Promise.all(promises);
+    const results = await Promise.allSettled(
+      batch.map((instance) => this.executeTick(instance, tick))
+    );
+
+    return results.map((r, idx) => {
+      if (r.status === 'fulfilled') return r.value;
+      const msg =
+        r.reason instanceof Error ? r.reason.message : String(r.reason);
+      const label = `${batch[idx].agent.name}/${batch[idx].archetypeId} tick ${tick}`;
+      errors.push(`${label}: ${msg}`);
+      // Return a synthetic HOLD step so trajectory remains consistent
+      return {
+        tick,
+        timestamp: new Date().toISOString(),
+        context: {
+          balance: 0,
+          positions: [],
+          markets: [],
+          posts: [],
+          tick,
+          archetype: batch[idx]
+            ? getArchetype(batch[idx].archetypeId)
+            : undefined,
+        },
+        decision: {
+          action: 'HOLD' as const,
+          params: {},
+          reasoning: `Error: ${msg}`,
+        },
+        result: { success: false, action: 'HOLD' as const, error: msg },
+        reward: -1,
+      };
+    });
   }
 
   /**
@@ -386,7 +425,7 @@ export class AgentHarness {
       ) {
         const batch = this.instances.slice(i, i + this.config.parallelAgents);
 
-        const steps = await this.runBatch(batch, tick);
+        const steps = await this.runBatch(batch, tick, errors);
 
         // Log progress
         for (let j = 0; j < batch.length; j++) {

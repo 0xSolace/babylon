@@ -269,8 +269,19 @@ export interface Trajectory {
 
 // ==================== Harness Config ====================
 
+/**
+ * Optional factory that returns an A2AClientInterface for a given agent
+ * instance. When provided, the harness calls this instead of building a
+ * default HarnessA2AClient. Use to inject BabylonProductionClient or
+ * SimulationA2AAdapter per instance.
+ */
+export type ClientFactory = (instanceIndex: number) => A2AClientInterface;
+
 export interface HarnessConfig {
-  /** A2A server URL */
+  /**
+   * A2A server URL.
+   * Used only when `clientFactory` is omitted (default HarnessA2AClient).
+   */
   a2aUrl: string;
 
   /** Agents to run */
@@ -296,6 +307,13 @@ export interface HarnessConfig {
 
   /** Output directory for trajectories */
   outputDir?: string;
+
+  /**
+   * Optional factory for custom A2A clients.
+   * Receives the instance index (0-based) so each instance can get
+   * its own client (e.g. SimulationA2AAdapter with separate state).
+   */
+  clientFactory?: ClientFactory;
 }
 
 export interface HarnessResult {
