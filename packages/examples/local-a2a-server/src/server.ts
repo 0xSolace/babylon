@@ -87,18 +87,22 @@ app.post('/api/a2a', async (req: Request, res: Response) => {
   const agentAddress = req.headers['x-agent-address'] as string;
   const tokenId = req.headers['x-agent-token-id'] as string;
 
-  // Handle method
-  const result = await a2aHandler.handleMethod(method, params, {
-    agentId,
-    address: agentAddress,
-    tokenId: parseInt(tokenId || '0'),
-  });
-
-  res.json({
-    jsonrpc: '2.0',
-    result,
-    id,
-  });
+  // Handle method — catch handler errors and return JSON-RPC error instead of crashing
+  try {
+    const result = await a2aHandler.handleMethod(method, params, {
+      agentId,
+      address: agentAddress,
+      tokenId: parseInt(tokenId || '0'),
+    });
+    res.json({ jsonrpc: '2.0', result, id });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.json({
+      jsonrpc: '2.0',
+      error: { code: -32000, message },
+      id,
+    });
+  }
 });
 
 // Create HTTP server
