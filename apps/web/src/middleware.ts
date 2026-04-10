@@ -13,7 +13,7 @@ const PRODUCTION_ORIGINS = [
   'https://babylon.market',
   'https://www.babylon.market',
   'https://app.babylon.market',
-  'https://privy.babylon.market',
+  // 'https://privy.babylon.market', // DEPRECATED — Privy removed in Phase 2
   'https://staging.babylon.market',
   'https://app.staging.babylon.market',
   'https://play.staging.babylon.market',
