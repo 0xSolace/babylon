@@ -473,6 +473,10 @@ export class BreakingArticleRateLimiterService {
   /**
    * No-op: DB-backed counting means we don't need to manually record articles.
    * Kept for API compatibility.
+   *
+   * @deprecated This method is a no-op since the service was migrated to
+   * DB-backed counting. The post row itself is the source of truth.
+   * Safe to call but has no effect.
    */
   recordBreakingArticle(_timestamp?: number): void {
     // DB-backed — the post row is already counted on next query

@@ -39,7 +39,12 @@ import {
   userInteractions,
   users,
 } from '@babylon/db';
-import { GROUP_CONFIG, generateSnowflakeId, logger } from '@babylon/shared';
+import {
+  GROUP_CONFIG,
+  generateSnowflakeId,
+  jaccardSimilarity,
+  logger,
+} from '@babylon/shared';
 import { NPC_GROUP_DYNAMICS_CONFIG } from '../config/npc-activity';
 import { BabylonLLMClient } from '../llm/openai-client';
 import { generateWorldContext, validateNoRealNames } from '../prompts';
@@ -805,30 +810,9 @@ Return your response as XML:
       );
       let tooSimilar = false;
       for (const recent of recentChatMsgs) {
-        const words1 = new Set(
-          messageContent
-            .toLowerCase()
-            .replace(/[^\w\s]/g, '')
-            .split(/\s+/)
-            .filter((w) => w.length > 3)
-        );
-        const words2 = new Set(
-          recent.content
-            .toLowerCase()
-            .replace(/[^\w\s]/g, '')
-            .split(/\s+/)
-            .filter((w) => w.length > 3)
-        );
-        if (words1.size > 0 && words2.size > 0) {
-          const intersection = new Set(
-            [...words1].filter((w) => words2.has(w))
-          );
-          const union = new Set([...words1, ...words2]);
-          const similarity = intersection.size / union.size;
-          if (similarity >= 0.5) {
-            tooSimilar = true;
-            break;
-          }
+        if (jaccardSimilarity(messageContent, recent.content) >= 0.5) {
+          tooSimilar = true;
+          break;
         }
       }
       if (tooSimilar) {
