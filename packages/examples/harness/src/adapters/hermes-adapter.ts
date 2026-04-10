@@ -291,14 +291,30 @@ async function callBridge(
       return;
     }
 
+    let done = false;
+    let buf = '';
+
     const timer = setTimeout(() => {
+      if (done) return;
+      done = true;
+      proc.stdout!.off('data', onData);
       reject(new Error(`Hermes bridge timed out after ${timeoutMs}ms`));
     }, timeoutMs);
 
+    // Buffer incoming data and look for a complete newline-terminated JSON line.
+    // A single `data` event may carry only a partial chunk of the response.
     const onData = (chunk: Buffer | string) => {
+      if (done) return;
+      buf += String(chunk);
+
+      const newline = buf.indexOf('\n');
+      if (newline === -1) return; // incomplete line, keep buffering
+
+      done = true;
       clearTimeout(timer);
       proc.stdout!.off('data', onData);
-      const line = String(chunk).trim();
+
+      const line = buf.slice(0, newline).trim();
       try {
         const resp = JSON.parse(line) as BridgeResponse;
         if (!resp.ok) {
@@ -313,7 +329,7 @@ async function callBridge(
       }
     };
 
-    proc.stdout.once('data', onData);
+    proc.stdout.on('data', onData);
     proc.stdin.write(JSON.stringify(payload) + '\n');
   });
 }

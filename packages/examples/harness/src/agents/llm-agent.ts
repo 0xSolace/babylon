@@ -38,19 +38,23 @@ export interface LLMAgentConfig {
 
 const PROVIDER_DEFAULTS: Record<
   LLMProvider,
-  { model: string; baseURL: string }
+  { model: string; baseURL: string; endpoint: string }
 > = {
   groq: {
     model: 'llama-3.3-70b-versatile',
     baseURL: 'https://api.groq.com/openai/v1',
+    endpoint: 'chat/completions',
   },
   openai: {
     model: 'gpt-4o-mini',
     baseURL: 'https://api.openai.com/v1',
+    endpoint: 'chat/completions',
   },
+  // Anthropic uses /messages with a different request and response shape
   anthropic: {
     model: 'claude-3-5-haiku-20241022',
     baseURL: 'https://api.anthropic.com/v1',
+    endpoint: 'messages',
   },
 };
 
@@ -210,8 +214,42 @@ async function callLLM(
   userPrompt: string,
   temperature: number
 ): Promise<string> {
-  const { baseURL } = PROVIDER_DEFAULTS[provider];
+  const { baseURL, endpoint } = PROVIDER_DEFAULTS[provider];
 
+  // Anthropic uses /messages with a distinct request/response shape
+  if (provider === 'anthropic') {
+    const payload = {
+      model,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userPrompt }],
+      temperature,
+      max_tokens: 300,
+    };
+
+    const resp = await fetch(`${baseURL}/${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => '');
+      throw new Error(
+        `Anthropic API error ${resp.status}: ${body.slice(0, 200)}`
+      );
+    }
+
+    const data = (await resp.json()) as {
+      content: Array<{ type: string; text: string }>;
+    };
+    return data.content.find((b) => b.type === 'text')?.text ?? '';
+  }
+
+  // OpenAI-compatible: Groq and OpenAI both use /chat/completions
   const payload = {
     model,
     messages: [
@@ -222,15 +260,11 @@ async function callLLM(
     max_tokens: 300,
   };
 
-  const resp = await fetch(`${baseURL}/chat/completions`, {
+  const resp = await fetch(`${baseURL}/${endpoint}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
-      // Anthropic requires this header
-      ...(provider === 'anthropic'
-        ? { 'anthropic-version': '2023-06-01' }
-        : {}),
     },
     body: JSON.stringify(payload),
   });
@@ -242,14 +276,7 @@ async function callLLM(
 
   const data = (await resp.json()) as {
     choices: Array<{ message: { content: string } }>;
-    content?: Array<{ text: string }>;
   };
-
-  // Handle Anthropic's response format
-  if (provider === 'anthropic' && data.content) {
-    return data.content[0]?.text ?? '';
-  }
-
   return data.choices?.[0]?.message?.content ?? '';
 }
 

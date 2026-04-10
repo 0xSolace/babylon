@@ -98,9 +98,18 @@ export class AgentHarness {
             tickInterval: this.config.tickInterval,
           });
 
+          // getAgentId() exists on HarnessA2AClient but not on all A2AClientInterface
+          // implementations (e.g. BabylonProductionClient, SimulationA2AAdapter).
+          const agentId =
+            'getAgentId' in client &&
+            typeof (client as { getAgentId(): string }).getAgentId ===
+              'function'
+              ? (client as { getAgentId(): string }).getAgentId()
+              : `${agent.name}-${archetype.id}-${instanceId}`;
+
           const trajectory: Trajectory = {
             id: `traj-${Date.now()}-${instanceId}`,
-            agentId: client.getAgentId(),
+            agentId,
             archetype: archetype.id,
             startTime: new Date().toISOString(),
             steps: [],
@@ -367,8 +376,8 @@ export class AgentHarness {
         r.reason instanceof Error ? r.reason.message : String(r.reason);
       const label = `${batch[idx].agent.name}/${batch[idx].archetypeId} tick ${tick}`;
       errors.push(`${label}: ${msg}`);
-      // Return a synthetic HOLD step so trajectory remains consistent
-      return {
+      // Synthetic HOLD step — keeps trajectory length consistent with ticksPerAgent
+      const syntheticStep: TrajectoryStep = {
         tick,
         timestamp: new Date().toISOString(),
         context: {
@@ -389,6 +398,10 @@ export class AgentHarness {
         result: { success: false, action: 'HOLD' as const, error: msg },
         reward: -1,
       };
+      // Push into trajectory so steps.length always equals ticksPerAgent
+      batch[idx].trajectory.steps.push(syntheticStep);
+      batch[idx].trajectory.totalReward -= 1;
+      return syntheticStep;
     });
   }
 

@@ -36,7 +36,7 @@
  * ```
  */
 
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type {
@@ -299,6 +299,9 @@ export class OpenClawAdapter implements TrainableAgent {
         ? ['node', this.binPath]
         : [this.binPath];
 
+      // OpenClaw CLI: `openclaw agent --message <prompt> [--model <model>]`
+      // We do not pass --json-output or --no-stream; these flags don't exist
+      // in the public CLI. The response parser handles natural language output.
       const args = [
         ...cmdArgs,
         'agent',
@@ -306,12 +309,9 @@ export class OpenClawAdapter implements TrainableAgent {
         prompt,
         '--model',
         this.cfg.model,
-        '--no-stream',
-        '--json-output',
       ];
 
-      const { spawn: spawnFn } = require('node:child_process');
-      const proc = spawnFn(cmd, args, {
+      const proc = spawn(cmd, args, {
         env: { ...process.env },
         stdio: ['ignore', 'pipe', 'pipe'],
       });
