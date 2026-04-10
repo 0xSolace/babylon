@@ -60,8 +60,8 @@ function resolveElizaCloudConfig():
   if (!apiKey) return undefined;
   const base =
     process.env.ELIZACLOUD_API_URL?.replace(/\/$/, '') ||
-    'https://api.elizacloud.com';
-  return { apiKey, baseURL: `${base}/openai/v1` };
+    'https://www.elizacloud.ai';
+  return { apiKey, baseURL: `${base}/api/v1` };
 }
 
 function resolveGroqBaseURL(): string {
@@ -160,6 +160,7 @@ export class BabylonLLMClient {
       this.client = new OpenAI({
         apiKey: elizaCloud.apiKey,
         baseURL: elizaCloud.baseURL,
+        defaultHeaders: { 'X-API-Key': elizaCloud.apiKey },
         timeout: timeoutMs,
         maxRetries: sdkMaxRetries,
       });
@@ -199,6 +200,7 @@ export class BabylonLLMClient {
       this.client = new OpenAI({
         apiKey: elizaCloud.apiKey,
         baseURL: elizaCloud.baseURL,
+        defaultHeaders: { 'X-API-Key': elizaCloud.apiKey },
         timeout: timeoutMs,
         maxRetries: sdkMaxRetries,
       });
