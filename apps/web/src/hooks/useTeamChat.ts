@@ -6,7 +6,6 @@
  */
 
 import { generateUUID, logger, type MessageMetadata } from '@babylon/shared';
-import { usePrivy } from '@privy-io/react-auth';
 import {
   useCallback,
   useEffect,
@@ -23,6 +22,7 @@ import type {
   ReplyToMessage,
 } from '@/components/chats/types';
 import { MessageTypeEnum } from '@/components/chats/types';
+import { useAuth } from '@/hooks/useAuth';
 import {
   OptimisticMessageIdPrefix,
   useChatMessages,
@@ -231,7 +231,7 @@ interface UseTeamChatReturn {
 
 export function useTeamChat(): UseTeamChatReturn {
   const { user } = useAuthStore();
-  const { getAccessToken } = usePrivy();
+  const { getAccessToken } = useAuth();
 
   // Team chat state
   const [teamChat, setTeamChat] = useState<TeamChatInfo | null>(null);

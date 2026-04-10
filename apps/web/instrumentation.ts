@@ -1,7 +1,7 @@
 /**
  * Next.js Instrumentation
  *
- * Runs on server startup to register Babylon in Agent0 registry and initialize Sentry.
+ * Runs on server startup to bootstrap NPC agents and initialize Sentry.
  * This file handles server-side Sentry initialization.
  *
  * Note: Client-side Sentry is initialized via instrumentation-client.ts
@@ -112,35 +112,6 @@ export async function register() {
   // Initialize Sentry for Edge Runtime (middleware, edge route handlers)
   if (!sentryDisabled && process.env.NEXT_RUNTIME === 'edge') {
     await import('./sentry.edge.config');
-  }
-
-  // Register reputation sync service if agents package is available
-  // This breaks the circular dependency between engine and agents packages
-  // Only load agent0 code server-side to avoid bundling electron-fetch in client
-  if (
-    process.env.AGENT0_ENABLED === 'true' &&
-    process.env.NEXT_RUNTIME === 'nodejs'
-  ) {
-    const { setReputationSyncService } = await import('@babylon/engine');
-    const { createReputationSyncAdapter } = await import('@babylon/agents');
-    setReputationSyncService(createReputationSyncAdapter());
-
-    // Initialize Agent0 blockchain reputation functions
-    // CRITICAL: Must be called before any agent registration to prevent runtime crashes
-    const { initializeAgent0Services } = await import('./src/lib/agent0-init');
-    initializeAgent0Services();
-  }
-
-  // Register Babylon on Agent0 registry (ERC-8004) on startup
-  // Only if Agent0 is enabled and we're in Node.js runtime
-  // Only load agent0 code server-side to avoid bundling electron-fetch in client
-  if (
-    process.env.AGENT0_ENABLED === 'true' &&
-    process.env.NEXT_RUNTIME === 'nodejs' &&
-    process.env.NODE_ENV === 'production' // Only in production to avoid blocking dev
-  ) {
-    const { registerBabylonGame } = await import('@babylon/agents');
-    await registerBabylonGame();
   }
 }
 

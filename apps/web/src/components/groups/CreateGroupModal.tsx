@@ -1,11 +1,13 @@
 'use client';
 
 import { cn, GROUP_CONFIG, getCurrentChainId, logger } from '@babylon/shared';
-import { usePrivy } from '@privy-io/react-auth';
+
 import { Check, Loader2, Search, Shield, Users, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Avatar } from '@/components/shared/Avatar';
+import { useAuth } from '@/hooks/useAuth';
 import { useAuthStore } from '@/stores/authStore';
+import { apiUrl } from '@/utils/api-url';
 
 /**
  * Member structure for group creation modal.
@@ -50,7 +52,7 @@ export function CreateGroupModal({
   onClose,
   onGroupCreated,
 }: CreateGroupModalProps) {
-  const { getAccessToken } = usePrivy();
+  const { getAccessToken } = useAuth();
   const { user } = useAuthStore();
   const [groupName, setGroupName] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -196,7 +198,7 @@ export function CreateGroupModal({
     };
 
     try {
-      const response = await fetch('/api/groups', {
+      const response = await fetch(apiUrl('/api/groups'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -348,7 +350,7 @@ export function CreateGroupModal({
 
               {/* Search Input */}
               <div className="relative">
-                <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Search className="-translate-y-1/2 absolute top-1/2 left-3 h-4 w-4 text-muted-foreground" />
                 <input
                   type="text"
                   placeholder="Search users by name..."
@@ -357,7 +359,7 @@ export function CreateGroupModal({
                   className="w-full rounded-lg border border-border bg-sidebar py-3 pr-10 pl-9 transition-colors focus:border-primary focus:outline-none"
                 />
                 {searching && (
-                  <Loader2 className="absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 animate-spin text-primary" />
+                  <Loader2 className="-translate-y-1/2 absolute top-1/2 right-3 h-4 w-4 animate-spin text-primary" />
                 )}
               </div>
             </div>

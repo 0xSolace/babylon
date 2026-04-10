@@ -470,6 +470,13 @@
       "when": 1775431800000,
       "tag": "0066_add_user_lifetime_pnl_index",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1775710454009,
+      "tag": "0067_add_steward_id",
+      "breakpoints": true
     }
   ]
 }

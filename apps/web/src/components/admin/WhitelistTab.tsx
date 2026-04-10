@@ -23,6 +23,7 @@ import {
 } from 'react';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/shared/Skeleton';
+import { apiUrl } from '@/utils/api-url';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -118,7 +119,7 @@ export function WhitelistTab() {
 
   const fetchEntries = useCallback(async () => {
     try {
-      const res = await fetch('/api/admin/whitelist');
+      const res = await fetch(apiUrl('/api/admin/whitelist'));
       if (!res.ok) throw new Error('Failed to fetch whitelist');
       const data = await res.json();
       setEntries(data.entries ?? []);
@@ -137,7 +138,7 @@ export function WhitelistTab() {
 
   const fetchConfig = useCallback(async () => {
     try {
-      const res = await fetch('/api/admin/whitelist/config');
+      const res = await fetch(apiUrl('/api/admin/whitelist/config'));
       if (!res.ok) throw new Error('Failed to fetch config');
       const data = await res.json();
       const cfg = data.config ?? null;
@@ -170,7 +171,7 @@ export function WhitelistTab() {
 
     startTransition(async () => {
       try {
-        const res = await fetch('/api/admin/whitelist', {
+        const res = await fetch(apiUrl('/api/admin/whitelist'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -203,7 +204,7 @@ export function WhitelistTab() {
 
     setRemovingUserId(userId);
     try {
-      const res = await fetch('/api/admin/whitelist', {
+      const res = await fetch(apiUrl('/api/admin/whitelist'), {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId }),
@@ -236,7 +237,7 @@ export function WhitelistTab() {
         return;
       }
 
-      const res = await fetch('/api/admin/whitelist/config', {
+      const res = await fetch(apiUrl('/api/admin/whitelist/config'), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ leaderboardRankThreshold: threshold }),
@@ -457,7 +458,7 @@ export function WhitelistTab() {
         </div>
 
         <div className="relative">
-          <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="-translate-y-1/2 absolute top-1/2 left-3 h-4 w-4 text-muted-foreground" />
           <input
             type="text"
             value={searchQuery}
@@ -468,7 +469,7 @@ export function WhitelistTab() {
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
-              className="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              className="-translate-y-1/2 absolute top-1/2 right-2 text-muted-foreground hover:text-foreground"
             >
               <X className="h-3.5 w-3.5" />
             </button>

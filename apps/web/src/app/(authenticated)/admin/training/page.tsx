@@ -48,6 +48,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { apiUrl } from '@/utils/api-url';
 
 /**
  * Training job information
@@ -128,7 +129,7 @@ export default function TrainingDashboard() {
   const [training, setTraining] = useState(false);
 
   const loadStatus = useCallback(async () => {
-    const res = await fetch('/api/admin/training/status');
+    const res = await fetch(apiUrl('/api/admin/training/status'));
 
     if (!res.ok) {
       logger.error(
@@ -154,7 +155,7 @@ export default function TrainingDashboard() {
   async function triggerTraining() {
     setTraining(true);
 
-    const res = await fetch('/api/admin/training/trigger', {
+    const res = await fetch(apiUrl('/api/admin/training/trigger'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ force: false }),

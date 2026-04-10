@@ -1,5 +1,4 @@
 import { logger, type MessageMetadata } from '@babylon/shared';
-import { usePrivy } from '@privy-io/react-auth';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -8,6 +7,7 @@ import {
   MessageTypeEnum,
   type ReplyToMessage,
 } from '@/components/chats/types';
+import { useAuth } from '@/hooks/useAuth';
 import { getPrivyAccessTokenSafely } from '@/lib/auth/privyAccessToken';
 import { setCachedMessages } from '@/lib/chat/message-store';
 import { CHAT_PAGE_SIZE } from '@/lib/constants';
@@ -197,7 +197,7 @@ export interface ChatMessagesData {
  * @param chatId - The ID of the chat to load messages for, or null to clear.
  */
 export function useChatMessages(chatId: string | null) {
-  const { getAccessToken } = usePrivy();
+  const { getAccessToken } = useAuth();
   const { user } = useAuthStore();
   const queryClient = useQueryClient();
   const [isLoadingMore, setIsLoadingMore] = useState(false);

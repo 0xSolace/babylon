@@ -15,8 +15,6 @@
       "@babylon/db/*": ["../db/src/*"],
       "@babylon/engine": ["../engine/src/index.ts"],
       "@babylon/engine/*": ["../engine/src/*"],
-      "@babylon/contracts": ["../contracts/src/index.ts"],
-      "@babylon/contracts/*": ["../contracts/src/*"],
       "@babylon/agents": ["../agents/dist/index.d.ts"],
       "@babylon/agents/*": ["../agents/dist/*"]
     }
@@ -27,7 +25,6 @@
     { "path": "../core" },
     { "path": "../shared" },
     { "path": "../db" },
-    { "path": "../engine" },
-    { "path": "../contracts" }
+    { "path": "../engine" }
   ]
 }

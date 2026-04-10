@@ -11,15 +11,14 @@ import type { AutonomyService } from './service';
 import { AutonomousServiceType } from './types';
 
 // Type guard to check if service is AutonomyService
-function isAutonomyService(service: unknown): service is AutonomyService {
+function isAutonomyService(service: object | null): service is AutonomyService {
+  if (!service) return false;
+  const maybe = service as Partial<AutonomyService>;
   return (
-    service !== null &&
-    typeof service === 'object' &&
-    'getStatus' in service &&
-    'enableAutonomy' in service &&
-    'disableAutonomy' in service &&
-    'setLoopInterval' in service &&
-    typeof (service as { getStatus: unknown }).getStatus === 'function'
+    typeof maybe.getStatus === 'function' &&
+    typeof maybe.enableAutonomy === 'function' &&
+    typeof maybe.disableAutonomy === 'function' &&
+    typeof maybe.setLoopInterval === 'function'
   );
 }
 
@@ -186,25 +185,14 @@ export const autonomyRoutes: Route[] = [
         return;
       }
 
-      // TypeScript now knows autonomyService is AutonomyService after the guard
-      const currentStatus = (autonomyService as AutonomyService).getStatus();
+      const currentStatus = autonomyService.getStatus();
 
       if (currentStatus.enabled) {
-        if (!isAutonomyService(autonomyService)) {
-          res.status(503).json({
-            success: false,
-            error: 'Autonomy service not available',
-          });
-          return;
-        }
-
         await autonomyService.disableAutonomy();
       } else {
-        // Type guard already verified autonomyService is AutonomyService
         await autonomyService.enableAutonomy();
       }
 
-      // Type guard already verified autonomyService is AutonomyService
       const newStatus = autonomyService.getStatus();
 
       res.json({
@@ -239,7 +227,7 @@ export const autonomyRoutes: Route[] = [
         return;
       }
 
-      const interval = (req.body as { interval?: unknown } | undefined)
+      const interval = (req.body as { interval?: number } | undefined)
         ?.interval;
 
       if (

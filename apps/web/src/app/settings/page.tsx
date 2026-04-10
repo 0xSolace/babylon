@@ -35,6 +35,7 @@ import { Skeleton } from '@/components/shared/Skeleton';
 import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthStore } from '@/stores/authStore';
+import { apiUrl } from '@/utils/api-url';
 import { uploadImage, validateImageFile } from '@/utils/upload-image';
 
 /**
@@ -264,7 +265,7 @@ export default function SettingsPage() {
     }
 
     const response = await fetch(
-      `/api/users/${encodeURIComponent(user.id)}/update-visibility`,
+      apiUrl(`/api/users/${encodeURIComponent(user.id)}/update-visibility`),
       {
         method: 'POST',
         headers,
@@ -447,7 +448,7 @@ export default function SettingsPage() {
     let response: Response;
     try {
       response = await fetch(
-        `/api/users/${encodeURIComponent(user.id)}/update-profile`,
+        apiUrl(`/api/users/${encodeURIComponent(user.id)}/update-profile`),
         {
           method: 'POST',
           headers,
@@ -496,8 +497,6 @@ export default function SettingsPage() {
         coverImageUrl: payload.user.coverImageUrl ?? user.coverImageUrl,
         usernameChangedAt: payload.user.usernameChangedAt,
         referralCode: payload.user.referralCode,
-        onChainRegistered:
-          payload.user.onChainRegistered ?? user.onChainRegistered,
       });
     }
 
@@ -652,7 +651,7 @@ export default function SettingsPage() {
                       </div>
 
                       {/* Avatar - overlapping cover */}
-                      <div className="absolute -bottom-12 left-3 sm:-bottom-14 sm:left-4">
+                      <div className="-bottom-12 sm:-bottom-14 absolute left-3 sm:left-4">
                         <div className="group relative h-24 w-24 overflow-hidden rounded-full border-4 border-background bg-background sm:h-28 sm:w-28">
                           <Avatar
                             id={user?.id || ''}
@@ -796,23 +795,6 @@ export default function SettingsPage() {
                             void updateSocialVisibility('farcaster', checked)
                           }
                           disabled={!user?.hasFarcaster}
-                        />
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="font-medium text-sm">Wallet</div>
-                          <div className="truncate text-muted-foreground text-xs">
-                            {user?.walletAddress
-                              ? 'Connected'
-                              : 'Not connected'}
-                          </div>
-                        </div>
-                        <Switch
-                          checked={socialVisibility.wallet}
-                          onCheckedChange={(checked) =>
-                            void updateSocialVisibility('wallet', checked)
-                          }
-                          disabled={!user?.walletAddress}
                         />
                       </div>
                     </div>

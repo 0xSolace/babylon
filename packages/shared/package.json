@@ -22,7 +22,6 @@
     "zod": "^4.3.6"
   },
   "peerDependencies": {
-    "@privy-io/react-auth": "^3.13.1",
     "viem": "^2.45.1"
   },
   "devDependencies": {

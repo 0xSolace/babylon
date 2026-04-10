@@ -25,6 +25,7 @@ import {
 } from '@/components/shared/VerifiedBadge';
 import { useAuth } from '@/hooks/useAuth';
 import { MAX_REPLY_COUNT } from '@/lib/constants';
+import { apiUrl } from '@/utils/api-url';
 
 const WidgetSidebar = nextDynamic(
   () =>
@@ -122,7 +123,7 @@ function OriginalPostCard({ post }: { post: PostData }) {
   return (
     <div className="relative">
       {/* Connector line - from avatar center down */}
-      <div className="absolute top-16 -bottom-3 left-[2.25rem] w-0.5 bg-border sm:left-[2.75rem]" />
+      <div className="-bottom-3 absolute top-16 left-[2.25rem] w-0.5 bg-border sm:left-[2.75rem]" />
 
       <div
         className="flex cursor-pointer gap-3 px-4 py-3 transition-colors hover:bg-muted/50 sm:px-6"
@@ -238,7 +239,7 @@ function ParentCommentCard({
     <div className="relative">
       {/* Connector line - from avatar center down */}
       {showConnector && (
-        <div className="absolute top-16 -bottom-3 left-[2.25rem] w-0.5 bg-border sm:left-[2.75rem]" />
+        <div className="-bottom-3 absolute top-16 left-[2.25rem] w-0.5 bg-border sm:left-[2.75rem]" />
       )}
 
       <div
@@ -509,7 +510,7 @@ export default function CommentPage({ params }: CommentPageProps) {
     setIsLoading(true);
     setError(null);
 
-    const response = await fetch(`/api/comments/${commentId}`);
+    const response = await fetch(apiUrl(`/api/comments/${commentId}`));
 
     if (!response.ok) {
       setError('Comment not found');

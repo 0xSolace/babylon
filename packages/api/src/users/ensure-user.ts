@@ -7,7 +7,10 @@
  */
 
 import { db, eq, type User, users } from '@babylon/db';
-import { resolveUserIdentifierKind } from '@babylon/shared';
+import {
+  generateSnowflakeId,
+  resolveUserIdentifierKind,
+} from '@babylon/shared';
 import { sql } from 'drizzle-orm';
 import type { AuthenticatedUser } from '../auth-middleware';
 import { cachedDb } from '../cache/cached-database-service';
@@ -28,6 +31,7 @@ export type CanonicalUser = Pick<
   User,
   | 'id'
   | 'privyId'
+  | 'stewardId'
   | 'username'
   | 'displayName'
   | 'walletAddress'
@@ -40,6 +44,7 @@ type MinimalUser = Pick<User, 'id'>;
 const canonicalUserSelect = {
   id: users.id,
   privyId: users.privyId,
+  stewardId: users.stewardId,
   username: users.username,
   displayName: users.displayName,
   walletAddress: users.walletAddress,
@@ -314,21 +319,81 @@ export async function ensureUserForAuth(
 
 /**
  * Get canonical user ID
- *
- * @description Returns the database user ID if available, otherwise falls
- * back to the authentication user ID. Ensures a consistent user ID format.
- *
- * @param {Pick<AuthenticatedUser, 'userId' | 'dbUserId'>} user - User object with IDs
- * @returns {string} Canonical user ID
- *
- * @example
- * ```typescript
- * const userId = getCanonicalUserId(authUser);
- * // Returns dbUserId if set, otherwise userId
- * ```
  */
 export function getCanonicalUserId(
   user: Pick<AuthenticatedUser, 'userId' | 'dbUserId'>
 ): string {
   return user.dbUserId ?? user.userId;
+}
+
+/**
+ * Ensure a Babylon user record exists for a Steward-authenticated user.
+ *
+ * Called by auth-middleware when a Steward JWT arrives and no existing user
+ * is found by stewardId or email. Creates a new minimal Babylon user and
+ * links the stewardId.
+ *
+ * Idempotent: uses onConflictDoUpdate to handle concurrent first-logins.
+ */
+export async function ensureUserFromSteward(
+  stewardUserId: string,
+  email?: string
+): Promise<{
+  id: string;
+  stewardId: string | null;
+  privyId: string | null;
+  email: string | null;
+  isAdmin: boolean;
+  isAgent: boolean;
+}> {
+  // Try insert first — generate a new Babylon snowflake ID for this user
+  const newId = await generateSnowflakeId();
+  const inserted = await db
+    .insert(users)
+    .values({
+      id: newId,
+      stewardId: stewardUserId,
+      email: email ?? null,
+      isActor: false,
+      updatedAt: new Date(),
+    })
+    .onConflictDoNothing()
+    .returning({
+      id: users.id,
+      stewardId: users.stewardId,
+      privyId: users.privyId,
+      email: users.email,
+      isAdmin: users.isAdmin,
+      isAgent: users.isAgent,
+    });
+
+  if (inserted[0]) return inserted[0];
+
+  // Concurrent insert already created this stewardId — read back
+  const [existing] = await db
+    .select({
+      id: users.id,
+      stewardId: users.stewardId,
+      privyId: users.privyId,
+      email: users.email,
+      isAdmin: users.isAdmin,
+      isAgent: users.isAgent,
+    })
+    .from(users)
+    .where(eq(users.stewardId, stewardUserId))
+    .limit(1);
+
+  if (!existing) {
+    throw new Error(
+      `ensureUserFromSteward: failed to find or create user for stewardId ${stewardUserId}`
+    );
+  }
+
+  // Update email if we have one now and the existing record doesn't
+  if (email && !existing.email) {
+    await db.update(users).set({ email }).where(eq(users.id, existing.id));
+    existing.email = email;
+  }
+
+  return existing;
 }

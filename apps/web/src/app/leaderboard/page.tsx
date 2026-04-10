@@ -338,7 +338,7 @@ export default function LeaderboardPage() {
           />
           {authenticated && !isCurrentUser && !isPinned && (
             <div
-              className={`absolute -right-1 -bottom-0.5 ${variant === 'mobile' ? '' : ''}`}
+              className={`-right-1 -bottom-0.5 absolute ${variant === 'mobile' ? '' : ''}`}
               onClick={(e) => e.stopPropagation()}
               onKeyDown={(e) => e.stopPropagation()}
             >

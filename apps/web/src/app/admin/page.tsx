@@ -88,6 +88,7 @@ import { PageContainer } from '@/components/shared/PageContainer';
 import { Skeleton } from '@/components/shared/Skeleton';
 import { useAuth } from '@/hooks/useAuth';
 import { useOnClickOutside } from '@/hooks/useOnClickOutside';
+import { apiUrl } from '@/utils/api-url';
 
 /**
  * Available admin dashboard tabs
@@ -163,16 +164,18 @@ export default function AdminDashboard() {
     }
 
     // Check if user is admin by trying to fetch admin stats
-    const response = await fetch('/api/admin/stats').catch((error: Error) => {
-      logger.error(
-        'Admin access check failed',
-        error instanceof Error ? error : { error },
-        'AdminPage'
-      );
-      setIsAuthorized(false);
-      setLoading(false);
-      throw error;
-    });
+    const response = await fetch(apiUrl('/api/admin/stats')).catch(
+      (error: Error) => {
+        logger.error(
+          'Admin access check failed',
+          error instanceof Error ? error : { error },
+          'AdminPage'
+        );
+        setIsAuthorized(false);
+        setLoading(false);
+        throw error;
+      }
+    );
 
     if (!response.ok) {
       setIsAuthorized(false);

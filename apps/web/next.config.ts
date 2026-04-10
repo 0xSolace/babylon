@@ -48,7 +48,6 @@ const nextConfig: NextConfig = {
     '@babylon/api',
     '@babylon/db',
     '@babylon/training',
-    '@babylon/contracts',
     '@babylon/a2a',
   ],
   experimental: {
@@ -231,7 +230,7 @@ const nextConfig: NextConfig = {
       config.plugins.push(
         new webpack.IgnorePlugin({
           resourceRegExp:
-            /^@babylon\/(api|db|contracts|training|agents)(\/.*)?$|^(ioredis|postgres|electron-fetch|agent0-sdk|ipfs-http-client)$|^@elizaos\/core$/,
+            /^@babylon\/(api|db|training|agents)(\/.*)?$|^(ioredis|postgres|electron-fetch|ipfs-http-client)$|^@elizaos\/core$/,
         })
       );
     }
@@ -327,7 +326,6 @@ const nextConfig: NextConfig = {
         'ioredis',
         '@babylon/db',
         '@babylon/api',
-        '@babylon/contracts',
         'swagger-jsdoc',
       ];
 

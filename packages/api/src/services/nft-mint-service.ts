@@ -41,12 +41,7 @@ import {
   keccak256,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { getPrivyClient } from '../auth-middleware';
 import { getNftChainId } from './nft/nft-chain';
-import {
-  listEmbeddedEvmWallets,
-  type PrivyUserWalletsLite,
-} from './privy/user-wallets';
 
 // ============================================================================
 // Types
@@ -295,7 +290,7 @@ async function getDbUserForMint(dbUserId: string): Promise<{
 async function resolveUserEmbeddedWalletAddress(
   userId: string
 ): Promise<Address> {
-  const { privyId, privyWalletId } = await getDbUserForMint(userId);
+  const { privyWalletId } = await getDbUserForMint(userId);
 
   if (!privyWalletId) {
     throw new ValidationError(
@@ -311,27 +306,18 @@ async function resolveUserEmbeddedWalletAddress(
     );
   }
 
-  const privyClient = getPrivyClient();
-  const privyUser = (await privyClient.getUser(
-    privyId
-  )) as PrivyUserWalletsLite;
-  const wallets = listEmbeddedEvmWallets(privyUser);
-  const matched = wallets.find((wallet) => wallet.walletId === privyWalletId);
-  if (!matched?.address || !isAddress(matched.address)) {
-    throw new ValidationError(
-      'Embedded wallet mismatch',
-      ['privyWalletId'],
-      [
-        {
-          field: 'privyWalletId',
-          message:
-            'Configured embedded wallet is not available. Please refresh session and retry.',
-        },
-      ]
-    );
-  }
-
-  return matched.address.toLowerCase() as Address;
+  // Phase 2: Privy embedded wallets removed. NFT minting is currently disabled.
+  // This path should not be reached (NFT feature flag prevents it).
+  throw new ValidationError(
+    'NFT minting unavailable',
+    ['privyWalletId'],
+    [
+      {
+        field: 'privyWalletId',
+        message: 'NFT minting is not available in this version.',
+      },
+    ]
+  );
 }
 
 /**

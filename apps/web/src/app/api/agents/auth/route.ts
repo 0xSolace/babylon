@@ -90,6 +90,18 @@ import {
 import { AgentAuthSchema, logger } from '@babylon/shared';
 import { randomBytes } from 'crypto';
 import type { NextRequest } from 'next/server';
+import { z } from 'zod';
+
+const isProduction = process.env.NODE_ENV === 'production';
+
+/**
+ * Relaxed auth schema for dev mode — accepts any non-empty string as agentId
+ * (e.g. "babylon-agent-alice") instead of requiring Snowflake ID format.
+ */
+const DevAgentAuthSchema = z.object({
+  agentId: z.string().min(1, { message: 'agentId is required' }),
+  agentSecret: z.string().min(1, { message: 'agentSecret is required' }),
+});
 
 /**
  * POST /api/agents/auth
@@ -105,7 +117,9 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     );
   }
 
-  const { agentId, agentSecret } = AgentAuthSchema.parse(body);
+  const { agentId, agentSecret } = isProduction
+    ? AgentAuthSchema.parse(body)
+    : DevAgentAuthSchema.parse(body);
 
   // Verify agent credentials
   if (!verifyAgentCredentials(agentId, agentSecret)) {

@@ -7,7 +7,7 @@ import {
   POINTS,
   sanitizeOnboardingUsername,
 } from '@babylon/shared';
-import { useIdentityToken, usePrivy } from '@privy-io/react-auth';
+// Phase 2: Privy replaced by Steward — no more usePrivy or useIdentityToken
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ImportedProfileData } from '@/components/onboarding/UserOnboardingFlow';
@@ -53,21 +53,14 @@ export function OnboardingProvider({
     logout,
   } = useAuth();
 
-  const { user: privyUser } = usePrivy();
-
+  // Phase 2: isSocialLogin derived from the Babylon user record (populated at login)
   const isSocialLogin = useMemo(() => {
-    if (!privyUser) return false;
-    const userWithSocial = privyUser as typeof privyUser & {
-      farcaster?: { username?: string };
-      twitter?: { username?: string };
-    };
-    return !!(
-      userWithSocial.farcaster?.username || userWithSocial.twitter?.username
-    );
-  }, [privyUser]);
+    return !!(user?.hasFarcaster || user?.hasTwitter);
+  }, [user]);
 
   const { setUser, setNeedsOnboarding } = useAuthStore();
-  const { identityToken } = useIdentityToken();
+  // identityToken deprecated — Steward JWT is managed server-side via httpOnly cookie
+  const identityToken: string | undefined = undefined;
   const { trackSignupStarted, trackSignupCompleted, trackOnboardingStep } =
     useSignupTracking();
 
@@ -229,10 +222,8 @@ export function OnboardingProvider({
       logger.info(
         'Identity token state during signup',
         {
-          present: Boolean(identityToken),
-          tokenPreview: identityToken
-            ? `${identityToken.slice(0, 12)}...`
-            : null,
+          present: false,
+          tokenPreview: null,
         },
         'OnboardingProvider'
       );
@@ -279,7 +270,6 @@ export function OnboardingProvider({
           };
           setUser({
             id: u.id,
-            walletAddress: u.walletAddress ?? undefined,
             displayName:
               u.displayName ?? payload.displayName ?? payload.username,
             email: user?.email,
@@ -295,9 +285,7 @@ export function OnboardingProvider({
             hasTwitter: u.hasTwitter ?? user?.hasTwitter,
             farcasterUsername: u.farcasterUsername ?? user?.farcasterUsername,
             twitterUsername: u.twitterUsername ?? user?.twitterUsername,
-            nftTokenId: u.nftTokenId ?? undefined,
             createdAt: u.createdAt ?? user?.createdAt,
-            onChainRegistered: u.onChainRegistered ?? user?.onChainRegistered,
             gameGuideCompletedAt: u.gameGuideCompletedAt ?? null,
           });
         }
@@ -321,7 +309,6 @@ export function OnboardingProvider({
       user,
       setUser,
       setNeedsOnboarding,
-      identityToken,
       trackSignupStarted,
       trackSignupCompleted,
       trackOnboardingStep,
@@ -420,58 +407,28 @@ export function OnboardingProvider({
     socialAutoSubmitAttempted,
   ]);
 
+  // Phase 2: Auto-import social profile from Babylon user record
+  // Social data (farcasterUsername, twitterUsername, etc.) is populated at login
+  // by the Farcaster/Twitter auth routes before this effect runs.
   useEffect(() => {
-    if (!authenticated || !privyUser || !needsOnboarding) return;
+    if (!authenticated || !needsOnboarding || !user) return;
     if (importedProfileData) return;
     if (loadingProfile) return;
 
-    const userWithFarcaster = privyUser as typeof privyUser & {
-      farcaster?: {
-        username?: string;
-        displayName?: string;
-        bio?: string;
-        pfp?: string;
-        pfpUrl?: string;
-        fid?: number;
-        url?: string;
-        ownerAddress?: string;
-        verifications?: string[];
-      };
-    };
-    const userWithTwitter = privyUser as typeof privyUser & {
-      twitter?: {
-        username?: string;
-        name?: string;
-        profilePictureUrl?: string;
-        subject?: string;
-      };
-    };
-
-    if (userWithFarcaster.farcaster) {
-      const fc = userWithFarcaster.farcaster;
-      const profileImage = fc.pfpUrl || fc.pfp || null;
-
+    if (user.hasFarcaster && user.farcasterUsername) {
       const profileData: ImportedProfileData = {
         platform: 'farcaster',
-        username:
-          fc.username ||
-          fc.displayName?.toLowerCase().replace(/\s+/g, '_') ||
-          'farcaster_user',
-        displayName: fc.displayName || fc.username || 'Farcaster User',
-        bio: fc.bio || undefined,
-        profileImageUrl: profileImage,
-        farcasterFid: fc.fid?.toString(),
+        username: user.farcasterUsername,
+        displayName: user.displayName || user.farcasterUsername,
+        bio: user.bio || undefined,
+        profileImageUrl: user.profileImageUrl || null,
+        farcasterFid: undefined,
       };
 
       logger.info(
-        'Auto-imported Farcaster profile from Privy - will award points on signup',
+        'Auto-imported Farcaster profile from Babylon user record',
         {
           username: profileData.username,
-          displayName: profileData.displayName,
-          fid: fc.fid,
-          hasBio: !!profileData.bio,
-          hasProfileImage: !!profileImage,
-          rewardEligible: true,
           expectedPoints: POINTS.FARCASTER_LINK,
         },
         'OnboardingProvider'
@@ -482,49 +439,28 @@ export function OnboardingProvider({
       return;
     }
 
-    if (userWithTwitter.twitter) {
-      const tw = userWithTwitter.twitter;
-
-      let profileImageUrl = tw.profilePictureUrl;
-      if (profileImageUrl && profileImageUrl.includes('_normal')) {
-        profileImageUrl = profileImageUrl.replace('_normal', '_400x400');
-      }
-
+    if (user.hasTwitter && user.twitterUsername) {
       const profileData: ImportedProfileData = {
         platform: 'twitter',
-        username: tw.username || 'twitter_user',
-        displayName: tw.name || tw.username || 'Twitter User',
+        username: user.twitterUsername,
+        displayName: user.displayName || user.twitterUsername,
         bio: undefined,
-        profileImageUrl: profileImageUrl || null,
-        twitterId: tw.subject || tw.username,
+        profileImageUrl: user.profileImageUrl || null,
+        twitterId: undefined,
       };
 
       logger.info(
-        'Auto-imported Twitter profile from Privy - will award points on signup',
-        {
-          username: profileData.username,
-          displayName: profileData.displayName,
-          twitterId: profileData.twitterId,
-          hasProfileImage: !!profileImageUrl,
-          rewardEligible: true,
-          expectedPoints: POINTS.TWITTER_LINK,
-        },
+        'Auto-imported Twitter profile from Babylon user record',
+        { username: profileData.username, expectedPoints: POINTS.TWITTER_LINK },
         'OnboardingProvider'
       );
 
       setImportedProfileData(profileData);
       setHasProgressedPastSocialImport(true);
-      return;
     }
-
-    logger.info(
-      'User authenticated with wallet only - will use generated profile',
-      { userId: privyUser.id },
-      'OnboardingProvider'
-    );
   }, [
     authenticated,
-    privyUser,
+    user,
     needsOnboarding,
     importedProfileData,
     loadingProfile,
@@ -653,6 +589,7 @@ export function OnboardingProvider({
       phase,
       isReplayGuide: replayGuide,
       shouldShowOnboarding,
+      isOnboardingResolved: isReadyToShow,
       isSubmitting,
       guideSubmitting,
       error,
@@ -666,6 +603,7 @@ export function OnboardingProvider({
       phase,
       replayGuide,
       shouldShowOnboarding,
+      isReadyToShow,
       isSubmitting,
       guideSubmitting,
       error,

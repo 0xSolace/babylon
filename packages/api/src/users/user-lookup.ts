@@ -48,14 +48,16 @@ function projectUser(
  */
 async function fetchUserByClassifiedIdentifier(
   identifier: string,
-  kind: 'id' | 'privyId' | 'username'
+  kind: 'id' | 'privyId' | 'stewardId' | 'username'
 ): Promise<User | null> {
   const condition =
     kind === 'id'
       ? eq(users.id, identifier)
       : kind === 'privyId'
         ? eq(users.privyId, identifier)
-        : sql`lower(${users.username}) = lower(${identifier})`;
+        : kind === 'stewardId'
+          ? eq(users.stewardId, identifier)
+          : sql`lower(${users.username}) = lower(${identifier})`;
 
   const [user] = await db.select().from(users).where(condition).limit(1);
   if (user) return user;
@@ -98,16 +100,15 @@ async function fetchUserByClassifiedIdentifier(
  */
 function getUserIdentifierCacheKey(
   identifier: string,
-  kind: 'id' | 'privyId' | 'username'
+  kind: 'id' | 'privyId' | 'stewardId' | 'username'
 ): string {
   if (kind === 'id') {
     return `id:${identifier}`;
   } else if (kind === 'privyId') {
     return `privy:${identifier}`;
+  } else if (kind === 'stewardId') {
+    return `steward:${identifier}`;
   } else {
-    // WHY lowercase username? Must match query normalization (lower(username) = lower(identifier))
-    // If cache key uses "Alice" but query normalizes to "alice", cache miss occurs
-    // This ensures cache key matches the normalized query, maximizing cache hits
     return `username:${identifier.toLowerCase()}`;
   }
 }

@@ -39,8 +39,6 @@
       "@babylon/a2a": ["../a2a/src/index.ts"],
       "@babylon/a2a/*": ["../a2a/src/*"],
       "@babylon/mcp": ["../mcp/src/index.ts"],
-      "@babylon/contracts": ["../contracts/src/index.ts"],
-      "@babylon/contracts/*": ["../contracts/src/*"],
       "@babylon/training": ["../training/src/index.ts"],
       "@babylon/training/*": ["../training/src/*"],
       "@babylon/web/*": ["../../apps/web/*"],
@@ -78,7 +76,6 @@
     { "path": "../agents" },
     { "path": "../a2a" },
     { "path": "../mcp" },
-    { "path": "../contracts" },
     { "path": "../training" }
   ]
 }

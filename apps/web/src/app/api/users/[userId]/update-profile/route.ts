@@ -47,9 +47,6 @@
  *                 type: boolean
  *               showWalletPublic:
  *                 type: boolean
- *               onchainTxHash:
- *                 type: string
- *                 description: Transaction hash for on-chain profile update
  *     responses:
  *       200:
  *         description: Profile updated successfully
@@ -64,9 +61,6 @@
  *                   type: string
  *                 reputationRewards:
  *                   type: array
- *                 onchain:
- *                   type: object
- *                   nullable: true
  *       400:
  *         description: Username taken or rate limit exceeded
  *       401:
@@ -89,14 +83,12 @@
  *
  */
 
-import type { JsonValue } from '@babylon/api';
 import {
   AuthorizationError,
   authenticate,
   BusinessLogicError,
   cachedDb,
   checkProfileUpdateRateLimit,
-  confirmOnchainProfileUpdate,
   isReferralCodeAvailableForUser,
   logProfileUpdate,
   notifyProfileComplete,
@@ -106,7 +98,6 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { and, db, eq, ne, sql, users } from '@babylon/db';
-import type { StringRecord } from '@babylon/shared';
 import { logger, UpdateUserSchema, UserIdParamSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { trackServerEvent } from '@/lib/posthog/server';
@@ -163,7 +154,6 @@ export const POST = withErrorHandling(
       showTwitterPublic,
       showFarcasterPublic,
       showWalletPublic,
-      onchainTxHash,
     } = parsedBody;
 
     // Check username uniqueness only if username is being updated (case-insensitive)
@@ -200,9 +190,6 @@ export const POST = withErrorHandling(
         hasProfileImage: users.hasProfileImage,
         usernameChangedAt: users.usernameChangedAt,
         pointsAwardedForProfile: users.pointsAwardedForProfile,
-        walletAddress: users.walletAddress,
-        onChainRegistered: users.onChainRegistered,
-        nftTokenId: users.nftTokenId,
       })
       .from(users)
       .where(eq(users.id, canonicalUserId))
@@ -228,33 +215,6 @@ export const POST = withErrorHandling(
     // Profile updates are now database-first - we save to DB immediately
     // and the chain sync job will update on-chain state later.
     //
-    // If user provides an onchainTxHash, we still confirm it for backwards compatibility.
-    let onchainMetadata: StringRecord<JsonValue> | null = null;
-
-    if (
-      onchainTxHash &&
-      currentUser!.onChainRegistered &&
-      currentUser!.nftTokenId
-    ) {
-      // User provided a transaction hash - confirm it (backwards compatibility)
-      const onchainResult = await confirmOnchainProfileUpdate({
-        userId: canonicalUserId,
-        walletAddress: currentUser!.walletAddress!,
-        txHash: onchainTxHash as `0x${string}`,
-      });
-
-      onchainMetadata = onchainResult.metadata as StringRecord<JsonValue>;
-
-      logger.info(
-        'Confirmed user-signed on-chain profile update',
-        {
-          userId: canonicalUserId,
-          txHash: onchainTxHash,
-          tokenId: onchainResult.tokenId,
-        },
-        'POST /api/users/[userId]/update-profile'
-      );
-    }
 
     // Update referral code if username is changing and username is available
     const referralCodeUpdate: { referralCode?: string } = {};
@@ -308,24 +268,6 @@ export const POST = withErrorHandling(
             normalizedBio.length > 0 &&
             normalizedProfileImageUrl.length > 0
           : undefined,
-      // Mark profile as needing chain sync if user is on-chain registered
-      // and profile fields changed (not just visibility settings)
-      ...(currentUser!.onChainRegistered &&
-        !onchainTxHash &&
-        (normalizedUsername !== undefined ||
-          normalizedDisplayName !== undefined ||
-          normalizedBio !== undefined ||
-          normalizedProfileImageUrl !== undefined ||
-          normalizedCoverImageUrl !== undefined) && {
-          profileChainSyncNeeded: true,
-          profileChainSyncError: null,
-        }),
-      // If user provided on-chain tx hash, mark as synced
-      ...(onchainTxHash && {
-        profileChainSyncNeeded: false,
-        profileChainSyncAt: new Date(),
-        profileChainSyncError: null,
-      }),
     };
 
     const [updatedUser] = await db
@@ -347,8 +289,6 @@ export const POST = withErrorHandling(
         referralCount: users.referralCount,
         referralCode: users.referralCode,
         usernameChangedAt: users.usernameChangedAt,
-        onChainRegistered: users.onChainRegistered,
-        nftTokenId: users.nftTokenId,
         profileChainSyncNeeded: users.profileChainSyncNeeded,
         privyId: users.privyId,
       });
@@ -445,19 +385,13 @@ export const POST = withErrorHandling(
     const fieldsUpdated = Object.keys(parsedBody).filter(
       (key) => parsedBody[key as keyof typeof parsedBody] !== undefined
     );
-    await logProfileUpdate(
-      canonicalUserId,
-      fieldsUpdated,
-      false, // backendSigned - now always false (database-first approach)
-      onchainTxHash
-    );
+    await logProfileUpdate(canonicalUserId, fieldsUpdated, false);
 
     logger.info(
       'Profile updated successfully',
       {
         userId: canonicalUserId,
         reputationRewardsCount: reputationRewards.length,
-        onchainConfirmed: Boolean(onchainTxHash),
       },
       'POST /api/users/[userId]/update-profile'
     );
@@ -479,7 +413,6 @@ export const POST = withErrorHandling(
         (sum, reward) => sum + reward.amount,
         0
       ),
-      onchainUpdate: Boolean(onchainTxHash),
     }).catch((error) => {
       logger.warn('Failed to track profile_updated event', { error });
     });
@@ -492,13 +425,6 @@ export const POST = withErrorHandling(
         0
       ),
       reputationRewards,
-      onchain: onchainTxHash
-        ? {
-            txHash: onchainTxHash,
-            metadata: onchainMetadata,
-            backendSigned: false,
-          }
-        : null,
     });
   }
 );

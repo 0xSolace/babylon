@@ -14,7 +14,6 @@ import { A2AClient } from '@a2a-js/sdk/client';
 import { db } from '@babylon/db';
 import { StaticDataRegistry } from '@babylon/engine';
 import type { AgentRuntime, Plugin } from '@elizaos/core';
-import { agentWalletService } from '../../identity/AgentWalletService';
 import { logger } from '../../shared/logger';
 import type { JsonValue } from '../../types/common';
 
@@ -30,13 +29,11 @@ function isA2AExplicitlyDisabled(): boolean {
 // =============================================================================
 
 /**
- * Cached agent identity for ERC-8004 headers
+ * Cached agent identity for A2A headers.
  * TTL: 5 minutes (agents rarely change identity)
  */
 interface CachedAgentIdentity {
   agentUserId: string;
-  walletAddress: string | null;
-  agent0TokenId: number | null;
   displayName: string | null;
   cachedAt: number;
 }
@@ -50,82 +47,16 @@ const AGENT_IDENTITY_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const AGENT_IDENTITY_MAX_SIZE = 10000;
 
 /**
- * In-flight wallet creation promises to deduplicate concurrent requests.
- * Prevents race condition where multiple concurrent getCachedAgentIdentity calls
- * for the same agent without a wallet both attempt wallet creation.
- * Note: Size-limited to prevent unbounded growth; oldest entries evicted at capacity.
- */
-const WALLET_CREATION_IN_FLIGHT = new Map<
-  string,
-  Promise<{ walletAddress: string } | null>
->();
-
-/** Maximum size for in-flight map to prevent unbounded growth */
-const WALLET_CREATION_IN_FLIGHT_MAX_SIZE = 1000;
-
-/** Timeout for wallet creation to prevent unbounded promise hangs (30 seconds) */
-const WALLET_CREATION_TIMEOUT_MS = 30_000;
-
-/**
- * Wraps a promise with a timeout. If the promise doesn't resolve within
- * the timeout, returns null and cleans up the in-flight entry.
- */
-function withWalletCreationTimeout<T>(
-  promise: Promise<T>,
-  agentUserId: string,
-  timeoutMs: number = WALLET_CREATION_TIMEOUT_MS
-): Promise<T | null> {
-  let didCleanup = false;
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => {
-      if (!didCleanup) {
-        didCleanup = true;
-        logger.warn(
-          `Wallet creation timed out for agent ${agentUserId} after ${timeoutMs}ms`,
-          { agentUserId, timeoutMs },
-          'BabylonIntegration'
-        );
-        WALLET_CREATION_IN_FLIGHT.delete(agentUserId);
-      }
-      resolve(null);
-    }, timeoutMs);
-
-    promise
-      .then((result) => {
-        clearTimeout(timer);
-        if (!didCleanup) {
-          didCleanup = true;
-          WALLET_CREATION_IN_FLIGHT.delete(agentUserId);
-        }
-        resolve(result);
-      })
-      .catch(() => {
-        clearTimeout(timer);
-        if (!didCleanup) {
-          didCleanup = true;
-          WALLET_CREATION_IN_FLIGHT.delete(agentUserId);
-        }
-        resolve(null);
-      });
-  });
-}
-
-/**
- * Get agent identity from cache or database
- * Optimized for high concurrency with lazy refresh
- * Supports both USER_CONTROLLED agents (User table) and NPCs (StaticDataRegistry)
- *
- * @param agentUserId - The agent's user ID
- * @param options.requireWallet - If true, throws an error when wallet creation fails (for scenarios where wallet is mandatory)
+ * Get agent identity from cache or database.
+ * Optimized for high concurrency with lazy refresh.
+ * Supports both USER_CONTROLLED agents (User table) and NPCs (StaticDataRegistry).
  */
 async function getCachedAgentIdentity(
-  agentUserId: string,
-  options?: { requireWallet?: boolean }
+  agentUserId: string
 ): Promise<CachedAgentIdentity | null> {
   const now = Date.now();
   const cached = AGENT_IDENTITY_CACHE.get(agentUserId);
 
-  // Return cached if valid
   if (cached && now - cached.cachedAt < AGENT_IDENTITY_TTL_MS) {
     return cached;
   }
@@ -136,145 +67,28 @@ async function getCachedAgentIdentity(
     select: {
       id: true,
       isAgent: true,
-      walletAddress: true,
-      agent0TokenId: true,
       displayName: true,
     },
   });
 
-  // Note: checks if agent wallets should auto-create only when explicitly enabled by env var
   if (user && user.isAgent) {
-    let walletAddress = user.walletAddress;
-    let agent0TokenId = user.agent0TokenId;
-
-    // Auto-create wallet if missing and AUTO_CREATE_AGENT_WALLETS is explicitly enabled
-    // Uses in-flight map to deduplicate concurrent wallet creation requests for the same agent
-    const shouldAutoCreateWallet = ['true', '1', 'yes'].includes(
-      process.env.AUTO_CREATE_AGENT_WALLETS?.toLowerCase() ?? ''
-    );
-    if (!walletAddress && shouldAutoCreateWallet) {
-      try {
-        // Check if wallet creation is already in progress for this agent
-        let walletPromise = WALLET_CREATION_IN_FLIGHT.get(agentUserId);
-        if (!walletPromise) {
-          logger.info(
-            `Auto-creating wallet for agent ${agentUserId}`,
-            undefined,
-            'BabylonIntegration'
-          );
-          // Note: Cleanup of WALLET_CREATION_IN_FLIGHT is handled by withWalletCreationTimeout
-          // to avoid double-deletion race conditions when timeout occurs before promise settles
-          const rawPromise = agentWalletService
-            .createAgentEmbeddedWallet(agentUserId)
-            .then((result) => ({ walletAddress: result.walletAddress }))
-            .catch((err) => {
-              const errorMsg = err instanceof Error ? err.message : String(err);
-              logger.warn(
-                `Wallet creation failed for agent ${agentUserId}`,
-                { error: errorMsg },
-                'BabylonIntegration'
-              );
-              if (options?.requireWallet) {
-                throw new Error(
-                  `Wallet creation required but failed: ${errorMsg}`
-                );
-              }
-              return null;
-            });
-          // Wrap with timeout to prevent unbounded hangs in serverless environments
-          walletPromise = withWalletCreationTimeout(rawPromise, agentUserId);
-          // Evict oldest entry if at capacity to prevent unbounded growth
-          if (
-            WALLET_CREATION_IN_FLIGHT.size >= WALLET_CREATION_IN_FLIGHT_MAX_SIZE
-          ) {
-            const oldestKey = WALLET_CREATION_IN_FLIGHT.keys().next().value;
-            if (oldestKey) {
-              WALLET_CREATION_IN_FLIGHT.delete(oldestKey);
-            }
-          }
-          WALLET_CREATION_IN_FLIGHT.set(agentUserId, walletPromise);
-        }
-        const walletResult = await walletPromise;
-        if (walletResult) {
-          // Wallet creation succeeded - refresh user data to get updated walletAddress and agent0TokenId
-          // Use separate try/catch so refresh failures don't mask successful wallet creation
-          try {
-            const updatedUser = await db.user.findUnique({
-              where: { id: agentUserId },
-              select: {
-                walletAddress: true,
-                agent0TokenId: true,
-              },
-            });
-            if (updatedUser) {
-              walletAddress = updatedUser.walletAddress;
-              agent0TokenId = updatedUser.agent0TokenId;
-            } else {
-              // Fallback to walletAddress from creation result if refresh returns null
-              walletAddress = walletResult.walletAddress;
-            }
-          } catch (refreshError) {
-            // Refresh failed but wallet was created successfully - use walletAddress from creation result
-            // Note: agent0TokenId cannot be retrieved without DB access, so explicitly set to null
-            logger.warn(
-              `Wallet created for agent ${agentUserId} but failed to refresh user data`,
-              {
-                error:
-                  refreshError instanceof Error
-                    ? refreshError.message
-                    : String(refreshError),
-                walletAddress: walletResult.walletAddress,
-                agent0TokenIdStatus: 'unavailable due to refresh failure',
-              },
-              'BabylonIntegration'
-            );
-            // Use walletAddress from creation result as fallback
-            walletAddress = walletResult.walletAddress;
-            // Explicitly set agent0TokenId to null since we can't retrieve it without DB refresh
-            // This ensures downstream code knows the value is intentionally null, not undefined
-            agent0TokenId = null;
-          }
-        }
-      } catch (error) {
-        if (options?.requireWallet) {
-          throw error;
-        }
-        logger.warn(
-          `Failed to auto-create wallet for agent ${agentUserId}`,
-          {
-            error: error instanceof Error ? error.message : String(error),
-          },
-          'BabylonIntegration'
-        );
-        // Continue with null walletAddress - agent can still work without wallet
-      }
-    }
-
     const identity: CachedAgentIdentity = {
       agentUserId,
-      walletAddress,
-      agent0TokenId,
       displayName: user.displayName,
       cachedAt: now,
     };
-
     cacheIdentity(agentUserId, identity);
     return identity;
   }
 
   // Fall back to static actor data (NPC agents)
-  // Actor data is now stored in TypeScript files via StaticDataRegistry
   const actor = StaticDataRegistry.getActor(agentUserId);
   if (actor) {
-    // NPCs don't have wallets or tokens - create minimal identity
     const identity: CachedAgentIdentity = {
       agentUserId,
-      walletAddress: null,
-      agent0TokenId: null,
       displayName: actor.name,
       cachedAt: now,
     };
-
     cacheIdentity(agentUserId, identity);
     return identity;
   }
@@ -403,7 +217,7 @@ async function fetchAgentCard(): Promise<CachedAgentCard | null> {
 // =============================================================================
 
 /**
- * Create authenticated fetch for an agent that injects ERC-8004 headers
+ * Create authenticated fetch for an agent that injects identity headers
  * Headers come from cached identity (refreshed every 5 minutes max)
  */
 function createAuthenticatedFetchForAgent(
@@ -417,14 +231,6 @@ function createAuthenticatedFetchForAgent(
 
     // Always set agent ID for request correlation
     headers.set('x-agent-id', identity.agentUserId);
-
-    // Add ERC-8004 identity headers if available (for Agent0 integration)
-    if (identity.walletAddress) {
-      headers.set('x-agent-address', identity.walletAddress);
-    }
-    if (identity.agent0TokenId !== null) {
-      headers.set('x-agent-token-id', identity.agent0TokenId.toString());
-    }
 
     // Add API key if configured
     const apiKey = process.env.BABYLON_A2A_API_KEY;
@@ -500,22 +306,7 @@ async function initializeA2ASdkClient(
     throw new Error(`Agent user ${agentUserId} not found or not an agent`);
   }
 
-  // Log ERC-8004 identity status (only on first init, not on cache hit)
-  const hasFullIdentity =
-    identity.walletAddress && identity.agent0TokenId !== null;
-
-  if (!hasFullIdentity) {
-    logger.debug(
-      'Agent missing ERC-8004 identity - A2A will work with limited auth headers',
-      {
-        agentUserId,
-        hasWallet: !!identity.walletAddress,
-        hasTokenId: identity.agent0TokenId !== null,
-      },
-      'BabylonIntegration'
-    );
-  }
-
+  // Log identity status (only on first init, not on cache hit)
   // Create A2A client with cached agent card and identity-specific headers
   const client = await createA2AClientForAgent(identity);
 
@@ -531,7 +322,6 @@ async function initializeA2ASdkClient(
   logger.debug('A2A client ready for agent', {
     agentUserId,
     agentName: identity.displayName,
-    hasErc8004Identity: hasFullIdentity,
   });
 
   return { client, identity };
@@ -546,10 +336,6 @@ async function initializeA2ASdkClient(
  * - Agent identity cached (5-minute TTL) - one DB query per 5 min per agent
  * - Per-agent client with identity-specific headers baked in at creation
  *
- * @remarks
- * ERC-8004 identity headers (x-agent-address, x-agent-token-id) are injected
- * via custom fetchImpl at client creation time. This enables Agent0 to verify
- * the agent's on-chain identity for authenticated operations.
  */
 export class BabylonA2AClient {
   public readonly agentId: string;
@@ -1301,8 +1087,6 @@ export async function enhanceRuntimeWithBabylon(
     // Create a disconnected client for graceful degradation
     const fallbackIdentity: CachedAgentIdentity = {
       agentUserId,
-      walletAddress: null,
-      agent0TokenId: null,
       displayName: null,
       cachedAt: Date.now(),
     };

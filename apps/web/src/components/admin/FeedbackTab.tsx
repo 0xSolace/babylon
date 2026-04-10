@@ -35,6 +35,7 @@ import {
 import { useCallback, useEffect, useState } from 'react';
 import { Avatar } from '@/components/shared/Avatar';
 import { Skeleton } from '@/components/shared/Skeleton';
+import { apiUrl } from '@/utils/api-url';
 
 /**
  * Feedback item structure from API
@@ -174,7 +175,7 @@ export function FeedbackTab() {
         params.set('search', debouncedSearch.trim());
       }
 
-      const response = await fetch(`/api/admin/feedback?${params}`);
+      const response = await fetch(apiUrl(`/api/admin/feedback?${params}`));
       if (!response.ok) {
         logger.error(
           'Failed to fetch feedback',
@@ -317,7 +318,7 @@ export function FeedbackTab() {
       <div className="flex flex-wrap items-center gap-3">
         {/* Search */}
         <div className="relative flex-1 sm:max-w-xs">
-          <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="-translate-y-1/2 absolute top-1/2 left-3 h-4 w-4 text-muted-foreground" />
           <input
             type="text"
             placeholder="Search feedback..."

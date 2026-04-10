@@ -24,6 +24,7 @@
  */
 
 import { logger } from '@babylon/shared';
+import { apiUrl } from '@/utils/api-url';
 
 // ============================================================================
 // Types
@@ -714,8 +715,9 @@ export class SSEManager {
         ? `&cursor=${encodeURIComponent(JSON.stringify(cursorPayload))}`
         : '';
 
-    const baseUrl = this.config.baseUrl ?? window.location.origin;
-    const url = `${baseUrl}/api/sse/events?channels=${encodeURIComponent(
+    const sseBaseUrl = this.config.baseUrl ?? apiUrl('');
+    const resolvedBase = sseBaseUrl || window.location.origin;
+    const url = `${resolvedBase}/api/sse/events?channels=${encodeURIComponent(
       channelsList.join(',')
     )}&token=${encodeURIComponent(token)}${cursorParam}`;
 
@@ -966,7 +968,7 @@ export class SSEManager {
       if (!accessToken) return null;
       if (epoch !== this.authEpoch) return null;
 
-      const res = await fetch('/api/realtime/token', {
+      const res = await fetch(apiUrl('/api/realtime/token'), {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${accessToken}`,

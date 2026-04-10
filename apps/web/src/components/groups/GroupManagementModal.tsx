@@ -1,7 +1,9 @@
-'use client';
+import { useAuth } from '@/hooks/useAuth';
+
+('use client');
 
 import { cn, logger } from '@babylon/shared';
-import { usePrivy } from '@privy-io/react-auth';
+
 import {
   Crown,
   Loader2,
@@ -16,6 +18,7 @@ import {
 import { useEffect, useState } from 'react';
 import { Avatar } from '@/components/shared/Avatar';
 import { useAuthStore } from '@/stores/authStore';
+import { apiUrl } from '@/utils/api-url';
 import { GroupTypeBadge } from './MemberTypeBadge';
 
 /**
@@ -100,7 +103,7 @@ export function GroupManagementModal({
   onGroupUpdated,
   onGroupRemoved,
 }: GroupManagementModalProps) {
-  const { getAccessToken } = usePrivy();
+  const { getAccessToken } = useAuth();
   const { user } = useAuthStore();
   const [groupDetails, setGroupDetails] = useState<GroupDetails | null>(null);
   const [loading, setLoading] = useState(false);
@@ -150,7 +153,7 @@ export function GroupManagementModal({
       setError(null);
       try {
         const token = await getAccessToken();
-        const response = await fetch(`/api/groups/${groupId}`, {
+        const response = await fetch(apiUrl(`/api/groups/${groupId}`), {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -322,7 +325,7 @@ export function GroupManagementModal({
 
     try {
       const token = await getAccessToken();
-      const response = await fetch(`/api/groups/${groupId}/members`, {
+      const response = await fetch(apiUrl(`/api/groups/${groupId}/members`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -340,7 +343,7 @@ export function GroupManagementModal({
       await response.json();
 
       // Reload group details
-      const detailsResponse = await fetch(`/api/groups/${groupId}`, {
+      const detailsResponse = await fetch(apiUrl(`/api/groups/${groupId}`), {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -390,7 +393,7 @@ export function GroupManagementModal({
     }
 
     // Reload group details
-    const detailsResponse = await fetch(`/api/groups/${groupId}`, {
+    const detailsResponse = await fetch(apiUrl(`/api/groups/${groupId}`), {
       headers: {
         Authorization: `Bearer ${token}`,
       },
@@ -411,7 +414,7 @@ export function GroupManagementModal({
     setActionLoading(userId);
     setError(null);
     const token = await getAccessToken();
-    const response = await fetch(`/api/groups/${groupId}/admins`, {
+    const response = await fetch(apiUrl(`/api/groups/${groupId}/admins`), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -429,7 +432,7 @@ export function GroupManagementModal({
     }
 
     // Reload group details
-    const detailsResponse = await fetch(`/api/groups/${groupId}`, {
+    const detailsResponse = await fetch(apiUrl(`/api/groups/${groupId}`), {
       headers: {
         Authorization: `Bearer ${token}`,
       },
@@ -469,7 +472,7 @@ export function GroupManagementModal({
     }
 
     // Reload group details
-    const detailsResponse = await fetch(`/api/groups/${groupId}`, {
+    const detailsResponse = await fetch(apiUrl(`/api/groups/${groupId}`), {
       headers: {
         Authorization: `Bearer ${token}`,
       },
@@ -490,7 +493,7 @@ export function GroupManagementModal({
     setActionLoading('delete');
     setError(null);
     const token = await getAccessToken();
-    const response = await fetch(`/api/groups/${groupId}`, {
+    const response = await fetch(apiUrl(`/api/groups/${groupId}`), {
       method: 'DELETE',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -764,7 +767,7 @@ export function GroupManagementModal({
                     <div className="space-y-3 rounded-lg border border-border bg-sidebar p-3">
                       {/* Search Input */}
                       <div className="relative">
-                        <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Search className="-translate-y-1/2 absolute top-1/2 left-3 h-4 w-4 text-muted-foreground" />
                         <input
                           type="text"
                           placeholder="Search users..."
@@ -773,7 +776,7 @@ export function GroupManagementModal({
                           className="w-full rounded-lg border border-border bg-background py-2.5 pr-10 pl-9 transition-colors focus:border-primary focus:outline-none"
                         />
                         {searching && (
-                          <Loader2 className="absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 animate-spin text-primary" />
+                          <Loader2 className="-translate-y-1/2 absolute top-1/2 right-3 h-4 w-4 animate-spin text-primary" />
                         )}
                       </div>
 

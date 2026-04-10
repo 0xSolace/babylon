@@ -2,36 +2,26 @@
 
 import { logger } from '@babylon/shared';
 import { sdk } from '@farcaster/miniapp-sdk';
-import { usePrivy } from '@privy-io/react-auth';
-import { useLoginToMiniApp } from '@privy-io/react-auth/farcaster';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { useStewardAuthContext } from './StewardAuthProvider';
 
 /**
- * Consolidated Farcaster Mini App Provider.
+ * Farcaster Mini App Provider.
  *
- * Handles:
- * 1. Mini App detection
- * 2. SDK initialization (calling ready())
- * 3. Auto-authentication with Privy
- * 4. Wallet creation
- * 5. Share functionality
+ * Phase 2: Auto-authenticates via the Babylon /api/auth/farcaster-miniapp
+ * endpoint (quickAuth JWKS verification) instead of Privy.
  *
- * Works seamlessly in both Mini App and standalone modes.
+ * Flow:
+ * 1. Detect mini-app context via sdk.context
+ * 2. Call sdk.quickAuth.getToken() to get a Farcaster-signed JWT
+ * 3. POST the token to /api/auth/farcaster-miniapp to get a Steward-compatible JWT
+ * 4. Call onLoginSuccess() to set the httpOnly cookie and fetch user profile
  */
 
-/**
- * Mini App context structure from Farcaster SDK.
- */
 interface MiniAppContext {
-  user?: {
-    fid: number;
-    username: string;
-  };
+  user?: { fid: number; username: string };
 }
 
-/**
- * Farcaster Mini App context type for provider.
- */
 interface FarcasterMiniAppContextType {
   isMiniApp: boolean;
   isLoading: boolean;
@@ -49,52 +39,24 @@ interface FarcasterMiniAppContextType {
 const FarcasterMiniAppContext =
   createContext<FarcasterMiniAppContextType | null>(null);
 
-/**
- * Hook to access Farcaster Mini App context.
- *
- * Must be used within FarcasterMiniAppProvider. Returns Mini App
- * state including detection, user info, and share functionality.
- *
- * @returns Farcaster Mini App context
- * @throws Error if used outside FarcasterMiniAppProvider
- */
 export function useFarcasterMiniApp() {
   const context = useContext(FarcasterMiniAppContext);
-  if (!context) {
+  if (!context)
     throw new Error(
       'useFarcasterMiniApp must be used within FarcasterMiniAppProvider'
     );
-  }
   return context;
 }
 
-/**
- * Farcaster Mini App provider component for Mini App integration.
- *
- * Detects Farcaster Mini App context, initializes SDK, handles auto-authentication
- * with Privy, creates wallets, and provides share functionality. Works in both
- * Mini App and standalone browser modes.
- *
- * Features:
- * - Mini App detection
- * - SDK initialization (ready())
- * - Auto-authentication
- * - Wallet creation
- * - Share functionality
- * - Context provider
- *
- * @param props - FarcasterMiniAppProvider component props
- * @returns Farcaster Mini App provider element
- */
 export function FarcasterMiniAppProvider({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const { onLoginSuccess } = useStewardAuthContext();
   const [isMiniApp, setIsMiniApp] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string>();
-  const [isCreatingWallet, setIsCreatingWallet] = useState(false);
   const [fid, setFid] = useState<number>();
   const [username, setUsername] = useState<string>();
   const [miniAppContext, setMiniAppContext] = useState<MiniAppContext | null>(
@@ -102,11 +64,9 @@ export function FarcasterMiniAppProvider({
   );
   const hasCalledReady = useRef(false);
   const hasAttemptedLogin = useRef(false);
+  const isAuthenticated = useRef(false);
 
-  const { ready, authenticated, user, createWallet } = usePrivy();
-  const { initLoginToMiniApp, loginToMiniApp } = useLoginToMiniApp();
-
-  // Detect Mini App context and call sdk.actions.ready()
+  // Detect mini-app context and initialize SDK
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -124,204 +84,92 @@ export function FarcasterMiniAppProvider({
 
         logger.info(
           'Detected Farcaster Mini App context',
-          {
-            fid: context.user?.fid,
-            username: context.user?.username,
-          },
+          { fid: context.user?.fid, username: context.user?.username },
           'FarcasterMiniApp'
         );
 
-        // Call ready() to hide splash screen and show content
-        // Only call once
         if (!hasCalledReady.current) {
           hasCalledReady.current = true;
-
-          // Small delay to ensure DOM is ready
           setTimeout(async () => {
             await sdk.actions.ready();
             logger.info(
-              'Farcaster Mini App ready() called successfully',
+              'Farcaster Mini App ready() called',
               {},
               'FarcasterMiniApp'
             );
           }, 100);
         }
-      } else {
-        logger.debug(
-          'Not in Farcaster Mini App context',
-          {},
-          'FarcasterMiniApp'
-        );
       }
       setIsLoading(false);
     };
 
-    initializeMiniApp();
+    void initializeMiniApp();
   }, []);
 
-  const hasEmbeddedWallet =
-    user?.wallet?.walletClientType === 'privy' ||
-    user?.wallet?.walletClientType === 'privy-v2' ||
-    (user?.linkedAccounts?.some((account) => {
-      if (account.type !== 'wallet') {
-        return false;
-      }
-
-      return (
-        account.walletClientType === 'privy' ||
-        account.walletClientType === 'privy-v2'
-      );
-    }) ??
-      false);
-
-  // Auto-login with Farcaster Mini App when detected
+  // Auto-login via quickAuth when mini-app is detected and user is not yet authenticated
   useEffect(() => {
-    if (!ready || !isMiniApp || authenticated || isLoading) {
+    if (
+      !isMiniApp ||
+      isLoading ||
+      isAuthenticated.current ||
+      hasAttemptedLogin.current
+    )
       return;
-    }
-
-    // Prevent multiple login attempts - only attempt once
-    if (hasAttemptedLogin.current) {
-      return;
-    }
     hasAttemptedLogin.current = true;
 
-    const attemptMiniAppLogin = async () => {
+    const attemptLogin = async () => {
       logger.info(
-        'Attempting Farcaster Mini App auto-login',
+        'Attempting Farcaster quickAuth auto-login',
         { fid, username },
         'FarcasterMiniApp'
       );
 
-      // Initialize a new login attempt to get a nonce for the Farcaster wallet to sign
-      const { nonce } = await initLoginToMiniApp();
+      // quickAuth.getToken() returns a Farcaster-signed JWT containing the FID
+      const quickAuthResult = await (
+        sdk as unknown as {
+          quickAuth: { getToken(): Promise<{ token: string }> };
+        }
+      ).quickAuth.getToken();
+      const quickAuthToken = quickAuthResult.token;
 
-      logger.debug(
-        'Requesting signature from Farcaster',
-        { nonce },
-        'FarcasterMiniApp'
-      );
-
-      // Request a signature from Farcaster using Mini App SDK
-      const result = await sdk.actions.signIn({ nonce });
-
-      logger.debug(
-        'Received signature, authenticating with Privy',
-        {},
-        'FarcasterMiniApp'
-      );
-
-      // Extract only serializable data (avoid passing functions in postMessage)
-      const message =
-        typeof result.message === 'string'
-          ? result.message
-          : String(result.message || '');
-      const signature =
-        typeof result.signature === 'string'
-          ? result.signature
-          : String(result.signature || '');
-
-      // Send the received signature from Farcaster to Privy for authentication
-      await loginToMiniApp({
-        message,
-        signature,
+      const res = await fetch('/api/auth/farcaster-miniapp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ token: quickAuthToken }),
       });
 
+      const data = (await res.json()) as {
+        ok: boolean;
+        token?: string;
+        error?: string;
+      };
+      if (!data.ok || !data.token) {
+        throw new Error(data.error ?? 'Farcaster miniapp auth failed');
+      }
+
+      // Set httpOnly cookie and trigger profile fetch
+      await onLoginSuccess(data.token);
+      isAuthenticated.current = true;
+
       logger.info(
-        'Farcaster Mini App auto-login successful',
-        {
-          fid,
-          username,
-          userId: user?.id,
-        },
+        'Farcaster Mini App quickAuth login successful',
+        { fid, username },
         'FarcasterMiniApp'
       );
     };
 
-    attemptMiniAppLogin().catch((error: Error) => {
-      // Allow retry on error
+    attemptLogin().catch((err: Error) => {
       hasAttemptedLogin.current = false;
       logger.error(
-        'Farcaster Mini App auto-login failed',
-        {
-          error: error.message,
-          fid,
-          username,
-        },
+        'Farcaster Mini App quickAuth failed',
+        { error: err.message, fid },
         'FarcasterMiniApp'
       );
-      setError(error.message);
+      setError(err.message);
     });
-  }, [
-    ready,
-    authenticated,
-    isMiniApp,
-    isLoading,
-    fid,
-    username,
-    initLoginToMiniApp,
-    loginToMiniApp,
-    user?.id,
-  ]);
+  }, [isMiniApp, isLoading, fid, username, onLoginSuccess]);
 
-  // Ensure embedded wallets are created for non-Mini App sessions
-  useEffect(() => {
-    if (
-      !ready ||
-      !authenticated ||
-      !user ||
-      isMiniApp ||
-      hasEmbeddedWallet ||
-      isCreatingWallet
-    ) {
-      return;
-    }
-
-    if (!createWallet) {
-      logger.warn(
-        'Privy createWallet helper unavailable, skipping embedded wallet creation',
-        { userId: user.id },
-        'FarcasterMiniApp'
-      );
-      return;
-    }
-
-    setIsCreatingWallet(true);
-
-    createWallet()
-      .then(() => {
-        logger.info(
-          'Embedded wallet created for user',
-          {
-            userId: user.id,
-          },
-          'FarcasterMiniApp'
-        );
-      })
-      .catch((creationError: Error) => {
-        logger.error(
-          'Failed to create embedded wallet automatically',
-          {
-            error: creationError.message,
-            userId: user.id,
-          },
-          'FarcasterMiniApp'
-        );
-      })
-      .finally(() => {
-        setIsCreatingWallet(false);
-      });
-  }, [
-    authenticated,
-    createWallet,
-    hasEmbeddedWallet,
-    isCreatingWallet,
-    isMiniApp,
-    ready,
-    user,
-  ]);
-
-  // Share functionality using Mini App SDK
   const share = async (options: {
     text?: string;
     url?: string;
@@ -335,28 +183,26 @@ export function FarcasterMiniAppProvider({
       );
       return;
     }
-
-    // Farcaster compose URL - uses official protocol endpoint (farcaster.xyz)
     await sdk.actions.openUrl(
-      `https://farcaster.xyz/~/compose?text=${encodeURIComponent(options.text || '')}${
+      `https://farcaster.xyz/~/compose?text=${encodeURIComponent(options.text ?? '')}${
         options.url ? `&embeds[]=${encodeURIComponent(options.url)}` : ''
       }`
     );
     logger.info('Mini App share opened', options, 'FarcasterMiniApp');
   };
 
-  const value: FarcasterMiniAppContextType = {
-    isMiniApp,
-    isLoading,
-    error,
-    fid,
-    username,
-    context: miniAppContext,
-    share,
-  };
-
   return (
-    <FarcasterMiniAppContext.Provider value={value}>
+    <FarcasterMiniAppContext.Provider
+      value={{
+        isMiniApp,
+        isLoading,
+        error,
+        fid,
+        username,
+        context: miniAppContext,
+        share,
+      }}
+    >
       {children}
     </FarcasterMiniAppContext.Provider>
   );

@@ -29,6 +29,8 @@ import { useShallow } from 'zustand/react/shallow';
 // Re-export types for convenience
 export type { PerpPosition, UserPredictionPosition } from '@babylon/shared';
 
+import { apiUrl } from '@/utils/api-url';
+
 interface PerpStats {
   totalPositions: number;
   totalPnL: number;
@@ -238,7 +240,9 @@ export const useUserPositionsStore = create<UserPositionsState>((set, get) => ({
 
       try {
         const response = await fetch(
-          `/api/markets/positions/${encodeURIComponent(requestedUserId)}`
+          apiUrl(
+            `/api/markets/positions/${encodeURIComponent(requestedUserId)}`
+          )
         );
 
         if (!response.ok) {

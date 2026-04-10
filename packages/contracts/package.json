@@ -25,11 +25,6 @@
       "types": "./deployments/base/index.ts",
       "import": "./deployments/base/index.ts",
       "require": "./deployments/base/index.ts"
-    },
-    "./deployment/validation-node": {
-      "types": "./src/deployment/validation-node.ts",
-      "import": "./src/deployment/validation-node.ts",
-      "require": "./src/deployment/validation-node.ts"
     }
   },
   "files": [
@@ -46,8 +41,7 @@
     "test:invariant": "forge test --match-path 'test/Invariant*.sol' -vvv",
     "test:all": "forge test -vvv && bun run slither",
     "test:coverage": "forge coverage --report lcov",
-    "slither": "bun run slither:legacy",
-    "slither:legacy": "slither . --config-file slither.config.json --checklist",
+    "slither": "slither . --config-file slither.config.json --checklist",
     "slither:triage": "slither . --config-file slither.config.json --triage-mode",
     "security": "bun run test && bun run slither",
     "security:full": "bun run test:all && bun run test:fuzz && bun run test:invariant"
@@ -61,6 +55,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.10.0",
+    "hardhat-preprocessor": "^0.1.5",
     "typescript": "^5.9.3"
   }
 }

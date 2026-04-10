@@ -7,6 +7,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 // Re-export for convenience
 export type { UserPredictionPosition } from '@babylon/shared';
 
+import { apiUrl } from '@/utils/api-url';
+
 interface PerpStats {
   totalPositions: number;
   totalPnL: number;
@@ -135,7 +137,7 @@ export function useUserPositions(
 
     try {
       const response = await fetch(
-        `/api/markets/positions/${encodeURIComponent(userId)}`,
+        apiUrl(`/api/markets/positions/${encodeURIComponent(userId)}`),
         { signal: controller.signal }
       );
 

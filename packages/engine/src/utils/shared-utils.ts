@@ -5,7 +5,7 @@
  */
 
 import { CONTEXT_LIMITS, truncateText } from './context-limits';
-import { shuffleArray } from './randomization';
+import { pickRandom, shuffleArray } from './randomization';
 
 /**
  * Format actor voice context with postStyle and randomized postExample
@@ -16,6 +16,7 @@ import { shuffleArray } from './randomization';
  */
 export function formatActorVoiceContext(actor: {
   name?: string;
+  realName?: string;
   postStyle?: string;
   postExample?: string[];
   voice?: string;
@@ -32,9 +33,20 @@ export function formatActorVoiceContext(actor: {
 
   const parts: string[] = [];
   const actorName = actor.name || 'this character';
+  const realName = actor.realName?.trim();
 
   // Header with clear instruction
-  parts.push(`\n   === VOICE FOR ${actorName.toUpperCase()} ===`);
+  if (realName) {
+    parts.push(
+      `\n   === REAL PERSON (DO NOT NAME IN OUTPUT): ${realName.toUpperCase()} ===`
+    );
+    parts.push(`   === PARODY CHARACTER: ${actorName.toUpperCase()} ===`);
+    parts.push(
+      `   OUTPUT RULE: Never mention the real name. Always use the parody name/handle.`
+    );
+  } else {
+    parts.push(`\n   === VOICE FOR ${actorName.toUpperCase()} ===`);
+  }
 
   if (actor.personality) {
     parts.push(`   PERSONALITY: ${actor.personality}`);
@@ -49,36 +61,78 @@ export function formatActorVoiceContext(actor: {
   }
 
   if (actor.postExample && actor.postExample.length > 0) {
-    const shuffledExamples = shuffleArray(actor.postExample);
-    const examples = shuffledExamples.slice(0, 3);
+    const examples = (() => {
+      const all = actor.postExample ?? [];
+      if (all.length <= 5) return shuffleArray(all);
+
+      // Stratified sampling by length to maximize variance in examples
+      const sorted = [...all].sort((a, b) => a.length - b.length);
+      const shortest = sorted[0]!;
+      const median = sorted[Math.floor(sorted.length / 2)]!;
+      const longest = sorted[sorted.length - 1]!;
+
+      const remaining = sorted
+        .slice(1, -1)
+        .filter((e) => e !== median && e !== shortest && e !== longest);
+      const extras = shuffleArray(remaining).slice(0, 2);
+      return shuffleArray([shortest, median, longest, ...extras]);
+    })();
 
     // Analyze example patterns for guidance
-    const avgLength = Math.round(
-      examples.reduce((sum, ex) => sum + ex.length, 0) / examples.length
-    );
+    const lengths = examples.map((ex) => ex.length);
+    const minLength = Math.min(...lengths);
+    const maxLength = Math.max(...lengths);
     const hasLowercase = examples.some((ex) => ex === ex.toLowerCase());
     const hasAllCaps = examples.some(
       (ex) => ex === ex.toUpperCase() && ex.length > 3
     );
+    const hasMultiLine = examples.some((ex) => ex.includes('\n'));
 
-    parts.push(`   EXAMPLE POSTS (YOUR OUTPUT MUST MATCH THIS STYLE):`);
+    parts.push(`   EXAMPLE POSTS (MATCH VOICE; VARY LENGTH):`);
     examples.forEach((ex, i) => {
       parts.push(`     ${i + 1}. "${ex}"`);
     });
 
     // Add derived voice hints
     const hints: string[] = [];
-    if (avgLength < 50) hints.push('ultra-short');
-    else if (avgLength < 100) hints.push('short');
     if (hasLowercase) hints.push('lowercase');
     if (hasAllCaps) hints.push('ALL CAPS');
+    if (hasMultiLine) hints.push('multi-line');
 
     if (hints.length > 0) {
       parts.push(`   VOICE PATTERN: ${hints.join(', ')}`);
     }
 
+    // Encourage entropy in length/cadence (prevents monotone outputs over long runs)
+    type LengthTarget = {
+      label: 'VERY SHORT' | 'SHORT' | 'MEDIUM' | 'LONG';
+      guidance: string;
+    };
+    const maxLenAll = Math.max(...actor.postExample.map((ex) => ex.length));
+    const lengthTargets: LengthTarget[] = [
+      { label: 'VERY SHORT', guidance: '1-3 words or a clipped fragment.' },
+      { label: 'SHORT', guidance: 'a single punchy sentence.' },
+    ];
+    if (maxLenAll >= 90) {
+      lengthTargets.push({
+        label: 'MEDIUM',
+        guidance: '1-2 sentences with a specific detail.',
+      });
+    }
+    if (maxLenAll >= 140) {
+      lengthTargets.push({
+        label: 'LONG',
+        guidance:
+          '2-4 sentences or a mini-thread, still under the character limit.',
+      });
+    }
+
+    const chosen = pickRandom(lengthTargets) ?? lengthTargets[1]!;
+
+    parts.push(`   LENGTH RANGE (examples): ${minLength}-${maxLength} chars`);
+    parts.push(`   THIS POST: Aim for ${chosen.label} (${chosen.guidance})`);
     parts.push(
-      `   YOUR POST MUST: Match tone, length (~${avgLength} chars), and quirks from examples above.`
+      `   YOUR POST MUST: Match tone and quirks from examples above. Avoid monotone cadence over time.`
     );
   }
 
@@ -246,6 +300,7 @@ export function formatActorFinanceGuardrails(
  */
 export function formatCharacterInfoWithEntropy(actor: {
   name?: string;
+  realName?: string;
   description?: string;
   profileDescription?: string; // Their bio/self-description
   domain?: string[];
@@ -276,6 +331,20 @@ export function formatCharacterInfoWithEntropy(actor: {
 }): string {
   const parts: string[] = [];
   const actorName = actor.name || 'Unknown';
+  const realName = actor.realName?.trim();
+
+  // Always anchor with the real person/org name first (do not use in output).
+  if (realName) {
+    parts.push(
+      `=== REAL PERSON (DO NOT NAME IN OUTPUT): ${realName.toUpperCase()} ===`
+    );
+    parts.push(`=== PARODY CHARACTER: ${actorName.toUpperCase()} ===`);
+    parts.push(
+      `OUTPUT RULE: Never mention the real name. Always use the parody name/handle.`
+    );
+  } else {
+    parts.push(`=== CHARACTER: ${actorName.toUpperCase()} ===`);
+  }
 
   // Shuffle order of sections for entropy
   const sections: Array<{ type: string; content: string }> = [];
@@ -495,9 +564,12 @@ export function formatCharacterInfoWithEntropy(actor: {
       Math.min(5, shuffledExamples.length)
     );
 
+    const lengths = examples.map((ex) => ex.length);
     const avgLength = Math.round(
-      examples.reduce((sum, ex) => sum + ex.length, 0) / examples.length
+      lengths.reduce((sum, len) => sum + len, 0) / lengths.length
     );
+    const minLength = Math.min(...lengths);
+    const maxLength = Math.max(...lengths);
     const hasLowercase = examples.some((ex) => ex === ex.toLowerCase());
     const hasAllCaps = examples.some(
       (ex) => ex === ex.toUpperCase() && ex.length > 3
@@ -517,7 +589,7 @@ export function formatCharacterInfoWithEntropy(actor: {
     if (hints.length > 0) {
       examplesSection += `VOICE PATTERNS: ${hints.join(', ')}\n`;
     }
-    examplesSection += `TARGET LENGTH: ~${avgLength} characters`;
+    examplesSection += `LENGTH (examples): ~${avgLength} chars (range ${minLength}-${maxLength}). Vary cadence; do not get monotone.`;
 
     sections.push({
       type: 'examples',

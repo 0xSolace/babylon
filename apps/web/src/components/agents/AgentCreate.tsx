@@ -22,11 +22,12 @@ import {
   AgentSettingsStep,
   AgentSetupModal,
   ProfilePreviewCard,
-} from '@/app/agents/create/components';
-import { useAgentForm } from '@/app/agents/create/hooks';
+} from '@/components/agents/create/components';
+import { useAgentForm } from '@/components/agents/create/hooks';
 import { Skeleton } from '@/components/shared/Skeleton';
 import { useAuth } from '@/hooks/useAuth';
 import { useWalletBalance } from '@/hooks/useWalletBalance';
+import { apiUrl } from '@/utils/api-url';
 
 const TOTAL_BANNERS = 100;
 const DEFAULT_MAX_DEPOSIT = 10000;
@@ -214,7 +215,7 @@ export function AgentCreate({
       : agentData.system;
 
     // Step 1: Create the agent
-    const response = await fetch('/api/agents', {
+    const response = await fetch(apiUrl('/api/agents'), {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,

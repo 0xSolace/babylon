@@ -5,6 +5,7 @@ import { ArrowRight, Search, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Avatar } from '@/components/shared/Avatar';
+import { apiUrl } from '@/utils/api-url';
 
 /**
  * API user structure from registry API.
@@ -111,7 +112,9 @@ export function EntitySearchAutocomplete({
         search: value,
         type: searchType,
       });
-      const response = await fetch(`/api/registry/all?${params.toString()}`);
+      const response = await fetch(
+        apiUrl(`/api/registry/all?${params.toString()}`)
+      );
       if (response.ok) {
         const data = await response.json();
         // Filter out NPC users (isActor: true) - they appear in the actors array
@@ -228,7 +231,7 @@ export function EntitySearchAutocomplete({
     <div ref={wrapperRef} className={cn('relative', className)}>
       <div
         className={cn(
-          'pointer-events-none absolute top-1/2 z-10 -translate-y-1/2',
+          '-translate-y-1/2 pointer-events-none absolute top-1/2 z-10',
           compact ? 'left-3' : 'left-4'
         )}
       >
@@ -267,7 +270,7 @@ export function EntitySearchAutocomplete({
             setSelectedIndex(-1);
           }}
           className={cn(
-            'absolute top-1/2 z-10 -translate-y-1/2 p-1 transition-colors hover:bg-muted/50',
+            '-translate-y-1/2 absolute top-1/2 z-10 p-1 transition-colors hover:bg-muted/50',
             compact ? 'right-2' : 'right-3'
           )}
         >

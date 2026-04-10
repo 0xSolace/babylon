@@ -1,112 +1,198 @@
-"use client";
+'use client';
+
+import { logger } from '@babylon/shared';
+
+/**
+ * Embed Context — postMessage auth handshake for Milady iframe integration.
+ *
+ * Flow:
+ * 1. Babylon (iframe) sends BABYLON_READY to parent
+ * 2. Milady (parent) responds with BABYLON_AUTH { agentId, agentSecret }
+ * 3. Babylon exchanges credentials for a session token via POST /api/agents/auth
+ * 4. Token is stored on window.__babylonEmbedToken for apiFetch to use
+ */
 
 import {
   createContext,
+  type ReactNode,
+  useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
-  type ReactNode,
-} from "react";
+} from 'react';
 
-interface EmbedContextValue {
-  /** True when the app is loaded inside an iframe with ?embedded=true. */
+interface EmbedState {
+  /** Whether we're running inside a Milady iframe */
   isEmbedded: boolean;
-  /** The parent origin that sent auth credentials, if any. */
+  /** Whether embed auth has completed successfully */
+  isAuthenticated: boolean;
+  /** The parent origin that sent auth credentials, if any */
   parentOrigin: string | null;
-  /** Agent session token received via postMessage from the embedding host. */
+  /** Session token used by apiFetch in embed mode */
   agentSessionToken: string | null;
-  /** Agent ID received via postMessage. */
+  /** The authenticated agent ID, if any */
   agentId: string | null;
+  /** Error from auth attempt */
+  error: string | null;
 }
 
-const EmbedContext = createContext<EmbedContextValue>({
+const EmbedContext = createContext<EmbedState>({
   isEmbedded: false,
+  isAuthenticated: false,
   parentOrigin: null,
   agentSessionToken: null,
   agentId: null,
+  error: null,
 });
 
-export function useEmbedMode(): EmbedContextValue {
+export function useEmbed(): EmbedState {
   return useContext(EmbedContext);
 }
 
-/**
- * Detects embed mode from URL params and listens for BABYLON_AUTH
- * postMessage from the embedding host (Milady desktop/web).
- *
- * Flow:
- * 1. Detect ?embedded=true in URL → set isEmbedded
- * 2. Send { type: "BABYLON_READY" } to parent window
- * 3. Listen for { type: "BABYLON_AUTH", authToken, agentId } response
- * 4. Store credentials in context for use by API layer
- */
-export function EmbedModeProvider({ children }: { children: ReactNode }) {
-  const [isEmbedded, setIsEmbedded] = useState(false);
-  const [parentOrigin, setParentOrigin] = useState<string | null>(null);
-  const [agentSessionToken, setAgentSessionToken] = useState<string | null>(
-    null,
-  );
-  const [agentId, setAgentId] = useState<string | null>(null);
+export function useEmbedMode() {
+  const { isEmbedded, parentOrigin, agentSessionToken, agentId } =
+    useContext(EmbedContext);
 
-  // Detect embed mode from URL params
-  useEffect(() => {
-    if (typeof window === "undefined") return;
+  return { isEmbedded, parentOrigin, agentSessionToken, agentId };
+}
 
-    const params = new URLSearchParams(window.location.search);
-    const embedded =
-      params.get("embedded") === "true" || window.self !== window.top;
+async function authenticateWithCredentials(
+  agentId: string,
+  agentSecret: string
+): Promise<string> {
+  const res = await fetch('/api/agents/auth', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ agentId, agentSecret }),
+  });
 
-    if (!embedded) return;
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(
+      `Babylon auth failed (${res.status}): ${text || res.statusText}`
+    );
+  }
 
-    setIsEmbedded(true);
+  const data = await res.json();
+  const token = data.sessionToken ?? data.token;
+  if (!token) {
+    throw new Error('Auth response did not include a session token');
+  }
+  return token;
+}
 
-    // Notify parent that we're ready for auth
-    if (window.parent && window.parent !== window) {
-      try {
-        window.parent.postMessage({ type: "BABYLON_READY" }, "*");
-      } catch {
-        // Cross-origin restriction — parent will still post to us
-      }
+function setGlobalEmbedAuth(token: string, agentId: string) {
+  const embedWindow = window as Window & {
+    __babylonEmbedAgentId?: string;
+    __babylonEmbedToken?: string;
+  };
+
+  embedWindow.__babylonEmbedToken = token;
+  embedWindow.__babylonEmbedAgentId = agentId;
+}
+
+export function EmbedProvider({ children }: { children: ReactNode }) {
+  const [state, setState] = useState<EmbedState>({
+    isEmbedded: false,
+    isAuthenticated: false,
+    parentOrigin: null,
+    agentSessionToken: null,
+    agentId: null,
+    error: null,
+  });
+  const handledRef = useRef(false);
+
+  const handleMessage = useCallback(async (event: MessageEvent) => {
+    if (handledRef.current) return;
+
+    const data = event.data;
+    if (!data || typeof data !== 'object' || data.type !== 'BABYLON_AUTH') {
+      return;
+    }
+
+    const agentId =
+      typeof data.agentId === 'string' ? data.agentId.trim() : null;
+    const agentSecret =
+      typeof data.agentSecret === 'string' ? data.agentSecret.trim() : null;
+    const authToken =
+      typeof data.authToken === 'string' ? data.authToken.trim() : null;
+
+    if (!agentId || (!agentSecret && !authToken)) {
+      logger.warn(
+        'Received BABYLON_AUTH with invalid payload',
+        {
+          hasAgentId: Boolean(agentId),
+          hasAgentSecret: Boolean(agentSecret),
+          hasAuthToken: Boolean(authToken),
+        },
+        'EmbedContext'
+      );
+      return;
+    }
+
+    handledRef.current = true;
+
+    try {
+      const token = authToken
+        ? authToken
+        : await authenticateWithCredentials(agentId, agentSecret!);
+
+      setGlobalEmbedAuth(token, agentId);
+
+      setState({
+        isEmbedded: true,
+        isAuthenticated: true,
+        parentOrigin: event.origin,
+        agentSessionToken: token,
+        agentId,
+        error: null,
+      });
+
+      // Acknowledge to parent
+      window.parent.postMessage({ type: 'BABYLON_AUTH_OK', agentId }, '*');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error('Auth failed', { error: message }, 'EmbedContext');
+      setState({
+        isEmbedded: true,
+        isAuthenticated: false,
+        parentOrigin: event.origin,
+        agentSessionToken: null,
+        agentId: null,
+        error: message,
+      });
+      window.parent.postMessage(
+        { type: 'BABYLON_AUTH_ERROR', error: message },
+        '*'
+      );
+      handledRef.current = false; // Allow retry
     }
   }, []);
 
-  // Listen for BABYLON_AUTH from parent
   useEffect(() => {
-    if (!isEmbedded) return;
-
-    function handleMessage(event: MessageEvent) {
-      const data = event.data;
-      if (!data || typeof data !== "object") return;
-      if (data.type !== "BABYLON_AUTH") return;
-
-      const token =
-        typeof data.authToken === "string" ? data.authToken.trim() : null;
-      const id =
-        typeof data.agentId === "string" ? data.agentId.trim() : null;
-
-      if (token) {
-        setAgentSessionToken(token);
-        // Make token available globally for API calls
-        (window as unknown as Record<string, unknown>).__babylonEmbedToken =
-          token;
-      }
-      if (id) {
-        setAgentId(id);
-        (window as unknown as Record<string, unknown>).__babylonEmbedAgentId =
-          id;
-      }
-      setParentOrigin(event.origin);
+    // Only activate in iframe context
+    if (typeof window === 'undefined' || window === window.parent) {
+      return;
     }
 
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
-  }, [isEmbedded]);
+    setState((s) => ({ ...s, isEmbedded: true }));
+
+    window.addEventListener('message', handleMessage);
+
+    // Signal readiness to Milady parent
+    window.parent.postMessage({ type: 'BABYLON_READY' }, '*');
+
+    return () => {
+      window.removeEventListener('message', handleMessage);
+    };
+  }, [handleMessage]);
 
   return (
-    <EmbedContext.Provider
-      value={{ isEmbedded, parentOrigin, agentSessionToken, agentId }}
-    >
-      {children}
-    </EmbedContext.Provider>
+    <EmbedContext.Provider value={state}>{children}</EmbedContext.Provider>
   );
+}
+
+export function EmbedModeProvider({ children }: { children: ReactNode }) {
+  return <EmbedProvider>{children}</EmbedProvider>;
 }

@@ -5,7 +5,18 @@
  *   (prevents using stale tokens for sensitive wallet operations).
  */
 
-import { safeDecodeJwtPayload } from './services/privy/evm-send-transaction';
+function safeDecodeJwtPayload(token: string): Record<string, number> | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length < 2) return null;
+    const payload = parts[1];
+    if (!payload) return null;
+    const padded = payload + '='.repeat((4 - (payload.length % 4)) % 4);
+    return JSON.parse(atob(padded)) as Record<string, number>;
+  } catch {
+    return null;
+  }
+}
 
 const MAX_TOKEN_AGE_SECONDS = 300; // 5 minutes
 

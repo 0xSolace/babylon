@@ -47,6 +47,7 @@ import { TradesFeed } from '@/components/trades/TradesFeed';
 import { useAuth } from '@/hooks/useAuth';
 import { useErrorToasts } from '@/hooks/useErrorToasts';
 import { useGameStore } from '@/stores/gameStore';
+import { apiUrl } from '@/utils/api-url';
 
 type ProfileRouteMode = 'auto' | 'user' | 'user_id' | 'actor' | 'org';
 
@@ -447,7 +448,7 @@ export function ProfilePageClient({
       organizations: [],
     };
     try {
-      const response = await fetch('/api/actors');
+      const response = await fetch(apiUrl('/api/actors'));
       if (response.ok) {
         actorsDb = (await response.json()) as typeof actorsDb;
       }
@@ -913,7 +914,7 @@ export function ProfilePageClient({
 
               <div className="px-4 pb-4">
                 <div className="mb-4 flex items-start justify-between">
-                  <div className="relative -mt-16 sm:-mt-20">
+                  <div className="-mt-16 sm:-mt-20 relative">
                     <div className="h-32 w-32 overflow-hidden rounded-full border-4 border-background bg-background sm:h-36 sm:w-36">
                       <Avatar
                         id={actorInfo.id}
@@ -1016,9 +1017,9 @@ export function ProfilePageClient({
                   )}
                 </div>
 
-                {(actorInfo.profileDescription || actorInfo.description) && (
+                {actorInfo.description && (
                   <p className="mb-3 whitespace-pre-wrap text-[15px] text-foreground">
-                    {actorInfo.profileDescription || actorInfo.description}
+                    {actorInfo.description}
                   </p>
                 )}
 

@@ -17,7 +17,7 @@ mock.module('@babylon/shared', () => ({
 }));
 
 mock.module('../auth-middleware', () => ({
-  getPrivyClient: () => ({ getUser: mock() }),
+  // Phase 2: Privy removed; getPrivyClient no longer used
 }));
 
 describe('parseEmailAddress', () => {

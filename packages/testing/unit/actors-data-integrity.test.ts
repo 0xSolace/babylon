@@ -101,6 +101,43 @@ describe('Actors.json Data Integrity', () => {
       expect(missing).toHaveLength(0);
     });
 
+    it('all actor pfpDescriptions should start with realName', () => {
+      const escapeRegex = (str: string): string =>
+        str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+      type PfpPrefixViolation = {
+        id: string;
+        realName: string;
+        pfpStart: string;
+      };
+
+      const violations: PfpPrefixViolation[] = actorsData.actors.flatMap(
+        (a: ActorData) => {
+          if (!a.pfpDescription) return [];
+
+          const pfp = a.pfpDescription.trim();
+          const realName = a.realName.trim();
+
+          const startsWithRealName = new RegExp(
+            `^${escapeRegex(realName)}(\\b|[\\s.:,(])`,
+            'i'
+          ).test(pfp);
+
+          if (startsWithRealName) return [];
+
+          return [
+            {
+              id: a.id,
+              realName,
+              pfpStart: pfp.slice(0, 120),
+            },
+          ];
+        }
+      );
+
+      expect(violations).toHaveLength(0);
+    });
+
     it('all actors should have profileBanner', () => {
       const missing = actorsData.actors.filter(
         (a: ActorData) => !a.profileBanner

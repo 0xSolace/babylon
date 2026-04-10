@@ -71,6 +71,7 @@ import {
   createParodyHeadlineGenerator,
   DistributedLockService,
   dailyTopicService,
+  FeeRedistributionService,
   generateArcPulseEventsIfNeeded,
   generateEvents,
   initFalClient,
@@ -156,6 +157,12 @@ export interface GameTickResult {
   relationshipsUpdated?: number;
   /** Number of markets with simulated price volatility applied */
   priceVolatilitySimulated?: number;
+  /** Fee redistribution stats for NPC liquidity maintenance */
+  feeRedistribution?: {
+    npcsToppedUp: number;
+    totalDistributed: number;
+    fundBalance: number;
+  };
   /** Narrative arc processing stats */
   narrativeArcs?: {
     arcsProcessed: number;
@@ -989,6 +996,33 @@ export async function executeGameTick(
   } catch (error) {
     logger.warn(
       'Perp quote state refresh failed',
+      { error: formatError(error) },
+      'GameTick'
+    );
+  }
+
+  try {
+    const redistributionResult =
+      await FeeRedistributionService.redistributeFunds();
+    if (redistributionResult.npcsToppedUp > 0) {
+      result.feeRedistribution = {
+        npcsToppedUp: redistributionResult.npcsToppedUp,
+        totalDistributed: redistributionResult.totalDistributed,
+        fundBalance: redistributionResult.fundBalanceAfter,
+      };
+      logger.info(
+        'Fee redistribution completed',
+        {
+          npcsToppedUp: redistributionResult.npcsToppedUp,
+          totalDistributed: redistributionResult.totalDistributed,
+          fundBalance: redistributionResult.fundBalanceAfter,
+        },
+        'GameTick'
+      );
+    }
+  } catch (error) {
+    logger.warn(
+      'Fee redistribution failed',
       { error: formatError(error) },
       'GameTick'
     );

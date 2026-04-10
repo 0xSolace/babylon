@@ -124,8 +124,14 @@ describe('formatActorVoiceContext', () => {
   });
 
   it('should include voice header with actor name', () => {
-    const actor = { name: 'AIlon Musk', personality: 'erratic' };
+    const actor = {
+      name: 'AIlon Musk',
+      realName: 'Elon Musk',
+      personality: 'erratic',
+    };
     const result = formatActorVoiceContext(actor);
-    expect(result).toContain('VOICE FOR AILON MUSK');
+    expect(result).toContain('REAL PERSON');
+    expect(result).toContain('ELON MUSK');
+    expect(result).toContain('PARODY CHARACTER: AILON MUSK');
   });
 });
