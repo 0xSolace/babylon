@@ -1197,7 +1197,8 @@ export async function getAgentMemory(
 
   return rows.map((r) => ({
     type: r.type,
-    message: r.message.length > 100 ? `${r.message.slice(0, 100)}...` : r.message,
+    message:
+      r.message.length > 100 ? `${r.message.slice(0, 100)}...` : r.message,
     thinking: r.thinking
       ? r.thinking.length > 120
         ? `${r.thinking.slice(0, 120)}...`

@@ -6,8 +6,8 @@
  *
  * @description
  * Completes off-chain user onboarding with profile creation, referral handling,
- * social account linking, and points awards. Supports waitlist users, legal
- * acceptance tracking, and identity token verification from Privy.
+ * social account linking, and points awards. Supports waitlist users and legal
+ * acceptance tracking.
  *
  * @openapi
  * /api/users/signup:
@@ -42,7 +42,7 @@
  *                 type: string
  *               identityToken:
  *                 type: string
- *                 description: Privy identity token for social account linking
+ *                 description: Deprecated legacy field accepted for backwards compatibility
  *               isWaitlist:
  *                 type: boolean
  *                 default: false
@@ -158,7 +158,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
   const parsedBody = SignupSchema.parse(body);
   const {
-    identityToken,
+    identityToken: _identityToken,
     referralCode: rawReferralCode,
     isWaitlist,
     ...profileData

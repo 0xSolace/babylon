@@ -59,8 +59,6 @@ export function OnboardingProvider({
   }, [user]);
 
   const { setUser, setNeedsOnboarding } = useAuthStore();
-  // identityToken deprecated — Steward JWT is managed server-side via httpOnly cookie
-  const identityToken: string | undefined = undefined;
   const { trackSignupStarted, trackSignupCompleted, trackOnboardingStep } =
     useSignupTracking();
 
@@ -219,15 +217,6 @@ export function OnboardingProvider({
 
       const referralCode = getReferralCode();
 
-      logger.info(
-        'Identity token state during signup',
-        {
-          present: false,
-          tokenPreview: null,
-        },
-        'OnboardingProvider'
-      );
-
       try {
         const response = await apiFetch('/api/users/signup', {
           method: 'POST',
@@ -235,7 +224,6 @@ export function OnboardingProvider({
           body: JSON.stringify({
             ...payload,
             referralCode: referralCode ?? undefined,
-            identityToken: identityToken ?? undefined,
           }),
         });
 

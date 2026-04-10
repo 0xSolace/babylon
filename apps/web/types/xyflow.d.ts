@@ -46,9 +46,9 @@ declare module '@xyflow/react' {
   }>;
 
   // biome-ignore lint/suspicious/noExplicitAny: ambient type for uninstalled package
-  export function useNodesState<T = any>(initial: any[]): [any[], any, any];
+  export function useNodesState<_T = any>(initial: any[]): [any[], any, any];
   // biome-ignore lint/suspicious/noExplicitAny: ambient type for uninstalled package
-  export function useEdgesState<T = any>(initial: any[]): [any[], any, any];
+  export function useEdgesState<_T = any>(initial: any[]): [any[], any, any];
 
   // biome-ignore lint/suspicious/noExplicitAny: ambient type for uninstalled package
   export const ReactFlow: ComponentType<any>;
