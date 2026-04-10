@@ -603,6 +603,7 @@ export function OnboardingProvider({
       phase,
       replayGuide,
       shouldShowOnboarding,
+      isReadyToShow,
       isSubmitting,
       guideSubmitting,
       error,
