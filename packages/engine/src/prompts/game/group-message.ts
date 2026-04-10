@@ -10,10 +10,16 @@ import { ANTI_REPETITION_RULES, PARODY_NAME_RULES } from '../shared-sections';
  * history for evolving private discussions.
  *
  * Returns XML with group message content.
+ *
+ * Variable inventory:
+ *   Required: actorName, actorDescription, personality, domain, groupTheme,
+ *             eventContext, informationHint
+ *   Optional: realityGrounding, richGameContext, conversationHistory, mood,
+ *             groupMembers, currentPositions, marketConditions
  */
 export const groupMessage = definePrompt({
   id: 'group-message',
-  version: '3.0.0',
+  version: '4.0.0',
   category: 'game',
   description: 'Private group messages with conversation history',
   temperature: 1,

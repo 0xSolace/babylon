@@ -11,6 +11,7 @@ import type { BabylonLLMClient } from './llm/openai-client';
 import {
   daySummary,
   expertAnalysis,
+  getRealityGrounding,
   newsReport,
   npcConversation,
   renderPrompt,
@@ -943,14 +944,24 @@ export class GameWorld extends EventEmitter implements TypedGameWorldEmitter {
         ? events.map((e) => e.description).join('; ')
         : 'Quiet period in the markets.';
 
+    const recentEventsRichContext =
+      events.length > 0
+        ? `=== RECENT EVENTS (Day ${day}) ===\n${events
+            .slice(-10)
+            .map((e) => `- [${e.type}] ${e.description}`)
+            .join('\n')}`
+        : '';
+
     const prompt = renderPrompt(newsReport, {
+      realityGrounding: getRealityGrounding(),
       day: day.toString(),
       question: this.generateQuestion(),
       outcome: this.config.outcome ? 'YES' : 'NO',
       journalistName: journalist.name,
       journalistRole: journalist.role,
       journalistReliability: journalist.reliability.toString(),
-      recentEvents: recentEventsStr, // Use patched variable
+      recentEvents: recentEventsStr,
+      richGameContext: recentEventsRichContext,
       reputationContext,
       truthContext,
     });
@@ -998,9 +1009,46 @@ export class GameWorld extends EventEmitter implements TypedGameWorldEmitter {
       return rumors[index]!;
     }
 
-    const outcomeHint = this.config.outcome
-      ? 'Leans positive'
-      : 'Raises concerns';
+    // Calibrate how much the rumor can "reveal" based on game phase.
+    // Early days → vague; late days → more directional.
+    const phaseFraction = day / Math.max(this.config.duration, 1);
+    const phaseLabel =
+      phaseFraction < 0.2
+        ? 'WILD'
+        : phaseFraction < 0.5
+          ? 'CONNECTION'
+          : phaseFraction < 0.8
+            ? 'CONVERGENCE'
+            : phaseFraction < 0.95
+              ? 'CLIMAX'
+              : 'RESOLUTION';
+
+    const outcomeHintsByPhase: Record<string, { yes: string; no: string }> = {
+      WILD: {
+        yes: 'Keep it cryptic — vague hints of something promising, no specifics',
+        no: 'Keep it cryptic — ominous atmosphere, uneasy whispers, no specifics',
+      },
+      CONNECTION: {
+        yes: 'Suggestive but unconfirmed — link a person or event to potential good news',
+        no: 'Suggestive but unconfirmed — link a person or event to trouble brewing',
+      },
+      CONVERGENCE: {
+        yes: 'Fairly directional — sources are bullish, insider language about upcoming wins',
+        no: 'Fairly directional — sources alarmed, insider language about looming problems',
+      },
+      CLIMAX: {
+        yes: 'Strongly directional — near-confirmation of positive outcome, high-stakes tone',
+        no: 'Strongly directional — near-confirmation of negative outcome, high-stakes tone',
+      },
+      RESOLUTION: {
+        yes: 'Aftermath framing — how insiders are processing the positive outcome',
+        no: 'Aftermath framing — how insiders are processing the negative outcome',
+      },
+    };
+
+    const phaseHints =
+      outcomeHintsByPhase[phaseLabel] ?? outcomeHintsByPhase['CONNECTION']!;
+    const outcomeHint = this.config.outcome ? phaseHints.yes : phaseHints.no;
 
     // Handle empty events list
     const recentEventsStr =
@@ -1012,10 +1060,12 @@ export class GameWorld extends EventEmitter implements TypedGameWorldEmitter {
         : 'No major public events yet, but tension is building.';
 
     const prompt = renderPrompt(rumor, {
+      realityGrounding: getRealityGrounding(),
       day: day.toString(),
       question: this.generateQuestion(),
       outcome: this.config.outcome ? 'YES' : 'NO',
-      recentEvents: recentEventsStr, // Use patched variable
+      phaseContext: phaseLabel,
+      recentEvents: recentEventsStr,
       outcomeHint,
     });
 
@@ -1102,7 +1152,16 @@ export class GameWorld extends EventEmitter implements TypedGameWorldEmitter {
     const reliabilityContext =
       expert.reliability > 0.7 ? 'accurate' : 'sometimes wrong';
 
+    const expertEventsRichContext =
+      events.length > 0
+        ? `=== EVENTS FOR ANALYSIS ===\n${events
+            .slice(-8)
+            .map((e) => `- [${e.type}] ${e.description}`)
+            .join('\n')}`
+        : '';
+
     const prompt = renderPrompt(expertAnalysis, {
+      realityGrounding: getRealityGrounding(),
       expertName: expert.name,
       question: this.generateQuestion(),
       outcome: this.config.outcome ? 'YES' : 'NO',
@@ -1116,6 +1175,7 @@ export class GameWorld extends EventEmitter implements TypedGameWorldEmitter {
               .map((e) => e.description)
               .join('; ')
           : 'Underlying market indicators.',
+      richGameContext: expertEventsRichContext,
       confidenceContext,
       reliabilityContext,
     });
@@ -1151,11 +1211,31 @@ export class GameWorld extends EventEmitter implements TypedGameWorldEmitter {
       return `Day ${day}: ${events.length} events`;
     }
 
+    const daySummaryRichContext =
+      events.length > 0
+        ? `=== TODAY'S EVENTS ===\n${events.map((e) => `- [${e.type}] ${e.description}`).join('\n')}`
+        : '';
+
+    const phaseFrac = day / Math.max(this.config.duration, 1);
+    const dayPhaseLabel =
+      phaseFrac < 0.2
+        ? 'WILD'
+        : phaseFrac < 0.5
+          ? 'CONNECTION'
+          : phaseFrac < 0.8
+            ? 'CONVERGENCE'
+            : phaseFrac < 0.95
+              ? 'CLIMAX'
+              : 'RESOLUTION';
+
     const prompt = renderPrompt(daySummary, {
+      realityGrounding: getRealityGrounding(),
       day: day.toString(),
       question: this.generateQuestion(),
       eventsToday: events.map((e) => `${e.type}: ${e.description}`).join('; '),
+      richGameContext: daySummaryRichContext,
       outcome: this.config.outcome ? 'YES' : 'NO',
+      phaseContext: dayPhaseLabel,
     });
 
     const rawResponse = await this.llm.generateJSON<
