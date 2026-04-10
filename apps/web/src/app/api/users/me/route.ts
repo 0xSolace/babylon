@@ -22,7 +22,7 @@
  *     summary: Get current user profile
  *     description: Returns the authenticated user complete profile including onboarding status, social connections, and reputation.
  *     security:
- *       - PrivyAuth: []
+ *       - StewardAuth: []
  *     responses:
  *       200:
  *         description: User profile

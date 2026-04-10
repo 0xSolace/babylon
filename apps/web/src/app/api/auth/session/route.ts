@@ -11,19 +11,9 @@ import { withErrorHandling } from '@babylon/api';
 import { jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
+import { getStewardJwtSecret } from '@/lib/auth/steward-server';
 
 const THIRTY_DAYS = 60 * 60 * 24 * 30;
-
-function getStewardJwtSecret(): Uint8Array {
-  const secret = process.env.STEWARD_JWT_SECRET;
-  if (!secret) {
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error('STEWARD_JWT_SECRET is not configured');
-    }
-    return new TextEncoder().encode('dev-jwt-secret-change-in-prod');
-  }
-  return new TextEncoder().encode(secret);
-}
 
 export const POST = withErrorHandling(async (req: NextRequest) => {
   let body: { token?: string; refreshToken?: string };
