@@ -2,18 +2,19 @@ import {
   and,
   db,
   desc,
+  eq,
+  getRawDrizzle,
   gte,
   inArray,
   type Question,
+  sql,
   worldEvents,
 } from '@babylon/db';
+import { arcEventCoverage } from '@babylon/db/schema';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import { ArticleGenerator } from '../ArticleGenerator';
 import type { BabylonLLMClient } from '../llm/openai-client';
-import {
-  type ArcEventStatus,
-  NewsArticlePacingEngine,
-} from '../NewsArticlePacingEngine';
+import type { ArcEventStatus } from '../NewsArticlePacingEngine';
 import { toDateString, toSafeDayNumber } from '../utils/date-utils';
 import { secureRandom, weightedPick } from '../utils/entropy';
 import { formatError } from '../utils/error-utils';
@@ -29,24 +30,6 @@ import {
   getSignalDirection,
 } from './narrative-state-service';
 import { StaticDataRegistry } from './static-data-registry';
-
-/**
- * Singleton pacing engine for arc event coverage tracking.
- *
- * @remarks
- * **In-memory only** - This singleton tracks which events have been covered
- * by which organizations to prevent duplicate articles. The state is NOT
- * persisted to the database and will be lost on:
- * - Server restart/redeploy
- * - Serverless cold start
- * - Process termination
- *
- * This is acceptable because:
- * 1. The article rate limiter (DB-backed) provides primary flood protection
- * 2. Occasional duplicate articles after restart are not harmful
- * 3. Most events are covered within the typical serverless warm period
- */
-const arcEventPacer = new NewsArticlePacingEngine();
 
 // Minimal question type for event generation (only fields actually used)
 // outcome is optional - only used for arc plan signal direction, and the code handles missing outcome
@@ -607,10 +590,10 @@ export async function generateArticlesForArcEvent(
     return 0;
   }
 
-  // Select orgs that haven't covered this event status yet
+  // Select orgs that haven't covered this event status yet (DB-backed)
   // Limit to remaining rate limit slots (not just max 2)
   const maxOrgsAllowed = Math.min(2, remaining);
-  const orgsToPublish = arcEventPacer.selectOrgsForArcEvent(
+  const orgsToPublish = await dbSelectOrgsForArcEvent(
     arcEventId,
     eventStatus,
     newsOrgs,
@@ -778,8 +761,8 @@ export async function generateArticlesForArcEvent(
 
       const articleId = persistResult.articleId;
 
-      // Record that this org has covered this event status
-      arcEventPacer.recordArcEventCoverage(
+      // Record that this org has covered this event status (DB-backed)
+      await dbRecordArcEventCoverage(
         arcEventId,
         org.id,
         eventStatus,
@@ -872,10 +855,10 @@ export async function maybeGenerateBreakingArticle(
 
   // Use reservation pattern to prevent race conditions:
   // Reserve a slot before generation, release if it fails
-  const reservationId = breakingArticleRateLimiter.tryReserveSlot();
+  const reservationId = await breakingArticleRateLimiter.tryReserveSlot();
   if (reservationId === null) {
     const { currentCount, maxAllowed } =
-      breakingArticleRateLimiter.canGenerateArticle();
+      await breakingArticleRateLimiter.canGenerateArticle();
     logger.debug(
       'Breaking article skipped - rate limit reached',
       { eventId, eventType, currentCount, maxAllowed },
@@ -923,61 +906,120 @@ export async function maybeGenerateBreakingArticle(
   }
 }
 
+// ---------------------------------------------------------------------------
+// DB-backed arc event coverage helpers (replaces in-memory arcEventPacer for arc events)
+// ---------------------------------------------------------------------------
+
 /**
- * Get arc event coverage statistics
+ * Select news orgs that have not yet covered `arcEventId` at `currentStatus`.
+ * DB-backed — survives restarts and serverless cold starts.
  */
-export function getArcEventCoverageStats() {
-  return arcEventPacer.getArcEventCoverageStats();
+async function dbSelectOrgsForArcEvent<T extends { id: string; name: string }>(
+  arcEventId: string,
+  currentStatus: ArcEventStatus,
+  availableOrgs: T[],
+  maxOrgs = 2
+): Promise<T[]> {
+  if (!arcEventId || availableOrgs.length === 0 || maxOrgs <= 0) return [];
+
+  const rawDb = getRawDrizzle();
+  const covered = await rawDb
+    .select({ orgId: arcEventCoverage.orgId })
+    .from(arcEventCoverage)
+    .where(
+      and(
+        eq(arcEventCoverage.eventId, arcEventId),
+        eq(arcEventCoverage.status, currentStatus)
+      )
+    );
+
+  const coveredOrgIds = new Set(covered.map((r) => r.orgId));
+  const eligible = availableOrgs.filter((o) => !coveredOrgIds.has(o.id));
+
+  // Shuffle and cap
+  const shuffled = eligible.slice().sort(() => secureRandom() - 0.5);
+  return shuffled.slice(0, maxOrgs);
+}
+
+/**
+ * Upsert a coverage record for (eventId, orgId, status).
+ * Duplicate inserts are silently ignored via ON CONFLICT DO NOTHING.
+ */
+async function dbRecordArcEventCoverage(
+  eventId: string,
+  orgId: string,
+  status: ArcEventStatus,
+  articleId: string
+): Promise<void> {
+  const rawDb = getRawDrizzle();
+  await rawDb
+    .insert(arcEventCoverage)
+    .values({ eventId, orgId, status, articleId })
+    .onConflictDoNothing();
+}
+
+/**
+ * Get arc event coverage statistics from the DB.
+ */
+export async function getArcEventCoverageStats(): Promise<{
+  totalEvents: number;
+  totalCoverage: number;
+  eventIds: string[];
+}> {
+  const rawDb = getRawDrizzle();
+  const rows = await rawDb
+    .select({ eventId: arcEventCoverage.eventId })
+    .from(arcEventCoverage);
+
+  const eventIdSet = new Set(rows.map((r) => r.eventId));
+  return {
+    totalEvents: eventIdSet.size,
+    totalCoverage: rows.length,
+    eventIds: Array.from(eventIdSet),
+  };
 }
 
 /**
  * Check if an event has already been covered by any organization at a specific status.
- * Uses the arcEventPacer to determine if the event has received coverage for the given status.
+ * DB-backed — survives restarts and serverless cold starts.
  *
  * @param eventId - The event/question ID to check
  * @param status - The status level to check (default: 'created')
  * @returns True if the event has been covered by at least one org at the specified status
- *
- * @remarks
- * **LIMITATION: In-memory tracking** - Event coverage tracking is stored in-memory
- * using a singleton `NewsArticlePacingEngine`. This means:
- * - Tracking is lost on server restart/redeploy (cold start)
- * - Multiple serverless instances don't share tracking state
- * - Occasional duplicate coverage is possible after deployments
- *
- * This is acceptable for our use case because:
- * 1. Duplicate articles occasionally are not harmful to user experience
- * 2. The article rate limiter provides the primary flood protection
- * 3. Events are typically covered within minutes, before most restarts
- *
- * For stricter duplicate prevention, consider DB-backed tracking with:
- * - A `covered_events` table with (eventId, orgId, status, articleId, timestamp)
- * - Query before generating to check existing coverage
  */
-export function hasEventBeenCovered(
+export async function hasEventBeenCovered(
   eventId: string,
   status: ArcEventStatus = 'created'
-): boolean {
-  // Check if any org has covered this event at the specified status
-  return arcEventPacer.hasEventBeenCoveredForStatus(eventId, status);
+): Promise<boolean> {
+  const rawDb = getRawDrizzle();
+  const result = await rawDb
+    .select({ cnt: sql<number>`count(*)::int` })
+    .from(arcEventCoverage)
+    .where(
+      and(
+        eq(arcEventCoverage.eventId, eventId),
+        eq(arcEventCoverage.status, status)
+      )
+    );
+  return (result[0]?.cnt ?? 0) > 0;
 }
 
 /**
- * Mark an event as covered by recording it in the pacer.
- * This prevents future duplicate coverage of the same event.
+ * Mark an event as covered by recording it in the DB.
+ * Survives restarts and serverless cold starts.
  *
  * @param eventId - The event/question ID that was covered
  * @param orgId - The organization that covered it
  * @param articleId - The generated article ID
  * @param status - The status at time of coverage (default: 'created')
  */
-export function markEventAsCovered(
+export async function markEventAsCovered(
   eventId: string,
   orgId: string,
   articleId: string,
   status: ArcEventStatus = 'created'
-): void {
-  arcEventPacer.recordArcEventCoverage(eventId, orgId, status, articleId);
+): Promise<void> {
+  await dbRecordArcEventCoverage(eventId, orgId, status, articleId);
 }
 
 /** @internal Exported for testing only */

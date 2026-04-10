@@ -412,9 +412,9 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
       const event = activeEventsData.activeEvents[eventIndex];
 
       if (event) {
-        // Check if we've already covered this event using explicit tracking
+        // Check if we've already covered this event using DB-backed tracking
         const eventId = event.questionId;
-        const alreadyCovered = hasEventBeenCovered(eventId);
+        const alreadyCovered = await hasEventBeenCovered(eventId);
 
         if (!alreadyCovered) {
           // Pick a random news org to write the article
@@ -432,8 +432,8 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
 
           if (result.status === 'success') {
             articlesCreated++;
-            // Mark this event as covered for future duplicate detection
-            markEventAsCovered(eventId, org.id, result.id);
+            // Mark this event as covered for future duplicate detection (DB-backed)
+            await markEventAsCovered(eventId, org.id, result.id);
             logger.info(
               `Article created by ${org.name}`,
               { eventId: event.questionId, articleId: result.id },

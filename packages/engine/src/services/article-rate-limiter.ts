@@ -312,29 +312,25 @@ function parseBreakingRateLimit(): number {
 /**
  * Breaking Article Rate Limiter Service
  *
- * Tracks breaking articles separately from regular articles using in-memory timestamps.
- * This is necessary because the posts table doesn't have a field to distinguish
- * breaking articles from regular articles, so database queries would count all articles.
+ * Tracks breaking article count via a DB query against the posts table.
+ * DB-backed — survives restarts and serverless cold starts, so redeployment
+ * no longer causes breaking-article bursts.
  *
  * Breaking articles are event-triggered (scandals, leaks, revelations) and have
- * their own rate limit separate from regular scheduled articles.
+ * their own rate limit (default 1/hr) separate from regular scheduled articles.
+ *
+ * The in-flight `reservations` map prevents TOCTOU races within a single process
+ * run (short-lived; cleared when the process exits, which is fine).
  *
  * @remarks
- * **In-Memory Tracking**: This service uses in-memory timestamp tracking because:
- * 1. The posts table lacks an isBreaking/subtype field to filter by
- * 2. Breaking articles are infrequent (default 1/hour)
- * 3. Tracking is reset on server restart, which is acceptable:
- *    - Breaking events are time-sensitive and don't span restarts
- *    - Worst case: one extra breaking article after restart
- *
  * **Concurrency Note**: Same TOCTOU considerations as ArticleRateLimiterService apply.
+ * The check-then-act pattern may allow one extra article in concurrent environments,
+ * which is acceptable for feed quality purposes.
  */
 export class BreakingArticleRateLimiterService {
   private readonly maxArticlesPerHour: number;
   private readonly windowMs: number;
-  /** Timestamps of breaking articles created within the current window (for non-reservation flow) */
-  private breakingArticleTimestamps: number[] = [];
-  /** Reservations keyed by reservationId -> timestamp (for reservation flow) */
+  /** In-flight reservations for TOCTOU protection within a single process run */
   private reservations: Map<string, number> = new Map();
 
   constructor(config: { maxArticlesPerHour?: number; windowMs?: number } = {}) {
@@ -343,15 +339,9 @@ export class BreakingArticleRateLimiterService {
     this.windowMs = config.windowMs ?? 60 * 60 * 1000; // 1 hour
   }
 
-  /**
-   * Clean up expired timestamps outside the current window
-   */
-  private cleanupExpiredTimestamps(): void {
+  /** Clean up stale in-flight reservations (older than windowMs) */
+  private cleanupReservations(): void {
     const windowStart = Date.now() - this.windowMs;
-    this.breakingArticleTimestamps = this.breakingArticleTimestamps.filter(
-      (ts) => ts > windowStart
-    );
-    // Also clean up expired reservations
     for (const [id, ts] of this.reservations) {
       if (ts <= windowStart) {
         this.reservations.delete(id);
@@ -360,31 +350,38 @@ export class BreakingArticleRateLimiterService {
   }
 
   /**
-   * Get the count of breaking articles created in the current time window
-   * (includes both reservations and recorded timestamps)
+   * Get the count of articles created in the current time window from the DB,
+   * plus any in-flight reservations.
    */
-  getRecentArticleCount(): number {
-    this.cleanupExpiredTimestamps();
-    return this.breakingArticleTimestamps.length + this.reservations.size;
+  async getRecentArticleCount(): Promise<number> {
+    this.cleanupReservations();
+    const windowStart = new Date(Date.now() - this.windowMs);
+
+    const [result] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(posts)
+      .where(
+        and(
+          eq(posts.type, 'article'),
+          gte(posts.timestamp, windowStart),
+          isNull(posts.deletedAt)
+        )
+      );
+
+    const dbCount = result?.count ?? 0;
+    return dbCount + this.reservations.size;
   }
 
   /**
-   * Check if more breaking articles can be generated
-   *
-   * @returns Object with allowed status and remaining slots
+   * Check if more breaking articles can be generated.
    */
-  canGenerateArticle(): {
+  async canGenerateArticle(): Promise<{
     allowed: boolean;
     currentCount: number;
     maxAllowed: number;
     remaining: number;
-  } {
-    // Clean up expired timestamps on every check to prevent memory accumulation
-    // when canGenerateArticle() is called repeatedly without recording
-    this.cleanupExpiredTimestamps();
-
-    const currentCount =
-      this.breakingArticleTimestamps.length + this.reservations.size;
+  }> {
+    const currentCount = await this.getRecentArticleCount();
     const remaining = Math.max(0, this.maxArticlesPerHour - currentCount);
 
     const result = {
@@ -411,33 +408,24 @@ export class BreakingArticleRateLimiterService {
 
   /**
    * Try to reserve a slot for a breaking article.
-   * This implements a reservation pattern to prevent race conditions.
-   *
-   * The slot is reserved by adding a timestamp immediately with a unique ID.
-   * If article generation fails, call `releaseSlot(reservationId)` to free
-   * the reservation. On success, the reservation automatically counts toward
-   * the rate limit (no need to call `recordBreakingArticle()`).
+   * Reserves a short-lived in-process slot to prevent race conditions.
+   * After persisting the article, the slot is superseded by the DB record.
    *
    * @returns A unique reservationId if a slot was reserved, or null if rate limit would be exceeded
    */
-  tryReserveSlot(): string | null {
-    this.cleanupExpiredTimestamps();
+  async tryReserveSlot(): Promise<string | null> {
+    this.cleanupReservations();
 
-    const currentCount =
-      this.breakingArticleTimestamps.length + this.reservations.size;
+    const currentCount = await this.getRecentArticleCount();
     if (currentCount >= this.maxArticlesPerHour) {
       logger.debug(
         'Breaking article slot reservation failed - rate limit reached',
-        {
-          currentCount,
-          maxAllowed: this.maxArticlesPerHour,
-        },
+        { currentCount, maxAllowed: this.maxArticlesPerHour },
         'BreakingArticleRateLimiter'
       );
       return null;
     }
 
-    // Reserve the slot with a unique ID
     const reservationId = crypto.randomUUID();
     this.reservations.set(reservationId, Date.now());
 
@@ -464,72 +452,30 @@ export class BreakingArticleRateLimiterService {
   releaseSlot(reservationId: string): boolean {
     const existed = this.reservations.delete(reservationId);
 
-    if (existed) {
-      logger.debug(
-        'Breaking article slot released',
-        {
-          reservationId,
-          currentCount:
-            this.breakingArticleTimestamps.length + this.reservations.size,
-          maxAllowed: this.maxArticlesPerHour,
-        },
-        'BreakingArticleRateLimiter'
-      );
-    } else {
-      logger.debug(
-        'Breaking article slot release failed - reservation not found',
-        { reservationId },
-        'BreakingArticleRateLimiter'
-      );
-    }
+    logger.debug(
+      existed
+        ? 'Breaking article slot released'
+        : 'Breaking article slot release failed - reservation not found',
+      { reservationId },
+      'BreakingArticleRateLimiter'
+    );
 
     return existed;
   }
 
   /**
-   * Record that a breaking article was created.
-   *
-   * **IMPORTANT**: Do not call if you used `tryReserveSlot()` — that method
-   * already records a timestamp on success. Calling both will double-count
-   * and prematurely exhaust the rate limit.
-   *
-   * This method is intended for callers that do NOT use the reservation pattern
-   * (e.g., external systems or legacy code paths).
-   *
-   * @param timestamp - Optional timestamp of creation (defaults to now)
+   * No-op: DB-backed counting means we don't need to manually record articles.
+   * Kept for API compatibility.
    */
-  recordBreakingArticle(timestamp?: number): void {
-    this.breakingArticleTimestamps.push(timestamp ?? Date.now());
-    this.cleanupExpiredTimestamps();
-
-    logger.debug(
-      'Recorded breaking article creation',
-      {
-        currentCount:
-          this.breakingArticleTimestamps.length + this.reservations.size,
-        maxAllowed: this.maxArticlesPerHour,
-      },
-      'BreakingArticleRateLimiter'
-    );
+  recordBreakingArticle(_timestamp?: number): void {
+    // DB-backed — the post row is already counted on next query
   }
 
   /**
    * Get the number of breaking articles that can still be generated this hour.
-   *
-   * @remarks
-   * **Intentionally synchronous**: Unlike `ArticleRateLimiterService.getRemainingSlots()`
-   * which returns `Promise<number>`, this method is synchronous because the
-   * `BreakingArticleRateLimiterService` uses in-memory tracking instead of database
-   * queries. All methods in this class (`canGenerateArticle()`, `getRecentArticleCount()`,
-   * etc.) are synchronous by design for performance and simplicity.
-   *
-   * If you need a unified interface across both services, wrap the call:
-   * ```typescript
-   * const remaining = await Promise.resolve(breakingArticleRateLimiter.getRemainingSlots());
-   * ```
    */
-  getRemainingSlots(): number {
-    const { remaining } = this.canGenerateArticle();
+  async getRemainingSlots(): Promise<number> {
+    const { remaining } = await this.canGenerateArticle();
     return remaining;
   }
 
@@ -544,10 +490,9 @@ export class BreakingArticleRateLimiterService {
   }
 
   /**
-   * Reset the in-memory tracking (for testing purposes)
+   * Reset in-flight reservations (for testing purposes)
    */
   reset(): void {
-    this.breakingArticleTimestamps = [];
     this.reservations.clear();
   }
 }

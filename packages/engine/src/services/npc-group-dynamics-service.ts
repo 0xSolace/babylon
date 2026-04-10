@@ -781,6 +781,65 @@ Return your response as XML:
         continue;
       }
 
+      // Minimum length guard: reject one-word or very short messages
+      if (
+        messageContent.length < 20 ||
+        messageContent.trim().split(/\s+/).length < 3
+      ) {
+        logger.warn(
+          'NPC group message too short, skipping',
+          {
+            npcId: randomNpc.id,
+            length: messageContent.length,
+            message: messageContent,
+          },
+          'NPCGroupDynamicsService'
+        );
+        continue;
+      }
+
+      // Similarity guard: reject if too similar to any recent message in this chat (5-min window)
+      const recentChatWindow = new Date(Date.now() - 5 * 60 * 1000);
+      const recentChatMsgs = recentMsgs.filter(
+        (m) => m.createdAt >= recentChatWindow
+      );
+      let tooSimilar = false;
+      for (const recent of recentChatMsgs) {
+        const words1 = new Set(
+          messageContent
+            .toLowerCase()
+            .replace(/[^\w\s]/g, '')
+            .split(/\s+/)
+            .filter((w) => w.length > 3)
+        );
+        const words2 = new Set(
+          recent.content
+            .toLowerCase()
+            .replace(/[^\w\s]/g, '')
+            .split(/\s+/)
+            .filter((w) => w.length > 3)
+        );
+        if (words1.size > 0 && words2.size > 0) {
+          const intersection = new Set(
+            [...words1].filter((w) => words2.has(w))
+          );
+          const union = new Set([...words1, ...words2]);
+          const similarity = intersection.size / union.size;
+          if (similarity >= 0.5) {
+            tooSimilar = true;
+            break;
+          }
+        }
+      }
+      if (tooSimilar) {
+        logger.warn(
+          'NPC group message too similar to recent message, skipping',
+          { npcId: randomNpc.id, chatId: group.id },
+          'NPCGroupDynamicsService'
+        );
+        continue;
+      }
+
       // Create the message
       await db.insert(messages).values({
         id: await generateSnowflakeId(),
