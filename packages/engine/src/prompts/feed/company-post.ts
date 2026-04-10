@@ -3,7 +3,6 @@ import {
   ANTI_REPETITION_RULES,
   CONTENT_REQUIREMENTS,
   FINAL_REMINDERS,
-  IMPORTANT_RULES,
   WORLD_CONTEXT_HEADER,
 } from '../shared-sections';
 
@@ -19,7 +18,7 @@ import {
  */
 export const companyPost = definePrompt({
   id: 'company-post',
-  version: '3.0.0',
+  version: '4.0.0',
   category: 'feed',
   description: 'Company PR with full narrative context',
   temperature: 0.9,
@@ -57,8 +56,6 @@ ${ANTI_REPETITION_RULES}
 
 Write ONE corporate post (max 200 chars).
 Professional, on-brand corporate speak.
-
-${IMPORTANT_RULES}
 
 ${CONTENT_REQUIREMENTS}
 

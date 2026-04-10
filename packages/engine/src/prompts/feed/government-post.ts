@@ -3,7 +3,6 @@ import {
   ANTI_REPETITION_RULES,
   CONTENT_REQUIREMENTS,
   FINAL_REMINDERS,
-  IMPORTANT_RULES,
   WORLD_CONTEXT_HEADER,
 } from '../shared-sections';
 
@@ -19,7 +18,7 @@ import {
  */
 export const governmentPost = definePrompt({
   id: 'government-post',
-  version: '3.0.0',
+  version: '4.0.0',
   category: 'feed',
   description: 'Government statement with full narrative context',
   temperature: 0.9,
@@ -56,8 +55,6 @@ ${ANTI_REPETITION_RULES}
 
 Write ONE official government statement (max 200 chars).
 Bureaucratic, cautious, official tone.
-
-${IMPORTANT_RULES}
 
 ${CONTENT_REQUIREMENTS}
 

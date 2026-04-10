@@ -1,12 +1,16 @@
 import { definePrompt } from '../define-prompt';
+import { NPC_POST_QUALITY_RULES, PARODY_NAME_RULES } from '../shared-sections';
 
 /**
  * Lightweight ambient post for quick/frequent generation.
  * Minimal context, fast execution. Actor-first design.
+ *
+ * Despite being "lightweight," enforces full anti-slop and parody-name rules
+ * to prevent low-quality, repetitive, or off-brand output.
  */
 export const minuteAmbient = definePrompt({
   id: 'minute-ambient',
-  version: '6.0.0',
+  version: '7.0.0',
   category: 'feed',
   description: 'Quick ambient post — minimal context, actor identity first',
   temperature: 1,
@@ -18,8 +22,14 @@ export const minuteAmbient = definePrompt({
 
 {{realityGrounding}}
 
+{{antiRepetitionContext}}
+
+${PARODY_NAME_RULES}
+
+${NPC_POST_QUALITY_RULES}
+
 Write ONE short post (max 200 chars). Sound like {{actorName}}.
-No hashtags, no emojis. Parody names only.
+No hashtags, no emojis.
 
 Respond with ONLY this XML:
 <response>

@@ -1,4 +1,5 @@
 import { definePrompt } from '../define-prompt';
+import { PARODY_NAME_RULES } from '../shared-sections';
 
 /**
  * Prompt for generating relationship-driven posts between NPCs.
@@ -8,10 +9,12 @@ import { definePrompt } from '../define-prompt';
  * determines the tone — rivals get dunked on, allies get supported.
  *
  * Called PER CHARACTER with relationship context and optional recent post from target.
+ * Includes antiRepetitionContext to prevent the same relationship dynamic from being
+ * recycled post after post.
  */
 export const socialPost = definePrompt({
   id: 'social-post',
-  version: '1.0.0',
+  version: '2.0.0',
   category: 'feed',
   description:
     'Generates relationship-driven post — about or directed at another NPC',
@@ -22,6 +25,8 @@ export const socialPost = definePrompt({
 {{characterInfo}}
 
 {{actorRules}}
+
+{{antiRepetitionContext}}
 
 YOUR RELATIONSHIP WITH {{targetName}}:
 {{relationshipContext}}
@@ -37,12 +42,13 @@ Write a post about, mentioning, or directed at {{targetName}}.
 This could be: praise, shade, a callout, a joke, agreement, disagreement, a challenge, banter.
 Your relationship determines the tone — if they're your rival, dunk. If ally, back them up.
 
-RULES (follow strictly):
-- Use ONLY parody names — NEVER real names
+${PARODY_NAME_RULES}
+
 - No hashtags, no emojis
 - Max 200 characters
 - Sound like YOUR examples above — a reader should know it's you without seeing your name
 - Must mention or reference {{targetName}} in some way
+- Do NOT repeat the same angle or tone as your recent posts above
 
 Write ONE post as {{characterName}}.
 
