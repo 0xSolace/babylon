@@ -5,6 +5,7 @@ import {
   getDbInstance,
   organizationState,
   organizations,
+  perpMarketSnapshots,
 } from '@babylon/db';
 import type { JsonValue } from '@babylon/shared';
 import { logger } from '@babylon/shared';
@@ -211,6 +212,63 @@ export class PriceUpdateService {
 
     if (priceMap.size > 0) {
       await perpService.applyPriceUpdates(priceMap);
+
+      // Sync indexPrice: keep it within 5% of currentPrice so mark price
+      // premium stays honest and microstructure spreads don't widen spuriously.
+      // indexPrice is only set at bootstrap and never updated otherwise.
+      const INDEX_DRIFT_THRESHOLD = 0.05;
+      try {
+        const snapshots = await db
+          .select({
+            ticker: perpMarketSnapshots.ticker,
+            organizationId: perpMarketSnapshots.organizationId,
+            currentPrice: perpMarketSnapshots.currentPrice,
+            indexPrice: perpMarketSnapshots.indexPrice,
+          })
+          .from(perpMarketSnapshots);
+
+        const indexUpdates: Array<{ ticker: string; indexPrice: number }> = [];
+        for (const snap of snapshots) {
+          const newCurrentPrice =
+            priceMap.get(snap.organizationId) ?? snap.currentPrice;
+          const idx = snap.indexPrice;
+          if (idx == null || idx <= 0 || !Number.isFinite(idx)) {
+            indexUpdates.push({
+              ticker: snap.ticker,
+              indexPrice: newCurrentPrice,
+            });
+            continue;
+          }
+          const drift = Math.abs(newCurrentPrice - idx) / idx;
+          if (drift > INDEX_DRIFT_THRESHOLD) {
+            indexUpdates.push({
+              ticker: snap.ticker,
+              indexPrice: newCurrentPrice,
+            });
+          }
+        }
+
+        for (const update of indexUpdates) {
+          await db
+            .update(perpMarketSnapshots)
+            .set({ indexPrice: update.indexPrice, updatedAt: now })
+            .where(eq(perpMarketSnapshots.ticker, update.ticker));
+        }
+
+        if (indexUpdates.length > 0) {
+          logger.debug(
+            `Synced indexPrice for ${indexUpdates.length} perp market(s)`,
+            { tickers: indexUpdates.map((u) => u.ticker) },
+            'PriceUpdateService'
+          );
+        }
+      } catch (err) {
+        logger.warn(
+          'Failed to sync perp indexPrice',
+          { err },
+          'PriceUpdateService'
+        );
+      }
 
       // Broadcast price updates (handled by API layer if available)
       try {
