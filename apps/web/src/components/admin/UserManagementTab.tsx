@@ -1,10 +1,9 @@
 'use client';
 
-import { cn, formatCompactCurrency } from '@babylon/shared';
+import { cn, formatDate } from '@babylon/shared';
 import {
   Ban,
   CheckCircle,
-  DollarSign,
   RefreshCw,
   Search,
   Shield,
@@ -14,11 +13,12 @@ import {
 import { useCallback, useEffect, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { z } from 'zod';
-import { AdminSendMoneyModal } from '@/components/admin/AdminSendMoneyModal';
 import { BlockUserModal } from '@/components/moderation/BlockUserModal';
 import { MuteUserModal } from '@/components/moderation/MuteUserModal';
 import { Avatar } from '@/components/shared/Avatar';
 import { Skeleton } from '@/components/shared/Skeleton';
+import { formatCurrencyCompact } from '@/lib/format';
+import { getUserDisplayName } from '@/lib/user-display';
 
 /**
  * User schema for validation.
@@ -27,11 +27,11 @@ const UserSchema = z.object({
   id: z.string(),
   username: z.string().nullable(),
   displayName: z.string().nullable(),
-  walletAddress: z.string().nullable(),
   profileImageUrl: z.string().nullable(),
   isActor: z.boolean(),
   isAdmin: z.boolean(),
   isBanned: z.boolean(),
+  isWhitelisted: z.boolean().optional(),
   bannedAt: z.string().nullable(),
   bannedReason: z.string().nullable(),
   bannedBy: z.string().nullable(),
@@ -125,13 +125,15 @@ export function UserManagementTab() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showBanModal, setShowBanModal] = useState(false);
-  const [showSendMoneyModal, setShowSendMoneyModal] = useState(false);
   const [showMuteModal, setShowMuteModal] = useState(false);
   const [showBlockModal, setShowBlockModal] = useState(false);
   const [banReason, setBanReason] = useState('');
   const [isScammer, setIsScammer] = useState(false);
   const [isCSAM, setIsCSAM] = useState(false);
   const [isBanning, startBanning] = useTransition();
+  const [whitelistingUserId, setWhitelistingUserId] = useState<string | null>(
+    null
+  );
 
   const fetchUsers = useCallback(
     (showRefreshing = false) => {
@@ -191,11 +193,6 @@ export function UserManagementTab() {
         throw new Error(error.message || 'Failed to update user');
       }
 
-      toast.success(
-        action === 'ban'
-          ? 'User banned successfully'
-          : 'User unbanned successfully'
-      );
       setShowBanModal(false);
       setBanReason('');
       setIsScammer(false);
@@ -205,22 +202,36 @@ export function UserManagementTab() {
     });
   };
 
-  /** Use shared formatCompactCurrency for currency formatting */
-  const formatCurrency = (value: string) => {
-    const num = parseFloat(value);
-    return formatCompactCurrency(Number.isNaN(num) ? 0 : num);
+  const handleWhitelistUser = async (userId: string) => {
+    setWhitelistingUserId(userId);
+    try {
+      const res = await fetch('/api/admin/whitelist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, source: 'admin_manual' }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        if (res.status === 409) {
+          toast.info('User is already whitelisted');
+        } else {
+          toast.error(data.error ?? 'Failed to whitelist user');
+        }
+        return;
+      }
+    } catch {
+      toast.error('Failed to whitelist user');
+    } finally {
+      setWhitelistingUserId(null);
+    }
   };
 
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-  };
+  const formatCurrency = formatCurrencyCompact;
 
   const UserRow = ({ user }: { user: User }) => {
-    const displayName = user.displayName || user.username || 'Anonymous';
+    const displayName = getUserDisplayName(user, 'Anonymous');
 
     return (
       <div className="rounded-2xl border border-border bg-card p-4 transition-colors hover:border-primary/50">
@@ -261,6 +272,12 @@ export function UserManagementTab() {
               {user.onChainRegistered && (
                 <span className="rounded bg-green-500/20 px-2 py-0.5 text-green-500 text-xs">
                   On-chain
+                </span>
+              )}
+              {user.isWhitelisted && (
+                <span className="flex items-center gap-1 rounded bg-emerald-500/20 px-2 py-0.5 text-emerald-500 text-xs">
+                  <Shield className="h-3 w-3" />
+                  Whitelisted
                 </span>
               )}
             </div>
@@ -364,13 +381,6 @@ export function UserManagementTab() {
                 </div>
               )}
 
-            {/* Wallet Address */}
-            {user.walletAddress && (
-              <div className="font-mono text-muted-foreground text-xs">
-                {user.walletAddress}
-              </div>
-            )}
-
             {/* Ban Info */}
             {user.isBanned && user.bannedReason && (
               <div className="rounded border border-red-500/20 bg-red-500/10 p-2 text-sm">
@@ -393,17 +403,6 @@ export function UserManagementTab() {
               <button
                 onClick={() => {
                   setSelectedUser(user);
-                  setShowSendMoneyModal(true);
-                }}
-                className="flex items-center gap-1 rounded bg-green-500/20 px-3 py-1.5 font-medium text-green-500 text-sm transition-colors hover:bg-green-500/30"
-                title="Send money via escrow"
-              >
-                <DollarSign className="h-4 w-4" />
-                Cash
-              </button>
-              <button
-                onClick={() => {
-                  setSelectedUser(user);
                   setShowMuteModal(true);
                 }}
                 className="flex items-center gap-1 rounded bg-blue-500/20 px-3 py-1.5 font-medium text-blue-500 text-sm transition-colors hover:bg-blue-500/30"
@@ -422,6 +421,19 @@ export function UserManagementTab() {
               >
                 <Ban className="h-4 w-4" />
                 Block
+              </button>
+              <button
+                onClick={() => handleWhitelistUser(user.id)}
+                disabled={whitelistingUserId === user.id}
+                className="flex items-center gap-1 rounded bg-emerald-500/20 px-3 py-1.5 font-medium text-emerald-500 text-sm transition-colors hover:bg-emerald-500/30 disabled:opacity-50"
+                title="Whitelist user — allow them to bypass gating"
+              >
+                {whitelistingUserId === user.id ? (
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Shield className="h-4 w-4" />
+                )}
+                Whitelist
               </button>
               {user.isBanned ? (
                 <button
@@ -552,26 +564,6 @@ export function UserManagementTab() {
         </div>
       )}
 
-      {/* Send Money Modal */}
-      {showSendMoneyModal && selectedUser && (
-        <AdminSendMoneyModal
-          isOpen={showSendMoneyModal}
-          onClose={() => {
-            setShowSendMoneyModal(false);
-            setSelectedUser(null);
-          }}
-          recipientId={selectedUser.id}
-          recipientName={
-            selectedUser.displayName || selectedUser.username || 'User'
-          }
-          recipientUsername={selectedUser.username}
-          recipientWalletAddress={selectedUser.walletAddress}
-          onSuccess={() => {
-            fetchUsers(true);
-          }}
-        />
-      )}
-
       {/* Block Modal */}
       {showBlockModal && selectedUser && (
         <BlockUserModal
@@ -610,7 +602,7 @@ export function UserManagementTab() {
 
       {/* Ban Modal */}
       {showBanModal && selectedUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6">
             <h2 className="mb-4 font-bold text-xl">Ban User</h2>
             <p className="mb-4 text-muted-foreground">

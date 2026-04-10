@@ -4,13 +4,9 @@
  * This package provides the core agent infrastructure for Babylon:
  * - Agent services (creation, management, points)
  * - Autonomous behaviors (trading, posting, commenting, messaging)
- * - Agent identity and wallet management
  * - Plugin system for extending agent capabilities
- * - Agent0 integration for on-chain reputation
  */
 
-// Agent0 integration (feedback/reputation)
-export * from './agent0';
 // Autonomous services
 export * from './autonomous';
 // Communication
@@ -28,9 +24,6 @@ export {
   getExternalAgentAdapter,
   type Protocol,
 } from './external/ExternalAgentAdapter';
-// Identity and wallet management
-export * from './identity/AgentIdentityService';
-export * from './identity/AgentWalletService';
 // LLM integrations
 export * from './llm';
 // Plugins - Babylon plugin is the main export
@@ -51,6 +44,19 @@ export * from './plugins/plugin-trajectory-logger/src';
 export * from './runtime/AgentRuntimeManager';
 // Services
 export * from './services';
+// Shared utilities
+export {
+  getAgentConfig,
+  getAutonomousFeatures,
+  hasAnyAutonomousFeature,
+  isAutonomousCommentingEnabled,
+  isAutonomousDMsEnabled,
+  isAutonomousGroupChatsEnabled,
+  isAutonomousPostingEnabled,
+  isAutonomousTradingEnabled,
+} from './shared/agent-config';
+// Keep Solana registry helpers off the root barrel so non-Solana routes do not
+// pull Solana SDK dependencies into shared serverless bundles.
 // Templates loader
 export * from './templates-loader';
 // Training utilities (RL model fetching, config)

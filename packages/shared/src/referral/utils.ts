@@ -8,11 +8,35 @@
  * Get the base URL for the application
  * Uses window.location.origin in browser, falls back to env variable or default
  */
-export function getBaseUrl(): string {
+export function getReferralAppBaseUrl(): string {
   if (typeof window !== 'undefined') {
     return window.location.origin;
   }
   return process.env.NEXT_PUBLIC_APP_URL || 'https://babylon.market';
+}
+
+/**
+ * Get the base URL for the waitlist (canonical referral destination).
+ *
+ * When you run the app on a separate subdomain (ex: app.babylon.market),
+ * referrals should generally land on the waitlist domain (babylon.market).
+ */
+export function getWaitlistBaseUrl(): string {
+  const fromEnv = process.env.NEXT_PUBLIC_WAITLIST_URL;
+  if (fromEnv && fromEnv.trim().length > 0) return fromEnv.trim();
+
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname.toLowerCase();
+    if (hostname.endsWith('staging.babylon.market')) {
+      return 'https://staging.babylon.market';
+    }
+    if (hostname.endsWith('babylon.market')) {
+      return 'https://babylon.market';
+    }
+    return window.location.origin;
+  }
+
+  return 'https://babylon.market';
 }
 
 /**
@@ -28,7 +52,7 @@ export function getBaseUrl(): string {
  * ```
  */
 export function getReferralUrl(usernameOrCode: string): string {
-  const baseUrl = getBaseUrl();
+  const baseUrl = getWaitlistBaseUrl();
   return `${baseUrl}?ref=${encodeURIComponent(usernameOrCode)}`;
 }
 

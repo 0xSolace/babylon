@@ -6,6 +6,7 @@
  */
 
 import type { SimulationMetrics } from './SimulationEngine';
+import { parseTrustMetrics } from './trust';
 
 /**
  * JSON value type for parsing untyped data
@@ -15,7 +16,6 @@ export type JsonValue =
   | number
   | boolean
   | null
-  | undefined
   | JsonValue[]
   | { [key: string]: JsonValue };
 
@@ -120,5 +120,12 @@ export function parseSimulationMetrics(data: JsonValue): SimulationMetrics {
       totalDuration: getNumber(timing, 'totalDuration'),
     },
     optimalityScore: metrics.optimalityScore as number,
+    optimalityScoreSource:
+      metrics.optimalityScoreSource === 'measured' ||
+      metrics.optimalityScoreSource === 'synthetic' ||
+      metrics.optimalityScoreSource === 'none'
+        ? metrics.optimalityScoreSource
+        : 'synthetic',
+    trustMetrics: parseTrustMetrics(metrics.trustMetrics ?? null),
   };
 }

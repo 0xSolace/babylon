@@ -1,17 +1,17 @@
+import { logger } from '@babylon/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { mintNftAction } from '@/app/_actions/nft';
 import { useAuth } from '@/hooks/useAuth';
-import { useSmartWallet } from '@/hooks/useSmartWallet';
 import type {
+  EligibilityApiResponse,
   EligibilityResponse,
   MintConfirmResponse,
   MintFlowState,
-  MintPrepareResponse,
 } from '@/types/nft';
 
 const MINTING_STATES = new Set<MintFlowState>([
   'preparing',
-  'awaiting_signature',
   'minting',
   'confirming',
 ]);
@@ -30,8 +30,6 @@ interface UseNftMintResult {
 
 export function useNftMint(): UseNftMintResult {
   const { authenticated, getAccessToken } = useAuth();
-  const { smartWalletReady, smartWalletAddress, sendSmartWalletTransaction } =
-    useSmartWallet();
 
   const [eligibility, setEligibility] = useState<EligibilityResponse | null>(
     null
@@ -61,35 +59,38 @@ export function useNftMint(): UseNftMintResult {
       setError(null);
 
       try {
-        const token = await getAccessToken();
+        // In production we may rely on Privy's HttpOnly cookie auth. In that setup,
+        // `getAccessToken()` can be unavailable/undefined in the browser, but the
+        // cookie still authenticates same-origin requests.
+        const token = await getAccessToken().catch(() => null);
 
         // Check if aborted before continuing
         if (signal?.aborted) return;
 
-        if (!token) {
-          setEligibility(notAuthenticated);
-          setFlowState('idle');
-          setIsCheckingEligibility(false);
-          return;
-        }
-
         const response = await fetch('/api/nft/eligibility', {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          credentials: 'include',
           signal, // Pass abort signal to fetch
         });
 
         // Check if aborted before updating state
         if (signal?.aborted) return;
 
+        if (response.status === 401) {
+          setEligibility(notAuthenticated);
+          setFlowState('idle');
+          return;
+        }
+
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
           setError(errorData.error ?? 'Failed to check eligibility');
           setFlowState('error');
-          setIsCheckingEligibility(false);
           return;
         }
 
-        const data: EligibilityResponse = await response.json();
+        const json: EligibilityApiResponse = await response.json();
+        const data: EligibilityResponse = json.data;
 
         // Check if aborted before updating state
         if (signal?.aborted) return;
@@ -127,9 +128,10 @@ export function useNftMint(): UseNftMintResult {
   );
 
   const startMint = useCallback(async () => {
-    const handleError = (message: string) => {
-      setError(message);
-      toast.error(message);
+    const handleError = (message: string, errorId?: string) => {
+      const uiMessage = errorId ? `${message} (Ref: ${errorId})` : message;
+      setError(uiMessage);
+      toast.error(uiMessage);
       setFlowState('error');
     };
 
@@ -143,149 +145,80 @@ export function useNftMint(): UseNftMintResult {
       return;
     }
 
-    if (!smartWalletReady || !smartWalletAddress) {
-      toast.error('Smart wallet not ready');
-      return;
-    }
-
     setFlowState('preparing');
     setError(null);
 
-    let token: string | null;
     try {
-      token = await getAccessToken();
-    } catch {
-      handleError('Authentication failed');
-      return;
-    }
+      setFlowState('minting');
 
-    if (!token) {
-      handleError('Authentication failed');
-      return;
-    }
-
-    // Step 1: Prepare mint (get signature from backend)
-    let prepareData: MintPrepareResponse;
-    try {
-      const prepareResponse = await fetch('/api/nft/mint/prepare', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!prepareResponse.ok) {
-        const errorData = await prepareResponse.json().catch(() => ({}));
-        handleError(errorData.error ?? 'Failed to prepare mint');
+      // Per Privy cookie best practices, always refresh the session before
+      // triggering a privileged server-side action.
+      //
+      // This avoids relying on a potentially-missing/stale `privy-token` cookie
+      // on the first request after the user returns to the app.
+      let userJwt: string | null;
+      try {
+        userJwt = await getAccessToken();
+      } catch {
+        userJwt = null;
+      }
+      if (!userJwt) {
+        handleError(
+          'Your session has expired. Please sign in again and try minting.'
+        );
         return;
       }
 
-      prepareData = await prepareResponse.json();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Network error';
-      handleError(`Failed to prepare mint: ${message}`);
-      return;
-    }
+      const result = await mintNftAction({ userJwt });
 
-    // Validate response data before transitioning to awaiting_signature state
-    const zeroAddress = '0x0000000000000000000000000000000000000000';
-    if (prepareData.contractAddress === zeroAddress) {
-      handleError('NFT contract not deployed');
-      return;
-    }
+      if (result.status === 'error') {
+        logger.error(
+          '[NFT Mint Error]',
+          {
+            step: result.step,
+            errorId: result.errorId,
+            message: result.error,
+            debug: result.debug,
+          },
+          'useNftMint'
+        );
+        handleError(result.error, result.errorId);
+        return;
+      }
 
-    if (!prepareData.encodedData || !prepareData.signature) {
-      handleError('Failed to generate mint signature');
-      return;
-    }
+      if (result.status === 'pending') {
+        // Transaction submitted but not yet confirmed
+        // Show a different toast and let user know they can check later
+        toast.info(result.message, { duration: 10000 });
+        setFlowState('eligible'); // Reset to eligible state so they can try again later
+        return;
+      }
 
-    // Only transition to awaiting_signature after validation passes
-    setFlowState('awaiting_signature');
+      // Transaction confirmed - update state with minted NFT
+      setMintedNft(result.nft);
+      setFlowState('revealing');
+      setEligibility((prev) =>
+        prev
+          ? {
+              ...prev,
+              hasMinted: true,
+              status: 'already_minted',
+              mintedNft: {
+                tokenId: result.nft.tokenId,
+                name: result.nft.name,
+                thumbnailUrl: result.nft.thumbnailUrl ?? result.nft.imageUrl,
+                txHash: result.txHash,
+              },
+            }
+          : null
+      );
 
-    // Step 2: Send transaction
-    setFlowState('minting');
-
-    let txHash: string;
-    try {
-      txHash = await sendSmartWalletTransaction({
-        to: prepareData.contractAddress as `0x${string}`,
-        data: prepareData.encodedData as `0x${string}`,
-        value: 0n,
-      });
+      toast.success('NFT minted successfully!');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Transaction failed';
-      // User rejection is common, don't show harsh error
-      if (message.includes('rejected') || message.includes('denied')) {
-        setFlowState('eligible');
-        setError(null);
-        return;
-      }
       handleError(message);
-      return;
     }
-
-    // Step 3: Confirm mint on backend
-    setFlowState('confirming');
-
-    let confirmData: MintConfirmResponse;
-    try {
-      const confirmResponse = await fetch('/api/nft/mint/confirm', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          txHash,
-          walletAddress: smartWalletAddress,
-        }),
-      });
-
-      if (!confirmResponse.ok) {
-        const errorData = await confirmResponse.json().catch(() => ({}));
-        handleError(errorData.error ?? 'Failed to confirm mint');
-        return;
-      }
-
-      confirmData = await confirmResponse.json();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Network error';
-      // Transaction succeeded but confirm failed - don't lose the tx
-      handleError(
-        `Mint confirmed on chain but database update failed: ${message}. TX: ${txHash}`
-      );
-      return;
-    }
-
-    // Update state with minted NFT
-    setMintedNft(confirmData.nft);
-    setFlowState('revealing');
-    setEligibility((prev) =>
-      prev
-        ? {
-            ...prev,
-            hasMinted: true,
-            status: 'already_minted',
-            mintedNft: {
-              tokenId: confirmData.nft.tokenId,
-              name: confirmData.nft.name,
-              thumbnailUrl: confirmData.nft.thumbnailUrl ?? '',
-              txHash,
-            },
-          }
-        : null
-    );
-
-    toast.success('NFT minted successfully!');
-  }, [
-    authenticated,
-    eligibility,
-    smartWalletReady,
-    smartWalletAddress,
-    getAccessToken,
-    sendSmartWalletTransaction,
-  ]);
+  }, [authenticated, eligibility, getAccessToken]);
 
   const resetFlow = useCallback(() => {
     setFlowState(

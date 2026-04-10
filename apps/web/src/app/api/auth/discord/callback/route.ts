@@ -9,15 +9,17 @@
  * links Discord account, and awards points. Redirects to rewards page with status.
  */
 
-import { PointsService, withErrorHandling } from '@babylon/api';
+import { ReputationService, withErrorHandling } from '@babylon/api';
 import { db } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { getWaitlistBaseUrl, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
-// Configurable redirect destination after OAuth completion
-const OAUTH_REDIRECT_PATH = process.env.OAUTH_REDIRECT_PATH ?? '/rewards';
+// Configurable redirect destination after OAuth completion.
+// Treat empty string as "unset" to avoid redirecting to `/?success=...`.
+const OAUTH_REDIRECT_PATH =
+  process.env.OAUTH_REDIRECT_PATH?.trim() || '/rewards';
 
 const DiscordCallbackQuerySchema = z.object({
   code: z.string().optional(),
@@ -31,8 +33,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     Object.fromEntries(searchParams)
   );
 
-  // Use the app URL as base for all redirects
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
+  // Use the waitlist URL as base for all redirects
+  const baseUrl = getWaitlistBaseUrl();
 
   if (!parsed.success) {
     return NextResponse.redirect(
@@ -157,7 +159,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         client_secret: process.env.DISCORD_CLIENT_SECRET!,
         grant_type: 'authorization_code',
         code,
-        redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/discord/callback`,
+        redirect_uri: `${getWaitlistBaseUrl()}/api/auth/discord/callback`,
       }),
     }
   );
@@ -257,14 +259,14 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   });
 
   // Award points if this is the first time linking Discord
-  const pointsResult = await PointsService.awardDiscordLink(
+  const pointsResult = await ReputationService.awardDiscordLink(
     userId,
     discordUsername
   );
 
   // Check if this qualifies a referral (award bonus to referrer)
   if (pointsResult.success) {
-    await PointsService.checkAndQualifyReferral(userId).catch((error) => {
+    await ReputationService.checkAndQualifyReferral(userId).catch((error) => {
       // Log error but don't fail the request if qualification check fails
       logger.warn(
         `Failed to check and qualify referral for user ${userId}`,
@@ -276,14 +278,18 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   logger.info(
     'Discord account linked successfully',
-    { userId, discordUsername, pointsAwarded: pointsResult.pointsAwarded },
+    {
+      userId,
+      discordUsername,
+      reputationAwarded: pointsResult.reputationAwarded,
+    },
     'DiscordCallback'
   );
 
   // Redirect back to configured destination with success
   return NextResponse.redirect(
     new URL(
-      `${OAUTH_REDIRECT_PATH}?success=discord_linked&points=${pointsResult.pointsAwarded}`,
+      `${OAUTH_REDIRECT_PATH}?success=discord_linked&reputation=${pointsResult.reputationAwarded}`,
       baseUrl
     )
   );

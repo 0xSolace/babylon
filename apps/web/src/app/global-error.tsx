@@ -1,18 +1,9 @@
 'use client';
 
-/**
- * Global Error Boundary for Next.js App Router
- *
- * This file catches errors that occur in the root layout or other global components.
- * It's separate from the regular error.tsx because it must be a client component
- * and wraps the entire application, including the root layout.
- *
- * Best practice: This is the last line of defense for errors in the app.
- */
-
 import * as Sentry from '@sentry/nextjs';
 import { AlertTriangle } from 'lucide-react';
 import { useEffect } from 'react';
+import { posthog } from '@/lib/posthog';
 
 export default function GlobalError({
   error,
@@ -22,26 +13,29 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    // Capture error in Sentry with highest priority context
     Sentry.withScope((scope) => {
-      scope.setLevel('fatal'); // Mark as fatal since it's a global error
       scope.setTag('errorBoundary', 'global');
       if (error.digest) {
         scope.setTag('errorDigest', error.digest);
       }
-      scope.setContext('globalError', {
-        message: error.message,
-        stack: error.stack,
-        digest: error.digest,
-      });
       Sentry.captureException(error);
     });
+
+    if (posthog) {
+      posthog.capture('$exception', {
+        $exception_type: error.name || 'Error',
+        $exception_message: error.message,
+        $exception_stack: error.stack,
+        errorBoundary: 'global',
+        digest: error.digest,
+      });
+    }
   }, [error]);
 
   return (
     <html lang="en">
       <body>
-        <div className="flex min-h-screen flex-col items-center justify-center p-8">
+        <div className="flex min-h-dvh flex-col items-center justify-center p-8 md:min-h-screen">
           <div className="max-w-md text-center">
             <AlertTriangle className="mx-auto mb-4 h-16 w-16 text-destructive" />
             <h2 className="mb-2 font-bold text-2xl">Something went wrong</h2>

@@ -31,26 +31,28 @@ function toGuardrailsActor(actorId: string): {
 
 describe('NPC finance/ticker guardrails', () => {
   it('classifies degens vs non-degens reasonably', () => {
-    // Non-degens: tech leaders without trading/crypto jargon
-    // Note: ben-horowaitz contains "funding rounds" which triggers degen detection
-    // so we use jensen-huaing (GPU hardware) and sergey-brain (tech/science) instead
-    expect(isDegenSpeaker(toGuardrailsActor('jensen-huaing'))).toBe(false);
-    expect(isDegenSpeaker(toGuardrailsActor('sergey-brain'))).toBe(false);
+    // ben-horowaitz now matches degen keywords (funding, ape) in his post examples
+    expect(isDegenSpeaker(toGuardrailsActor('ben-horowaitz'))).toBe(true);
+    expect(isDegenSpeaker(toGuardrailsActor('ailon-musk'))).toBe(false);
 
-    // Degens: traders and finance people who naturally use tickers/jargon
     expect(isDegenSpeaker(toGuardrailsActor('gainzy'))).toBe(true);
     // Finance voice that naturally uses tickers should be allowed
     expect(isDegenSpeaker(toGuardrailsActor('nancy-pelosai'))).toBe(true);
   });
 
   it('applies finance guardrails only to non-degens', () => {
-    // Non-degen should get guardrails
-    const jensenRules = formatActorFinanceGuardrails(
-      toGuardrailsActor('jensen-huaing')
+    // ben-horowaitz is now classified as degen, so no guardrails
+    const benRules = formatActorFinanceGuardrails(
+      toGuardrailsActor('ben-horowaitz')
     );
-    expect(jensenRules).toContain('DO NOT talk in tickers');
+    expect(benRules).toBe('');
 
-    // Degens should NOT get guardrails (empty string)
+    // ailon-musk is non-degen, so guardrails should apply
+    const elonRules = formatActorFinanceGuardrails(
+      toGuardrailsActor('ailon-musk')
+    );
+    expect(elonRules).toContain('DO NOT talk in tickers');
+
     const degenRules = formatActorFinanceGuardrails(
       toGuardrailsActor('gainzy')
     );

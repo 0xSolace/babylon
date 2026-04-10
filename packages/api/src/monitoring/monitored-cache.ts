@@ -6,6 +6,7 @@
  * to be injected from the application layer.
  */
 
+import { serializeCacheValue } from '../cache/cache-service';
 import { performanceMonitor } from './performance-monitor';
 
 export interface CacheOptions {
@@ -50,7 +51,7 @@ export async function getMonitoredCache<T>(
   const hit = value !== null;
 
   // Estimate size (rough approximation)
-  const bytes = value ? JSON.stringify(value).length : 0;
+  const bytes = value ? serializeCacheValue(value).length : 0;
 
   performanceMonitor.recordCacheOperation('get', hit, latency, bytes);
 
@@ -72,7 +73,7 @@ export async function setMonitoredCache<T>(
   const latency = performance.now() - startTime;
 
   // Estimate size
-  const bytes = JSON.stringify(value).length;
+  const bytes = serializeCacheValue(value).length;
 
   performanceMonitor.recordCacheOperation('set', true, latency, bytes);
 }

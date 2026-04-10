@@ -1,6 +1,6 @@
 'use client';
 
-import { cn, logger } from '@babylon/shared';
+import { BABYLON_POINTS_SYMBOL, cn, logger } from '@babylon/shared';
 import {
   Activity,
   AlertCircle,
@@ -178,7 +178,6 @@ export function AgentsTab() {
       return;
     }
 
-    toast.success(`Agent ${enable ? 'enabled' : 'paused'}`);
     await fetchData();
   };
 
@@ -209,8 +208,7 @@ export function AgentsTab() {
       return;
     }
 
-    const result = await response.json();
-    toast.success(`Paused ${result.data.paused} agents`);
+    await response.json();
     await fetchData();
   };
 
@@ -241,8 +239,7 @@ export function AgentsTab() {
       return;
     }
 
-    const result = await response.json();
-    toast.success(`Resumed ${result.data.resumed} agents`);
+    await response.json();
     await fetchData();
   };
 
@@ -680,7 +677,8 @@ export function AgentsTab() {
                             : 'text-red-500'
                         )}
                       >
-                        {agent.lifetimePnL >= 0 ? '+' : ''}$
+                        {agent.lifetimePnL >= 0 ? '+' : ''}
+                        {BABYLON_POINTS_SYMBOL}
                         {agent.lifetimePnL.toFixed(2)}
                       </div>
                     </div>

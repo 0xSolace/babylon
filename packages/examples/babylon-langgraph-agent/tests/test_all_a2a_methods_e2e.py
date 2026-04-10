@@ -1,11 +1,11 @@
 """
-Comprehensive E2E tests for ALL A2A methods
-Tests against real server running on localhost:3000
+Coverage E2E tests for the Babylon LangGraph example client.
+Tests against a real server running on localhost:3000.
 
-This test suite verifies that ALL ~60 A2A methods are:
-1. Available in the client
-2. Can be called successfully (or return expected errors)
-3. Return proper response structures
+This suite verifies that the methods wrapped by the example client are:
+1. Available on the client
+2. Callable against a live server or return expected errors
+3. Returning the expected response structures
 """
 
 import pytest
@@ -227,10 +227,10 @@ class TestPortfolio:
 
 @pytest.mark.asyncio
 class TestMethodAvailability:
-    """Verify all methods are available"""
+    """Verify the example client methods are available"""
     
     async def test_all_methods_available(self, client):
-        """Check that all ~60 A2A methods are available"""
+        """Check that the expected example client methods are available"""
         expected_methods = [
             # Trading
             'get_predictions', 'get_perpetuals', 'sell_shares',
@@ -263,5 +263,4 @@ class TestMethodAvailability:
             print(f'❌ Missing methods: {missing_methods}')
         
         assert len(missing_methods) == 0, f'Missing {len(missing_methods)} methods'
-        assert len(expected_methods) >= 40, 'Should have ~60 methods total'
-
+        assert len(expected_methods) >= 40, 'Should track the current client method inventory'

@@ -39,6 +39,45 @@ export interface GeneratedTag {
   category?: string; // auto-detected category (e.g., "Sports", "Politics", "Tech")
 }
 
+/**
+ * Tag details shared between PostTagWithTag and TrendingTagWithTag
+ */
+export interface TagDetails {
+  id: string;
+  name: string;
+  displayName: string;
+  category: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * Post tag with tag details
+ */
+export interface PostTagWithTag {
+  id: string;
+  postId: string;
+  tagId: string;
+  createdAt: Date;
+  tag: TagDetails;
+}
+
+/**
+ * Trending tag with tag details
+ */
+export interface TrendingTagWithTag {
+  id: string;
+  tagId: string;
+  rank: number;
+  score: number;
+  postCount: number;
+  windowStart: Date;
+  windowEnd: Date;
+  calculatedAt: Date;
+  relatedContext: string | null;
+  tag: TagDetails;
+}
+
 // =============================================================================
 // LLM Client Setup
 // =============================================================================
@@ -47,8 +86,13 @@ type OpenAIClient = OpenAI;
 
 const apiKey = process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY;
 const baseURL = process.env.GROQ_API_KEY
-  ? 'https://api.groq.com/openai/v1'
+  ? process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1'
   : 'https://api.openai.com/v1';
+const suppressOptionalLlmWarnings = ['1', 'true', 'yes'].includes(
+  (process.env.BABYLON_SUPPRESS_OPTIONAL_LLM_WARNINGS || '')
+    .trim()
+    .toLowerCase()
+);
 
 let openaiClient: OpenAIClient | null = null;
 let openaiImportAttempted = false;
@@ -85,11 +129,13 @@ export async function generateTagsFromPost(
   const openai = await getOpenAIClient();
 
   if (!openai) {
-    logger.warn(
-      'Tag generation skipped - no GROQ_API_KEY or OPENAI_API_KEY configured',
-      undefined,
-      'TagService'
-    );
+    if (!suppressOptionalLlmWarnings) {
+      logger.warn(
+        'Tag generation skipped - no GROQ_API_KEY or OPENAI_API_KEY configured',
+        undefined,
+        'TagService'
+      );
+    }
     return [];
   }
 
@@ -116,7 +162,7 @@ BAD TAGS (too generic, won't cluster):
 - "Tech" (too generic)
 - "News" (not a topic)
 - "Breaking" (not searchable)
-- "Market" (use specific market like "Bitcoin" or "NVDA")
+- "Market" (use specific market like "BitcAIn" or "NVDA")
 
 CLUSTERING EXAMPLES:
 - Post about Sam AIltman announcing SMH-6 → tags: "Sam AIltman", "SMH-6", "OpenAGI" (all will cluster)
@@ -407,7 +453,7 @@ export async function storeTagsForPost(
  * Get tags for a post
  */
 export async function getTagsForPost(postId: string) {
-  return await db.query.postTags.findMany({
+  return db.query.postTags.findMany({
     where: eq(postTags.postId, postId),
     with: {
       tag: true,
@@ -599,7 +645,9 @@ export async function storeTrendingTags(
 /**
  * Get current trending tags (most recent calculation)
  */
-export async function getCurrentTrendingTags(limit = 10) {
+export async function getCurrentTrendingTags(
+  limit = 10
+): Promise<TrendingTagWithTag[]> {
   const [latestCalculation] = await db
     .select({ calculatedAt: trendingTags.calculatedAt })
     .from(trendingTags)
@@ -612,12 +660,12 @@ export async function getCurrentTrendingTags(limit = 10) {
 
   const cutoffTime = new Date(latestCalculation.calculatedAt.getTime() - 1000);
 
-  return await db.query.trendingTags.findMany({
+  return (await db.query.trendingTags.findMany({
     where: gte(trendingTags.calculatedAt, cutoffTime),
     with: { tag: true },
     orderBy: asc(trendingTags.rank),
     limit,
-  });
+  })) as TrendingTagWithTag[];
 }
 
 /**

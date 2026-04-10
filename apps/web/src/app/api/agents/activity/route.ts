@@ -9,7 +9,7 @@
  * Used for the "My Moves" dashboard showing aggregate agent activity.
  */
 
-import { authenticateUser } from '@babylon/api';
+import { authenticateUser, withErrorHandling } from '@babylon/api';
 import {
   agentTrades,
   comments,
@@ -21,6 +21,7 @@ import {
   posts,
   users,
 } from '@babylon/db';
+import { toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -82,7 +83,7 @@ interface CommentActivity {
 
 type AgentActivity = TradeActivity | PostActivity | CommentActivity;
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandling(async function GET(req: NextRequest) {
   const user = await authenticateUser(req);
 
   const { searchParams } = new URL(req.url);
@@ -182,7 +183,7 @@ export async function GET(req: NextRequest) {
       activities.push({
         type: 'trade',
         id: trade.id,
-        timestamp: trade.executedAt.toISOString(),
+        timestamp: toISO(trade.executedAt),
         agent: agentInfo,
         data: {
           tradeId: trade.id,
@@ -226,7 +227,7 @@ export async function GET(req: NextRequest) {
       activities.push({
         type: 'post',
         id: post.id,
-        timestamp: post.createdAt.toISOString(),
+        timestamp: toISO(post.createdAt),
         agent: agentInfo,
         data: {
           postId: post.id,
@@ -261,7 +262,7 @@ export async function GET(req: NextRequest) {
       activities.push({
         type: 'comment',
         id: comment.id,
-        timestamp: comment.createdAt.toISOString(),
+        timestamp: toISO(comment.createdAt),
         agent: agentInfo,
         data: {
           commentId: comment.id,
@@ -292,4 +293,4 @@ export async function GET(req: NextRequest) {
       hasMore: activities.length > limit || mightHaveMore,
     },
   });
-}
+});

@@ -1,4 +1,3 @@
-import { usePrivy } from '@privy-io/react-auth';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -8,6 +7,8 @@ import { useAuth } from '@/hooks/useAuth';
 interface UnreadCounts {
   /** Number of pending DM requests from anonymous users */
   pendingDMs: number;
+  /** Number of unread chat message notifications */
+  unreadMessages: number;
   /** Whether there are new messages in existing chats */
   hasNewMessages: boolean;
 }
@@ -25,8 +26,9 @@ interface UnreadCounts {
  *
  * @returns An object containing:
  * - `pendingDMs`: Number of pending DM requests
+ * - `unreadMessages`: Number of unread chat notifications
  * - `hasNewMessages`: Whether there are new messages in existing chats
- * - `totalUnread`: Combined unread count (pendingDMs + 1 if hasNewMessages)
+ * - `totalUnread`: Combined unread count (pending DM requests + unread chat notifications)
  * - `isLoading`: Whether counts are currently being fetched
  *
  * @example
@@ -41,10 +43,10 @@ interface UnreadCounts {
  * ```
  */
 export function useUnreadMessages() {
-  const { authenticated } = useAuth();
-  const { getAccessToken } = usePrivy();
+  const { authenticated, getAccessToken } = useAuth();
   const [counts, setCounts] = useState<UnreadCounts>({
     pendingDMs: 0,
+    unreadMessages: 0,
     hasNewMessages: false,
   });
   const [isLoading, setIsLoading] = useState(false);
@@ -52,7 +54,7 @@ export function useUnreadMessages() {
   useEffect(() => {
     // Only poll if user is authenticated
     if (!authenticated) {
-      setCounts({ pendingDMs: 0, hasNewMessages: false });
+      setCounts({ pendingDMs: 0, unreadMessages: 0, hasNewMessages: false });
       return;
     }
 
@@ -73,8 +75,21 @@ export function useUnreadMessages() {
       }
 
       const data = await response.json();
+      const pendingDMRequests =
+        typeof data.pendingDMRequests === 'number'
+          ? data.pendingDMRequests
+          : typeof data.pendingDMs === 'number'
+            ? data.pendingDMs
+            : 0;
+      const unreadMessages =
+        typeof data.unreadMessages === 'number'
+          ? data.unreadMessages
+          : data.hasNewMessages
+            ? 1
+            : 0;
       setCounts({
-        pendingDMs: data.pendingDMs || 0,
+        pendingDMs: pendingDMRequests,
+        unreadMessages,
         hasNewMessages: data.hasNewMessages || false,
       });
       setIsLoading(false);
@@ -92,7 +107,7 @@ export function useUnreadMessages() {
 
   return {
     ...counts,
-    totalUnread: counts.pendingDMs + (counts.hasNewMessages ? 1 : 0),
+    totalUnread: counts.pendingDMs + counts.unreadMessages,
     isLoading,
   };
 }

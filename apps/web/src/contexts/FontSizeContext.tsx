@@ -10,6 +10,7 @@
 
 import type { ReactNode } from 'react';
 import { createContext, useContext, useEffect, useState } from 'react';
+import { readStorageJson, writeStorageItem } from '@/utils/browser-storage';
 
 /**
  * Font size preset options or custom numeric value.
@@ -59,11 +60,13 @@ export function FontSizeProvider({ children }: { children: ReactNode }) {
 
   // Load from localStorage on mount
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = readStorageJson<{
+      fontSize?: number;
+      preset?: FontSize;
+    }>('localStorage', STORAGE_KEY);
     if (stored) {
-      const parsed = JSON.parse(stored);
-      setFontSizeState(parsed.fontSize || 1);
-      setFontSizePresetState(parsed.preset || 'medium');
+      setFontSizeState(stored.fontSize ?? 1);
+      setFontSizePresetState(stored.preset ?? 'medium');
     }
   }, []);
 
@@ -75,7 +78,8 @@ export function FontSizeProvider({ children }: { children: ReactNode }) {
         ([, value]) => value === size
       )?.[0] as FontSize) || size;
     setFontSizePresetState(preset);
-    localStorage.setItem(
+    writeStorageItem(
+      'localStorage',
       STORAGE_KEY,
       JSON.stringify({ fontSize: size, preset })
     );
@@ -86,7 +90,8 @@ export function FontSizeProvider({ children }: { children: ReactNode }) {
       const size = FONT_SIZE_PRESETS[preset];
       setFontSizeState(size);
       setFontSizePresetState(preset);
-      localStorage.setItem(
+      writeStorageItem(
+        'localStorage',
         STORAGE_KEY,
         JSON.stringify({ fontSize: size, preset })
       );

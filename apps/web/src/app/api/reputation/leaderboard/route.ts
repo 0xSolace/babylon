@@ -42,6 +42,13 @@
  *           minimum: 0
  *           default: 5
  *         description: Minimum games/trades threshold
+ *       - in: query
+ *         name: timeRange
+ *         schema:
+ *           type: string
+ *           enum: [all, daily, weekly, monthly]
+ *           default: all
+ *         description: Filter leaderboard entries by recent activity window
  *     responses:
  *       200:
  *         description: Reputation leaderboard
@@ -80,6 +87,8 @@
  *                       type: integer
  *                     minGames:
  *                       type: integer
+ *                     timeRange:
+ *                       type: string
  *
  * @example
  * ```typescript
@@ -102,28 +111,43 @@
  * @see {@link /src/app/reputation/page.tsx} Reputation UI
  */
 
+import {
+  addPublicReadHeaders,
+  publicRateLimit,
+  withErrorHandling,
+} from '@babylon/api';
 import { getReputationLeaderboard } from '@babylon/engine';
+import { toISOOrNull } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import {
+  getReputationActivityCutoff,
+  parseReputationLeaderboardQuery,
+} from './query';
 
-export async function GET(request: NextRequest) {
+export const GET = withErrorHandling(async function GET(request: NextRequest) {
+  const { error, rateLimitInfo } = await publicRateLimit(request);
+  if (error) return error;
+
   const { searchParams } = new URL(request.url);
+  const { limit, minGames, timeRange } =
+    parseReputationLeaderboardQuery(searchParams);
+  const activeSince = getReputationActivityCutoff(timeRange);
+  const leaderboard = await getReputationLeaderboard(limit, minGames, {
+    activeSince,
+  });
 
-  const limitParam = searchParams.get('limit');
-  const minGamesParam = searchParams.get('minGames');
-
-  const limit = limitParam ? Number.parseInt(limitParam, 10) : 100;
-  const minGames = minGamesParam ? Number.parseInt(minGamesParam, 10) : 5;
-
-  const leaderboard = await getReputationLeaderboard(limit, minGames);
-
-  return NextResponse.json({
+  const res = NextResponse.json({
     success: true,
     leaderboard,
     metadata: {
       count: leaderboard.length,
       limit,
       minGames,
+      timeRange,
+      activitySince: toISOOrNull(activeSince),
     },
   });
-}
+  if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
+  return res;
+});

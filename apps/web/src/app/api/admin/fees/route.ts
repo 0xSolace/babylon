@@ -97,6 +97,7 @@ import {
   users,
 } from '@babylon/db';
 import { FeeService, StaticDataRegistry } from '@babylon/engine';
+import { toISO, toISOOrNull } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
 // Infer the TradingFee type from the schema
@@ -374,7 +375,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       feeAmount: Number(fee.feeAmount),
       platformFee: Number(fee.platformFee),
       referrerFee: Number(fee.referrerFee),
-      createdAt: fee.createdAt.toISOString(),
+      createdAt: toISO(fee.createdAt),
     };
   });
 
@@ -405,7 +406,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const trendMap = new Map<string, { totalFees: number; tradeCount: number }>();
 
   for (const record of dailyFeeRecords) {
-    const dayKey = record.createdAt?.toISOString().split('T')[0];
+    const dayKey = toISOOrNull(record.createdAt)?.split('T')[0];
     if (!dayKey) continue;
     const existing = trendMap.get(dayKey) ?? { totalFees: 0, tradeCount: 0 };
 

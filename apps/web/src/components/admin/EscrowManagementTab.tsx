@@ -1,10 +1,6 @@
 'use client';
 
-import {
-  cn,
-  formatCurrency as formatCurrencyShared,
-  logger,
-} from '@babylon/shared';
+import { cn, logger } from '@babylon/shared';
 import {
   AlertCircle,
   ArrowLeftRight,
@@ -20,6 +16,7 @@ import { z } from 'zod';
 import { Avatar } from '@/components/shared/Avatar';
 import { Skeleton } from '@/components/shared/Skeleton';
 import { getAuthToken } from '@/lib/auth';
+import { formatCurrencyDefault } from '@/lib/format';
 
 /**
  * Escrow schema for validation.
@@ -182,7 +179,6 @@ export function EscrowManagementTab() {
       return;
     }
 
-    toast.success('Escrow refunded successfully');
     setShowRefundModal(false);
     setSelectedEscrow(null);
     setRefundTxHash('');
@@ -191,11 +187,7 @@ export function EscrowManagementTab() {
     setIsRefunding(false);
   };
 
-  /** Use shared formatCurrency for currency formatting */
-  const formatCurrency = (value: string | number) => {
-    const num = typeof value === 'string' ? parseFloat(value) : value;
-    return formatCurrencyShared(num);
-  };
+  const formatCurrency = formatCurrencyDefault;
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -427,7 +419,7 @@ export function EscrowManagementTab() {
 
       {/* Refund Modal */}
       {showRefundModal && selectedEscrow && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6">
             <h2 className="mb-4 flex items-center gap-2 font-bold text-xl">
               <ArrowLeftRight className="h-5 w-5 text-blue-500" />

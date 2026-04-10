@@ -6,7 +6,11 @@
 
 import { PerpDbAdapter, PerpMarketService } from '@babylon/core/markets/perps';
 import { and, db, eq, isNull, perpPositions } from '@babylon/db';
-import { FEE_CONFIG, WalletService } from '@babylon/engine';
+import {
+  createPerpPriceImpactPort,
+  FEE_CONFIG,
+  WalletService,
+} from '@babylon/engine';
 import type {
   Action,
   ActionResult,
@@ -23,7 +27,7 @@ const agentPnLService = new AgentPnLService();
 export const closePerpAction: Action = {
   name: 'CLOSE_PERP',
   description:
-    'Close an open perpetual position (full or partial). IMPORTANT: Always call CHECK_PNL first to see your actual open positions - you need the position ID and current size to close. Requires positionId. Optionally specify amount to partially close.',
+    'Close YOUR perpetual position (full or partial). IMPORTANT: Call CHECK_PNL first to see your open positions and get the position ID. Optionally specify amount for partial close.',
   parameters: {
     positionId: {
       type: 'string',
@@ -36,7 +40,7 @@ export const closePerpAction: Action = {
         'Dollar amount of position to close. If not specified, closes the entire position.',
       required: false,
     },
-  },
+  } as unknown as Action['parameters'],
   examples: [
     [
       {
@@ -182,6 +186,7 @@ export const closePerpAction: Action = {
           referrerShare: FEE_CONFIG.REFERRER_SHARE,
           minFeeAmount: FEE_CONFIG.MIN_FEE_AMOUNT,
         },
+        priceImpact: createPerpPriceImpactPort(),
       });
 
       const positionSize = Number(position.size);

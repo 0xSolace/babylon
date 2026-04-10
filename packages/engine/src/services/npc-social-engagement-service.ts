@@ -10,10 +10,21 @@
 
 import { db } from '@babylon/db';
 import type { JsonValue } from '@babylon/shared';
-import { generateSnowflakeId, logger } from '@babylon/shared';
-import { NPC_ENGAGEMENT_CONFIG } from '../config/npc-activity';
+import {
+  generateSnowflakeId,
+  isNonEmptyString,
+  isPureRepost,
+  logger,
+} from '@babylon/shared';
+import {
+  NPC_DIVERSITY_CONFIG,
+  NPC_ENGAGEMENT_CONFIG,
+} from '../config/npc-activity';
 import type { LLMJsonClient } from '../llm/types';
 import { secureRandom } from '../utils/entropy';
+import { formatError } from '../utils/error-utils';
+import { ActionDiversityTracker } from '../utils/feed-diversity';
+import { shuffleArray } from '../utils/randomization';
 import {
   formatActorFinanceGuardrails,
   formatActorToneGuardrails,
@@ -150,7 +161,7 @@ export async function processNPCSocialEngagements(
   };
 
   try {
-    const now = options.now ?? new Date();
+    const baseNow = options.now ?? new Date();
     const currentDay = options.currentDay;
     const random = options.random ?? secureRandom;
     const skipActorProbability = options.skipActorProbability ?? 0.3;
@@ -166,8 +177,24 @@ export async function processNPCSocialEngagements(
     let topLevelCommentsCreated = 0;
     let replyCommentsCreated = 0;
 
+    // Initialize action diversity tracker (TikTok-style clustering prevention)
+    // Tracks recent actions and skips if too many consecutive same types
+    const diversityTracker = new ActionDiversityTracker(
+      NPC_DIVERSITY_CONFIG.maxRecentActions,
+      NPC_DIVERSITY_CONFIG.maxConsecutiveSameAction
+    );
+
+    // Timestamp staggering for organic feed pacing
+    // Each action gets a timestamp spread across the window
+    const STAGGER_WINDOW_MS = NPC_DIVERSITY_CONFIG.timestampStaggerMs;
+    const getStaggeredTimestamp = (): Date => {
+      const offset = Math.floor(random() * STAGGER_WINDOW_MS);
+      return new Date(baseNow.getTime() + offset);
+    };
+
     // Get recent posts (last 6 hours)
-    const sixHoursAgo = new Date(now.getTime() - 6 * 60 * 60 * 1000);
+    // Use baseNow for time window calculations, getStaggeredTimestamp() for action timestamps
+    const sixHoursAgo = new Date(baseNow.getTime() - 6 * 60 * 60 * 1000);
     const recentPostsRaw = await db.post.findMany({
       where: {
         deletedAt: null,
@@ -227,15 +254,9 @@ export async function processNPCSocialEngagements(
       };
     });
 
-    // Randomly sample actors using Fisher-Yates shuffle (unbiased)
+    // Randomly sample actors using shuffle utility
     const allActors = StaticDataRegistry.getAllActors();
-    const shuffled = [...allActors];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(random() * (i + 1));
-      const temp = shuffled[i]!;
-      shuffled[i] = shuffled[j]!;
-      shuffled[j] = temp;
-    }
+    const shuffled = shuffleArray(allActors, random);
     const sampledActorIds = shuffled
       .slice(0, NPC_ENGAGEMENT_CONFIG.actorsToSample)
       .map((a) => a.id);
@@ -261,7 +282,7 @@ export async function processNPCSocialEngagements(
     // Add per-actor agenda fuel: positions + running bit (batch, no LLM calls)
     const [positionsByActorId, runningBitsByActorId] = await Promise.all([
       buildPositionsPromptContextByActorId(contextActorIds),
-      ensureRunningBits(contextActorIds, { now, currentDay }),
+      ensureRunningBits(contextActorIds, { now: baseNow, currentDay }),
     ]);
 
     const actorContextById = new Map<string, ActorContext>();
@@ -301,13 +322,19 @@ export async function processNPCSocialEngagements(
 
     // Get existing engagements
     const postIds = recentPosts.map((p) => p.id);
+    const shareTargetPostIds = new Set(postIds);
+    for (const post of recentPosts) {
+      if (isPureRepost(post)) {
+        shareTargetPostIds.add(post.originalPostId);
+      }
+    }
     const [existingReactions, existingShares] = await Promise.all([
       db.reaction.findMany({
         where: { postId: { in: postIds } },
         select: { postId: true, userId: true },
       }),
       db.share.findMany({
-        where: { postId: { in: postIds } },
+        where: { postId: { in: Array.from(shareTargetPostIds) } },
         select: { postId: true, userId: true },
       }),
     ]);
@@ -403,7 +430,7 @@ export async function processNPCSocialEngagements(
                   relatedQuestion: quotePost.relatedQuestion ?? null,
                   quoteOriginalPostId: quotePost.originalPostId ?? null,
                 },
-                timestamp: now,
+                timestamp: baseNow,
               },
             });
           } catch (_error) {
@@ -440,12 +467,19 @@ export async function processNPCSocialEngagements(
 
         const key = `${post.id}-${actor.id}`;
         const probs = calculateEngagementProbability(actor, post, random);
+        // If this is a pure repost, share the original instead of the repost itself
+        const shareTargetPostId = isPureRepost(post)
+          ? post.originalPostId
+          : post.id;
+        const shareKey = `${shareTargetPostId}-${actor.id}`;
 
         // LIKE
         // Skip if global likes quota reached (other actors may still process shares/comments)
+        // Skip if diversity tracker says too many consecutive likes
         if (
           !likesQuotaReached &&
           !reactionSet.has(key) &&
+          !diversityTracker.shouldSkipForDiversity('like') &&
           random() < probs.like
         ) {
           try {
@@ -459,6 +493,7 @@ export async function processNPCSocialEngagements(
             });
             result.likesCreated++;
             engagedActors.add(actor.id);
+            diversityTracker.recordAction('like');
           } catch (error) {
             // Likely a unique constraint race - ignore to keep engagement loop resilient
             logger.debug(
@@ -466,7 +501,7 @@ export async function processNPCSocialEngagements(
               {
                 actorId: actor.id,
                 postId: post.id,
-                error: error instanceof Error ? error.message : String(error),
+                error: formatError(error),
               },
               'NPCSocialEngagement'
             );
@@ -475,43 +510,66 @@ export async function processNPCSocialEngagements(
           }
         }
 
-        // SHARE
+        // SHARE (creates both a Share record AND a visible repost Post)
+        // Skip if diversity tracker says too many consecutive shares
         if (
-          !shareSet.has(key) &&
-          result.sharesCreated < NPC_ENGAGEMENT_CONFIG.maxSharesPerTick
+          !shareSet.has(shareKey) &&
+          result.sharesCreated < NPC_ENGAGEMENT_CONFIG.maxSharesPerTick &&
+          !diversityTracker.shouldSkipForDiversity('share')
         ) {
           if (random() < probs.share) {
             try {
-              await db.share.create({
-                data: {
-                  id: await generateSnowflakeId(),
-                  postId: post.id,
-                  userId: actor.id,
-                },
+              // Wrap in transaction for atomicity - both succeed or both fail
+              await db.$transaction(async (tx) => {
+                await tx.share.create({
+                  data: {
+                    id: await generateSnowflakeId(),
+                    postId: shareTargetPostId,
+                    userId: actor.id,
+                  },
+                });
+
+                // Create visible repost Post (empty content = simple repost)
+                // Use staggered timestamp for organic feed pacing
+                const repostId = await generateSnowflakeId();
+                await tx.post.create({
+                  data: {
+                    id: repostId,
+                    content: '',
+                    authorId: actor.id,
+                    timestamp: getStaggeredTimestamp(), // Staggered for organic feel
+                    originalPostId: shareTargetPostId,
+                    type: 'repost', // Explicit type for query filtering
+                  },
+                });
               });
+
               result.sharesCreated++;
               engagedActors.add(actor.id);
+              shareSet.add(shareKey); // Only mark on success - allows retry on failure
+              diversityTracker.recordAction('share');
             } catch (error) {
-              // Likely a unique constraint race - ignore to keep engagement loop resilient
+              // Unique constraint or other error - don't mark as processed, allows retry
               logger.debug(
-                'Failed to insert NPC share (ignored)',
+                'Failed to insert NPC share/repost (ignored)',
                 {
                   actorId: actor.id,
                   postId: post.id,
-                  error: error instanceof Error ? error.message : String(error),
+                  error: formatError(error),
                 },
                 'NPCSocialEngagement'
               );
-            } finally {
-              shareSet.add(key); // Mark as processed either way
             }
+            // No finally block - shareSet only marked on success
           }
         }
 
         // COMMENT - comments don't have unique constraints per-actor
+        // Skip if diversity tracker says too many consecutive comments
         if (
           npcSocialEngagementService.getLLMClient() &&
-          topLevelCommentsCreated < maxTopLevelCommentsPerTick
+          topLevelCommentsCreated < maxTopLevelCommentsPerTick &&
+          !diversityTracker.shouldSkipForDiversity('comment')
         ) {
           if (topLevelCommentSet.has(key)) {
             continue;
@@ -538,6 +596,7 @@ export async function processNPCSocialEngagements(
                 result.commentsCreated++;
                 engagedActors.add(actor.id);
                 topLevelCommentSet.add(key);
+                diversityTracker.recordAction('comment');
 
                 // Record this as a first-class NPC interaction for relationship evolution + continuity.
                 // Sentiment is a lightweight heuristic driven by existing relationship sentiment (if any).
@@ -558,7 +617,7 @@ export async function processNPCSocialEngagements(
                       commentId,
                       relatedQuestion: post.relatedQuestion ?? null,
                     },
-                    timestamp: now,
+                    timestamp: baseNow,
                   },
                 });
               } catch (commentError) {
@@ -724,7 +783,7 @@ export async function processNPCSocialEngagements(
                   parentCommentId: root.id,
                   relatedQuestion: post.relatedQuestion ?? null,
                 },
-                timestamp: now,
+                timestamp: baseNow,
               },
             });
 
@@ -735,7 +794,7 @@ export async function processNPCSocialEngagements(
               authorId: author.id,
               content: authorReply,
               parentCommentId: root.id,
-              createdAt: now,
+              createdAt: baseNow,
             };
             postComments.unshift(created);
             commentById.set(commentId, created);
@@ -808,7 +867,7 @@ export async function processNPCSocialEngagements(
                     parentCommentId: parent.id,
                     relatedQuestion: post.relatedQuestion ?? null,
                   },
-                  timestamp: now,
+                  timestamp: baseNow,
                 },
               });
 
@@ -818,7 +877,7 @@ export async function processNPCSocialEngagements(
                 authorId: speaker.id,
                 content: replyText,
                 parentCommentId: parent.id,
-                createdAt: now,
+                createdAt: baseNow,
               };
               postComments.unshift(createdReply);
               commentById.set(replyId, createdReply);
@@ -839,6 +898,18 @@ export async function processNPCSocialEngagements(
 
     result.actorsEngaged = engagedActors.size;
 
+    // Log diversity distribution for debugging
+    const diversityDist = diversityTracker.getDistribution();
+    logger.debug(
+      'Social engagement diversity distribution',
+      {
+        distribution: diversityDist,
+        totalActions:
+          result.likesCreated + result.sharesCreated + result.commentsCreated,
+      },
+      'NPCSocialEngagement'
+    );
+
     if (
       result.likesCreated + result.sharesCreated + result.commentsCreated >
       0
@@ -857,7 +928,7 @@ export async function processNPCSocialEngagements(
     logger.error(
       'NPC engagement failed',
       {
-        error: error instanceof Error ? error.message : String(error),
+        error: formatError(error),
       },
       'NPCSocialEngagement'
     );
@@ -882,6 +953,23 @@ function calculateEngagementProbability(
   let likeProb = NPC_ENGAGEMENT_CONFIG.baseLikeProbability;
   let shareProb = NPC_ENGAGEMENT_CONFIG.baseShareProbability;
   let commentProb = NPC_ENGAGEMENT_CONFIG.baseCommentProbability;
+
+  // Domain relevance boost: actors engage much more with content matching their expertise
+  const postText = (post.content || '').toLowerCase();
+  const actorDomains: string[] = actor.domain ?? [];
+  const domainMatch = actorDomains.some((d) =>
+    postText.includes(d.toLowerCase())
+  );
+  if (domainMatch) {
+    likeProb *= 3.0;
+    shareProb *= 2.5;
+    commentProb *= 3.0;
+  } else if (actorDomains.length > 0) {
+    // Off-domain content: reduce engagement significantly
+    likeProb *= 0.15;
+    shareProb *= 0.1;
+    commentProb *= 0.1;
+  }
 
   // Affiliation boost: actors engage more with content from their orgs
   const sharedAffiliations = actor.affiliations.filter((a) =>
@@ -946,10 +1034,6 @@ function inferSelfInterest(actor: ActorContext): SelfInterest {
     return 'ideology';
   }
   return 'reputation';
-}
-
-function isNonEmptyString(v: string | undefined): v is string {
-  return typeof v === 'string' && v.trim().length > 0;
 }
 
 function formatAgendaPromptContext(actor: ActorContext): string {
@@ -1166,7 +1250,7 @@ ${promptContext}
         actorName: actor.name,
         postId: post.id,
         parentCommentId: parentComment.id,
-        error: error instanceof Error ? error.message : String(error),
+        error: formatError(error),
       },
       'NPCSocialEngagement'
     );
@@ -1312,7 +1396,7 @@ ${promptContext}
         actorId: actor.id,
         actorName: actor.name,
         postId: post.id,
-        error: err instanceof Error ? err.message : String(err),
+        error: formatError(err),
       },
       'NPCSocialEngagement'
     );

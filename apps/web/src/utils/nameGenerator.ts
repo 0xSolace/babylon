@@ -5,6 +5,8 @@
  * Uses curated word lists organized by theme for variety.
  */
 
+import { escapeRegex } from '@babylon/shared';
+
 // Agent name generation word lists
 const NAME_PREFIXES = [
   // Greek letters
@@ -140,14 +142,16 @@ export interface GeneratedAgentName {
 }
 
 /**
- * Generates a random agent name with display name and username.
+ * Generates a random agent name with a 1-word display name and 2-word username.
+ * No numbers are appended by default — numbers are only added when the username
+ * is already taken (handled by the username check hook).
  *
- * @returns Object with displayName (e.g., "Nova Trader") and username (e.g., "novatrader123456")
+ * @returns Object with displayName (e.g., "Phoenix") and username (e.g., "phoenix_trader")
  *
  * @example
  * const { username, displayName } = generateAgentName();
- * // displayName: "Quantum Oracle"
- * // username: "quantumoracle847291"
+ * // displayName: "Nova"
+ * // username: "nova_oracle"
  */
 export function generateAgentName(): GeneratedAgentName {
   // Arrays are non-empty (defined above), so these are guaranteed to exist
@@ -156,24 +160,13 @@ export function generateAgentName(): GeneratedAgentName {
   const suffix =
     NAME_SUFFIXES[Math.floor(Math.random() * NAME_SUFFIXES.length)]!;
 
-  // Use 6-digit number for better uniqueness at scale
-  // Range: 100000-999999 = 900,000 possible numbers
-  // Combined with ~2,275 name combos = ~2 billion unique usernames
-  const number = Math.floor(Math.random() * 900000) + 100000;
-
-  const displayName = `${prefix} ${suffix}`;
-  const username = `${prefix.toLowerCase()}${suffix.toLowerCase()}${number}`;
+  const displayName = prefix;
+  const username = `${prefix.toLowerCase()}_${suffix.toLowerCase()}`;
 
   return { username, displayName };
 }
 
-/**
- * Escapes special regex characters in a string.
- * Used for safe string replacement in prompts.
- */
-export function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
+export { escapeRegex };
 
 /**
  * Creates a regex pattern for matching a name with flexible boundaries.

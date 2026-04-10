@@ -14,6 +14,7 @@
 
 import {
   balanceTransactions,
+  type DrizzleClient,
   db,
   desc,
   eq,
@@ -120,7 +121,7 @@ export class WalletService {
    * @private
    */
   private static async applyBalanceChange(
-    tx: Transaction,
+    tx: Transaction | DrizzleClient,
     userId: string,
     delta: number,
     type: string,
@@ -146,6 +147,17 @@ export class WalletService {
 
     const currentBalance = Number(user.virtualBalance ?? 0);
     const newBalance = currentBalance + delta;
+
+    // Reject non-finite values to prevent balance corruption
+    if (
+      !Number.isFinite(delta) ||
+      !Number.isFinite(currentBalance) ||
+      !Number.isFinite(newBalance)
+    ) {
+      throw new Error(
+        `Invalid wallet mutation for ${userId}: delta=${delta}, balance=${currentBalance}, result=${newBalance}`
+      );
+    }
 
     // Prevent negative balance on debits
     if (delta < 0 && newBalance < 0) {
@@ -271,7 +283,7 @@ export class WalletService {
     type: string,
     description: string,
     relatedId?: string,
-    tx?: Transaction
+    tx?: Transaction | DrizzleClient
   ): Promise<void> {
     const delta = -amount;
 
@@ -309,7 +321,7 @@ export class WalletService {
     type: string,
     description: string,
     relatedId?: string,
-    tx?: Transaction
+    tx?: Transaction | DrizzleClient
   ): Promise<void> {
     if (tx) {
       await WalletService.applyBalanceChange(
@@ -368,8 +380,21 @@ export class WalletService {
         );
       }
 
+      // Reject non-finite PnL to prevent lifetime stats corruption
+      if (!Number.isFinite(pnl)) {
+        throw new Error(
+          `Invalid PnL for ${userId}: pnl=${pnl}, tradeType=${tradeType}`
+        );
+      }
+
       const previousLifetimePnL = Number(user.lifetimePnL);
       const newLifetimePnL = previousLifetimePnL + pnl;
+
+      if (!Number.isFinite(newLifetimePnL)) {
+        throw new Error(
+          `Invalid lifetimePnL for ${userId}: prev=${previousLifetimePnL}, delta=${pnl}`
+        );
+      }
 
       // Update lifetimePnL first within the transaction
       await tx

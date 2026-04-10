@@ -3,11 +3,14 @@ import { PostCardSkeleton, Skeleton } from '@/components/shared/Skeleton';
 
 export default function PostDetailLoading() {
   return (
-    <PageContainer noPadding className="flex min-h-screen flex-col">
+    <PageContainer
+      noPadding
+      className="flex min-h-dvh flex-col md:min-h-screen"
+    >
       {/* Desktop */}
       <div className="hidden flex-1 lg:flex">
         {/* Main Content */}
-        <div className="flex min-w-0 flex-1 flex-col border-[rgba(120,120,120,0.5)] border-r border-l">
+        <div className="flex min-w-0 flex-1 flex-col border-border border-r border-l">
           <div className="flex-1 overflow-y-auto">
             <div className="mx-auto w-full max-w-[700px]">
               {/* Post Detail */}

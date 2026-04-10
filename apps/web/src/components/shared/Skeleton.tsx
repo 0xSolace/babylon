@@ -308,17 +308,18 @@ export function ProfileHeaderSkeleton() {
  */
 export function LeaderboardItemSkeleton() {
   return (
-    <div className="p-3 sm:p-4">
+    <div className="px-4 py-1.5 xl:py-3">
       <div className="flex items-center gap-2 sm:gap-4">
-        <Skeleton className="h-8 w-8 shrink-0 rounded" />
-        <Skeleton className="h-10 w-10 shrink-0 rounded-full sm:h-12 sm:w-12" />
-        <div className="min-w-0 flex-1 space-y-2">
+        <Skeleton className="h-8 w-8 shrink-0 rounded-full" />
+        <Skeleton className="h-10 w-10 shrink-0 rounded-full" />
+        <div className="min-w-0 flex-1 space-y-1.5">
           <Skeleton className="h-4 w-24 max-w-full sm:w-32" />
-          <Skeleton className="h-3 w-20 max-w-full sm:w-24" />
+          <Skeleton className="h-3 w-20 max-w-full xl:hidden" />
+          <Skeleton className="hidden h-3 w-20 max-w-full xl:block" />
         </div>
-        <div className="shrink-0 space-y-2 text-right">
-          <Skeleton className="h-4 w-16 sm:h-5 sm:w-20" />
-          <Skeleton className="h-3 w-10 sm:w-12" />
+        <div className="hidden shrink-0 space-y-1.5 text-right xl:block">
+          <Skeleton className="h-5 w-20" />
+          <Skeleton className="h-3 w-12" />
         </div>
       </div>
     </div>
@@ -500,6 +501,47 @@ export function PageHeaderSkeleton() {
       <div className="flex flex-wrap gap-2">
         <Skeleton className="h-10 w-28 sm:w-32" />
         <Skeleton className="h-10 w-28 sm:w-32" />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Skeleton component for feed layout loading state.
+ *
+ * Displays a complete feed layout skeleton with sticky header tabs,
+ * feed content area, and widget sidebar. Used for root and feed pages.
+ *
+ * @returns Feed layout skeleton element
+ */
+export function FeedLayoutSkeleton() {
+  return (
+    <div className="relative flex flex-1">
+      {/* Feed column */}
+      <div className="flex min-w-0 flex-1 flex-col border-border lg:border-r lg:border-l xl:max-w-[700px] xl:flex-[0_1_700px]">
+        {/* Sticky header placeholder (FeedToggle) */}
+        <div className="sticky top-0 z-10 flex-shrink-0 bg-background shadow-sm">
+          <div className="flex w-full items-center border-border border-b">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="flex-1 py-3.5 text-center">
+                <Skeleton className="mx-auto h-4 w-16" />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Feed content */}
+        <div className="flex-1 bg-background">
+          <div className="w-full lg:mx-auto lg:max-w-[700px]">
+            <FeedSkeleton />
+          </div>
+        </div>
+      </div>
+
+      {/* Widget sidebar placeholder */}
+      <div className="hidden w-96 flex-none flex-col gap-8 px-4 py-6 xl:flex">
+        <WidgetPanelSkeleton />
+        <WidgetPanelSkeleton />
       </div>
     </div>
   );

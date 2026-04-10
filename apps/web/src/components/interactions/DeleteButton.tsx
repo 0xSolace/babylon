@@ -33,7 +33,7 @@ interface DeleteButtonProps {
 }
 
 const sizeClasses = {
-  sm: 'h-8 px-2 text-xs gap-1',
+  sm: 'text-xs gap-1',
   md: 'h-10 px-3 text-sm gap-1.5',
   lg: 'h-12 px-4 text-base gap-2',
 };
@@ -116,7 +116,7 @@ export function DeleteButton({
       {/* Confirmation Modal */}
       {showConfirmation && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50"
           onClick={() => setShowConfirmation(false)}
         >
           <div

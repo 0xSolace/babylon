@@ -5,16 +5,16 @@
  * @access Authenticated
  *
  * @description
- * Verifies an x402 payment and credits points to user's account. Checks
- * transaction hash and updates payment status. Credits points on success.
+ * Verifies an x402 payment and funds the user's trading balance. Checks
+ * transaction hash and updates payment status before crediting the wallet.
  *
  * @openapi
  * /api/points/purchase/verify-payment:
  *   post:
  *     tags:
  *       - Points
- *     summary: Verify payment and credit points
- *     description: Verifies on-chain payment and credits points to account
+ *     summary: Verify payment and fund trading balance
+ *     description: Verifies on-chain payment and funds trading balance
  *     security:
  *       - PrivyAuth: []
  *     requestBody:
@@ -46,7 +46,7 @@
  *                 description: Payment amount
  *     responses:
  *       200:
- *         description: Payment verified and points credited successfully
+ *         description: Payment verified and trading balance funded successfully
  *       400:
  *         description: Invalid payment or transaction
  *       401:
@@ -68,18 +68,16 @@
  * ```
  */
 
-import { X402Manager } from '@babylon/a2a';
-import { authenticate, PointsService } from '@babylon/api';
+import {
+  authenticate,
+  TradingBalanceFundingService,
+  withErrorHandling,
+} from '@babylon/api';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import { getPointsPurchaseX402Manager } from '@/lib/points-purchase-x402';
 import { trackServerEvent } from '@/lib/posthog/server';
-
-// Initialize x402 manager
-const x402Manager = new X402Manager({
-  rpcUrl: process.env.NEXT_PUBLIC_RPC_URL || 'https://sepolia.base.org',
-  paymentTimeout: 15 * 60 * 1000, // 15 minutes
-});
 
 interface VerifyPaymentBody {
   requestId: string;
@@ -89,13 +87,14 @@ interface VerifyPaymentBody {
   amount: string;
 }
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandling(async function POST(req: NextRequest) {
   const authUser = await authenticate(req);
   const userId = authUser.dbUserId!;
 
   const body: VerifyPaymentBody = await req.json();
   const { requestId, txHash, fromAddress, toAddress, amount } = body;
 
+  const x402Manager = await getPointsPurchaseX402Manager();
   const verificationResult = await x402Manager.verifyPayment({
     requestId,
     txHash,
@@ -106,54 +105,94 @@ export async function POST(req: NextRequest) {
     confirmed: true,
   });
 
-  logger.warn(
-    `Payment verification failed for request ${requestId}`,
-    { requestId, txHash, error: verificationResult.error },
-    'PointsPurchase'
-  );
+  if (!verificationResult.verified) {
+    logger.warn(
+      `Payment verification failed for request ${requestId}`,
+      { requestId, txHash, error: verificationResult.error },
+      'TradingBalanceFunding'
+    );
+    return NextResponse.json(
+      {
+        success: false,
+        error: verificationResult.error ?? 'Payment verification failed',
+      },
+      { status: 400 }
+    );
+  }
 
   const paymentRequest = await x402Manager.getPaymentRequest(requestId);
+  if (!paymentRequest?.metadata) {
+    // Payment verified on-chain but request data is missing — this is a
+    // server-side state inconsistency, not a client error. Use 500 so the
+    // client knows to retry rather than treating the request as permanently bad.
+    logger.error(
+      'Payment request or metadata missing after verification',
+      { requestId },
+      'TradingBalanceFunding'
+    );
+    return NextResponse.json(
+      { success: false, error: 'Payment request not found' },
+      { status: 500 }
+    );
+  }
 
-  const metadata = paymentRequest!.metadata;
-  const amountUSD = metadata!.amountUSD as number;
-
-  const result = await PointsService.purchasePoints(
+  const amountUSD = paymentRequest.metadata.amountUSD as number;
+  const result = await TradingBalanceFundingService.fundPurchase(
     userId,
     amountUSD,
     requestId,
     txHash
   );
 
-  logger.error(
-    'Failed to credit points after payment verification',
-    { userId, requestId, error: result.error },
-    'PointsPurchase'
-  );
+  if (result.error) {
+    logger.error(
+      'Failed to fund trading balance after payment verification',
+      { userId, requestId, error: result.error },
+      'TradingBalanceFunding'
+    );
+    return NextResponse.json(
+      {
+        success: false,
+        error: result.error ?? 'Failed to fund trading balance',
+      },
+      { status: 500 }
+    );
+  }
 
-  logger.info(
-    `Successfully credited ${result.pointsAwarded} points to user ${userId}`,
-    {
-      userId,
+  const actuallyFunded = !result.alreadyProcessed && result.balanceDelta > 0;
+  if (actuallyFunded) {
+    logger.info(
+      `Successfully funded ${result.balanceDelta} balance units to user ${userId}`,
+      {
+        userId,
+        requestId,
+        txHash,
+        balanceDelta: result.balanceDelta,
+        newBalance: result.newBalance,
+      },
+      'TradingBalanceFunding'
+    );
+
+    trackServerEvent(userId, 'trading_balance_purchase_completed', {
+      paymentProvider: 'crypto',
+      amountUSD,
+      balanceDelta: result.balanceDelta,
+      newBalance: result.newBalance,
       requestId,
       txHash,
-      pointsAwarded: result.pointsAwarded,
-      newTotal: result.newTotal,
-    },
-    'PointsPurchase'
-  );
-
-  trackServerEvent(userId, 'points_purchase_completed', {
-    amountUSD,
-    pointsAwarded: result.pointsAwarded,
-    newTotal: result.newTotal,
-    requestId,
-    txHash,
-  });
+    }).catch((err) => {
+      logger.warn(
+        'Failed to track trading_balance_purchase_completed',
+        { error: err },
+        'TradingBalanceFunding'
+      );
+    });
+  }
 
   return NextResponse.json({
     success: true,
-    pointsAwarded: result.pointsAwarded,
-    newTotal: result.newTotal,
+    balanceDelta: result.balanceDelta,
+    newBalance: result.newBalance,
     txHash,
   });
-}
+});

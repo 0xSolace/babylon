@@ -5,8 +5,12 @@ import {
   PredictionPricing,
 } from '@babylon/core/markets/prediction/client';
 import type { PerpPositionFromAPI, PredictionPosition } from '@babylon/shared';
-import { BABYLON_POINTS_SYMBOL, cn, type JsonValue } from '@babylon/shared';
-import { usePrivy } from '@privy-io/react-auth';
+import {
+  BABYLON_POINTS_SYMBOL,
+  cn,
+  formatDate,
+  type JsonValue,
+} from '@babylon/shared';
 import {
   AlertTriangle,
   BarChart3,
@@ -23,6 +27,7 @@ import { toast } from 'sonner';
 import { formatPrice } from '@/app/markets/_lib/formatters';
 import { FollowButton } from '@/components/interactions';
 import { useAuth } from '@/hooks/useAuth';
+import { usePredictionTrading } from '@/hooks/usePredictionTrading';
 import { usePerpMarketsStore } from '@/stores/perpMarketsStore';
 
 /**
@@ -117,6 +122,9 @@ interface PerpMarket {
   ticker: string;
   name: string;
   currentPrice: number;
+  bidPrice?: number;
+  askPrice?: number;
+  spreadBps?: number;
   fundingRate: {
     rate: number;
     nextFundingTime: string;
@@ -131,8 +139,12 @@ interface PerpMarket {
 interface PredictionMarket {
   id: number | string;
   text: string;
+  status?: 'active' | 'resolved' | 'cancelled';
+  resolvedOutcome?: boolean;
   yesShares?: number;
   noShares?: number;
+  yesProbability?: number;
+  noProbability?: number;
   resolutionDate?: string;
 }
 
@@ -144,8 +156,8 @@ export function PositionDetailModal({
   userId,
   onSuccess,
 }: PositionDetailModalProps) {
-  const { user, authenticated, login } = useAuth();
-  const { getAccessToken } = usePrivy();
+  const { getAccessToken, user, authenticated, login } = useAuth();
+  const { buyPrediction } = usePredictionTrading();
   const [activeTab, setActiveTab] = useState<'details' | 'trade'>('details');
 
   // Trading state
@@ -264,44 +276,29 @@ export function PositionDetailModal({
 
     setLoading(true);
 
-    const token = await getAccessToken();
-    if (!token) {
-      toast.error('Authentication required. Please log in.');
-      setLoading(false);
-      return;
-    }
-
     try {
-      const response = await fetch(
-        `/api/markets/predictions/${predictionMarket.id}/buy`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            side,
-            amount: amountNum,
-          }),
-        }
-      );
+      const result = await buyPrediction({
+        marketId: String(predictionMarket.id),
+        side: side.toUpperCase() as 'YES' | 'NO',
+        amount: amountNum,
+      });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        toast.error(formatErrorMessage(errorData, 'Failed to buy shares'));
-        return;
-      }
-
-      toast.success(`Bought ${side.toUpperCase()} shares!`);
+      toast.success(`Bought ${side.toUpperCase()} shares!`, {
+        description: `${result.shares.toFixed(2)} shares at ${formatPrice(result.avgPrice)}`,
+      });
       onClose();
       onSuccess?.();
+    } catch (error) {
+      toast.error(
+        formatErrorMessage(
+          error instanceof Error ? { message: error.message } : {},
+          'Failed to buy shares'
+        )
+      );
     } finally {
       setLoading(false);
     }
   };
-
-  if (!isOpen || !data) return null;
 
   const formatPoints = (points: number) => {
     return points.toLocaleString('en-US', {
@@ -311,14 +308,6 @@ export function PositionDetailModal({
 
   const formatPercent = (value: number) => {
     return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
   };
 
   // Calculate prediction trade preview
@@ -337,6 +326,12 @@ export function PositionDetailModal({
   };
 
   const predictionCalc = getPredictionCalculation();
+  const legacyPredictionCalc = predictionCalc;
+  const predictionMarketClosed = Boolean(
+    predictionMarket &&
+      (predictionMarket.status !== 'active' ||
+        predictionMarket.resolvedOutcome !== undefined)
+  );
   const expectedPayout = predictionCalc
     ? calculateExpectedPayout(
         predictionCalc.sharesBought,
@@ -345,32 +340,23 @@ export function PositionDetailModal({
     : 0;
   const expectedProfit = expectedPayout - (parseFloat(amount) || 0);
 
-  // Calculate perp trade preview
+  // Perp trade tab modifies an existing position, so a fresh-open preview
+  // would be misleading here.
   const sizeNum = parseFloat(size) || 0;
-  const marginRequired = perpMarket ? sizeNum / leverage : 0;
-  const positionValue = sizeNum * leverage;
-  const liquidationPrice =
-    perpMarket && type === 'perp' && 'currentPrice' in data
-      ? side === 'long'
-        ? perpMarket.currentPrice * (1 - 0.9 / leverage)
-        : perpMarket.currentPrice * (1 + 0.9 / leverage)
-      : 0;
-  const liquidationDistance =
-    perpMarket && liquidationPrice > 0
-      ? side === 'long'
-        ? ((perpMarket.currentPrice - liquidationPrice) /
-            perpMarket.currentPrice) *
-          100
-        : ((liquidationPrice - perpMarket.currentPrice) /
-            perpMarket.currentPrice) *
-          100
-      : 0;
+
+  if (!isOpen || !data) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-border bg-background shadow-xl">
+    <div
+      className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-0 backdrop-blur-sm md:p-4"
+      onClick={onClose}
+    >
+      <div
+        className="flex h-full w-full flex-col bg-background md:h-auto md:max-h-[90vh] md:w-auto md:min-w-[480px] md:max-w-2xl md:rounded-lg md:border md:border-border md:shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
-        <div className="sticky top-0 flex items-center justify-between border-border border-b bg-background p-4">
+        <div className="flex shrink-0 items-start justify-between border-border border-b bg-background p-4">
           <div className="flex items-center gap-3">
             <h2 className="font-bold text-foreground text-xl">
               {type === 'prediction' && 'Prediction'}
@@ -387,7 +373,7 @@ export function PositionDetailModal({
           </div>
           <button
             onClick={onClose}
-            className="rounded-full p-1 transition-colors hover:bg-muted"
+            className="rounded-full p-2 transition-colors hover:bg-muted"
             aria-label="Close"
           >
             <X className="h-5 w-5" />
@@ -431,7 +417,7 @@ export function PositionDetailModal({
         </div>
 
         {/* Content */}
-        <div className="space-y-6 p-4">
+        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto p-4">
           {activeTab === 'details' && (
             <>
               {/* Prediction Position Details */}
@@ -655,35 +641,37 @@ export function PositionDetailModal({
                     <div className="rounded bg-green-600/15 p-3">
                       <div className="mb-1 text-green-600 text-xs">YES</div>
                       <div className="font-bold text-2xl text-green-600">
-                        {(() => {
-                          const totalShares =
-                            (predictionMarket.yesShares || 0) +
-                            (predictionMarket.noShares || 0);
-                          return totalShares === 0
-                            ? '50.0'
-                            : (
-                                ((predictionMarket.yesShares || 0) /
-                                  totalShares) *
-                                100
-                              ).toFixed(1);
-                        })()}%
+                        {(
+                          (predictionMarket.yesProbability ??
+                            (() => {
+                              const totalShares =
+                                (predictionMarket.yesShares || 0) +
+                                (predictionMarket.noShares || 0);
+                              return totalShares === 0
+                                ? 0.5
+                                : (predictionMarket.yesShares || 0) /
+                                    totalShares;
+                            })()) * 100
+                        ).toFixed(1)}
+                        %
                       </div>
                     </div>
                     <div className="rounded bg-red-600/15 p-3">
                       <div className="mb-1 text-red-600 text-xs">NO</div>
                       <div className="font-bold text-2xl text-red-600">
-                        {(() => {
-                          const totalShares =
-                            (predictionMarket.yesShares || 0) +
-                            (predictionMarket.noShares || 0);
-                          return totalShares === 0
-                            ? '50.0'
-                            : (
-                                ((predictionMarket.noShares || 0) /
-                                  totalShares) *
-                                100
-                              ).toFixed(1);
-                        })()}%
+                        {(
+                          (predictionMarket.noProbability ??
+                            (() => {
+                              const totalShares =
+                                (predictionMarket.yesShares || 0) +
+                                (predictionMarket.noShares || 0);
+                              return totalShares === 0
+                                ? 0.5
+                                : (predictionMarket.noShares || 0) /
+                                    totalShares;
+                            })()) * 100
+                        ).toFixed(1)}
+                        %
                       </div>
                     </div>
                   </div>
@@ -691,11 +679,14 @@ export function PositionDetailModal({
                   <div className="flex gap-2">
                     <button
                       onClick={() => setSide('yes')}
+                      disabled={predictionMarketClosed}
                       className={cn(
                         'flex flex-1 items-center justify-center gap-2 rounded py-3 font-bold transition-all',
                         side === 'yes'
                           ? 'bg-green-600 text-primary-foreground'
-                          : 'bg-muted text-muted-foreground hover:bg-muted'
+                          : 'bg-muted text-muted-foreground hover:bg-muted',
+                        predictionMarketClosed &&
+                          'cursor-not-allowed opacity-50 hover:bg-muted'
                       )}
                     >
                       <CheckCircle size={18} />
@@ -703,11 +694,14 @@ export function PositionDetailModal({
                     </button>
                     <button
                       onClick={() => setSide('no')}
+                      disabled={predictionMarketClosed}
                       className={cn(
                         'flex flex-1 items-center justify-center gap-2 rounded py-3 font-bold transition-all',
                         side === 'no'
                           ? 'bg-red-600 text-primary-foreground'
-                          : 'bg-muted text-muted-foreground hover:bg-muted'
+                          : 'bg-muted text-muted-foreground hover:bg-muted',
+                        predictionMarketClosed &&
+                          'cursor-not-allowed opacity-50 hover:bg-muted'
                       )}
                     >
                       <XCircle size={18} />
@@ -725,19 +719,31 @@ export function PositionDetailModal({
                       onChange={(e) => setAmount(e.target.value)}
                       min="1"
                       step="1"
-                      className="w-full rounded bg-muted/50 px-4 py-3 font-medium text-base text-foreground focus:bg-muted focus:outline-none focus:ring-2 focus:ring-[#0066FF]/30"
+                      disabled={predictionMarketClosed}
+                      className={cn(
+                        'w-full rounded bg-muted/50 px-4 py-3 font-medium text-base text-foreground focus:bg-muted focus:outline-none focus:ring-2 focus:ring-[#0066FF]/30',
+                        predictionMarketClosed &&
+                          'cursor-not-allowed opacity-50'
+                      )}
                       placeholder={`Min: ${BABYLON_POINTS_SYMBOL}1`}
                     />
                   </div>
 
-                  {predictionCalc && (
+                  {predictionMarketClosed && (
+                    <div className="rounded border border-amber-500/30 bg-amber-500/10 p-4 text-amber-500 text-sm">
+                      This market is closed. New trades are disabled here. Use
+                      your positions view to review any settled exposure.
+                    </div>
+                  )}
+
+                  {legacyPredictionCalc && (
                     <div className="space-y-2 rounded bg-muted/20 p-4">
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">
                           Shares Received
                         </span>
                         <span className="font-bold text-foreground">
-                          {predictionCalc.sharesBought.toFixed(2)}
+                          {legacyPredictionCalc.sharesBought.toFixed(2)}
                         </span>
                       </div>
                       <div className="flex justify-between text-sm">
@@ -765,20 +771,29 @@ export function PositionDetailModal({
                       </div>
                     </div>
                   )}
-
                   <button
                     onClick={handlePredictionTrade}
-                    disabled={loading || parseFloat(amount) < 1}
+                    disabled={
+                      loading ||
+                      parseFloat(amount) < 1 ||
+                      predictionMarketClosed
+                    }
                     className={cn(
                       'w-full rounded py-3 font-bold text-foreground transition-all',
                       side === 'yes'
                         ? 'bg-green-600 hover:bg-green-700'
                         : 'bg-red-600 hover:bg-red-700',
-                      (loading || parseFloat(amount) < 1) &&
+                      (loading ||
+                        parseFloat(amount) < 1 ||
+                        predictionMarketClosed) &&
                         'cursor-not-allowed opacity-50'
                     )}
                   >
-                    {loading ? 'Placing Bet...' : `BUY ${side.toUpperCase()}`}
+                    {loading
+                      ? 'Placing Bet...'
+                      : predictionMarketClosed
+                        ? 'MARKET CLOSED'
+                        : `BUY ${side.toUpperCase()}`}
                   </button>
                 </>
               )}
@@ -861,42 +876,11 @@ export function PositionDetailModal({
                     </div>
                   </div>
 
-                  <div className="rounded bg-muted/20 p-4">
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                      <span className="text-muted-foreground">
-                        Margin Required
-                      </span>
-                      <span className="text-right font-bold text-foreground">
-                        {formatPrice(marginRequired)}
-                      </span>
-                      <span className="text-muted-foreground">
-                        Position Value
-                      </span>
-                      <span className="text-right font-bold text-foreground">
-                        {formatPrice(positionValue)}
-                      </span>
-                      <span className="text-muted-foreground">
-                        Liquidation Price
-                      </span>
-                      <span className="text-right font-bold text-red-600">
-                        {formatPrice(liquidationPrice)}
-                      </span>
-                      <span className="text-muted-foreground">
-                        Distance to Liq
-                      </span>
-                      <span
-                        className={cn(
-                          'text-right font-medium',
-                          liquidationDistance > 5
-                            ? 'text-green-600'
-                            : liquidationDistance > 2
-                              ? 'text-yellow-600'
-                              : 'text-red-600'
-                        )}
-                      >
-                        {liquidationDistance.toFixed(2)}%
-                      </span>
-                    </div>
+                  <div className="rounded border border-amber-500/30 bg-amber-500/10 p-4 text-amber-500 text-sm">
+                    This trade modifies your existing position. Canonical
+                    preview is intentionally hidden in this surface for
+                    rebalance flows so we do not show misleading pre-submit
+                    numbers.
                   </div>
 
                   {leverage > 50 && (
@@ -937,10 +921,10 @@ export function PositionDetailModal({
         </div>
 
         {/* Footer */}
-        <div className="sticky bottom-0 border-border border-t bg-background p-4">
+        <div className="shrink-0 border-border border-t bg-background p-4">
           <button
             onClick={onClose}
-            className="w-full rounded-lg bg-muted px-4 py-2 font-medium text-foreground transition-colors hover:bg-muted/80"
+            className="w-full rounded-lg bg-muted px-4 py-3 font-medium text-foreground transition-colors hover:bg-muted/80"
           >
             Close
           </button>

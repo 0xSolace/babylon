@@ -46,15 +46,24 @@
  * ```
  */
 
+import {
+  addPublicReadHeaders,
+  publicRateLimit,
+  withErrorHandling,
+} from '@babylon/api';
 import { PredictionPricing } from '@babylon/core/markets/prediction';
 import { db } from '@babylon/db';
+import { toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
-export async function GET(
-  _req: NextRequest,
+export const GET = withErrorHandling(async function GET(
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { error, rateLimitInfo } = await publicRateLimit(request);
+  if (error) return error;
+
   const { id } = await params;
   const questionNumber = Number.parseInt(id);
 
@@ -171,10 +180,10 @@ export async function GET(
       shares: Number(p.shares),
       avgPrice: Number(p.avgPrice),
       value: Number(p.shares) * Number(p.avgPrice),
-      timestamp: p.createdAt.toISOString(),
+      timestamp: toISO(p.createdAt),
     }));
 
-  return NextResponse.json({
+  const res = NextResponse.json({
     questionId: questionNumber,
     questionText: question.text,
     status: question.status,
@@ -223,4 +232,6 @@ export async function GET(
     // clueStrength: undefined,  ❌ Not included
     // pointsToward: undefined  ❌ Not included
   });
-}
+  if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
+  return res;
+});

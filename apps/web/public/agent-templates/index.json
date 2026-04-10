@@ -1,15 +1,9 @@
 {
   "templates": [
-    "degen",
-    "goody-twoshoes",
-    "scammer",
-    "super-predictor",
-    "social-butterfly",
     "trader",
-    "infosec",
-    "perps-trader",
+    "degen",
     "researcher",
-    "ass-kisser",
-    "information-trader"
+    "social-butterfly",
+    "super-predictor"
   ]
 }

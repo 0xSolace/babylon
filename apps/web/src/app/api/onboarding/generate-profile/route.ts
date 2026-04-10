@@ -39,9 +39,9 @@
  * ```
  */
 
-import { successResponse } from '@babylon/api';
+import { successResponse, withErrorHandling } from '@babylon/api';
 import { BabylonLLMClient } from '@babylon/engine';
-import { logger } from '@babylon/shared';
+import { logger, sanitizeOnboardingUsername } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import {
   adjectives,
@@ -63,7 +63,7 @@ interface ProfileData {
  * GET /api/onboarding/generate-profile
  * Generate AI profile data for onboarding
  */
-export async function GET(_request: NextRequest) {
+export const GET = withErrorHandling(async function GET(_request: NextRequest) {
   // Use game tick LLM client
   const llmClient = BabylonLLMClient.forGameTick();
 
@@ -152,11 +152,7 @@ Return your response as XML in this exact format:
       ? rawProfileData.response
       : (rawProfileData as ProfileData);
 
-  profileData.username = profileData.username
-    .replace(/^@/, '')
-    .replace(/[^a-zA-Z0-9_]/g, '_')
-    .toLowerCase()
-    .slice(0, 20);
+  profileData.username = sanitizeOnboardingUsername(profileData.username);
 
   logger.info(
     'Generated AI profile',
@@ -165,4 +161,4 @@ Return your response as XML in this exact format:
   );
 
   return successResponse(profileData);
-}
+});

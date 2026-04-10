@@ -29,6 +29,9 @@ const HARDHAT_DEV_ADDRESS = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
  * Dev admin user ID - consistent across sessions
  */
 const DEV_ADMIN_USER_ID = 'dev-admin-local';
+export const DEV_USER_ID_COOKIE_NAME = 'babylon-dev-user-id';
+export const DEV_ADMIN_TOKEN_COOKIE_NAME = 'babylon-dev-admin-token';
+const DEV_USER_BEARER_PREFIX = 'dev-user:';
 
 /**
  * Development credentials structure
@@ -48,6 +51,21 @@ export interface DevCredentials {
   cronSecret: string;
   /** Dev agent secret (separate from cron) */
   agentSecret: string;
+}
+
+export function createDevUserBearerToken(userId: string): string {
+  return `${DEV_USER_BEARER_PREFIX}${userId}`;
+}
+
+export function extractDevUserIdFromBearerToken(
+  token: string | null | undefined
+): string | null {
+  if (!token || !token.startsWith(DEV_USER_BEARER_PREFIX)) {
+    return null;
+  }
+
+  const userId = token.slice(DEV_USER_BEARER_PREFIX.length).trim();
+  return userId.length > 0 ? userId : null;
 }
 
 /**

@@ -1,9 +1,10 @@
 'use client';
 
 import type { FeedPost } from '@babylon/shared';
+import { useRouter } from 'next/navigation';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { toFeedPostCardData } from '@/app/feed/utils/postMappers';
 import { ArticleCard } from '@/components/articles/ArticleCard';
-import type { PostCardProps } from '@/components/posts/PostCard';
 import { PostCard } from '@/components/posts/PostCard';
 import { InviteFriendsBanner } from '@/components/shared/InviteFriendsBanner';
 import { useAuthStore } from '@/stores/authStore';
@@ -14,6 +15,7 @@ interface PostListProps {
   hasMore: boolean;
   loadingMore: boolean;
   onLoadMore: () => void;
+  density?: 'default' | 'compact';
 }
 
 /**
@@ -31,7 +33,9 @@ export const PostList = memo(function PostList({
   hasMore,
   loadingMore,
   onLoadMore,
+  density = 'default',
 }: PostListProps) {
+  const router = useRouter();
   const { user } = useAuthStore();
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const [bannerDismissed, setBannerDismissed] = useState(false);
@@ -91,56 +95,28 @@ export const PostList = memo(function PostList({
         const showBannerAfterThisPost =
           !bannerDismissed && i === bannerInterval.current - 1;
 
-        const postData = {
-          id: post.id,
-          type: ('type' in post ? post.type : undefined) || undefined,
-          content: post.content,
-          articleTitle:
-            ('articleTitle' in post ? post.articleTitle : null) || null,
-          byline: ('byline' in post ? post.byline : null) || null,
-          biasScore: ('biasScore' in post ? post.biasScore : null) ?? null,
-          category: ('category' in post ? post.category : null) || null,
-          authorId,
-          authorName,
-          authorUsername:
-            ('authorUsername' in post ? post.authorUsername : null) || null,
-          authorProfileImageUrl:
-            'authorProfileImageUrl' in post ? post.authorProfileImageUrl : null,
-          timestamp: post.timestamp,
-          likeCount:
-            ('likeCount' in post ? (post.likeCount as number) : 0) || 0,
-          commentCount:
-            ('commentCount' in post ? (post.commentCount as number) : 0) || 0,
-          shareCount:
-            ('shareCount' in post ? (post.shareCount as number) : 0) || 0,
-          isLiked:
-            ('isLiked' in post ? (post.isLiked as boolean) : false) || false,
-          isShared:
-            ('isShared' in post ? (post.isShared as boolean) : false) || false,
-          isRepost:
-            ('isRepost' in post ? (post.isRepost as boolean) : false) || false,
-          isQuote:
-            ('isQuote' in post ? (post.isQuote as boolean) : false) || false,
-          quoteComment:
-            ('quoteComment' in post
-              ? (post.quoteComment as string | null)
-              : null) || null,
-          originalPostId:
-            ('originalPostId' in post
-              ? (post.originalPostId as string | null)
-              : null) || null,
-          originalPost:
-            ('originalPost' in post
-              ? (post.originalPost as PostCardProps['post']['originalPost'])
-              : null) || null,
-        };
+        const postData = toFeedPostCardData(post, authorName);
 
         return (
           <div key={`post-wrapper-${post.id}-${i}`}>
             {postData.type === 'article' ? (
-              <ArticleCard post={postData} />
+              <ArticleCard post={postData} density={density} />
             ) : (
-              <PostCard post={postData} />
+              <PostCard
+                post={postData}
+                density={density}
+                showCommentInputBar={false}
+                onCommentClick={() => {
+                  // For simple reposts, comments live on the original post
+                  const postId =
+                    postData.isRepost &&
+                    !postData.isQuote &&
+                    postData.originalPostId != null
+                      ? postData.originalPostId
+                      : post.id;
+                  router.push(`/post/${postId}`);
+                }}
+              />
             )}
             {showBannerAfterThisPost && (
               <InviteFriendsBanner

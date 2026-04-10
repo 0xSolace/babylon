@@ -40,7 +40,7 @@
  *           Location:
  *             schema:
  *               type: string
- *               example: /rewards?success=twitter_linked&points=100
+ *               example: /rewards?success=twitter_linked&reputation=100
  *       400:
  *         description: Invalid parameters or state expired
  *
@@ -50,22 +50,24 @@
  * // /api/auth/twitter/callback?code=abc123&state=user-id|timestamp|nonce
  *
  * // On success, user redirected to:
- * // /rewards?success=twitter_linked&points=100
+ * // /rewards?success=twitter_linked&reputation=100
  * ```
  *
  * @see {@link /api/auth/twitter/initiate} OAuth initiation
  * @see {@link /lib/services/points-service} Points service
  */
 
-import { PointsService, withErrorHandling } from '@babylon/api';
+import { ReputationService, withErrorHandling } from '@babylon/api';
 import { db } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { getWaitlistBaseUrl, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
-// Configurable redirect destination after OAuth completion
-const OAUTH_REDIRECT_PATH = process.env.OAUTH_REDIRECT_PATH ?? '/rewards';
+// Configurable redirect destination after OAuth completion.
+// Treat empty string as "unset" to avoid redirecting to `/?success=...`.
+const OAUTH_REDIRECT_PATH =
+  process.env.OAUTH_REDIRECT_PATH?.trim() || '/rewards';
 
 const TwitterCallbackQuerySchema = z.object({
   code: z.string().optional(),
@@ -79,8 +81,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     Object.fromEntries(searchParams)
   );
 
-  // Use the app URL as base for all redirects
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
+  // Use the waitlist URL as base for all redirects
+  const baseUrl = getWaitlistBaseUrl();
 
   if (!parsed.success) {
     return NextResponse.redirect(
@@ -177,30 +179,12 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     },
   });
 
-  // Debug: Check all records without filters
-  const allStates = await db.oAuthState.findMany({
-    where: {
-      userId,
-    },
-    select: {
-      state: true,
-      returnPath: true,
-      expiresAt: true,
-      createdAt: true,
-    },
-    orderBy: {
-      createdAt: 'desc',
-    },
-    take: 3,
-  });
-
   if (!oauthState || !oauthState.codeVerifier) {
     logger.warn(
       'Twitter callback missing or expired PKCE state',
       {
         state,
         userId,
-        allStates,
         found: !!oauthState,
       },
       'TwitterCallback'
@@ -223,7 +207,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     body: new URLSearchParams({
       code,
       grant_type: 'authorization_code',
-      redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/twitter/callback`,
+      redirect_uri: `${getWaitlistBaseUrl()}/api/auth/twitter/callback`,
       code_verifier: oauthState.codeVerifier,
     }),
   });
@@ -328,14 +312,14 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   });
 
   // Award points if this is the first time linking Twitter
-  const pointsResult = await PointsService.awardTwitterLink(
+  const pointsResult = await ReputationService.awardTwitterLink(
     userId,
     twitterUsername
   );
 
   // Check if this qualifies a referral (award bonus to referrer)
   if (pointsResult.success) {
-    await PointsService.checkAndQualifyReferral(userId).catch((error) => {
+    await ReputationService.checkAndQualifyReferral(userId).catch((error) => {
       // Log error but don't fail the request if qualification check fails
       logger.warn(
         `Failed to check and qualify referral for user ${userId}`,
@@ -347,14 +331,18 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   logger.info(
     'Twitter account linked successfully',
-    { userId, twitterUsername, pointsAwarded: pointsResult.pointsAwarded },
+    {
+      userId,
+      twitterUsername,
+      reputationAwarded: pointsResult.reputationAwarded,
+    },
     'TwitterCallback'
   );
 
   // Redirect back to configured destination with success
   return NextResponse.redirect(
     new URL(
-      `${OAUTH_REDIRECT_PATH}?success=twitter_linked&points=${pointsResult.pointsAwarded}`,
+      `${OAUTH_REDIRECT_PATH}?success=twitter_linked&reputation=${pointsResult.reputationAwarded}`,
       baseUrl
     )
   );

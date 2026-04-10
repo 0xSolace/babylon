@@ -8,7 +8,8 @@ import {
 } from '@babylon/db';
 import { generateSnowflakeId } from '@babylon/shared';
 import type { InferInsertModel } from 'drizzle-orm';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, sql } from 'drizzle-orm';
+import { PredictionPricing } from '../../pricing';
 import type {
   PredictionDbPort,
   PredictionMarketRecord,
@@ -24,6 +25,7 @@ type NewHistory = InferInsertModel<typeof predictionPriceHistories>;
 
 const toSideBool = (side: PredictionSide) => side === 'yes';
 const fromSideBool = (side: boolean): PredictionSide => (side ? 'yes' : 'no');
+const MAX_SAFE_QUESTION_NUMBER = 2_147_483_647;
 
 type DbClient = typeof db | Transaction;
 
@@ -39,10 +41,6 @@ const mapMarket = (m: typeof markets.$inferSelect): PredictionMarketRecord => {
     endDate: m.endDate,
     resolved: m.resolved,
     resolution: m.resolution,
-    onChainMarketId: m.onChainMarketId,
-    onChainResolved: m.onChainResolved,
-    oracleCommitTxHash: extra.oracleCommitTxHash ?? undefined,
-    oracleRevealTxHash: extra.oracleRevealTxHash ?? undefined,
     resolutionProofUrl: extra.resolutionProofUrl ?? undefined,
     resolutionDescription: extra.resolutionDescription ?? undefined,
     createdAt: m.createdAt,
@@ -88,8 +86,38 @@ export class PredictionDbAdapter implements PredictionDbPort {
     return ms.map(mapMarket);
   }
 
-  async listMarkets(): Promise<PredictionMarketRecord[]> {
-    const rows = await this.client.select().from(markets);
+  /**
+   * WHY resolved=false filter: Both count and list must agree on the same
+   * predicate so pagination metadata (total) matches the returned rows.
+   * Resolved/cancelled markets are excluded from the trading list — they're
+   * historical, not actionable.
+   */
+  async countUnresolvedMarkets(): Promise<number> {
+    const [row] = await this.client
+      .select({ c: count() })
+      .from(markets)
+      .where(eq(markets.resolved, false));
+    return Number(row?.c ?? 0);
+  }
+
+  /**
+   * WHY orderBy createdAt DESC: Newest markets first — matches user expectation
+   * that recent questions appear at the top. Provides stable pagination when
+   * new markets aren't being created during the request.
+   */
+  async listMarkets(options?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<PredictionMarketRecord[]> {
+    const base = this.client
+      .select()
+      .from(markets)
+      .where(eq(markets.resolved, false))
+      .orderBy(desc(markets.createdAt));
+    const rows =
+      options?.limit != null
+        ? await base.limit(options.limit).offset(options.offset ?? 0)
+        : await base;
     return rows.map(mapMarket);
   }
 
@@ -126,8 +154,15 @@ export class PredictionDbAdapter implements PredictionDbPort {
       };
     }
 
-    const num = Number.parseInt(idOrNumber, 10);
-    if (Number.isNaN(num)) return null;
+    if (!/^\d+$/.test(idOrNumber)) return null;
+    const num = Number(idOrNumber);
+    if (
+      !Number.isSafeInteger(num) ||
+      num < 0 ||
+      num > MAX_SAFE_QUESTION_NUMBER
+    ) {
+      return null;
+    }
     const qs = await this.client
       .select()
       .from(questions)
@@ -150,28 +185,32 @@ export class PredictionDbAdapter implements PredictionDbPort {
   async createMarketFromQuestion(
     question: QuestionRecord,
     initialLiquidity: number,
-    options?: { description?: string | null }
+    options?: {
+      description?: string | null;
+      gameId?: string | null;
+      dayNumber?: number | null;
+      initialYesProbability?: number;
+    }
   ): Promise<PredictionMarketRecord> {
     const now = new Date();
-    const liquidityHalf = initialLiquidity / 2;
+    const { yesShares, noShares } = PredictionPricing.initializeMarket(
+      initialLiquidity,
+      options?.initialYesProbability ?? 0.5
+    );
     const data: NewMarket = {
       id: question.id,
       question: question.text,
       description: options?.description ?? null,
-      gameId: 'continuous',
-      dayNumber: null,
-      yesShares: String(liquidityHalf),
-      noShares: String(liquidityHalf),
+      gameId: options?.gameId ?? 'continuous',
+      dayNumber: options?.dayNumber ?? null,
+      yesShares: String(yesShares),
+      noShares: String(noShares),
       liquidity: String(initialLiquidity),
       resolved: false,
       resolution: null,
       endDate: question.resolutionDate,
       createdAt: now,
       updatedAt: now,
-      onChainMarketId: null,
-      onChainResolutionTxHash: null,
-      onChainResolved: false,
-      oracleAddress: null,
       resolutionProofUrl: null,
       resolutionDescription: null,
     };
@@ -203,8 +242,6 @@ export class PredictionDbAdapter implements PredictionDbPort {
         | 'liquidity'
         | 'resolved'
         | 'resolution'
-        | 'onChainMarketId'
-        | 'onChainResolved'
         | 'resolutionProofUrl'
         | 'resolutionDescription'
       >
@@ -221,8 +258,6 @@ export class PredictionDbAdapter implements PredictionDbPort {
           updates.liquidity != null ? String(updates.liquidity) : undefined,
         resolved: updates.resolved ?? undefined,
         resolution: updates.resolution ?? undefined,
-        onChainMarketId: updates.onChainMarketId ?? undefined,
-        onChainResolved: updates.onChainResolved ?? undefined,
         resolutionProofUrl: updates.resolutionProofUrl ?? undefined,
         resolutionDescription: updates.resolutionDescription ?? undefined,
         updatedAt: new Date(),
@@ -248,6 +283,14 @@ export class PredictionDbAdapter implements PredictionDbPort {
           eq(positions.marketId, marketId),
           eq(positions.side, toSideBool(side))
         )
+      )
+      // If duplicates exist, prefer the active/most-recent position.
+      .orderBy(
+        desc(
+          sql<number>`case when ${positions.status} = 'active' then 1 else 0 end`
+        ),
+        desc(positions.updatedAt),
+        desc(positions.createdAt)
       )
       .limit(1);
     return p ? mapPosition(p) : null;
@@ -283,6 +326,7 @@ export class PredictionDbAdapter implements PredictionDbPort {
         set: {
           shares: row.shares,
           avgPrice: row.avgPrice,
+          amount: row.amount,
           pnl: row.pnl,
           outcome: row.outcome,
           resolvedAt: row.resolvedAt,

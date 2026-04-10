@@ -2,14 +2,10 @@
 
 import type { UserPredictionPosition } from '@babylon/shared';
 import { cn, formatCurrency, logger } from '@babylon/shared';
-import { usePrivy } from '@privy-io/react-auth';
-import { CheckCircle, XCircle } from 'lucide-react';
+import { Bot, CheckCircle, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import type {
-  ApiErrorResponse,
-  SellSharesSuccessResponse,
-} from '@/types/markets';
+import { usePredictionTrading } from '@/hooks/usePredictionTrading';
 import {
   type SellPredictionDetails,
   TradeConfirmationDialog,
@@ -49,14 +45,19 @@ type PredictionPosition = UserPredictionPosition;
 interface PredictionPositionsListProps {
   positions: PredictionPosition[];
   onPositionSold?: () => void;
+  onPositionClick?: (marketId: string) => void;
+  density?: 'default' | 'compact';
 }
 
 export function PredictionPositionsList({
   positions,
   onPositionSold,
+  onPositionClick,
+  density = 'default',
 }: PredictionPositionsListProps) {
-  const { getAccessToken } = usePrivy();
-  const [sellingId, setSellingId] = useState<string | null>(null);
+  const { loading, sellPrediction } = usePredictionTrading();
+  const compact = density === 'compact';
+  const [submittingId, setSubmittingId] = useState<string | null>(null);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [pendingSell, setPendingSell] = useState<{
     position: PredictionPosition;
@@ -84,49 +85,21 @@ export function PredictionPositionsList({
     if (!pendingSell) return;
 
     const position = pendingSell.position;
-    setSellingId(position.id);
+    setSubmittingId(position.id);
     setConfirmDialogOpen(false);
 
-    const token = await getAccessToken();
-    if (!token) {
-      toast.error('Authentication required. Please log in.');
-      setSellingId(null);
-      setPendingSell(null);
-      return;
-    }
-
     try {
-      const response = await fetch(
-        `/api/markets/predictions/${position.marketId}/sell`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            shares: position.shares,
-            positionId: position.id,
-          }),
-        }
-      );
+      const result = await sellPrediction({
+        marketId: position.marketId,
+        side: position.side,
+        shares: position.shares,
+        positionId: position.id,
+      });
 
-      if (!response.ok) {
-        const errorData: ApiErrorResponse = await response.json();
-        const errorMessage =
-          typeof errorData.error === 'object'
-            ? (errorData.error.message ?? 'Failed to sell shares')
-            : (errorData.error ?? errorData.message ?? 'Failed to sell shares');
-        toast.error(errorMessage);
-        return;
-      }
-
-      const data: SellSharesSuccessResponse = await response.json();
-      const pnl = data.pnl;
-      const pnlSign = pnl >= 0 ? '+' : '-';
+      const pnlSign = result.pnl >= 0 ? '+' : '-';
       toast.success('Shares sold!', {
         description: `Sold ${position.shares.toFixed(2)} ${position.side} shares for ${pnlSign}${formatCurrency(
-          Math.abs(pnl),
+          Math.abs(result.pnl),
           { useThousandsSeparator: true }
         )} PnL`,
       });
@@ -142,7 +115,7 @@ export function PredictionPositionsList({
       );
       toast.error(message);
     } finally {
-      setSellingId(null);
+      setSubmittingId(null);
       setPendingSell(null);
     }
   };
@@ -153,15 +126,22 @@ export function PredictionPositionsList({
 
   if (positions.length === 0) {
     return (
-      <div className="py-8 text-center text-muted-foreground">
+      <div
+        className={cn(
+          'text-center text-muted-foreground',
+          compact ? 'py-6' : 'py-8'
+        )}
+      >
         <p>No prediction positions</p>
-        <p className="mt-1 text-sm">Buy YES or NO shares to start betting</p>
+        <p className={cn(compact ? 'mt-1 text-xs' : 'mt-1 text-sm')}>
+          Buy YES or NO shares to start betting
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-3">
+    <div className={cn(compact ? 'space-y-1.5' : 'space-y-2')}>
       {positions.map((position) => {
         const currentValue =
           position.currentValue ?? position.shares * position.currentPrice;
@@ -171,111 +151,125 @@ export function PredictionPositionsList({
           position.unrealizedPnL ?? currentValue - costBasis;
         const pnlPercent =
           costBasis !== 0 ? (unrealizedPnL / costBasis) * 100 : 0;
-        const isSelling = sellingId === position.id;
+        const isSubmitting = submittingId === position.id;
 
         return (
-          <div key={position.id} className="rounded bg-muted/40 p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <span
-                className={cn(
-                  'flex items-center gap-1 rounded px-2 py-1 font-bold text-xs',
-                  position.side === 'YES'
-                    ? 'bg-green-600/20 text-green-600'
-                    : 'bg-red-600/20 text-red-600'
-                )}
-              >
-                {position.side === 'YES' ? (
-                  <CheckCircle size={12} />
-                ) : (
-                  <XCircle size={12} />
-                )}
-                {position.side}
-              </span>
-
-              <div className="text-right">
-                <div
-                  className={cn(
-                    'font-bold text-lg',
-                    unrealizedPnL >= 0 ? 'text-green-600' : 'text-red-600'
-                  )}
-                >
-                  {unrealizedPnL >= 0 ? '+' : ''}
-                  {formatPrice(unrealizedPnL)}
-                </div>
-                <div
-                  className={cn(
-                    'text-xs',
-                    unrealizedPnL >= 0 ? 'text-green-600' : 'text-red-600'
-                  )}
-                >
-                  {unrealizedPnL >= 0 ? '+' : ''}
-                  {pnlPercent.toFixed(2)}%
-                </div>
-              </div>
-            </div>
-
-            <p className="mb-3 font-medium text-foreground text-sm">
-              {position.question}
-            </p>
-
-            <div className="mb-3 grid grid-cols-2 gap-2 text-xs">
-              <div>
-                <div className="text-muted-foreground">Shares</div>
-                <div className="font-medium text-foreground">
-                  {position.shares.toFixed(2)}
-                </div>
-              </div>
-              <div>
-                <div className="text-muted-foreground">Avg Cost</div>
-                <div className="font-medium text-foreground">
-                  {formatPrice(position.avgPrice)}
-                </div>
-              </div>
-              <div>
-                <div className="text-muted-foreground">Current Price</div>
-                <div className="font-medium text-foreground">
-                  {formatPrice(position.currentPrice)}
-                </div>
-              </div>
-              <div>
-                <div className="text-muted-foreground">Value</div>
-                <div className="font-medium text-foreground">
-                  {formatPrice(currentValue)}
-                </div>
-              </div>
-            </div>
-
-            {!position.resolved ? (
-              <button
-                onClick={() =>
-                  handleSellClick(
-                    position,
-                    currentValue,
-                    unrealizedPnL,
-                    pnlPercent
-                  )
-                }
-                disabled={isSelling || position.shares < 0.01}
-                className="w-full cursor-pointer rounded bg-muted py-2 font-medium text-foreground transition-all hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {isSelling
-                  ? 'Selling...'
-                  : position.shares < 0.01
-                    ? 'Position Too Small'
-                    : 'Sell Shares'}
-              </button>
-            ) : (
-              <div className="py-2 text-center font-medium text-sm">
-                <span className="text-muted-foreground">Resolved: </span>
+          <div
+            key={position.id}
+            className={cn(
+              'rounded bg-muted/40',
+              compact ? 'p-2' : 'p-2.5',
+              onPositionClick && 'cursor-pointer hover:bg-muted/60'
+            )}
+            onClick={() => onPositionClick?.(position.marketId.toString())}
+          >
+            {/* Row 1: Side badge, question (truncated), PnL */}
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-1.5">
                 <span
-                  className={
-                    position.resolution ? 'text-green-600' : 'text-red-600'
-                  }
+                  className={cn(
+                    'flex shrink-0 items-center gap-0.5 rounded px-1.5 py-0.5 font-bold text-[11px]',
+                    position.side === 'YES'
+                      ? 'bg-green-600/20 text-green-600'
+                      : 'bg-red-600/20 text-red-600'
+                  )}
                 >
-                  {position.resolution ? 'YES' : 'NO'}
+                  {position.side === 'YES' ? (
+                    <CheckCircle size={10} />
+                  ) : (
+                    <XCircle size={10} />
+                  )}
+                  {position.side}
+                </span>
+                {position.isAgentPosition && (
+                  <span className="flex shrink-0 items-center gap-0.5 rounded bg-muted px-1 py-0.5 font-medium text-[11px] text-muted-foreground">
+                    <Bot size={10} />
+                    {position.agentName || 'Agent'}
+                  </span>
+                )}
+                <span className="truncate font-medium text-foreground text-xs">
+                  {position.question}
                 </span>
               </div>
-            )}
+              <span
+                className={cn(
+                  'shrink-0 font-bold text-xs',
+                  unrealizedPnL >= 0 ? 'text-green-600' : 'text-red-600'
+                )}
+              >
+                {unrealizedPnL >= 0 ? '+' : ''}
+                {formatPrice(unrealizedPnL)}{' '}
+                <span className="font-normal text-[11px]">
+                  ({unrealizedPnL >= 0 ? '+' : ''}
+                  {pnlPercent.toFixed(2)}%)
+                </span>
+              </span>
+            </div>
+
+            {/* Row 2: Stats + Sell/Resolved */}
+            <div className="mt-1.5 flex items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-x-2 text-muted-foreground text-xs">
+                <span>
+                  {position.shares.toFixed(2)}{' '}
+                  <span className="font-medium text-foreground">shares</span>
+                </span>
+                <span className="text-muted-foreground/40">&middot;</span>
+                <span>
+                  Avg{' '}
+                  <span className="font-medium text-foreground">
+                    {formatPrice(position.avgPrice)}
+                  </span>
+                </span>
+                <span className="text-muted-foreground/40">&middot;</span>
+                <span>
+                  Now{' '}
+                  <span className="font-medium text-foreground">
+                    {formatPrice(position.currentPrice)}
+                  </span>
+                </span>
+                <span className="text-muted-foreground/40">&middot;</span>
+                <span>
+                  Val{' '}
+                  <span className="font-medium text-foreground">
+                    {formatPrice(currentValue)}
+                  </span>
+                </span>
+              </div>
+              {!position.resolved ? (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSellClick(
+                      position,
+                      currentValue,
+                      unrealizedPnL,
+                      pnlPercent
+                    );
+                  }}
+                  disabled={isSubmitting || position.shares < 0.01}
+                  className={cn(
+                    'shrink-0 cursor-pointer rounded-full bg-muted px-3 py-0.5 font-medium text-foreground text-xs transition-all hover:bg-muted/80 disabled:cursor-not-allowed disabled:opacity-50'
+                  )}
+                >
+                  {isSubmitting
+                    ? 'Selling...'
+                    : position.shares < 0.01
+                      ? 'Too Small'
+                      : 'Sell'}
+                </button>
+              ) : (
+                <span className="shrink-0 font-medium text-muted-foreground text-xs">
+                  Resolved:{' '}
+                  <span
+                    className={
+                      position.resolution ? 'text-green-600' : 'text-red-600'
+                    }
+                  >
+                    {position.resolution ? 'YES' : 'NO'}
+                  </span>
+                </span>
+              )}
+            </div>
           </div>
         );
       })}
@@ -285,11 +279,12 @@ export function PredictionPositionsList({
         open={confirmDialogOpen}
         onOpenChange={setConfirmDialogOpen}
         onConfirm={handleConfirmSell}
-        isSubmitting={sellingId !== null}
+        isSubmitting={loading || submittingId !== null}
         tradeDetails={
           pendingSell
             ? ({
                 type: 'sell-prediction',
+                mode: 'sell',
                 question: pendingSell.position.question,
                 side: pendingSell.position.side,
                 shares: pendingSell.position.shares,

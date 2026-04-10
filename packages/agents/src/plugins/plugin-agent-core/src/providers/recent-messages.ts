@@ -1,11 +1,23 @@
 /**
  * Recent Messages Provider
  *
- * Provides conversation history from Babylon's agentMessages table.
- * This uses Babylon's DB schema instead of ElizaOS memories.
+ * Provides conversation history from Babylon's database.
+ *
+ * In team chat mode: Queries the `messages` table filtered to only
+ * messages that target this specific agent (via targetIds) and the agent's responses.
+ *
+ * In regular DM mode: Queries the `agentMessages` table (legacy behavior).
  */
 
-import { db } from '@babylon/db';
+import {
+  and,
+  db,
+  desc,
+  eq,
+  messages as messagesTable,
+  or,
+  sql,
+} from '@babylon/db';
 import type {
   IAgentRuntime,
   Memory,
@@ -42,8 +54,10 @@ function formatTime(date: Date): string {
 /**
  * Recent Messages Provider
  *
- * Fetches recent chat messages from Babylon's agentMessages table
- * and formats them for LLM context.
+ * Fetches recent chat messages and formats them for LLM context.
+ *
+ * In team chat mode: Filters messages to only show conversation
+ * between the owner and this agent (not other agents' messages).
  */
 export const recentMessagesProvider: Provider = {
   name: 'RECENT_MESSAGES',
@@ -52,24 +66,86 @@ export const recentMessagesProvider: Provider = {
   get: async (
     runtime: IAgentRuntime,
     _message: Memory,
-    _state: State
+    state: State
   ): Promise<ProviderResult> => {
     const agentUserId = runtime.agentId;
 
-    try {
-      // Fetch recent messages using Prisma-style syntax
+    // Check if we're in team chat mode
+    const teamChatId = state?.values?.teamChatId as string | undefined;
+    const ownerId = state?.values?.ownerId as string | undefined;
+    const isTeamChatMode = !!teamChatId && !!ownerId;
+
+    let formattedMessages: string;
+    let messageCount: number;
+    // DrizzleMessageRow shape from messages table; AgentMessage from Prisma
+    type DrizzleMessageRow = typeof messagesTable.$inferSelect;
+    type AgentMessage = { role: string; content: string; createdAt: Date };
+    let rawMessages: Array<DrizzleMessageRow | AgentMessage>;
+
+    if (isTeamChatMode) {
+      // Team chat mode: Query messages that target this agent
+      // 1. User messages where targetIds contains this agent's ID
+      // 2. This agent's own responses
+      const recentMsgs = await db
+        .select()
+        .from(messagesTable)
+        .where(
+          and(
+            eq(messagesTable.chatId, teamChatId),
+            or(
+              // Agent's own messages
+              eq(messagesTable.senderId, agentUserId),
+              // User messages targeting this agent (use @> for GIN index efficiency)
+              and(
+                eq(messagesTable.senderId, ownerId),
+                sql`${messagesTable.targetIds} @> ARRAY[${agentUserId}]`
+              )
+            )
+          )
+        )
+        .orderBy(desc(messagesTable.createdAt))
+        .limit(10);
+
+      rawMessages = recentMsgs;
+      messageCount = recentMsgs.length;
+
+      if (recentMsgs.length === 0) {
+        return {
+          data: { recentMessages: [], messageCount: 0 },
+          values: {
+            recentMessages: 'No previous conversation history with this user.',
+            messageCount: 0,
+            hasHistory: false,
+          },
+          text: 'No previous conversation history with this user.',
+        };
+      }
+
+      // Format messages (oldest first for conversation flow)
+      // Use spread to create a copy before reversing to avoid mutating the original array
+      formattedMessages = [...recentMsgs]
+        .reverse()
+        .map((msg) => {
+          const speaker = msg.senderId === ownerId ? 'User' : 'You';
+          const time = formatTime(msg.createdAt);
+          const relativeTime = formatRelativeTime(msg.createdAt);
+          return `${time} (${relativeTime}) ${speaker}: ${msg.content}`;
+        })
+        .join('\n');
+    } else {
+      // Legacy DM mode: Query agentMessages table
       const messages = await db.agentMessage.findMany({
         where: { agentUserId },
         orderBy: { createdAt: 'desc' },
         take: 10,
       });
 
+      rawMessages = messages;
+      messageCount = messages.length;
+
       if (messages.length === 0) {
         return {
-          data: {
-            recentMessages: [],
-            messageCount: 0,
-          },
+          data: { recentMessages: [], messageCount: 0 },
           values: {
             recentMessages: 'No previous conversation history.',
             messageCount: 0,
@@ -80,7 +156,8 @@ export const recentMessagesProvider: Provider = {
       }
 
       // Format messages (oldest first for conversation flow)
-      const formattedMessages = messages
+      // Use spread to create a copy before reversing to avoid mutating the original array
+      formattedMessages = [...messages]
         .reverse()
         .map((msg) => {
           const speaker = msg.role === 'user' ? 'User' : 'Agent';
@@ -89,35 +166,19 @@ export const recentMessagesProvider: Provider = {
           return `${time} (${relativeTime}) ${speaker}: ${msg.content}`;
         })
         .join('\n');
-
-      const conversationText = formattedMessages;
-
-      return {
-        data: {
-          recentMessages: messages,
-          messageCount: messages.length,
-        },
-        values: {
-          recentMessages: conversationText,
-          messageCount: messages.length,
-          hasHistory: true,
-        },
-        text: conversationText,
-      };
-    } catch (error) {
-      console.error('[RecentMessagesProvider] Error fetching messages:', error);
-      return {
-        data: {
-          recentMessages: [],
-          messageCount: 0,
-        },
-        values: {
-          recentMessages: 'Error retrieving conversation history.',
-          messageCount: 0,
-          hasHistory: false,
-        },
-        text: 'Error retrieving conversation history.',
-      };
     }
+
+    return {
+      data: {
+        recentMessages: rawMessages,
+        messageCount,
+      },
+      values: {
+        recentMessages: formattedMessages,
+        messageCount,
+        hasHistory: true,
+      },
+      text: formattedMessages,
+    };
   },
 };

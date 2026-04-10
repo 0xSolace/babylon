@@ -100,13 +100,13 @@ export type TrainingBatch = InferSelectModel<typeof schema.trainingBatches>;
 export type BenchmarkResult = InferSelectModel<typeof schema.benchmarkResults>;
 export type Trajectory = InferSelectModel<typeof schema.trajectories>;
 export type RewardJudgment = InferSelectModel<typeof schema.rewardJudgments>;
-export type OracleCommitment = InferSelectModel<
-  typeof schema.oracleCommitments
->;
-export type OracleTransaction = InferSelectModel<
-  typeof schema.oracleTransactions
->;
 export type RealtimeOutbox = InferSelectModel<typeof schema.realtimeOutboxes>;
+export type SentryIncidentAlertOutbox = InferSelectModel<
+  typeof schema.sentryIncidentAlertOutboxes
+>;
+export type SentryIncidentDiscordThread = InferSelectModel<
+  typeof schema.sentryIncidentDiscordThreads
+>;
 export type Game = InferSelectModel<typeof schema.games>;
 export type GameConfig = InferSelectModel<typeof schema.gameConfigs>;
 export type OAuthState = InferSelectModel<typeof schema.oAuthStates>;
@@ -230,14 +230,14 @@ export type NewBenchmarkResult = InferInsertModel<
 >;
 export type NewTrajectory = InferInsertModel<typeof schema.trajectories>;
 export type NewRewardJudgment = InferInsertModel<typeof schema.rewardJudgments>;
-export type NewOracleCommitment = InferInsertModel<
-  typeof schema.oracleCommitments
->;
-export type NewOracleTransaction = InferInsertModel<
-  typeof schema.oracleTransactions
->;
 export type NewRealtimeOutbox = InferInsertModel<
   typeof schema.realtimeOutboxes
+>;
+export type NewSentryIncidentAlertOutbox = InferInsertModel<
+  typeof schema.sentryIncidentAlertOutboxes
+>;
+export type NewSentryIncidentDiscordThread = InferInsertModel<
+  typeof schema.sentryIncidentDiscordThreads
 >;
 export type NewGame = InferInsertModel<typeof schema.games>;
 export type NewGameConfig = InferInsertModel<typeof schema.gameConfigs>;

@@ -21,6 +21,7 @@
 
 import { beforeAll, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { existsSync, readFileSync } from 'fs';
+import { resolveLiveLlmTestConfig } from '../../../../testing/integration/helpers/live-runtime';
 
 // Set timeout to 5 minutes
 setDefaultTimeout(300000);
@@ -52,6 +53,9 @@ const hasLLMKey = !!(
   (process.env.ANTHROPIC_API_KEY?.trim() ?? '') !== '' ||
   (process.env.OPENAI_API_KEY?.trim() ?? '') !== ''
 );
+const liveLlmConfig = resolveLiveLlmTestConfig();
+const shouldSkipLiveLlmTests =
+  !liveLlmConfig.enabled && process.env.RUN_REAL_ENGINE_TESTS !== 'true';
 
 const requireLLMKey = () => {
   if (!hasLLMKey) {
@@ -63,7 +67,7 @@ const requireLLMKey = () => {
   }
 };
 
-describe('Engine Components Validation', () => {
+describe.skipIf(shouldSkipLiveLlmTests)('Engine Components Validation', () => {
   beforeAll(() => {
     requireLLMKey();
     console.log('\n🔧 Testing Individual Engine Components');
@@ -74,16 +78,18 @@ describe('Engine Components Validation', () => {
     test('generates article from event context', async () => {
       const { ArticleGenerator } = await import('../../ArticleGenerator');
       const { BabylonLLMClient } = await import('../../llm/openai-client');
-      const { loadActorsData } = await import('../../actors-loader');
+      const { StaticDataRegistry } = await import(
+        '../../services/static-data-registry'
+      );
 
       console.log('📰 Testing ArticleGenerator...');
 
       const llm = BabylonLLMClient.forGameTick();
       const generator = new ArticleGenerator(llm);
 
-      // Load real actor data
-      const actorsData = loadActorsData();
-      const actors = actorsData.actors.slice(0, 10).map((a) => ({
+      // Load real actor data using StaticDataRegistry (preferred over deprecated loadActorsData)
+      const allActors = StaticDataRegistry.getAllActors();
+      const actors = allActors.slice(0, 10).map((a) => ({
         ...a,
         tier: a.tier || ('B_TIER' as const),
         role: a.role || ('supporting' as const),
@@ -91,7 +97,7 @@ describe('Engine Components Validation', () => {
         initialMood: a.initialMood || 0,
       }));
 
-      const organizations = actorsData.organizations.filter(
+      const organizations = StaticDataRegistry.getAllOrganizations().filter(
         (o) => o.type === 'media'
       );
 
@@ -189,15 +195,18 @@ describe('Engine Components Validation', () => {
     test('generates feed posts', async () => {
       const { FeedGenerator } = await import('../../FeedGenerator');
       const { BabylonLLMClient } = await import('../../llm/openai-client');
-      const { loadActorsData } = await import('../../actors-loader');
+      const { StaticDataRegistry } = await import(
+        '../../services/static-data-registry'
+      );
 
       console.log('📝 Testing FeedGenerator...');
 
       const llm = BabylonLLMClient.forGameTick();
       const generator = new FeedGenerator(llm);
 
-      const actorsData = loadActorsData();
-      const actors = actorsData.actors.slice(0, 5).map((a) => ({
+      // Use StaticDataRegistry instead of deprecated loadActorsData
+      const allActors = StaticDataRegistry.getAllActors();
+      const actors = allActors.slice(0, 5).map((a) => ({
         ...a,
         tier: a.tier || ('B_TIER' as const),
         role: a.role || ('supporting' as const),

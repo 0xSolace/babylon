@@ -56,16 +56,28 @@
  * ```
  */
 
-import { optionalAuth } from '@babylon/api';
+import {
+  addPublicReadHeaders,
+  publicRateLimit,
+  withErrorHandling,
+} from '@babylon/api';
 import { asPublic, asUser } from '@babylon/db';
 import { getPostsByTag, StaticDataRegistry } from '@babylon/engine';
+import { toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
-export async function GET(
+export const GET = withErrorHandling(async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ tag: string }> }
 ) {
+  const {
+    error,
+    user: authUser,
+    rateLimitInfo,
+  } = await publicRateLimit(request);
+  if (error) return error;
+
   const { tag } = await params;
   const url = new URL(request.url);
   const limit = Number.parseInt(url.searchParams.get('limit') || '20');
@@ -94,9 +106,6 @@ export async function GET(
       { status: 404 }
     );
   }
-
-  // Optional auth - trending posts are public but RLS still applies
-  const authUser = await optionalAuth(request).catch(() => null);
 
   // Enrich posts with author information and engagement stats with RLS
   const enrichedPosts = await Promise.all(
@@ -189,7 +198,7 @@ export async function GET(
         authorName,
         authorUsername,
         authorProfileImageUrl,
-        timestamp: post.timestamp.toISOString(),
+        timestamp: toISO(post.timestamp),
         likeCount,
         commentCount,
         shareCount,
@@ -199,7 +208,7 @@ export async function GET(
     })
   );
 
-  return NextResponse.json({
+  const res = NextResponse.json({
     success: true,
     tag: {
       name: result.tag.name,
@@ -209,4 +218,6 @@ export async function GET(
     posts: enrichedPosts,
     total: result.total,
   });
-}
+  if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
+  return res;
+});

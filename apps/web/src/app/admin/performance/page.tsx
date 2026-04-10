@@ -7,6 +7,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { AdminStandalonePage } from '@/components/admin/AdminStandalonePage';
 
 // Simple replacement components
 const Card = ({
@@ -248,7 +249,7 @@ export default function AdminPerformancePage() {
   };
 
   return (
-    <div className="container mx-auto space-y-6 py-8">
+    <AdminStandalonePage className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="font-bold text-3xl">Performance Dashboard</h1>
         <div className="flex items-center gap-2">
@@ -531,6 +532,6 @@ export default function AdminPerformancePage() {
           </CardContent>
         </Card>
       )}
-    </div>
+    </AdminStandalonePage>
   );
 }

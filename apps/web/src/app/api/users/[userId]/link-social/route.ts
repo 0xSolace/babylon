@@ -5,7 +5,7 @@
  * @access Authenticated
  *
  * @description
- * Links a social account (Farcaster, Twitter, or wallet) to user profile.
+ * Links a social account (Farcaster, Twitter) to user profile.
  * Awards points if this is the first time linking this platform.
  *
  * @openapi
@@ -35,14 +35,10 @@
  *             properties:
  *               platform:
  *                 type: string
- *                 enum: [farcaster, twitter, wallet]
+ *                 enum: [farcaster, twitter]
  *               username:
  *                 type: string
  *                 description: Username for social platform
- *               address:
- *                 type: string
- *                 pattern: '^0x[a-fA-F0-9]{40}$'
- *                 description: Wallet address (for wallet platform)
  *     responses:
  *       200:
  *         description: Account linked successfully
@@ -73,7 +69,7 @@ import {
   authenticate,
   ConflictError,
   NotFoundError,
-  PointsService,
+  ReputationService,
   requireUserByIdentifier,
   successResponse,
   withErrorHandling,
@@ -85,12 +81,8 @@ import { z } from 'zod';
 import { trackServerEvent } from '@/lib/posthog/server';
 
 const LinkSocialRequestSchema = z.object({
-  platform: z.enum(['farcaster', 'twitter', 'wallet']),
+  platform: z.enum(['farcaster', 'twitter']),
   username: z.string().optional(),
-  address: z
-    .string()
-    .regex(/^0x[a-fA-F0-9]{40}$/)
-    .optional(),
 });
 
 /**
@@ -125,14 +117,13 @@ export const POST = withErrorHandling(
 
     // Parse and validate request body
     const body = await request.json();
-    const { platform, username, address } = LinkSocialRequestSchema.parse(body);
+    const { platform, username } = LinkSocialRequestSchema.parse(body);
 
     // Get current user state
     const [user] = await db
       .select({
         hasFarcaster: users.hasFarcaster,
         hasTwitter: users.hasTwitter,
-        walletAddress: users.walletAddress,
         farcasterFid: users.farcasterFid,
         twitterId: users.twitterId,
       })
@@ -191,25 +182,6 @@ export const POST = withErrorHandling(
           }
         }
         break;
-      case 'wallet':
-        alreadyLinked = !!user.walletAddress;
-        break;
-    }
-
-    // Check if wallet address is already in use by another user
-    if (platform === 'wallet' && address) {
-      const [existingWalletUser] = await db
-        .select({ id: users.id })
-        .from(users)
-        .where(eq(users.walletAddress, address.toLowerCase()))
-        .limit(1);
-
-      if (existingWalletUser && existingWalletUser.id !== canonicalUserId) {
-        throw new ConflictError(
-          'Wallet address already linked to another account',
-          'User.walletAddress'
-        );
-      }
     }
 
     // Update user with social connection
@@ -223,9 +195,6 @@ export const POST = withErrorHandling(
         updateData.hasTwitter = true;
         if (username) updateData.twitterUsername = username;
         break;
-      case 'wallet':
-        if (address) updateData.walletAddress = address.toLowerCase();
-        break;
     }
 
     await db.update(users).set(updateData).where(eq(users.id, canonicalUserId));
@@ -235,21 +204,15 @@ export const POST = withErrorHandling(
     if (!alreadyLinked) {
       switch (platform) {
         case 'farcaster':
-          pointsResult = await PointsService.awardFarcasterLink(
+          pointsResult = await ReputationService.awardFarcasterLink(
             canonicalUserId,
             username
           );
           break;
         case 'twitter':
-          pointsResult = await PointsService.awardTwitterLink(
+          pointsResult = await ReputationService.awardTwitterLink(
             canonicalUserId,
             username
-          );
-          break;
-        case 'wallet':
-          pointsResult = await PointsService.awardWalletConnect(
-            canonicalUserId,
-            address
           );
           break;
       }
@@ -257,7 +220,7 @@ export const POST = withErrorHandling(
       // Check if this qualifies a referral (award bonus to referrer)
       // This happens after linking social account, so user now has at least one social account
       if (pointsResult?.success) {
-        await PointsService.checkAndQualifyReferral(canonicalUserId).catch(
+        await ReputationService.checkAndQualifyReferral(canonicalUserId).catch(
           (error) => {
             // Log error but don't fail the request if qualification check fails
             logger.warn(
@@ -272,7 +235,7 @@ export const POST = withErrorHandling(
 
     logger.info(
       `User ${canonicalUserId} linked ${platform} account`,
-      { userId: canonicalUserId, platform, username, address, alreadyLinked },
+      { userId: canonicalUserId, platform, username, alreadyLinked },
       'POST /api/users/[userId]/link-social'
     );
 
@@ -280,9 +243,8 @@ export const POST = withErrorHandling(
     trackServerEvent(canonicalUserId, 'social_account_linked', {
       platform,
       ...(username && { username }),
-      ...(address && { address }),
       wasAlreadyLinked: alreadyLinked,
-      pointsAwarded: pointsResult?.pointsAwarded || 0,
+      reputationAwarded: pointsResult?.reputationAwarded || 0,
     }).catch((error) => {
       logger.warn('Failed to track social_account_linked event', { error });
     });
@@ -291,10 +253,10 @@ export const POST = withErrorHandling(
       platform,
       linked: true,
       alreadyLinked,
-      points: pointsResult
+      reputation: pointsResult
         ? {
-            awarded: pointsResult.pointsAwarded,
-            newTotal: pointsResult.newTotal,
+            awarded: pointsResult.reputationAwarded,
+            newReputationTotal: pointsResult.newReputationTotal,
           }
         : null,
     });

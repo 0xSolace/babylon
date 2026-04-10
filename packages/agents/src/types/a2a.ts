@@ -138,9 +138,6 @@ export enum A2AMethod {
   CHECK_BLOCK_STATUS = 'a2a.checkBlockStatus',
   CHECK_MUTE_STATUS = 'a2a.checkMuteStatus',
 
-  // Points Transfer
-  TRANSFER_POINTS = 'a2a.transferPoints',
-
   // Favorites
   FAVORITE_PROFILE = 'a2a.favoriteProfile',
   UNFAVORITE_PROFILE = 'a2a.unfavoriteProfile',

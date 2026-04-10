@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Avatar } from '@/components/shared/Avatar';
 import { useAuth } from '@/hooks/useAuth';
+import { useSocialTracking } from '@/hooks/usePostHog';
 import { getAuthToken } from '@/lib/auth';
 
 /**
@@ -98,6 +99,7 @@ export function InlineComposer({
   const [isFocused, setIsFocused] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { authenticated, user } = useAuth();
+  const { trackPostCreated } = useSocialTracking();
   const isMac = useIsMac();
 
   const charactersRemaining = MAX_LENGTH - content.length;
@@ -140,7 +142,6 @@ export function InlineComposer({
         const data = await response.json();
         setContent('');
         setIsFocused(false);
-        toast.success('Post created!');
 
         // Reset textarea height
         if (textareaRef.current) {
@@ -148,6 +149,7 @@ export function InlineComposer({
         }
 
         if (isValidPostResponse(data.post)) {
+          trackPostCreated(data.post.id, data.post.content.length);
           onPostCreated?.(data.post);
         } else if (data.post) {
           logger.error(

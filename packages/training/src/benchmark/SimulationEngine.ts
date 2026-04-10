@@ -20,6 +20,7 @@ import type {
   Tick,
 } from './BenchmarkDataGenerator';
 import { MetricsValidator } from './MetricsValidator';
+import { calculateTrustMetrics, type TrustMetrics } from './trust';
 
 export interface SimulationConfig {
   /** The benchmark snapshot to replay */
@@ -147,6 +148,10 @@ export interface SimulationMetrics {
 
   /** Compared to optimal actions */
   optimalityScore: number; // 0-100, how close to optimal
+  optimalityScoreSource?: 'measured' | 'synthetic' | 'none';
+
+  /** Optional trust/scam benchmark metrics */
+  trustMetrics?: TrustMetrics;
 }
 
 export interface TrajectoryData {
@@ -171,6 +176,13 @@ export class SimulationEngine {
     groupsJoined: 0,
     messagesReceived: 0,
   };
+
+  private isSyntheticOptimalityAction(action: { reason?: string }): boolean {
+    return (
+      typeof action.reason === 'string' &&
+      action.reason.startsWith('[SYNTHETIC]')
+    );
+  }
 
   constructor(config: SimulationConfig) {
     this.config = config;
@@ -397,6 +409,14 @@ export class SimulationEngine {
           result = this.handleCreatePost(data);
           break;
 
+        case 'send_message':
+          result = this.handleSendMessage(data);
+          break;
+
+        case 'query_state':
+          result = this.handleQueryState();
+          break;
+
         default:
           return { success: false, error: `Unknown action type: ${type}` };
       }
@@ -593,6 +613,23 @@ export class SimulationEngine {
   }
 
   /**
+   * Handle sending a direct or group message.
+   * The payload itself is evaluated later by trust metrics if present.
+   */
+  private handleSendMessage(_data: Record<string, JsonValue>): {
+    success: boolean;
+  } {
+    return { success: true };
+  }
+
+  /**
+   * Handle state queries as no-op benchmark actions.
+   */
+  private handleQueryState(): { success: boolean } {
+    return { success: true };
+  }
+
+  /**
    * Update position values based on current prices
    */
   private updatePositionValues(tick: Tick): void {
@@ -676,7 +713,49 @@ export class SimulationEngine {
       responseTimes.length > 0 ? Math.max(...responseTimes) : 0;
 
     // Calculate optimality score (how well did agent follow optimal actions)
-    const optimalityScore = this.calculateOptimalityScore();
+    const optimality = this.calculateOptimalityScore();
+
+    const trustMetrics = this.config.snapshot.groundTruth.trustGroundTruth
+      ? calculateTrustMetrics(
+          this.actions,
+          this.config.snapshot.groundTruth.trustGroundTruth,
+          {
+            predictionMetrics: {
+              totalPositions: this.predictionPositions.size,
+              correctPredictions,
+              incorrectPredictions,
+              accuracy:
+                this.predictionPositions.size > 0
+                  ? correctPredictions / this.predictionPositions.size
+                  : 0,
+              avgPnlPerPosition:
+                this.predictionPositions.size > 0
+                  ? predictionPnl / this.predictionPositions.size
+                  : 0,
+            },
+            perpMetrics: {
+              totalTrades: this.perpPositions.size,
+              profitableTrades,
+              winRate:
+                this.perpPositions.size > 0
+                  ? profitableTrades / this.perpPositions.size
+                  : 0,
+              avgPnlPerTrade:
+                this.perpPositions.size > 0
+                  ? perpPnl / this.perpPositions.size
+                  : 0,
+              maxDrawdown,
+            },
+            socialMetrics: {
+              postsCreated: this.socialStats.postsCreated,
+              groupsJoined: this.socialStats.groupsJoined,
+              messagesReceived: this.socialStats.messagesReceived,
+              reputationGained:
+                correctPredictions * 10 - incorrectPredictions * 5,
+            },
+          }
+        )
+      : undefined;
 
     return {
       totalPnl,
@@ -715,18 +794,35 @@ export class SimulationEngine {
         maxResponseTime,
         totalDuration: Date.now() - this.startTime,
       },
-      optimalityScore,
+      optimalityScore: optimality.score,
+      optimalityScoreSource: optimality.source,
+      trustMetrics,
     };
   }
 
   /**
    * Calculate how close agent came to optimal play
    */
-  private calculateOptimalityScore(): number {
+  private calculateOptimalityScore(): {
+    score: number;
+    source: 'measured' | 'synthetic' | 'none';
+  } {
     const optimalActions = this.config.snapshot.groundTruth.optimalActions;
+    if (optimalActions.length === 0) {
+      return { score: 0, source: 'none' };
+    }
+
+    const measuredOptimalActions = optimalActions.filter(
+      (optimalAction) => !this.isSyntheticOptimalityAction(optimalAction)
+    );
+
+    if (measuredOptimalActions.length === 0) {
+      return { score: 0, source: 'synthetic' };
+    }
+
     let matchedActions = 0;
 
-    for (const optimalAction of optimalActions) {
+    for (const optimalAction of measuredOptimalActions) {
       // Check if agent took this action within reasonable window
       const windowStart = optimalAction.tick - 2;
       const windowEnd = optimalAction.tick + 2;
@@ -751,9 +847,10 @@ export class SimulationEngine {
       if (agentAction) matchedActions++;
     }
 
-    return optimalActions.length > 0
-      ? (matchedActions / optimalActions.length) * 100
-      : 0;
+    return {
+      score: (matchedActions / measuredOptimalActions.length) * 100,
+      source: 'measured',
+    };
   }
 
   /**

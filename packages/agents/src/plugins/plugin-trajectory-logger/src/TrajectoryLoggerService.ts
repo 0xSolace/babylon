@@ -6,12 +6,14 @@
 
 import { db, llmCallLogs, trajectories } from '@babylon/db';
 import type { JsonValue } from '@babylon/shared';
-import type { UUID } from '@elizaos/core';
+import type { TrajectoryStep as TrainingTrajectoryStep } from '@babylon/training';
+import { type IAgentRuntime, Service, type UUID } from '@elizaos/core';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../../../shared/logger';
 import { generateSnowflakeId } from '../../../shared/snowflake';
 import type {
   ActionAttempt,
+  CounterpartyContext,
   EnvironmentState,
   LLMCall,
   ProviderAccess,
@@ -20,7 +22,117 @@ import type {
   TrajectoryStep,
 } from './types';
 
-export class TrajectoryLoggerService {
+type RuntimeEnvironmentStateInput = {
+  timestamp?: number;
+  agentBalance: number;
+  agentPoints?: number;
+  agentPnL: number;
+  openPositions: number;
+  activeMarkets?: number;
+  portfolioValue?: number;
+  unreadMessages?: number;
+  recentEngagement?: number;
+  groupChatsActive?: number;
+  groupChatFacts?: string[];
+  groupChatIntelTokenEstimate?: number;
+  promptTokenEstimate?: number;
+  contextBreakdown?: {
+    system?: number;
+    markets?: number;
+    positions?: number;
+    groupChat?: number;
+    pending?: number;
+    actionSchemas?: number;
+    feed?: number;
+  };
+  custom?: Record<string, JsonValue>;
+};
+
+type InsertableDatabase = {
+  insert: (table: unknown) => {
+    values: (row: Record<string, unknown>) => Promise<unknown>;
+  };
+};
+
+function normalizeEnvironmentState<T extends RuntimeEnvironmentStateInput>(
+  envState: T
+): EnvironmentState {
+  const {
+    timestamp,
+    agentBalance,
+    agentPoints,
+    agentPnL,
+    openPositions,
+    activeMarkets,
+    portfolioValue,
+    unreadMessages,
+    recentEngagement,
+    groupChatsActive,
+    groupChatFacts,
+    groupChatIntelTokenEstimate,
+    promptTokenEstimate,
+    contextBreakdown,
+    custom,
+    ...extraFields
+  } = envState;
+
+  const mergedCustom: Record<string, JsonValue> = {
+    ...(custom || {}),
+  };
+
+  for (const [key, value] of Object.entries(extraFields)) {
+    if (value !== undefined) {
+      mergedCustom[key] = value as JsonValue;
+    }
+  }
+
+  return {
+    timestamp: timestamp ?? Date.now(),
+    agentBalance,
+    agentPoints: agentPoints ?? 0,
+    agentPnL,
+    openPositions,
+    activeMarkets,
+    portfolioValue,
+    unreadMessages,
+    recentEngagement,
+    groupChatsActive,
+    groupChatFacts,
+    groupChatIntelTokenEstimate,
+    promptTokenEstimate,
+    contextBreakdown,
+    custom: Object.keys(mergedCustom).length > 0 ? mergedCustom : undefined,
+  };
+}
+
+function getInsertableDb(): InsertableDatabase | null {
+  const database = db as Partial<InsertableDatabase>;
+  return typeof database.insert === 'function'
+    ? (database as InsertableDatabase)
+    : null;
+}
+
+export class TrajectoryLoggerService extends Service {
+  static serviceType = 'trajectory_logger' as const;
+
+  capabilityDescription =
+    'Captures agent trajectories for RL training, debugging, and evaluation.';
+
+  constructor(runtime?: IAgentRuntime) {
+    super(runtime);
+  }
+
+  static override async start(
+    runtime: IAgentRuntime
+  ): Promise<TrajectoryLoggerService> {
+    return new TrajectoryLoggerService(runtime);
+  }
+
+  async stop(): Promise<void> {
+    this.activeTrajectories.clear();
+    this.activeStepIds.clear();
+  }
+
   private activeTrajectories: Map<string, Trajectory> = new Map();
   private activeStepIds: Map<string, string> = new Map(); // Maps trajectoryId -> current stepId
 
@@ -69,7 +181,10 @@ export class TrajectoryLoggerService {
   /**
    * Start a new step in the trajectory
    */
-  startStep(trajectoryId: string, envState: EnvironmentState): string {
+  startStep<T extends RuntimeEnvironmentStateInput>(
+    trajectoryId: string,
+    envState: T
+  ): string {
     const stepId = uuidv4();
     const trajectory = this.activeTrajectories.get(trajectoryId);
 
@@ -77,11 +192,13 @@ export class TrajectoryLoggerService {
       throw new Error(`Trajectory ${trajectoryId} not found`);
     }
 
+    const environmentState = normalizeEnvironmentState(envState);
+
     const step: TrajectoryStep = {
       stepId: stepId as UUID,
       stepNumber: trajectory.steps.length,
-      timestamp: envState.timestamp || Date.now(),
-      environmentState: envState,
+      timestamp: environmentState.timestamp,
+      environmentState,
       observation: {},
       llmCalls: [],
       providerAccesses: [],
@@ -149,7 +266,12 @@ export class TrajectoryLoggerService {
     stepId: string,
     llmCall: LLMCall
   ): Promise<void> {
-    await db.insert(llmCallLogs).values({
+    const database = getInsertableDb();
+    if (!database) {
+      return;
+    }
+
+    await database.insert(llmCallLogs).values({
       id: await generateSnowflakeId(),
       trajectoryId,
       stepId,
@@ -177,6 +299,12 @@ export class TrajectoryLoggerService {
         purpose: llmCall.purpose,
         actionType: llmCall.actionType,
         modelVersion: llmCall.modelVersion,
+        reasoningAvailable: llmCall.reasoningAvailable ?? false,
+        reasoningSource: llmCall.reasoningSource ?? null,
+        traceVisibility: llmCall.traceVisibility ?? null,
+        rawReasoningTrace: llmCall.rawReasoningTrace ?? null,
+        privateAnalysis: llmCall.privateAnalysis ?? null,
+        ...(llmCall.metadata ?? {}),
       }),
     });
   }
@@ -247,6 +375,66 @@ export class TrajectoryLoggerService {
   }
 
   /**
+   * Set counterparty context on the current step.
+   *
+   * Call this BEFORE completeStep() to attach ground-truth metadata about
+   * who the agent is interacting with. This enables intent-aware reward
+   * computation during training.
+   */
+  setCounterpartyContext(
+    trajectoryId: string,
+    stepId: string,
+    counterparty: CounterpartyContext
+  ): void {
+    const trajectory = this.activeTrajectories.get(trajectoryId);
+    if (!trajectory) return;
+    const step = trajectory.steps.find((s) => s.stepId === stepId);
+    if (!step) return;
+    step.counterpartyContext = counterparty;
+  }
+
+  /**
+   * Set counterparty context on current step by trajectory ID.
+   */
+  setCurrentStepCounterpartyContext(
+    trajectoryId: string,
+    counterparty: CounterpartyContext
+  ): void {
+    const stepId = this.activeStepIds.get(trajectoryId);
+    if (!stepId) return;
+    this.setCounterpartyContext(trajectoryId, stepId, counterparty);
+  }
+
+  /**
+   * Set the scenario intent on the trajectory metadata.
+   *
+   * Call this when ground-truth intent is known (e.g., from scenario matchmaker
+   * or counterparty team assignment). Enables the over-refusal penalty in
+   * deterministic reward judging.
+   */
+  setScenarioIntent(
+    trajectoryId: string,
+    intent: 'attack' | 'legitimate'
+  ): void {
+    const trajectory = this.activeTrajectories.get(trajectoryId);
+    if (!trajectory) return;
+    trajectory.metadata.scenarioIntent = intent;
+  }
+
+  /**
+   * Set the agent's decision classification on the trajectory metadata.
+   *
+   * Should be called when the agent's overall behavior can be classified
+   * (e.g., 'refuse', 'block', 'comply', 'engage', 'ignore').
+   * Used by the over-refusal penalty to detect false positives.
+   */
+  setAgentDecisionClass(trajectoryId: string, decisionClass: string): void {
+    const trajectory = this.activeTrajectories.get(trajectoryId);
+    if (!trajectory) return;
+    trajectory.metadata.agentDecisionClass = decisionClass;
+  }
+
+  /**
    * Complete a step with action and reward
    */
   completeStep(
@@ -272,6 +460,9 @@ export class TrajectoryLoggerService {
       timestamp: Date.now(),
       ...action,
     };
+    step.privateAnalysis =
+      action.privateAnalysis ??
+      step.llmCalls.find((call) => call.privateAnalysis)?.privateAnalysis;
 
     if (rewardInfo?.reward !== undefined) {
       step.reward = rewardInfo.reward;
@@ -331,8 +522,43 @@ export class TrajectoryLoggerService {
       };
     }
 
+    // Step-level reward attribution: distribute totalReward across individual steps
+    // so GRPO can identify which decisions mattered most in multi-turn episodes.
+    // Must run BEFORE database save so attributed rewards are persisted.
+    try {
+      const totalReward = trajectory.totalReward;
+      const steps = trajectory.steps;
+      if (steps.length > 0 && totalReward !== 0) {
+        let totalWeight = 0;
+        for (const step of steps) {
+          // A "real" action is one that was completed (not still 'pending' from init)
+          const hasRealAction =
+            step.action?.actionType !== undefined &&
+            step.action.actionType !== 'pending' &&
+            step.action.success === true;
+          const hasLLMCall = (step.llmCalls?.length ?? 0) > 0;
+          // Successful action steps get 2x weight, LLM-only steps get 1x, empty/pending steps get 0.5x
+          step.stepWeight = hasRealAction ? 2.0 : hasLLMCall ? 1.0 : 0.5;
+          totalWeight += step.stepWeight;
+        }
+        for (const step of steps) {
+          step.attributedReward =
+            totalReward * ((step.stepWeight ?? 1) / totalWeight);
+        }
+      }
+    } catch {
+      // Non-fatal — step attribution is best-effort
+    }
+
     // Save to database using Drizzle
-    await db.insert(trajectories).values({
+    const database = getInsertableDb();
+    if (!database) {
+      this.activeTrajectories.set(trajectoryId, trajectory);
+      this.activeStepIds.delete(trajectoryId);
+      return;
+    }
+
+    await database.insert(trajectories).values({
       id: await generateSnowflakeId(),
       trajectoryId,
       agentId: trajectory.agentId,
@@ -361,6 +587,19 @@ export class TrajectoryLoggerService {
       isEvaluation:
         (trajectory.metadata.isEvaluation as boolean | undefined) ?? false,
       usedInTraining: false,
+      archetype: (trajectory.metadata.archetype as string | undefined) ?? null,
+      packId: (trajectory.metadata.packId as string | undefined) ?? null,
+      worldStateSnapshotId:
+        (trajectory.metadata.worldStateSnapshotId as string | undefined) ??
+        null,
+      memorySnapshotJson:
+        trajectory.metadata.memorySnapshot != null
+          ? JSON.stringify(trajectory.metadata.memorySnapshot)
+          : null,
+      relationshipSnapshotJson:
+        trajectory.metadata.relationshipSnapshot != null
+          ? JSON.stringify(trajectory.metadata.relationshipSnapshot)
+          : null,
       updatedAt: new Date(),
     });
 
@@ -374,6 +613,63 @@ export class TrajectoryLoggerService {
       },
       'TrajectoryLoggerService'
     );
+
+    // Compute and persist deterministic reward judgment for RL training.
+    // This runs inline so every trajectory gets scored immediately after save,
+    // closing the gap between data collection and reward computation.
+    try {
+      const { computeDeterministicRewardJudgment, upsertRewardJudgment } =
+        await import('@babylon/training');
+      // The plugin's TrajectoryStep type and the training package's TrajectoryStep
+      // are structurally compatible but declared separately. Use unknown bridge.
+      const trainingSteps =
+        trajectory.steps as unknown as TrainingTrajectoryStep[];
+      const judgment = computeDeterministicRewardJudgment({
+        steps: trainingSteps,
+        totalReward: trajectory.totalReward,
+        finalPnL: trajectory.metrics.finalPnL as number | undefined,
+        finalTrustScore: trajectory.metrics.finalTrustScore as
+          | number
+          | undefined,
+        scenarioId: trajectory.scenarioId ?? undefined,
+        scenarioProfile: trajectory.metadata.scenarioProfile as
+          | string
+          | undefined,
+        scenarioIntent: trajectory.metadata.scenarioIntent as
+          | 'attack'
+          | 'legitimate'
+          | undefined,
+        agentDecisionClass: trajectory.metadata.agentDecisionClass as
+          | string
+          | undefined,
+      });
+
+      await upsertRewardJudgment({
+        trajectoryId,
+        ...judgment,
+        syncTrajectory: true,
+      });
+
+      logger.info(
+        'Deterministic reward judgment computed',
+        {
+          trajectoryId,
+          overallScore: judgment.overallScore,
+          components: Object.keys(judgment.componentScores ?? {}),
+        },
+        'TrajectoryLoggerService'
+      );
+    } catch (err) {
+      // Non-fatal — trajectory is saved regardless of scoring
+      logger.warn(
+        'Failed to compute deterministic reward judgment (non-fatal)',
+        {
+          trajectoryId,
+          error: err instanceof Error ? err.message : String(err),
+        },
+        'TrajectoryLoggerService'
+      );
+    }
 
     // Keep in memory for retrieval
     this.activeTrajectories.set(trajectoryId, trajectory);
@@ -397,5 +693,11 @@ export class TrajectoryLoggerService {
       }
     }
     return null;
+  }
+}
+
+declare module '@elizaos/core' {
+  interface ServiceTypeRegistry {
+    TRAJECTORY_LOGGER: 'trajectory_logger';
   }
 }

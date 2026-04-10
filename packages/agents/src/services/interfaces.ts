@@ -65,15 +65,6 @@ export interface IWalletService {
   getBalance(userId: string): Promise<number>;
 
   /**
-   * Transfer points between users
-   */
-  transferPoints(
-    fromUserId: string,
-    toUserId: string,
-    amount: number
-  ): Promise<void>;
-
-  /**
    * Add points to user
    */
   addPoints(userId: string, amount: number, reason?: string): Promise<void>;
@@ -166,39 +157,6 @@ export interface IPredictionPricing {
 }
 
 /**
- * Agent0 Client Interface
- */
-export interface IAgent0Client {
-  /**
-   * Register agent with Agent0
-   */
-  registerAgent(params: {
-    name: string;
-    description: string;
-    endpoint: string;
-    capabilities: AgentCapabilities;
-  }): Promise<{
-    tokenId: string;
-    metadataCID: string;
-  }>;
-
-  /**
-   * Get agent info from Agent0
-   */
-  getAgentInfo(tokenId: string): Promise<{
-    name: string;
-    description: string;
-    endpoint: string;
-    reputation: number;
-  } | null>;
-
-  /**
-   * Sync reputation with Agent0
-   */
-  syncReputation(agentId: string): Promise<number>;
-}
-
-/**
  * Database Context Interface
  * For running queries as a specific user
  */
@@ -254,7 +212,6 @@ export interface IServiceContainer {
   characterMappingService?: ICharacterMappingService;
   trajectoryRecorder?: ITrajectoryRecorder;
   predictionPricing?: IPredictionPricing;
-  agent0Client?: IAgent0Client;
   dbContext?: IDbContext;
   redisClient?: IRedisClient;
 }
@@ -263,17 +220,21 @@ export interface IServiceContainer {
  * Global service container for cross-module dependency injection.
  * Uses globalThis to ensure consistent state across dynamic and static imports.
  */
-declare global {
-  // eslint-disable-next-line no-var
-  var __babylon_agents_services__: IServiceContainer | undefined;
+type BabylonAgentsGlobal = typeof globalThis & {
+  __babylon_agents_services__?: IServiceContainer;
+};
+
+function getBabylonAgentsGlobal(): BabylonAgentsGlobal {
+  return globalThis as BabylonAgentsGlobal;
 }
 
 /**
  * Set the service container (merges with existing services)
  */
 export function setServiceContainer(container: IServiceContainer): void {
-  globalThis.__babylon_agents_services__ = {
-    ...globalThis.__babylon_agents_services__,
+  const g = getBabylonAgentsGlobal();
+  g.__babylon_agents_services__ = {
+    ...g.__babylon_agents_services__,
     ...container,
   };
 }
@@ -282,7 +243,7 @@ export function setServiceContainer(container: IServiceContainer): void {
  * Get the full service container
  */
 export function getServiceContainer(): IServiceContainer {
-  return globalThis.__babylon_agents_services__ ?? {};
+  return getBabylonAgentsGlobal().__babylon_agents_services__ ?? {};
 }
 
 /**
@@ -291,5 +252,5 @@ export function getServiceContainer(): IServiceContainer {
 export function getService<K extends keyof IServiceContainer>(
   key: K
 ): IServiceContainer[K] {
-  return globalThis.__babylon_agents_services__?.[key];
+  return getBabylonAgentsGlobal().__babylon_agents_services__?.[key];
 }

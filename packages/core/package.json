@@ -16,10 +16,30 @@
       "import": "./markets/perps/index.ts",
       "require": "./markets/perps/index.ts"
     },
+    "./markets/perps/client": {
+      "types": "./markets/perps/client.ts",
+      "import": "./markets/perps/client.ts",
+      "require": "./markets/perps/client.ts"
+    },
+    "./markets/perps/utils": {
+      "types": "./markets/perps/utils.ts",
+      "import": "./markets/perps/utils.ts",
+      "require": "./markets/perps/utils.ts"
+    },
     "./markets/prediction": {
       "types": "./markets/prediction/index.ts",
       "import": "./markets/prediction/index.ts",
       "require": "./markets/prediction/index.ts"
+    },
+    "./markets/prediction/client": {
+      "types": "./markets/prediction/client.ts",
+      "import": "./markets/prediction/client.ts",
+      "require": "./markets/prediction/client.ts"
+    },
+    "./markets/prediction/pricing": {
+      "types": "./markets/prediction/pricing.ts",
+      "import": "./markets/prediction/pricing.ts",
+      "require": "./markets/prediction/pricing.ts"
     },
     "./markets/shared": {
       "types": "./markets/shared/index.ts",

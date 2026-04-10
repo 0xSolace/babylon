@@ -168,13 +168,17 @@
 
 import {
   authenticate,
-  PointsService,
+  ReputationService,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
+import {
+  canAccessNftChatGate,
+  getNftChatGatingConfig,
+  reconcileNftChatMembershipForUser,
+} from '@babylon/api/services/nft-chat-gating-service';
 // Import from new Drizzle client
 import {
-  agentMessages,
   and,
   asSystem,
   asUser,
@@ -184,9 +188,9 @@ import {
   desc,
   eq,
   groupMembers,
+  groups,
   inArray,
   messages,
-  userAgentTeamChats,
   users,
 } from '@babylon/db';
 import {
@@ -204,8 +208,7 @@ import type { NextRequest } from 'next/server';
  * Get all chats for the authenticated user
  */
 export const GET = withErrorHandling(async (request: NextRequest) => {
-  console.log('[API /api/chats] GET request received');
-  logger.info('GET /api/chats - Request received', undefined, 'GET /api/chats');
+  logger.info('GET /api/chats - Request received', undefined, 'ChatsRoute');
 
   // Validate query parameters
   const { searchParams } = new URL(request.url);
@@ -307,6 +310,29 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   const user = await authenticate(request);
 
+  // Best-effort reconciliation: grant/revoke gated chat membership based on the
+  // latest access check (on-chain when available; falls back when degraded).
+  if (user.dbUserId) {
+    try {
+      await reconcileNftChatMembershipForUser({
+        dbUserId: user.dbUserId,
+        isAgent: user.isAgent,
+      });
+    } catch (error) {
+      logger.warn(
+        'NFT chat reconciliation failed',
+        { error, userId: user.userId, dbUserId: user.dbUserId },
+        'GET /api/chats'
+      );
+    }
+  }
+  const nftChatGatingConfig = getNftChatGatingConfig();
+  const gatedChatId = nftChatGatingConfig.chatId;
+  const canAccessNftGatedChat =
+    !nftChatGatingConfig.enabled ||
+    !gatedChatId ||
+    (await canAccessNftChatGate(user.dbUserId ?? user.userId, gatedChatId));
+
   logger.info(
     'Fetching chats for user',
     {
@@ -320,14 +346,14 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   // Get user's chats with proper RLS context
   const { groupChats, directChats } = await asUser(user, async (dbClient) => {
-    // Get user's Command Center chat ID to exclude from regular chat list
-    // Command Center is managed separately at /agents/team
-    const [teamChat] = await dbClient
-      .select({ chatId: userAgentTeamChats.chatId })
-      .from(userAgentTeamChats)
-      .where(eq(userAgentTeamChats.userId, user.userId))
-      .limit(1);
-    const teamChatId = teamChat?.chatId;
+    // Get ALL user's Agents groups to exclude from regular chat list
+    // (handles edge case of duplicate team groups from race conditions)
+    // Agents is managed separately at /agents/team
+    const teamGroups = await dbClient
+      .select({ id: groups.id })
+      .from(groups)
+      .where(and(eq(groups.type, 'team'), eq(groups.ownerId, user.userId)));
+    const teamGroupIds = new Set(teamGroups.map((g) => g.id));
 
     // Get user's group memberships
     const memberships = await dbClient
@@ -341,8 +367,23 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       )
       .orderBy(desc(groupMembers.lastMessageAt));
 
+    const gatedChatGroupId =
+      gatedChatId && canAccessNftGatedChat === false
+        ? (
+            await dbClient
+              .select({ groupId: chats.groupId })
+              .from(chats)
+              .where(eq(chats.id, gatedChatId))
+              .limit(1)
+          )[0]?.groupId
+        : undefined;
+    const filteredMemberships =
+      gatedChatGroupId && canAccessNftGatedChat === false
+        ? memberships.filter((m) => m.groupId !== gatedChatGroupId)
+        : memberships;
+
     // Get chat IDs via Chat.groupId relationship
-    const groupIds = memberships.map((m) => m.groupId);
+    const groupIds = filteredMemberships.map((m) => m.groupId);
     const groupChatsWithGroupId =
       groupIds.length > 0
         ? await dbClient
@@ -351,17 +392,26 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
             .where(inArray(chats.groupId, groupIds))
         : [];
 
-    // Filter out Command Center from group chats
-    const filteredGroupChats = teamChatId
-      ? groupChatsWithGroupId.filter((c) => c.id !== teamChatId)
-      : groupChatsWithGroupId;
-    const groupChatIds = filteredGroupChats.map((c) => c.id);
+    // Filter out Agents chats (all chats linked to any team group)
+    const filteredGroupChats =
+      teamGroupIds.size > 0
+        ? groupChatsWithGroupId.filter(
+            (c) => !c.groupId || !teamGroupIds.has(c.groupId)
+          )
+        : groupChatsWithGroupId;
+    const filteredGroupChatsForAccess =
+      gatedChatId && canAccessNftGatedChat === false
+        ? filteredGroupChats.filter((c) => c.id !== gatedChatId)
+        : filteredGroupChats;
+    const groupChatIds = filteredGroupChatsForAccess.map((c) => c.id);
     // Map groupId -> chatId for lookup
     const groupIdToChatId = new Map(
-      filteredGroupChats.map((c) => [c.groupId, c.id])
+      filteredGroupChatsForAccess.map((c) => [c.groupId, c.id])
     );
     // Map chatId -> chat details
-    const chatDetailsMap = new Map(filteredGroupChats.map((c) => [c.id, c]));
+    const chatDetailsMap = new Map(
+      filteredGroupChatsForAccess.map((c) => [c.id, c])
+    );
 
     // Get last messages for group chats
     const groupChatMessages = await Promise.all(
@@ -436,7 +486,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     });
 
     // Format group chats - use groupId -> chatId mapping
-    const formattedGroupChats = memberships
+    const formattedGroupChats = filteredMemberships
       .map((membership) => {
         // Get the chatId from groupId
         const chatId = groupIdToChatId.get(membership.groupId);
@@ -530,37 +580,18 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           return null;
         }
 
-        // Get last message for this chat
-        // If the other user is an agent owned by the current user, get from agentMessages
-        let lastMessage = messagesByChatId.get(chat.id)?.[0] || null;
-
+        // Filter out DMs with the user's own agents
+        // These legacy conversations should be hidden - agent-owner communication
+        // now happens through the team chat at /agents/team
         if (
           otherUserDetails.isAgent &&
           otherUserDetails.managedBy === user.userId
         ) {
-          // Fetch last message from agentMessages table for owned agents
-          const [agentLastMsg] = await dbClient
-            .select({
-              id: agentMessages.id,
-              content: agentMessages.content,
-              createdAt: agentMessages.createdAt,
-            })
-            .from(agentMessages)
-            .where(eq(agentMessages.agentUserId, otherUserDetails.id))
-            .orderBy(desc(agentMessages.createdAt))
-            .limit(1);
-
-          if (agentLastMsg) {
-            lastMessage = {
-              id: agentLastMsg.id,
-              content: agentLastMsg.content,
-              chatId: chat.id,
-              senderId: otherUserDetails.id,
-              type: 'user' as const,
-              createdAt: agentLastMsg.createdAt,
-            };
-          }
+          return null;
         }
+
+        // Get last message for this chat
+        const lastMessage = messagesByChatId.get(chat.id)?.[0] || null;
 
         return {
           id: chat.id,
@@ -663,16 +694,17 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
   // Award points for creating a private channel (group chat created directly, not through Group)
   if (isGroup && !chat.groupId) {
-    await PointsService.awardPrivateChannelCreate(user.userId, chat.id).catch(
-      (error: unknown) => {
-        // Log error but don't fail chat creation if points award fails
-        logger.error(
-          'Failed to award points for private channel creation',
-          { error, userId: user.userId, chatId: chat.id },
-          'POST /api/chats'
-        );
-      }
-    );
+    await ReputationService.awardPrivateChannelCreate(
+      user.userId,
+      chat.id
+    ).catch((error: unknown) => {
+      // Log error but don't fail chat creation if points award fails
+      logger.error(
+        'Failed to award points for private channel creation',
+        { error, userId: user.userId, chatId: chat.id },
+        'POST /api/chats'
+      );
+    });
   }
 
   logger.info(

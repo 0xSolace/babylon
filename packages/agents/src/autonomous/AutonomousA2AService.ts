@@ -11,8 +11,13 @@ import { db, eq, users } from '@babylon/db';
 import type { IAgentRuntime } from '@elizaos/core';
 import type { BabylonRuntime } from '../plugins/babylon/types';
 import { agentPnLService } from '../services/AgentPnLService';
-import { getAgentConfig } from '../shared/agent-config';
+import {
+  getAgentConfig,
+  isAutonomousTradingEnabled,
+} from '../shared/agent-config';
 import { logger } from '../shared/logger';
+import { trackAgentTradeExecuted } from './track-agent-trade';
+import { getPredictionMarketPrices } from './utils/prediction-pricing';
 
 /**
  * Type guard to check if runtime has A2A client
@@ -105,7 +110,7 @@ export class AutonomousA2AService {
     const agent = agentResult[0];
     const config = await getAgentConfig(agentUserId);
 
-    if (!agent || !agent.isAgent || !config?.autonomousTrading) {
+    if (!agent || !agent.isAgent || !isAutonomousTradingEnabled(config)) {
       return {
         success: false,
         marketId: undefined,
@@ -193,9 +198,10 @@ ${
   predictions.length > 0
     ? predictions
         .map((m: PredictionMarket, i: number) => {
-          const totalShares = m.yesShares + m.noShares;
-          const yesPrice = totalShares > 0 ? m.yesShares / totalShares : 0.5;
-          const noPrice = 1 - yesPrice;
+          const { yesPrice, noPrice } = getPredictionMarketPrices(
+            m.yesShares,
+            m.noShares
+          );
           return `${i + 1}. "${m.question}"
    - Market ID: ${m.id}
    - YES: ${(yesPrice * 100).toFixed(1)}% (${m.yesShares} shares)
@@ -369,6 +375,17 @@ Your JSON response:`;
         reasoning: `LLM decision (${perpLeverage}x leverage): ${reasoning}`,
       });
 
+      const ownerId = agent?.managedBy ?? agentUserId;
+      trackAgentTradeExecuted(agentUserId, {
+        agent_id: agentUserId,
+        market_type: 'perp',
+        action: 'open',
+        ticker,
+        side,
+        amount: size,
+        owner_id: ownerId,
+      });
+
       return {
         success: true,
         tradeId: tradeResult.positionId,
@@ -429,6 +446,17 @@ Your JSON response:`;
       amount,
       price: tradeResult.avgPrice || 0,
       reasoning: `LLM decision: ${reasoning}`,
+    });
+
+    const ownerId = agent?.managedBy ?? agentUserId;
+    trackAgentTradeExecuted(agentUserId, {
+      agent_id: agentUserId,
+      market_type: 'prediction',
+      action: 'buy',
+      market_id: marketId,
+      side: outcome,
+      amount,
+      owner_id: ownerId,
     });
 
     return {
@@ -585,7 +613,11 @@ Your JSON response:`;
     const agent = agentResult[0];
     const tradingConfig = await getAgentConfig(agentUserId);
 
-    if (!agent || !agent.isAgent || !tradingConfig?.autonomousTrading) {
+    if (
+      !agent ||
+      !agent.isAgent ||
+      !isAutonomousTradingEnabled(tradingConfig)
+    ) {
       return { success: false, actionsTaken: 0 };
     }
 

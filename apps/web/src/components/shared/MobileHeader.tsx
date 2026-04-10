@@ -3,22 +3,33 @@
 import { cn, getDisplayReferralUrl, getReferralUrl } from '@babylon/shared';
 import {
   Bell,
+  Bot,
   Check,
   Copy,
   Gift,
-  Home,
   LogOut,
   MessageCircle,
+  Settings,
   TrendingUp,
   Trophy,
+  User,
+  Wallet,
   X,
 } from 'lucide-react';
-import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { GameFeedbackModal } from '@/components/feedback/GameFeedbackModal';
 import { Avatar } from '@/components/shared/Avatar';
+import { BabylonIcon } from '@/components/shared/icons/BabylonIcon';
+import { HouseIcon } from '@/components/shared/icons/HouseIcon';
+import {
+  fetchMobileHeaderPointsSnapshot,
+  isAbortError,
+} from '@/components/shared/mobileHeaderPoints';
 import { useAuth } from '@/hooks/useAuth';
+import { useUnreadMessages } from '@/hooks/useUnreadMessages';
+import { useUnreadNotifications } from '@/hooks/useUnreadNotifications';
 import { getAuthToken } from '@/lib/auth';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -41,8 +52,10 @@ function MobileHeaderContent() {
     total: number;
   } | null>(null);
   const [copiedReferral, setCopiedReferral] = useState(false);
-  const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const pathname = usePathname();
+  const { totalUnread: unreadMessages } = useUnreadMessages();
+  const { unreadCount: unreadNotifications } = useUnreadNotifications();
 
   // Hide mobile header when WAITLIST_MODE is enabled on home page
   const isWaitlistMode = process.env.NEXT_PUBLIC_WAITLIST_MODE === 'true';
@@ -94,6 +107,8 @@ function MobileHeaderContent() {
   ]);
 
   useEffect(() => {
+    let activeController: AbortController | null = null;
+
     const fetchPoints = async () => {
       if (!authenticated || !user?.id) {
         setPointsData(null);
@@ -106,89 +121,60 @@ function MobileHeaderContent() {
         return;
       }
 
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      };
+      activeController?.abort();
+      const controller = new AbortController();
+      activeController = controller;
 
-      // Fetch both trading balance and profile for reputation points
-      const [balanceResponse, profileResponse] = await Promise.all([
-        fetch(`/api/users/${encodeURIComponent(user.id)}/balance`, { headers }),
-        fetch(`/api/users/${encodeURIComponent(user.id)}/profile`, { headers }),
-      ]);
-
-      if (balanceResponse.ok) {
-        const balanceData = await balanceResponse.json();
-        setPointsData({
-          available: Number(balanceData.balance || 0),
-          total: user.reputationPoints || 0, // Use reputation points from authStore as fallback
+      try {
+        const snapshot = await fetchMobileHeaderPointsSnapshot({
+          userId: user.id,
+          token,
+          signal: controller.signal,
         });
-      }
 
-      // Update reputation points from profile if changed
-      if (profileResponse.ok) {
-        const profileData = await profileResponse.json();
-        if (
-          profileData.user?.reputationPoints !== undefined &&
-          profileData.user.reputationPoints !== user.reputationPoints
-        ) {
-          setUser({
-            ...user,
-            reputationPoints: profileData.user.reputationPoints,
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        if (snapshot.available !== null) {
+          setPointsData({
+            available: snapshot.available,
+            total: snapshot.reputationPoints ?? user.reputationPoints ?? 0,
           });
-          // Update local state with new reputation points
+        } else if (snapshot.reputationPoints !== null) {
           setPointsData((prev) =>
             prev
               ? {
                   ...prev,
-                  total: profileData.user.reputationPoints,
+                  total: snapshot.reputationPoints ?? prev.total,
                 }
               : null
           );
         }
-      }
-    };
 
-    fetchPoints();
-    const interval = setInterval(fetchPoints, 30000);
-    return () => clearInterval(interval);
-  }, [authenticated, user?.id, user?.reputationPoints, setUser, user]);
-
-  // Poll for unread notifications
-  useEffect(() => {
-    if (!authenticated || !user) {
-      setUnreadNotifications(0);
-      return;
-    }
-
-    const fetchUnreadCount = async () => {
-      const token = getAuthToken();
-
-      if (!token) {
-        return;
-      }
-
-      const response = await fetch(
-        '/api/notifications?unreadOnly=true&limit=1',
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+        if (
+          snapshot.reputationPoints !== null &&
+          snapshot.reputationPoints !== user.reputationPoints
+        ) {
+          setUser({
+            ...user,
+            reputationPoints: snapshot.reputationPoints,
+          });
         }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        setUnreadNotifications(data.unreadCount || 0);
+      } catch (error) {
+        if (controller.signal.aborted || isAbortError(error)) {
+          return;
+        }
       }
     };
 
-    fetchUnreadCount();
-
-    // Refresh every 1 minute
-    const interval = setInterval(fetchUnreadCount, 60000); // 60 seconds = 1 minute
-    return () => clearInterval(interval);
-  }, [authenticated, user]);
+    void fetchPoints();
+    const interval = setInterval(fetchPoints, 30000);
+    return () => {
+      clearInterval(interval);
+      activeController?.abort();
+    };
+  }, [authenticated, user?.id, user?.reputationPoints, setUser, user]);
 
   const copyReferralCode = async () => {
     if (!user?.referralCode) return;
@@ -206,16 +192,26 @@ function MobileHeaderContent() {
 
   const menuItems = [
     {
-      name: 'Feed',
+      name: 'Home',
       href: '/feed',
-      icon: Home,
+      icon: HouseIcon,
       active: pathname === '/feed' || pathname === '/',
+    },
+    {
+      name: 'Agents',
+      href: '/agents/team',
+      icon: Bot,
+      active: pathname === '/agents' || pathname.startsWith('/agents/'),
     },
     {
       name: 'Markets',
       href: '/markets',
       icon: TrendingUp,
-      active: pathname === '/markets',
+      active:
+        pathname.startsWith('/markets') ||
+        pathname === '/markets' ||
+        pathname.startsWith('/markets/perps/') ||
+        pathname.startsWith('/markets/predictions/'),
     },
     {
       name: 'Chats',
@@ -224,7 +220,13 @@ function MobileHeaderContent() {
       active: pathname === '/chats',
     },
     {
-      name: 'Leaderboards',
+      name: 'Wallet',
+      href: '/wallet',
+      icon: Wallet,
+      active: pathname === '/wallet',
+    },
+    {
+      name: 'Leaderboard',
       href: '/leaderboard',
       icon: Trophy,
       active: pathname === '/leaderboard',
@@ -240,6 +242,18 @@ function MobileHeaderContent() {
       href: '/notifications',
       icon: Bell,
       active: pathname === '/notifications',
+    },
+    {
+      name: 'Profile',
+      href: '/profile',
+      icon: User,
+      active: pathname === '/profile' || pathname.startsWith('/u/'),
+    },
+    {
+      name: 'Settings',
+      href: '/settings',
+      icon: Settings,
+      active: pathname?.startsWith('/settings'),
     },
   ];
 
@@ -281,18 +295,9 @@ function MobileHeaderContent() {
               href="/feed"
               className="transition-transform duration-300 hover:scale-105"
             >
-              <Image
-                src="/assets/logos/logo.svg"
-                alt="Babylon Logo"
-                width={28}
-                height={28}
-                className="h-7 w-7"
-              />
+              <BabylonIcon className="h-7 w-7 text-primary" />
             </Link>
           </div>
-
-          {/* Right: Empty space for balance */}
-          <div className="w-8 shrink-0" />
         </div>
       </header>
 
@@ -301,7 +306,7 @@ function MobileHeaderContent() {
         <>
           {/* Backdrop */}
           <div
-            className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm md:hidden"
+            className="fixed inset-0 z-50 bg-neutral-300/70 backdrop-blur-[3px] md:hidden dark:bg-neutral-900/70"
             onClick={() => setShowSideMenu(false)}
           />
 
@@ -344,48 +349,37 @@ function MobileHeaderContent() {
             </Link>
 
             {/* Points Display */}
-            <div className="shrink-0 bg-muted/30 px-4 py-4">
-              <div className="flex items-start gap-3">
-                <div
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
-                  style={{ backgroundColor: '#0066FF' }}
-                >
-                  <Trophy className="h-5 w-5 text-foreground" />
+            <div className="shrink-0 border-border border-b px-4 py-3">
+              <div className="flex items-center justify-between">
+                <div className="text-muted-foreground text-xs">Reputation</div>
+                <div className="font-bold text-foreground text-sm">
+                  {(user?.reputationPoints || 0).toLocaleString()}
                 </div>
-                <div className="flex-1">
-                  <div className="flex items-center justify-between">
-                    <div className="font-semibold text-muted-foreground text-xs uppercase tracking-wide">
-                      Reputation
-                    </div>
-                    <div className="font-bold text-base text-foreground">
-                      {(user?.reputationPoints || 0).toLocaleString()}
-                    </div>
-                  </div>
-                  <div className="mt-2 flex items-center justify-between">
-                    <div className="text-muted-foreground text-xs">
-                      Trading Balance
-                    </div>
-                    <div className="font-semibold text-foreground text-sm">
-                      {(pointsData?.available || 0).toLocaleString()}
-                    </div>
-                  </div>
+              </div>
+              <div className="mt-1.5 flex items-center justify-between">
+                <div className="text-muted-foreground text-xs">
+                  Trading Balance
+                </div>
+                <div className="font-bold text-foreground text-sm">
+                  {(pointsData?.available || 0).toLocaleString()}
                 </div>
               </div>
             </div>
 
             {/* Menu Items - Scrollable */}
-            <nav className="min-h-0 flex-1 overflow-y-auto">
+            <nav className="min-h-0 flex-1 overflow-y-auto pt-2.5">
               {menuItems.map((item) => {
                 const Icon = item.icon;
-                const hasNotifications =
-                  item.name === 'Notifications' && unreadNotifications > 0;
+                const hasNotificationBadge =
+                  (Icon === Bell && unreadNotifications > 0) ||
+                  (Icon === MessageCircle && unreadMessages > 0);
                 return (
                   <Link
                     key={item.name}
                     href={item.href}
                     onClick={() => setShowSideMenu(false)}
                     className={cn(
-                      'relative flex items-center gap-4 px-4 py-3 transition-colors',
+                      'relative flex items-center gap-4 px-4 py-2.5 transition-colors',
                       item.active
                         ? 'bg-[#0066FF] font-bold text-primary-foreground'
                         : 'font-semibold text-sidebar-foreground hover:bg-sidebar-accent'
@@ -393,7 +387,7 @@ function MobileHeaderContent() {
                   >
                     <div className="relative">
                       <Icon className="h-5 w-5" />
-                      {hasNotifications && (
+                      {hasNotificationBadge && (
                         <span className="-top-1 -right-1 absolute h-2 w-2 rounded-full bg-blue-500 ring-2 ring-sidebar" />
                       )}
                     </div>
@@ -404,7 +398,7 @@ function MobileHeaderContent() {
             </nav>
 
             {/* Bottom Section - Referral & Logout */}
-            <div className="shrink-0 border-border border-t bg-sidebar pb-20">
+            <div className="shrink-0 border-border border-t bg-sidebar pb-16">
               {/* Referral Code Button */}
               {user?.referralCode && (
                 <button
@@ -414,9 +408,14 @@ function MobileHeaderContent() {
                   {copiedReferral ? (
                     <>
                       <Check className="h-5 w-5 text-green-500" />
-                      <span className="text-base text-green-500">
-                        Referral Link Copied!
-                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-base text-green-500">
+                          Referral Link Copied!
+                        </div>
+                        <div className="truncate font-mono text-muted-foreground text-xs">
+                          {getDisplayReferralUrl(user.referralCode)}
+                        </div>
+                      </div>
                     </>
                   ) : (
                     <>
@@ -452,6 +451,12 @@ function MobileHeaderContent() {
           </div>
         </>
       )}
+
+      {/* Feedback Modal */}
+      <GameFeedbackModal
+        isOpen={showFeedbackModal}
+        onClose={() => setShowFeedbackModal(false)}
+      />
     </>
   );
 }

@@ -6,7 +6,7 @@
  * Provides high-level functions for broadcasting to channels and chat rooms.
  */
 
-import { logger } from '@babylon/shared';
+import { logger, type MessageMetadata } from '@babylon/shared';
 import { publishEvent, type RealtimeChannel } from '../realtime';
 import type { JsonValue } from '../types';
 
@@ -85,6 +85,14 @@ export async function broadcastChatMessage(
     createdAt: string;
     isGameChat?: boolean;
     isDMChat?: boolean;
+    metadata?: MessageMetadata | null;
+    replyToMessageId?: string | null;
+    replyToMessage?: {
+      id: string;
+      content: string;
+      senderId: string;
+      senderName?: string;
+    } | null;
   }
 ): Promise<void> {
   logger.info(
@@ -92,9 +100,29 @@ export async function broadcastChatMessage(
     { chatId, messageId: message.id },
     'Realtime'
   );
+  // Cast to JsonValue for type compatibility - metadata may contain complex nested types
   await broadcastToChannel(`chat:${chatId}`, {
     type: 'new_message',
-    message,
+    message: message as unknown as JsonValue,
+  });
+}
+
+/**
+ * Broadcast a chat message reaction delta to a specific chat room.
+ */
+export async function broadcastChatMessageReaction(
+  chatId: string,
+  reaction: {
+    messageId: string;
+    chatId: string;
+    emoji: string;
+    userId: string;
+    action: 'added' | 'removed';
+  }
+): Promise<void> {
+  await broadcastToChannel(`chat:${chatId}`, {
+    type: 'message_reaction',
+    reaction: reaction as unknown as JsonValue,
   });
 }
 
@@ -201,6 +229,27 @@ export async function broadcastAgentActivity(
 }
 
 /**
+ * Broadcast chat title update to a chat room.
+ * Used when LLM generates a title for a new conversation.
+ */
+export async function broadcastChatTitleUpdate(
+  chatId: string,
+  newTitle: string
+): Promise<void> {
+  logger.info(
+    'Broadcasting chat title update',
+    { chatId, newTitle },
+    'Realtime'
+  );
+  await broadcastToChannel(`chat:${chatId}`, {
+    type: 'title_updated',
+    chatId,
+    title: newTitle,
+    timestamp: Date.now(),
+  });
+}
+
+/**
  * Broadcast typing indicator to a chat room.
  */
 export async function broadcastTypingIndicator(
@@ -214,6 +263,36 @@ export async function broadcastTypingIndicator(
     userId,
     displayName,
     isTyping,
+    timestamp: Date.now(),
+  });
+}
+
+/**
+ * Broadcast thinking indicator to a chat room.
+ *
+ * Distinct from typing indicator - shows that an agent is processing/analyzing
+ * a complex query. Used for longer-running operations where the user should
+ * see visual feedback that work is happening.
+ *
+ * @param chatId - The chat ID to broadcast to
+ * @param agentId - The agent user ID
+ * @param agentName - Display name of the agent
+ * @param isThinking - Whether the agent is currently thinking
+ * @param thinkingLabel - Optional label describing what the agent is doing (e.g., "Analyzing market data...")
+ */
+export async function broadcastThinkingIndicator(
+  chatId: string,
+  agentId: string,
+  agentName: string,
+  isThinking: boolean,
+  thinkingLabel?: string
+): Promise<void> {
+  await broadcastToChannel(`chat:${chatId}`, {
+    type: 'thinking_indicator',
+    agentId,
+    agentName,
+    isThinking,
+    thinkingLabel: thinkingLabel ?? null,
     timestamp: Date.now(),
   });
 }

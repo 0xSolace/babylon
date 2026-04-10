@@ -5,92 +5,69 @@
  * @access Cron (CRON_SECRET required)
  *
  * @description
- * Simple health check endpoint that runs every 15 minutes to keep serverless
- * functions warm, verify database connectivity, and log system health metrics.
- * Max execution time: 60s.
- *
- * @openapi
- * /api/cron/health-check:
- *   get:
- *     tags:
- *       - Cron
- *     summary: System health check
- *     description: Verifies database connectivity and system health (requires CRON_SECRET)
- *     security:
- *       - CronSecret: []
- *     responses:
- *       200:
- *         description: System healthy
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 status:
- *                   type: string
- *                   enum: [healthy, unhealthy]
- *                 database:
- *                   type: string
- *                   enum: [connected, error]
- *                 duration:
- *                   type: number
- *                 timestamp:
- *                   type: string
- *                   format: date-time
- *       401:
- *         description: Invalid or missing CRON_SECRET
- *       500:
- *         description: System unhealthy
- *
- * @example
- * ```typescript
- * const response = await fetch('/api/cron/health-check', {
- *   headers: { 'Authorization': `Bearer ${CRON_SECRET}` }
- * });
- * const { status, database } = await response.json();
- * ```
+ * Runs a shared observability snapshot used by the admin dashboard and sends
+ * Discord alerts when the platform enters a critical state.
  */
 
-import { verifyCronAuth } from '@babylon/api';
-import { db } from '@babylon/db';
+import {
+  getSystemStatusSnapshot,
+  sendDiscordSystemAlertIfNeeded,
+  withCronAuth,
+  withErrorHandling,
+} from '@babylon/api';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
-// Vercel function configuration
-export const maxDuration = 60; // 1 minute max for health check
+export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 
-export async function GET(request: NextRequest) {
+async function handler(_request: NextRequest) {
   const startTime = Date.now();
-
-  // Verify cron authorization using centralized auth
-  if (!verifyCronAuth(request, { jobName: 'HealthCheck' })) {
-    logger.warn('Unauthorized health check attempt', undefined, 'HealthCheck');
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  // Quick database health check
-  await db.$queryRaw`SELECT 1`;
-
+  const snapshot = await getSystemStatusSnapshot();
   const duration = Date.now() - startTime;
 
-  logger.info(
-    'Health check passed',
+  const databaseConnected = snapshot.health.database;
+  const httpStatus = databaseConnected ? 200 : 500;
+
+  const alertResult = await sendDiscordSystemAlertIfNeeded(snapshot);
+  const logMethod =
+    snapshot.status === 'critical'
+      ? 'error'
+      : snapshot.status === 'warning'
+        ? 'warn'
+        : 'info';
+
+  logger[logMethod](
+    'Health check completed',
     {
       duration,
-      timestamp: new Date().toISOString(),
+      databaseConnected,
+      systemStatus: snapshot.status,
+      issues: snapshot.issues,
+      discordAlert: alertResult.reason,
     },
     'HealthCheck'
   );
 
-  return NextResponse.json({
-    success: true,
-    status: 'healthy',
-    database: 'connected',
-    duration,
-    timestamp: new Date().toISOString(),
-  });
+  return NextResponse.json(
+    {
+      success: databaseConnected,
+      status: databaseConnected ? 'healthy' : 'unhealthy',
+      database: databaseConnected ? 'connected' : 'error',
+      duration,
+      timestamp: snapshot.timestamp,
+      systemStatus: snapshot.status,
+      issues: snapshot.issues,
+      criticalIssues: snapshot.criticalIssues,
+      summary: snapshot.summary,
+      alert: {
+        sent: alertResult.sent,
+        reason: alertResult.reason,
+      },
+    },
+    { status: httpStatus }
+  );
 }
+
+export const GET = withErrorHandling(withCronAuth('HealthCheck', handler));

@@ -16,9 +16,13 @@
  */
 
 import type { IAgentRuntime } from '@elizaos/core';
-import { getTrajectoryContext } from '../plugins/plugin-trajectory-logger/src/action-interceptor';
-import type { TrajectoryLoggerService } from '../plugins/plugin-trajectory-logger/src/TrajectoryLoggerService';
+import {
+  ensureTrajectoryStep,
+  getTrajectoryContext,
+  type RuntimeTrajectoryLogger,
+} from '../plugins/plugin-trajectory-logger/src/action-interceptor';
 import { logger } from '../shared/logger';
+import { buildReasoningTraceMetadata } from './reasoning-trace';
 
 /**
  * Ollama model metadata from API
@@ -67,6 +71,10 @@ const ARCHETYPE_MODELS: Record<string, string> = {
 // Default fallback model
 const DEFAULT_MODEL = 'qwen2.5:7b-instruct';
 
+function getConfiguredDefaultModel(): string | undefined {
+  return process.env.OLLAMA_MODEL;
+}
+
 // Ollama configuration
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
 
@@ -77,7 +85,7 @@ export interface OllamaCallParams {
   modelOverride?: string;
   temperature?: number;
   maxTokens?: number;
-  trajectoryLogger?: TrajectoryLoggerService;
+  trajectoryLogger?: RuntimeTrajectoryLogger;
   trajectoryId?: string;
   purpose?: 'action' | 'reasoning' | 'evaluation' | 'response' | 'other';
   actionType?: string;
@@ -127,10 +135,19 @@ export async function isModelAvailable(modelName: string): Promise<boolean> {
  * Get the best available model for an archetype
  */
 export async function getModelForArchetype(archetype: string): Promise<string> {
+  const configuredDefaultModel = getConfiguredDefaultModel();
+
   // First, try the archetype-specific trained model
   const archetypeModel = ARCHETYPE_MODELS[archetype];
   if (archetypeModel && (await isModelAvailable(archetypeModel))) {
     return archetypeModel;
+  }
+
+  if (
+    configuredDefaultModel &&
+    (await isModelAvailable(configuredDefaultModel))
+  ) {
+    return configuredDefaultModel;
   }
 
   // Fall back to default model
@@ -167,10 +184,16 @@ export async function callOllama(params: OllamaCallParams): Promise<string> {
 
   // Determine which model to use
   let model: string;
+  const configuredDefaultModel = getConfiguredDefaultModel();
   if (params.modelOverride) {
     model = params.modelOverride;
   } else if (params.archetype) {
     model = await getModelForArchetype(params.archetype);
+  } else if (
+    configuredDefaultModel &&
+    (await isModelAvailable(configuredDefaultModel))
+  ) {
+    model = configuredDefaultModel;
   } else {
     model = DEFAULT_MODEL;
   }
@@ -220,23 +243,34 @@ export async function callOllama(params: OllamaCallParams): Promise<string> {
   const latencyMs = Date.now() - startTime;
 
   // Log to trajectory if available (CRITICAL for RL training data collection)
-  if (trajectoryLogger && trajectoryId) {
-    const stepId = trajectoryLogger.getCurrentStepId(trajectoryId);
-    if (stepId) {
-      trajectoryLogger.logLLMCall(stepId, {
-        model,
-        systemPrompt: params.system || '',
-        userPrompt: params.prompt,
-        response: responseText,
-        temperature: params.temperature ?? 0.7,
-        maxTokens: params.maxTokens ?? 8192,
-        purpose: params.purpose || 'action',
-        actionType: params.actionType,
-        latencyMs,
-        promptTokens: data.prompt_eval_count,
-        completionTokens: data.eval_count,
-      });
+  let stepId: string | null = null;
+  if (params.runtime) {
+    const activeStep = await ensureTrajectoryStep(params.runtime);
+    if (activeStep) {
+      trajectoryLogger = activeStep.logger;
+      trajectoryId = activeStep.trajectoryId;
+      stepId = activeStep.stepId;
     }
+  } else if (trajectoryLogger && trajectoryId) {
+    stepId = trajectoryLogger.getCurrentStepId(trajectoryId);
+  }
+
+  if (trajectoryLogger && trajectoryId && stepId) {
+    const reasoningMetadata = buildReasoningTraceMetadata(responseText);
+    trajectoryLogger.logLLMCall(stepId, {
+      model,
+      systemPrompt: params.system || '',
+      userPrompt: params.prompt,
+      response: responseText,
+      temperature: params.temperature ?? 0.7,
+      maxTokens: params.maxTokens ?? 8192,
+      purpose: params.purpose || 'action',
+      actionType: params.actionType,
+      latencyMs,
+      promptTokens: data.prompt_eval_count,
+      completionTokens: data.eval_count,
+      ...reasoningMetadata,
+    });
   }
 
   logger.debug(

@@ -193,25 +193,25 @@ export function PlayerStatsModal({
 
               {/* Stats Grid */}
               <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3">
-                {/* Reputation Points */}
-                <div className="rounded-lg border border-border bg-background/50 p-2.5 sm:p-3">
+                {/* Reputation */}
+                <div className="rounded-lg border border-[#0066FF]/30 bg-[#0066FF]/10 p-2.5 sm:p-3">
                   <div className="mb-1.5 flex items-center gap-1.5">
-                    <Trophy className="h-3.5 w-3.5 shrink-0 text-yellow-500" />
-                    <span className="truncate text-muted-foreground text-xs">
+                    <Trophy className="h-3.5 w-3.5 shrink-0 text-[#0066FF]" />
+                    <span className="truncate text-[#0066FF] text-xs">
                       Reputation
                     </span>
                   </div>
-                  <p className="break-words font-bold text-lg sm:text-xl">
+                  <p className="break-words font-bold text-[#0066FF] text-lg sm:text-xl">
                     {profile.reputationPoints.toLocaleString()}
                   </p>
                 </div>
 
-                {/* Virtual Balance */}
+                {/* Trading Balance */}
                 <div className="rounded-lg border border-border bg-background/50 p-2.5 sm:p-3">
                   <div className="mb-1.5 flex items-center gap-1.5">
                     <Wallet className="h-3.5 w-3.5 shrink-0 text-primary" />
                     <span className="truncate text-muted-foreground text-xs">
-                      Balance
+                      Trading Balance
                     </span>
                   </div>
                   <p className="break-words font-bold text-lg sm:text-xl">
@@ -250,12 +250,12 @@ export function PlayerStatsModal({
                   </p>
                 </div>
 
-                {/* Invite Points */}
+                {/* Referral Rewards */}
                 <div className="rounded-lg border border-border bg-background/50 p-2.5 sm:p-3">
                   <div className="mb-1.5 flex items-center gap-1.5">
                     <Trophy className="h-3.5 w-3.5 shrink-0 text-primary" />
                     <span className="truncate text-muted-foreground text-xs">
-                      Invite Points
+                      Referral Rewards
                     </span>
                   </div>
                   <p className="break-words font-bold text-lg sm:text-xl">

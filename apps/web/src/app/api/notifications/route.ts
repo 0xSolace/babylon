@@ -3,6 +3,7 @@
  *
  * @route GET /api/notifications - Get user notifications
  * @route PATCH /api/notifications - Mark notifications as read
+ * @route DELETE /api/notifications - Clear notifications
  * @access Authenticated
  *
  * @description
@@ -78,6 +79,18 @@
  *     responses:
  *       200:
  *         description: Notifications marked as read
+ *       401:
+ *         description: Unauthorized
+ *   delete:
+ *     tags:
+ *       - Notifications
+ *     summary: Clear notifications
+ *     description: Deletes specific notifications or clears all notifications for the authenticated user.
+ *     security:
+ *       - PrivyAuth: []
+ *     responses:
+ *       200:
+ *         description: Notifications cleared
  *       401:
  *         description: Unauthorized
  *
@@ -193,8 +206,89 @@ import {
   logger,
   MarkNotificationsReadSchema,
   NotificationsQuerySchema,
+  toISO,
 } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+import { z } from 'zod';
+import { getMissingNotificationSchemaErrorCode } from './schema-compat';
+
+const ClearNotificationsSchema = z
+  .object({
+    notificationIds: z.array(z.string().min(1)).min(1).optional(),
+    clearAll: z.boolean().optional(),
+  })
+  .refine(
+    (value) => value.clearAll === true || value.notificationIds !== undefined,
+    {
+      message: 'Provide notificationIds or clearAll=true',
+    }
+  );
+
+export function serializeNotificationForApi(
+  n: Record<string, unknown> & {
+    actor?: Record<string, unknown> | null;
+  }
+) {
+  // Helper to safely convert any value to string (handles cached data)
+  const toSafeString = (value: unknown): string => {
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number') return String(value);
+    if (typeof value === 'boolean') return String(value);
+    if (typeof value === 'object' && 'toString' in value) {
+      return (value as { toString: () => string }).toString();
+    }
+    return String(value);
+  };
+
+  // Handle createdAt safely - it could be Date (from DB/memory cache) or string (from Redis cache)
+  let createdAtISO: string;
+  if (n.createdAt instanceof Date) {
+    createdAtISO = toISO(n.createdAt);
+  } else if (typeof n.createdAt === 'string') {
+    createdAtISO = n.createdAt;
+  } else {
+    const dateValue = n.createdAt as string | number | Date;
+    createdAtISO = new Date(dateValue).toISOString();
+  }
+
+  return {
+    id: toSafeString(n.id),
+    type: toSafeString(n.type),
+    title: toSafeString(n.title),
+    actorId: toSafeString(n.actorId),
+    actor: n.actor
+      ? {
+          id: toSafeString(n.actor.id),
+          displayName: toSafeString(n.actor.displayName),
+          username: toSafeString(n.actor.username),
+          profileImageUrl: toSafeString(n.actor.profileImageUrl),
+        }
+      : null,
+    postId: n.postId ? toSafeString(n.postId) : null,
+    commentId: n.commentId ? toSafeString(n.commentId) : null,
+    chatId: n.chatId ? toSafeString(n.chatId) : null,
+    groupId: n.groupId ? toSafeString(n.groupId) : null,
+    inviteId: n.inviteId ? toSafeString(n.inviteId) : null,
+    message: toSafeString(n.message),
+    data:
+      n.data && typeof n.data === 'object'
+        ? (n.data as Record<string, unknown>)
+        : null,
+    read: Boolean(n.read),
+    createdAt: createdAtISO,
+  };
+}
+
+type NotificationReadPayload = {
+  notificationsList: Array<
+    Record<string, unknown> & {
+      actor?: Record<string, unknown> | null;
+    }
+  >;
+  unreadCount: number;
+  degraded?: boolean;
+};
 
 /**
  * GET /api/notifications - Get user notifications
@@ -237,7 +331,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   // OPTIMIZED: Cache notifications with short TTL (high-frequency polling endpoint)
   const cacheKey = `notifications:${authUser.userId}:${validatedUnreadOnly}:${validatedType}:${validatedLimit}`;
 
-  // Get blocked/muted user IDs to filter notifications
+  // Keep moderation failures visible; only the notification-schema reads degrade.
   const [blockedIds, mutedIds, blockedByIds] = await Promise.all([
     getBlockedUserIds(authUser.userId),
     getMutedUserIds(authUser.userId),
@@ -250,127 +344,113 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     ...blockedByIds,
   ]);
 
-  const { notificationsList, unreadCount } = await getCacheOrFetch(
-    cacheKey,
-    async () => {
-      // Fetch notifications
-      const allNotifications = await db
-        .select()
-        .from(notifications)
-        .where(and(...conditions))
-        .orderBy(desc(notifications.createdAt))
-        .limit(validatedLimit * 2); // Fetch more to account for filtering
+  const { notificationsList, unreadCount, degraded } =
+    await getCacheOrFetch<NotificationReadPayload>(
+      cacheKey,
+      async () => {
+        let allNotifications:
+          | Array<Record<string, unknown> & { actorId?: string | null }>
+          | undefined;
+        let unreadCount = 0;
 
-      // Get actor IDs to fetch user info
-      const actorIds = [
-        ...new Set(
-          allNotifications
-            .map((n) => n.actorId)
-            .filter((id): id is string => id !== null)
-        ),
-      ];
+        try {
+          // Fetch notifications
+          allNotifications = await db
+            .select()
+            .from(notifications)
+            .where(and(...conditions))
+            .orderBy(desc(notifications.createdAt))
+            .limit(validatedLimit * 2); // Fetch more to account for filtering
 
-      // Fetch actor info
-      const actorsResult =
-        actorIds.length > 0
-          ? await db
-              .select({
-                id: users.id,
-                displayName: users.displayName,
-                username: users.username,
-                profileImageUrl: users.profileImageUrl,
-              })
-              .from(users)
-              .where(inArray(users.id, actorIds))
-          : [];
+          // Get unread count
+          const [unreadCountResult] = await db
+            .select({ count: count() })
+            .from(notifications)
+            .where(
+              and(
+                eq(notifications.userId, authUser.userId),
+                eq(notifications.read, false)
+              )
+            );
 
-      const actorMap = new Map(actorsResult.map((a) => [a.id, a]));
+          unreadCount = Number(unreadCountResult?.count ?? 0);
+        } catch (error) {
+          const missingSchemaCode =
+            getMissingNotificationSchemaErrorCode(error);
+          if (!missingSchemaCode) {
+            throw error;
+          }
 
-      // Filter out notifications from blocked/muted users and add actor info
-      const notificationsList = allNotifications
-        .filter((n) => !n.actorId || !excludedUserIds.has(n.actorId))
-        .slice(0, validatedLimit) // Limit to requested amount after filtering
-        .map((n) => ({
-          ...n,
-          actor: n.actorId ? actorMap.get(n.actorId) || null : null,
-        }));
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
+          logger.warn(
+            'Notifications unavailable because the database schema is pending',
+            { userId: authUser.userId, code: missingSchemaCode, errorMessage },
+            'GET /api/notifications'
+          );
 
-      // Get unread count
-      const [unreadCountResult] = await db
-        .select({ count: count() })
-        .from(notifications)
-        .where(
-          and(
-            eq(notifications.userId, authUser.userId),
-            eq(notifications.read, false)
-          )
-        );
+          return {
+            notificationsList: [],
+            unreadCount: 0,
+            degraded: true,
+          };
+        }
 
-      return {
-        notificationsList,
-        unreadCount: Number(unreadCountResult?.count ?? 0),
-      };
-    },
-    {
-      namespace: CACHE_KEYS.USER,
-      ttl: 10, // 10 second cache (high-frequency endpoint, needs to be fresh)
-    }
-  );
+        const rows = allNotifications ?? [];
 
-  logger.info(
-    'Notifications fetched successfully',
-    { userId: authUser.userId, count: notificationsList.length, unreadCount },
-    'GET /api/notifications'
-  );
+        // Get actor IDs to fetch user info
+        const actorIds = [
+          ...new Set(
+            rows.map((n) => n.actorId).filter((id): id is string => id !== null)
+          ),
+        ];
+
+        // Fetch actor info
+        const actorsResult =
+          actorIds.length > 0
+            ? await db
+                .select({
+                  id: users.id,
+                  displayName: users.displayName,
+                  username: users.username,
+                  profileImageUrl: users.profileImageUrl,
+                })
+                .from(users)
+                .where(inArray(users.id, actorIds))
+            : [];
+
+        const actorMap = new Map(actorsResult.map((a) => [a.id, a]));
+
+        // Filter out notifications from blocked/muted users and add actor info
+        const notificationsList = rows
+          .filter((n) => !n.actorId || !excludedUserIds.has(n.actorId))
+          .slice(0, validatedLimit) // Limit to requested amount after filtering
+          .map((n) => ({
+            ...n,
+            actor: n.actorId ? actorMap.get(n.actorId) || null : null,
+          }));
+
+        return {
+          notificationsList,
+          unreadCount,
+        };
+      },
+      {
+        namespace: CACHE_KEYS.USER,
+        ttl: 10, // 10 second cache (high-frequency endpoint, needs to be fresh)
+      }
+    );
+
+  if (!degraded) {
+    logger.info(
+      'Notifications fetched successfully',
+      { userId: authUser.userId, count: notificationsList.length, unreadCount },
+      'GET /api/notifications'
+    );
+  }
 
   return successResponse({
-    notifications: notificationsList.map((n) => {
-      // Helper to safely convert any value to string (handles cached data)
-      const toSafeString = (value: unknown): string => {
-        if (value === null || value === undefined) return '';
-        if (typeof value === 'string') return value;
-        if (typeof value === 'number') return String(value);
-        if (typeof value === 'boolean') return String(value);
-        if (typeof value === 'object' && 'toString' in value) {
-          return (value as { toString: () => string }).toString();
-        }
-        return String(value);
-      };
-
-      // Handle createdAt safely - it could be Date (from DB/memory cache) or string (from Redis cache)
-      let createdAtISO: string;
-      if (n.createdAt instanceof Date) {
-        createdAtISO = n.createdAt.toISOString();
-      } else if (typeof n.createdAt === 'string') {
-        createdAtISO = n.createdAt;
-      } else {
-        // Fallback: try to convert to Date then to ISO string
-        const dateValue = n.createdAt as string | number | Date;
-        createdAtISO = new Date(dateValue).toISOString();
-      }
-
-      return {
-        id: toSafeString(n.id),
-        type: toSafeString(n.type),
-        actorId: toSafeString(n.actorId),
-        actor: n.actor
-          ? {
-              id: toSafeString(n.actor.id),
-              displayName: toSafeString(n.actor.displayName),
-              username: toSafeString(n.actor.username),
-              profileImageUrl: toSafeString(n.actor.profileImageUrl),
-            }
-          : null,
-        postId: n.postId ? toSafeString(n.postId) : null,
-        commentId: n.commentId ? toSafeString(n.commentId) : null,
-        chatId: n.chatId ? toSafeString(n.chatId) : null,
-        groupId: n.groupId ? toSafeString(n.groupId) : null,
-        inviteId: n.inviteId ? toSafeString(n.inviteId) : null,
-        message: toSafeString(n.message),
-        read: Boolean(n.read),
-        createdAt: createdAtISO,
-      };
-    }),
+    notifications: notificationsList.map((n) => serializeNotificationForApi(n)),
     unreadCount,
   });
 });
@@ -449,4 +529,68 @@ export const PATCH = withErrorHandling(async (request: NextRequest) => {
   throw new InternalServerError(
     'Invalid request: provide notificationIds array or markAllAsRead=true'
   );
+});
+
+/**
+ * DELETE /api/notifications - Clear notifications
+ */
+export const DELETE = withErrorHandling(async (request: NextRequest) => {
+  const authUser = await authenticate(request);
+  const rawBody = await request.text();
+  let body: unknown = {};
+  if (rawBody.trim().length > 0) {
+    try {
+      body = JSON.parse(rawBody);
+    } catch {
+      return successResponse({ error: 'Invalid JSON body' }, 400);
+    }
+  }
+  const { notificationIds, clearAll } = ClearNotificationsSchema.parse(body);
+
+  if (clearAll) {
+    await db
+      .delete(notifications)
+      .where(eq(notifications.userId, authUser.userId));
+
+    await invalidateCachePattern(`notifications:${authUser.userId}:*`, {
+      namespace: CACHE_KEYS.USER,
+    });
+
+    logger.info(
+      'All notifications cleared',
+      { userId: authUser.userId },
+      'DELETE /api/notifications'
+    );
+
+    return successResponse({
+      success: true,
+      message: 'All notifications cleared',
+    });
+  }
+
+  const idsToDelete = notificationIds ?? [];
+
+  await db
+    .delete(notifications)
+    .where(
+      and(
+        inArray(notifications.id, idsToDelete),
+        eq(notifications.userId, authUser.userId)
+      )
+    );
+
+  await invalidateCachePattern(`notifications:${authUser.userId}:*`, {
+    namespace: CACHE_KEYS.USER,
+  });
+
+  logger.info(
+    'Notifications cleared',
+    { userId: authUser.userId, count: idsToDelete.length },
+    'DELETE /api/notifications'
+  );
+
+  return successResponse({
+    success: true,
+    message: 'Notifications cleared',
+  });
 });

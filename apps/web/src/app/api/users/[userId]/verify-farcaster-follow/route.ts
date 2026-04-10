@@ -47,7 +47,7 @@ import {
   AuthorizationError,
   authenticate,
   BusinessLogicError,
-  PointsService,
+  ReputationService,
   requireUserByIdentifier,
   successResponse,
   withErrorHandling,
@@ -227,29 +227,29 @@ export const POST = withErrorHandling(
         message:
           verificationError ||
           'Could not verify follow. Please ensure you are following @playbabylon on Farcaster.',
-        points: {
+        reputation: {
           awarded: 0,
-          newTotal: 0,
+          newReputationTotal: 0,
         },
       });
     }
 
-    // Award points only if verification succeeded and not already awarded
-    let pointsAwarded = 0;
-    let newPointsTotal = 0;
+    // Award reputation only if verification succeeded and not already awarded.
+    let reputationAwarded = 0;
+    let newReputationTotal = 0;
 
     if (!alreadyAwarded) {
-      // Award points through PointsService
-      const pointsResult =
-        await PointsService.awardFarcasterFollow(canonicalUserId);
+      // Award reputation through ReputationService.
+      const reputationResult =
+        await ReputationService.awardFarcasterFollow(canonicalUserId);
 
-      if (pointsResult.success) {
-        pointsAwarded = pointsResult.pointsAwarded;
-        newPointsTotal = pointsResult.newTotal;
+      if (reputationResult.success) {
+        reputationAwarded = reputationResult.reputationAwarded;
+        newReputationTotal = reputationResult.newReputationTotal;
 
         logger.info(
-          `Awarded ${pointsAwarded} points for Farcaster follow`,
-          { userId: canonicalUserId, pointsAwarded },
+          `Awarded ${reputationAwarded} reputation for Farcaster follow`,
+          { userId: canonicalUserId, reputationAwarded },
           'POST /api/users/[userId]/verify-farcaster-follow'
         );
       }
@@ -265,12 +265,12 @@ export const POST = withErrorHandling(
     return successResponse({
       verified: true,
       message:
-        pointsAwarded > 0
-          ? `Follow verified successfully! You earned ${pointsAwarded} points.`
-          : 'Follow verified! You already received points for this action.',
-      points: {
-        awarded: pointsAwarded,
-        newTotal: newPointsTotal,
+        reputationAwarded > 0
+          ? `Follow verified successfully! You earned ${reputationAwarded} reputation.`
+          : 'Follow verified! You already received reputation for this action.',
+      reputation: {
+        awarded: reputationAwarded,
+        newReputationTotal,
       },
     });
   }

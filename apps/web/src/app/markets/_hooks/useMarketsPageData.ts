@@ -4,6 +4,7 @@ import { logger } from '@babylon/shared';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { usePortfolioPnL } from '@/hooks/usePortfolioPnL';
+import { useSSEChannel } from '@/hooks/useSSE';
 import {
   usePerpMarkets,
   usePerpMarketsRealtime,
@@ -25,8 +26,8 @@ import type {
 /** Debounce delay for search input (ms) - balances responsiveness with performance */
 const SEARCH_DEBOUNCE_MS = 150;
 
-/** Number of top trending/hot items to display in dashboard widgets */
-const TOP_ITEMS_COUNT = 6;
+/** Default number of top trending/hot items for dashboard-style slices */
+const DEFAULT_TOP_ITEMS_COUNT = 6;
 
 /**
  * Trending score weights for perp markets.
@@ -76,6 +77,12 @@ export interface TrendingPerpMarket extends PerpMarket {
  */
 export interface TopPrediction extends PredictionMarketWithPosition {
   totalShares: number;
+}
+
+/** Options for [useMarketsPageData] */
+export interface UseMarketsPageDataOptions {
+  /** Max rows for `trendingMarkets` and `topPredictions` slices (default 6) */
+  topItemsCount?: number;
 }
 
 /**
@@ -176,9 +183,16 @@ function isPredictionExpiredOrResolved(
  * for the markets dashboard. Extracts data logic from the page component
  * to improve maintainability and testability.
  *
+ * Also consumed by `/markets` for the same stores and **debounced**
+ * `deferredSearchQuery` so the screener does not fork fetch/filter logic.
+ *
  * @returns Markets page data and actions
  */
-export function useMarketsPageData(): MarketsPageData {
+export function useMarketsPageData(
+  options?: UseMarketsPageDataOptions
+): MarketsPageData {
+  const topItemsCount = options?.topItemsCount ?? DEFAULT_TOP_ITEMS_COUNT;
+
   const { user, authenticated, login } = useAuth();
 
   // Search and sort state
@@ -245,6 +259,7 @@ export function useMarketsPageData(): MarketsPageData {
     userId: string | null | undefined;
   } | null>(null);
   const hasMountedRef = useRef(false);
+  const lastPredictionPositionsRefreshAtRef = useRef(0);
 
   // Update refs when values change
   useEffect(() => {
@@ -260,6 +275,112 @@ export function useMarketsPageData(): MarketsPageData {
     refetchPerpsRef.current = refetchPerps;
   }, [refetchPerps]);
 
+  // WHY SSE subscription here: PredictionMarketService already broadcasts
+  // prediction_trade, prediction_resolution, and prediction_cancellation to
+  // the 'markets' channel, but nothing was consuming them for the list view.
+  // Without this, probability changes only appear after the next fetch (12 s+).
+  //
+  // WHY useCallback(…, []): The callback only references setPredictions (stable
+  // from useState) and refs (read at call time). No reactive deps needed.
+  // useSSEChannel also keeps an internal ref to the latest callback, so even
+  // a stale closure is harmless.
+  //
+  // WHY throttled refreshUserPositions (2 s): If the user fires multiple trades
+  // in rapid succession, each SSE event triggers this. Without throttling we'd
+  // spam the positions API; 2 s lets at most one refresh per burst.
+  useSSEChannel(
+    'markets',
+    useCallback((data: unknown) => {
+      if (!data || typeof data !== 'object') return;
+      const d = data as Record<string, unknown>;
+      const type = d.type;
+
+      if (type === 'prediction_trade' && typeof d.marketId === 'string') {
+        const marketId = d.marketId;
+        const yesShares =
+          typeof d.yesShares === 'number' ? d.yesShares : undefined;
+        const noShares =
+          typeof d.noShares === 'number' ? d.noShares : undefined;
+        const yesProb = typeof d.yesPrice === 'number' ? d.yesPrice : undefined;
+        const noProb = typeof d.noPrice === 'number' ? d.noPrice : undefined;
+        setPredictions((prev) =>
+          prev.map((p) => {
+            if (String(p.id) !== String(marketId)) return p;
+            return {
+              ...p,
+              ...(yesShares !== undefined && { yesShares }),
+              ...(noShares !== undefined && { noShares }),
+              ...(yesProb !== undefined && { yesProbability: yesProb }),
+              ...(noProb !== undefined && { noProbability: noProb }),
+            } as PredictionMarketWithPosition;
+          })
+        );
+        const trade = d.trade;
+        if (
+          trade &&
+          typeof trade === 'object' &&
+          typeof (trade as Record<string, unknown>).actorId === 'string'
+        ) {
+          const actorId = (trade as Record<string, unknown>).actorId as string;
+          if (actorId && userIdRef.current === actorId) {
+            const now = Date.now();
+            if (now - lastPredictionPositionsRefreshAtRef.current > 2000) {
+              lastPredictionPositionsRefreshAtRef.current = now;
+              void refreshPositionsRef.current?.();
+            }
+          }
+        }
+        return;
+      }
+
+      if (type === 'prediction_resolution' && typeof d.marketId === 'string') {
+        const marketId = d.marketId;
+        const winningSide = d.winningSide;
+        const ws =
+          winningSide === 'yes' || winningSide === 'no' ? winningSide : null;
+        setPredictions((prev) =>
+          prev.map((p) => {
+            if (String(p.id) !== String(marketId)) return p;
+            if (!ws) {
+              return {
+                ...p,
+                status: 'resolved',
+              } as PredictionMarketWithPosition;
+            }
+            return {
+              ...p,
+              status: 'resolved',
+              resolvedOutcome: ws === 'yes',
+              yesProbability: ws === 'yes' ? 1 : 0,
+              noProbability: ws === 'no' ? 1 : 0,
+              ...(typeof d.resolutionProofUrl === 'string' && {
+                resolutionProofUrl: d.resolutionProofUrl,
+              }),
+              ...(typeof d.resolutionDescription === 'string' && {
+                resolutionDescription: d.resolutionDescription,
+              }),
+            } as PredictionMarketWithPosition;
+          })
+        );
+        return;
+      }
+
+      if (
+        type === 'prediction_cancellation' &&
+        typeof d.marketId === 'string'
+      ) {
+        const marketId = d.marketId;
+        setPredictions((prev) =>
+          prev.map((p) =>
+            String(p.id) === String(marketId)
+              ? ({ ...p, status: 'cancelled' } as PredictionMarketWithPosition)
+              : p
+          )
+        );
+      }
+    }, [])
+  );
+
   // Combined loading state - only true for INITIAL load (no data yet)
   // This prevents flickering when refetching data in the background
   const loading =
@@ -267,54 +388,112 @@ export function useMarketsPageData(): MarketsPageData {
     (predictionsLoading && predictions.length === 0);
 
   /**
-   * Fetches prediction markets data.
-   * Sets predictionsError on failure, clears it on success.
+   * Fetches prediction markets once per mount / auth change.
+   *
+   * WHY 429 retry: `GET /api/markets/predictions` uses `publicRateLimit`; bursty
+   * reloads or strict-mode double-fetch can hit the limit. Retrying with backoff
+   * (and `Retry-After` when sent) turns a transient limit into success without
+   * asking users to refresh. We still cap attempts so a sustained block fails fast.
+   *
+   * WHY AbortError early return: effect cleanup aborts the in-flight request;
+   * that must not flip `predictionsLoading` or log as a hard error.
    */
   const fetchData = useCallback(async (signal?: AbortSignal) => {
     const isAuth = authenticatedRef.current;
     const userId = userIdRef.current;
-
     const url = `/api/markets/predictions${isAuth && userId ? `?userId=${encodeURIComponent(userId)}` : ''}`;
 
-    try {
-      const response = await fetch(url, { signal });
+    const MAX_RETRIES = 3;
 
-      if (!response.ok) {
-        const errorMsg = `Failed to load predictions (${response.status})`;
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const response = await fetch(url, { signal });
+
+        if (response.status === 429 && attempt < MAX_RETRIES) {
+          const retryAfter = response.headers.get('Retry-After');
+          let backoffMs: number | undefined;
+
+          if (retryAfter) {
+            // First try to interpret Retry-After as seconds
+            const seconds = Number.parseInt(retryAfter, 10);
+            if (Number.isFinite(seconds) && seconds > 0) {
+              backoffMs = seconds * 1000;
+            } else {
+              // Fallback: try HTTP-date format
+              const retryDateMs = Date.parse(retryAfter);
+              if (Number.isFinite(retryDateMs)) {
+                const delayMs = retryDateMs - Date.now();
+                if (delayMs > 0) {
+                  backoffMs = delayMs;
+                }
+              }
+            }
+          }
+
+          if (!Number.isFinite(backoffMs!) || backoffMs! <= 0) {
+            backoffMs = 1000 * 2 ** attempt;
+          }
+          logger.warn(
+            `Rate limited (429), retrying in ${backoffMs}ms (attempt ${attempt + 1}/${MAX_RETRIES})`,
+            {},
+            'useMarketsPageData'
+          );
+          await new Promise<void>((resolve, reject) => {
+            const timer = setTimeout(resolve, backoffMs);
+            signal?.addEventListener(
+              'abort',
+              () => {
+                clearTimeout(timer);
+                reject(new DOMException('Aborted', 'AbortError'));
+              },
+              { once: true }
+            );
+          });
+          continue;
+        }
+
+        if (!response.ok) {
+          const errorMsg = `Failed to load predictions (${response.status})`;
+          logger.error(
+            'Failed to fetch predictions',
+            { status: response.status },
+            'useMarketsPageData'
+          );
+          setPredictionsError(errorMsg);
+          setPredictionsLoading(false);
+          return;
+        }
+
+        const data = await response.json();
+        setPredictions(data.questions ?? []);
+        setPredictionsError(null);
+
+        if (isAuth && userId && refreshPositionsRef.current) {
+          await refreshPositionsRef.current();
+        }
+
+        setBalanceRefreshTrigger(Date.now());
+        setPredictionsLoading(false);
+        return;
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') {
+          return;
+        }
+        if (attempt < MAX_RETRIES) {
+          await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
+          continue;
+        }
+        const errorMsg =
+          err instanceof Error ? err.message : 'Failed to load predictions';
         logger.error(
           'Failed to fetch predictions',
-          { status: response.status },
+          { error: errorMsg },
           'useMarketsPageData'
         );
         setPredictionsError(errorMsg);
         setPredictionsLoading(false);
         return;
       }
-
-      const data = await response.json();
-      setPredictions(data.questions ?? []);
-      setPredictionsError(null); // Clear error on success
-
-      if (isAuth && userId && refreshPositionsRef.current) {
-        await refreshPositionsRef.current();
-      }
-
-      setBalanceRefreshTrigger(Date.now());
-      setPredictionsLoading(false);
-    } catch (err) {
-      // Don't set error for abort - that's expected cleanup behavior
-      if (err instanceof Error && err.name === 'AbortError') {
-        return;
-      }
-      const errorMsg =
-        err instanceof Error ? err.message : 'Failed to load predictions';
-      logger.error(
-        'Failed to fetch predictions',
-        { error: errorMsg },
-        'useMarketsPageData'
-      );
-      setPredictionsError(errorMsg);
-      setPredictionsLoading(false);
     }
   }, []);
 
@@ -329,33 +508,26 @@ export function useMarketsPageData(): MarketsPageData {
     void refreshPortfolio();
   }, [authenticated, balanceRefreshTrigger, refreshPortfolio]);
 
-  // Initial fetch and auth state change handling
+  // Fetch predictions on mount and when auth identity changes.
+  //
+  // WHY reset hasMountedRef in cleanup: React 18 Strict Mode runs mount → cleanup →
+  // mount in dev. The first fetch is aborted; if we left hasMountedRef true and
+  // only refetched on auth delta, the second mount would skip fetch and leave
+  // predictionsLoading stuck true with an empty list.
   useEffect(() => {
     const controller = new AbortController();
     const currentAuth = { authenticated, userId: user?.id };
 
-    if (!hasMountedRef.current) {
-      hasMountedRef.current = true;
-      prevAuthRef.current = currentAuth;
-      fetchData(controller.signal).catch((err) => {
-        if (err instanceof Error && err.name !== 'AbortError') {
-          logger.warn(
-            'Failed to fetch predictions',
-            { error: err.message },
-            'useMarketsPageData'
-          );
-        }
-      });
-      return () => controller.abort();
-    }
+    const shouldFetch =
+      !hasMountedRef.current ||
+      !prevAuthRef.current ||
+      prevAuthRef.current.authenticated !== currentAuth.authenticated ||
+      prevAuthRef.current.userId !== currentAuth.userId;
 
-    const prevAuth = prevAuthRef.current;
-    if (
-      prevAuth &&
-      (prevAuth.authenticated !== currentAuth.authenticated ||
-        prevAuth.userId !== currentAuth.userId)
-    ) {
-      prevAuthRef.current = currentAuth;
+    hasMountedRef.current = true;
+    prevAuthRef.current = currentAuth;
+
+    if (shouldFetch) {
       fetchData(controller.signal).catch((err) => {
         if (err instanceof Error && err.name !== 'AbortError') {
           logger.warn(
@@ -367,7 +539,11 @@ export function useMarketsPageData(): MarketsPageData {
       });
     }
 
-    return () => controller.abort();
+    // Note: resets hasMountedRef for development mode double-mount behavior in React Strict Mode
+    return () => {
+      controller.abort();
+      hasMountedRef.current = false;
+    };
   }, [authenticated, user?.id, fetchData]);
 
   /**
@@ -499,7 +675,7 @@ export function useMarketsPageData(): MarketsPageData {
    *   Uses Math.abs so both gains and losses contribute to "trending".
    *
    * Final score = volumeScore + changeScore (max 100)
-   * Returns TOP_ITEMS_COUNT markets sorted by trending score descending.
+   * Returns up to `topItemsCount` markets sorted by trending score descending.
    */
   const trendingMarkets = useMemo((): TrendingPerpMarket[] => {
     if (perpMarkets.length === 0) return [];
@@ -529,12 +705,12 @@ export function useMarketsPageData(): MarketsPageData {
         if (scoreDiff === 0) return a.ticker.localeCompare(b.ticker);
         return scoreDiff;
       })
-      .slice(0, TOP_ITEMS_COUNT);
-  }, [perpMarkets]);
+      .slice(0, topItemsCount);
+  }, [perpMarkets, topItemsCount]);
 
   /**
    * Top predictions by volume.
-   * Returns TOP_ITEMS_COUNT predictions sorted by total shares descending.
+   * Returns up to `topItemsCount` predictions sorted by total shares descending.
    */
   const topPredictions = useMemo((): TopPrediction[] => {
     return predictions
@@ -544,8 +720,8 @@ export function useMarketsPageData(): MarketsPageData {
         totalShares: (p.yesShares ?? 0) + (p.noShares ?? 0),
       }))
       .sort((a, b) => b.totalShares - a.totalShares)
-      .slice(0, TOP_ITEMS_COUNT);
-  }, [predictions]);
+      .slice(0, topItemsCount);
+  }, [predictions, topItemsCount]);
 
   /**
    * Computed P&L data for perp positions.

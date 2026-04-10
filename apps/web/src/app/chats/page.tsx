@@ -1,10 +1,11 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { cn } from '@babylon/shared';
-import { Loader2, MessageCircle } from 'lucide-react';
-import { useMemo } from 'react';
-import { AgentChat } from '@/components/agents/AgentChat';
-import { LoginButton } from '@/components/auth/LoginButton';
+import { Loader2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useEffect, useMemo } from 'react';
 import {
   ChatHeader,
   ChatList,
@@ -14,35 +15,21 @@ import {
 } from '@/components/chats';
 import { CreateGroupModal } from '@/components/groups/CreateGroupModal';
 import { GroupManagementModal } from '@/components/groups/GroupManagementModal';
-import { PageContainer } from '@/components/shared/PageContainer';
-import { Separator } from '@/components/shared/Separator';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { buttonVariants } from '@/components/ui/button';
-import { useA2A } from '@/hooks/useA2A';
-import { useChatParam } from '@/hooks/useChatParam';
+import { useAuth } from '@/hooks/useAuth';
 import { useOwnedAgents } from '@/hooks/useOwnedAgents';
 import { useSSE } from '@/hooks/useSSE';
 
 export default function ChatsPage() {
-  useA2A();
-  useChatParam();
+  const router = useRouter();
+  const { login } = useAuth();
 
   // Get global SSE connection status
   const { isConnected: globalSSEConnected } = useSSE({
     channels: ['feed'],
   });
 
-  // Get owned agents for detecting if chatting with own agent
-  const { getAgentData, updateAgentBalance } = useOwnedAgents();
+  // Hook kept for potential future use (owned agent detection is via chatDetails)
+  useOwnedAgents();
 
   const {
     // Auth
@@ -76,14 +63,6 @@ export default function ChatsPage() {
     sendWarning,
     sendSuccess,
 
-    // Leave chat
-    isLeaveConfirmOpen,
-    setLeaveConfirmOpen,
-    isLeavingChat,
-    leaveChatError,
-    setLeaveChatError,
-    handleLeaveChat,
-
     // Group modals
     isCreateGroupModalOpen,
     setIsCreateGroupModalOpen,
@@ -102,41 +81,49 @@ export default function ChatsPage() {
     messagesEndRef,
     topSentinelRef,
     setRefs,
-    pullDistance,
+
+    // Reply
+    replyToMessage,
+    handleReplyToMessage,
+    clearReplyToMessage,
 
     // Actions
     sendMessage,
+    toggleReaction,
     loadChats,
   } = useChatPage();
 
   // Detect if the current chat is with the user's own agent
-  // If so, we'll render AgentChat instead of ChatView for AI capabilities
-  const ownAgentData = useMemo(() => {
+  // If so, redirect to team chat (Agents) instead of this DM
+  const ownAgentId = useMemo(() => {
     if (!chatDetails?.chat.otherUser || chatDetails.chat.isGroup) return null;
     const other = chatDetails.chat.otherUser;
     // Check if the other user is an agent managed by the current user
     if (other.isAgent && other.managedBy === user?.id) {
-      return getAgentData(other.id);
+      return other.id;
     }
     return null;
-  }, [chatDetails, user?.id, getAgentData]);
+  }, [chatDetails, user?.id]);
 
-  // Auth required state
+  // Redirect owned agent DMs to team chat and select the agent
+  useEffect(() => {
+    if (ownAgentId) {
+      router.replace(
+        `/agents/team?selectAgent=${encodeURIComponent(ownAgentId)}`
+      );
+    }
+  }, [ownAgentId, router]);
+
+  // Auth required — redirect to feed and show login
+  useEffect(() => {
+    if (!ready || authenticated) return;
+    router.push('/feed');
+    const timer = setTimeout(() => login(), 500);
+    return () => clearTimeout(timer);
+  }, [ready, authenticated, router, login]);
+
   if (ready && !authenticated) {
-    return (
-      <PageContainer noPadding className="flex flex-col">
-        <div className="flex flex-1 items-center justify-center p-8">
-          <div className="max-w-md text-center">
-            <MessageCircle className="mx-auto mb-4 h-16 w-16 text-muted-foreground" />
-            <h2 className="mb-2 font-bold text-foreground text-xl">log in</h2>
-            <p className="mb-6 text-muted-foreground">
-              Sign in to view and send messages
-            </p>
-            <LoginButton />
-          </div>
-        </div>
-      </PageContainer>
-    );
+    return null;
   }
 
   // Show back button only on mobile/tablet (not on xl+ where both columns visible)
@@ -144,21 +131,20 @@ export default function ChatsPage() {
 
   return (
     <>
-      {/* Use fixed viewport heights to ensure proper scroll containment */}
-      {/* Mobile: 100dvh - 56px (MobileHeader pt-14) - 56px (BottomNav pb-14) = 112px */}
-      {/* Desktop: full viewport height (no header/nav padding) */}
-      <div className="flex h-[calc(100dvh-112px)] flex-col overflow-hidden md:h-dvh">
+      {/* Mobile: fixed between MobileHeader (top-14) and BottomNav (bottom-14) */}
+      {/* Desktop: normal flow, full viewport height */}
+      <div className="fixed inset-x-0 top-14 bottom-14 z-30 flex flex-col overflow-hidden border-border md:relative md:inset-auto md:z-auto md:h-dvh lg:border-l">
         <div className="flex min-h-0 flex-1 overflow-hidden">
           {/* Left Column: Chat List */}
           {/* Mobile: full width when no chat selected, hidden when chat selected */}
-          {/* Tablet (lg): w-96 sidebar when chat selected */}
-          {/* Desktop (xl): always visible w-96 sidebar */}
+          {/* Tablet (lg): w-80 sidebar when chat selected */}
+          {/* Desktop (xl): always visible w-80 sidebar */}
           <div
             className={cn(
-              'h-full min-h-0 flex-col bg-background',
+              'h-full min-h-0 flex-col border-border bg-background',
               selectedChatId
-                ? 'hidden w-96 lg:flex' // Hide on mobile, show as sidebar on lg+
-                : 'flex w-full xl:w-96' // Full width on mobile, sidebar width on xl
+                ? 'hidden w-80 border-r lg:flex' // Hide on mobile, show as sidebar on lg+
+                : 'flex w-full xl:w-80 xl:border-r' // Full width on mobile, sidebar width on xl
             )}
           >
             <ChatHeader
@@ -183,34 +169,21 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* Vertical Separator - visible on lg+ when chat selected */}
-          <Separator
-            orientation="vertical"
-            className={cn(
-              'shrink-0',
-              selectedChatId ? 'hidden lg:block' : 'hidden xl:block'
-            )}
-          />
-
-          {/* Right Column: Chat View or Agent Chat */}
+          {/* Right Column: Chat View */}
           {/* Mobile/Tablet: only shown when chat selected */}
           {/* Desktop (xl): always shown */}
+          {/* Note: Owned agent DMs redirect to team chat automatically */}
           <div
             className={cn(
-              'h-full min-h-0 flex-1 bg-background',
+              'h-full min-h-0 min-w-0 flex-1 bg-background',
               selectedChatId ? 'block' : 'hidden xl:block'
             )}
           >
-            {ownAgentData ? (
-              <AgentChat
-                agent={ownAgentData}
-                onBalanceUpdate={(newBalance) =>
-                  updateAgentBalance(ownAgentData.id, newBalance)
-                }
-                onMessageSent={loadChats}
-                showBackButton={showBackButton}
-                onBack={() => setSelectedChatId(null)}
-              />
+            {ownAgentId ? (
+              // Redirecting to team chat...
+              <div className="flex h-full items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
             ) : (
               <ChatView
                 chatDetails={chatDetails}
@@ -220,7 +193,6 @@ export default function ChatsPage() {
                 loading={loadingChat}
                 isLoadingMore={isLoadingMore}
                 hasMore={hasMore}
-                pullDistance={pullDistance}
                 messageInput={messageInput}
                 sending={sending}
                 sendError={sendError}
@@ -231,52 +203,18 @@ export default function ChatsPage() {
                 topSentinelRef={topSentinelRef}
                 messagesEndRef={messagesEndRef}
                 onBack={() => setSelectedChatId(null)}
+                onToggleReaction={toggleReaction}
                 onManageGroup={handleManageGroup}
-                onLeaveChat={() => setLeaveConfirmOpen(true)}
                 onMessageChange={setMessageInput}
                 onSendMessage={sendMessage}
+                replyToMessage={replyToMessage}
+                onReply={handleReplyToMessage}
+                onDismissReply={clearReplyToMessage}
               />
             )}
           </div>
         </div>
       </div>
-
-      {/* Leave Chat Confirmation Dialog */}
-      <AlertDialog open={isLeaveConfirmOpen} onOpenChange={setLeaveConfirmOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Leave Chat?</AlertDialogTitle>
-            <AlertDialogDescription>
-              <p className="text-muted-foreground text-sm">
-                Are you sure you want to leave this chat?
-              </p>
-              {leaveChatError && (
-                <p className="mt-2 text-red-500 text-sm">{leaveChatError}</p>
-              )}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel
-              onClick={() => {
-                setLeaveConfirmOpen(false);
-                setLeaveChatError(null);
-              }}
-            >
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleLeaveChat}
-              className={buttonVariants()}
-              disabled={isLeavingChat}
-            >
-              {isLeavingChat && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              )}
-              Leave
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* Group Modals */}
       <CreateGroupModal
@@ -293,6 +231,12 @@ export default function ChatsPage() {
         }}
         groupId={selectedGroupId}
         onGroupUpdated={handleGroupUpdated}
+        onGroupRemoved={() => {
+          setSelectedChatId(null);
+          setIsGroupManagementModalOpen(false);
+          setSelectedGroupId(null);
+          loadChats();
+        }}
       />
     </>
   );

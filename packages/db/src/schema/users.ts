@@ -93,7 +93,21 @@ export const users = pgTable(
   'User',
   {
     id: text('id').primaryKey(),
+    // TODO: Remove these columns in a future migration once all references are cleaned up.
+    // They were part of the Privy embedded wallet / Solana / EVM chain integration
+    // which has been removed. Columns are kept nullable to avoid data loss during Phase 1.
+    privyWalletId: text('privyWalletId'),
+    privySolanaWalletId: text('privySolanaWalletId'),
+    offlineWalletReady: boolean('offlineWalletReady').notNull().default(false),
+    offlineWalletReadyAt: timestamp('offlineWalletReadyAt', { mode: 'date' }),
+    solanaOfflineWalletReady: boolean('solanaOfflineWalletReady')
+      .notNull()
+      .default(false),
+    solanaOfflineWalletReadyAt: timestamp('solanaOfflineWalletReadyAt', {
+      mode: 'date',
+    }),
     walletAddress: text('walletAddress').unique(),
+    solanaWalletAddress: text('solanaWalletAddress').unique(),
     username: text('username').unique(),
     displayName: text('displayName'),
     bio: text('bio'),
@@ -127,7 +141,10 @@ export const users = pgTable(
     hasFarcaster: boolean('hasFarcaster').notNull().default(false),
     hasTwitter: boolean('hasTwitter').notNull().default(false),
     hasDiscord: boolean('hasDiscord').notNull().default(false),
+    hasTelegram: boolean('hasTelegram').notNull().default(false),
+    // TODO: Remove nftTokenId in a future migration (NFT minting is disabled; see Phase 1 cleanup).
     nftTokenId: integer('nftTokenId').unique(),
+    // TODO: Remove onChainRegistered in a future migration (ERC-8004 removed in Phase 1).
     onChainRegistered: boolean('onChainRegistered').notNull().default(false),
     pointsAwardedForFarcaster: boolean('pointsAwardedForFarcaster')
       .notNull()
@@ -151,6 +168,9 @@ export const users = pgTable(
       .notNull()
       .default(false),
     pointsAwardedForDiscordJoin: boolean('pointsAwardedForDiscordJoin')
+      .notNull()
+      .default(false),
+    pointsAwardedForTelegram: boolean('pointsAwardedForTelegram')
       .notNull()
       .default(false),
     pointsAwardedForUsername: boolean('pointsAwardedForUsername')
@@ -186,11 +206,17 @@ export const users = pgTable(
     showTwitterPublic: boolean('showTwitterPublic').notNull().default(true),
     showWalletPublic: boolean('showWalletPublic').notNull().default(true),
     usernameChangedAt: timestamp('usernameChangedAt', { mode: 'date' }),
+    // TODO: Remove all agent0* and solana* columns in a future migration (Agent0/Solana removed in Phase 1).
     agent0FeedbackCount: integer('agent0FeedbackCount'),
     agent0MetadataCID: text('agent0MetadataCID'),
     agent0RegisteredAt: timestamp('agent0RegisteredAt', { mode: 'date' }),
     agent0TokenId: integer('agent0TokenId'),
     agent0TrustScore: doublePrecision('agent0TrustScore'),
+    solanaRegistered: boolean('solanaRegistered').notNull().default(false),
+    solanaRegistryAssetId: text('solanaRegistryAssetId'),
+    solanaMetadataUri: text('solanaMetadataUri'),
+    solanaRegistrationTxHash: text('solanaRegistrationTxHash'),
+    solanaRegisteredAt: timestamp('solanaRegisteredAt', { mode: 'date' }),
     bannedAt: timestamp('bannedAt', { mode: 'date' }),
     bannedBy: text('bannedBy'),
     bannedReason: text('bannedReason'),
@@ -214,6 +240,9 @@ export const users = pgTable(
     appealReviewedAt: timestamp('appealReviewedAt', { mode: 'date' }),
     falsePositiveHistory: json('falsePositiveHistory').$type<JsonValue>(),
     privyId: text('privyId').unique(),
+    // Steward auth user ID (UUID). Set at first Steward login.
+    // Coexists with privyId during migration; privyId will be dropped in Phase 3.
+    stewardId: text('stewardId').unique(),
     registrationBlockNumber: bigint('registrationBlockNumber', {
       mode: 'bigint',
     }),
@@ -237,6 +266,9 @@ export const users = pgTable(
     discordRefreshToken: text('discordRefreshToken'),
     discordTokenExpiresAt: timestamp('discordTokenExpiresAt', { mode: 'date' }),
     discordVerifiedAt: timestamp('discordVerifiedAt', { mode: 'date' }),
+    telegramId: text('telegramId').unique(),
+    telegramUsername: text('telegramUsername'),
+    telegramVerifiedAt: timestamp('telegramVerifiedAt', { mode: 'date' }),
     tosAccepted: boolean('tosAccepted').notNull().default(false),
     tosAcceptedAt: timestamp('tosAcceptedAt', { mode: 'date' }),
     tosAcceptedVersion: text('tosAcceptedVersion').default('2025-11-11'),
@@ -261,12 +293,58 @@ export const users = pgTable(
       .default(false),
     emailVerified: boolean('emailVerified').notNull().default(false),
     email: text('email'),
+    emailNotificationsEnabled: boolean('emailNotificationsEnabled')
+      .notNull()
+      .default(false),
+    emailNotificationsRealtime: boolean('emailNotificationsRealtime')
+      .notNull()
+      .default(true),
+    emailNotificationsDailySummary: boolean('emailNotificationsDailySummary')
+      .notNull()
+      .default(true),
+    emailNotificationsWeeklySummary: boolean('emailNotificationsWeeklySummary')
+      .notNull()
+      .default(true),
+    emailNotificationsMonthlySummary: boolean(
+      'emailNotificationsMonthlySummary'
+    )
+      .notNull()
+      .default(true),
+    notificationDigestEnabled: boolean('notificationDigestEnabled')
+      .notNull()
+      .default(true),
+    notificationDigestFrequency: text('notificationDigestFrequency')
+      .notNull()
+      .default('daily'),
+    notificationDigestDeliveryChannel: text('notificationDigestDeliveryChannel')
+      .notNull()
+      .default('both'),
+    notificationDigestLastSentAt: timestamp('notificationDigestLastSentAt', {
+      mode: 'date',
+    }),
+    emailNotificationsUnsubscribedAt: timestamp(
+      'emailNotificationsUnsubscribedAt',
+      {
+        mode: 'date',
+      }
+    ),
     waitlistGraduatedAt: timestamp('waitlistGraduatedAt', { mode: 'date' }),
     // Agent flags (config stored in UserAgentConfig table)
     isAgent: boolean('isAgent').notNull().default(false),
     managedBy: text('managedBy'),
     // Game guide completion tracking
     gameGuideCompletedAt: timestamp('gameGuideCompletedAt', { mode: 'date' }),
+    // Profile chain sync tracking (database-first architecture)
+    profileChainSyncNeeded: boolean('profileChainSyncNeeded')
+      .notNull()
+      .default(false),
+    profileChainSyncAt: timestamp('profileChainSyncAt', { mode: 'date' }),
+    profileChainSyncError: text('profileChainSyncError'),
+    // Daily login streak tracking (BAB-88)
+    dailyLoginStreak: integer('dailyLoginStreak').notNull().default(0),
+    lastDailyLogin: timestamp('lastDailyLogin', { mode: 'date' }),
+    longestStreak: integer('longestStreak').notNull().default(0),
+    totalDailyLogins: integer('totalDailyLogins').notNull().default(0),
   },
   (table) => [
     index('User_displayName_idx').on(table.displayName),
@@ -274,6 +352,7 @@ export const users = pgTable(
     index('User_invitePoints_idx').on(table.invitePoints),
     index('User_isActor_idx').on(table.isActor),
     // Admin stats indexes for optimized user signups queries
+    index('User_createdAt_idx').on(table.createdAt),
     index('User_isActor_createdAt_idx').on(table.isActor, table.createdAt),
     index('User_isAgent_idx').on(table.isAgent),
     index('User_isAgent_createdAt_idx').on(table.isAgent, table.createdAt),
@@ -282,20 +361,72 @@ export const users = pgTable(
     index('User_isScammer_idx').on(table.isScammer),
     index('User_isCSAM_idx').on(table.isCSAM),
     index('User_managedBy_idx').on(table.managedBy),
+    index('User_managedBy_isAgent_createdAt_idx').on(
+      table.managedBy,
+      table.isAgent,
+      table.createdAt
+    ),
     index('User_profileComplete_createdAt_idx').on(
       table.profileComplete,
       table.createdAt
     ),
     index('User_referralCode_idx').on(table.referralCode),
+    index('User_lifetimePnL_createdAt_id_idx').on(
+      table.lifetimePnL,
+      table.createdAt,
+      table.id
+    ),
     index('User_reputationPoints_idx').on(table.reputationPoints),
     index('User_username_idx').on(table.username),
+    index('User_emailNotificationsEnabled_idx').on(
+      table.emailNotificationsEnabled
+    ),
     index('User_waitlistJoinedAt_idx').on(table.waitlistJoinedAt),
     index('User_waitlistPosition_idx').on(table.waitlistPosition),
     index('User_walletAddress_idx').on(table.walletAddress),
     index('User_registrationIpHash_idx').on(table.registrationIpHash),
     index('User_lastReferralIpHash_idx').on(table.lastReferralIpHash),
+    // Index for efficient profile chain sync queries
+    index('User_profileChainSyncNeeded_onChainRegistered_idx').on(
+      table.profileChainSyncNeeded,
+      table.onChainRegistered
+    ),
+    // Indexes for daily login streak (BAB-88)
+    index('User_dailyLoginStreak_idx').on(table.dailyLoginStreak),
+    index('User_longestStreak_idx').on(table.longestStreak),
+    index('User_lastDailyLogin_idx').on(table.lastDailyLogin),
   ]
 );
+
+// UserPnLSnapshot - Hourly snapshots of canonical per-user trading metrics
+export const userPnLSnapshots = pgTable(
+  'UserPnLSnapshot',
+  {
+    id: text('id').primaryKey(),
+    userId: text('userId')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    snapshotAt: timestamp('snapshotAt', { mode: 'date' }).notNull(),
+    lifetimePnL: doublePrecision('lifetimePnL').notNull().default(0),
+    unrealizedPnL: doublePrecision('unrealizedPnL').notNull().default(0),
+    currentPnL: doublePrecision('currentPnL').notNull().default(0),
+    createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('UserPnLSnapshot_userId_snapshotAt_idx').on(
+      table.userId,
+      table.snapshotAt
+    ),
+    index('UserPnLSnapshot_snapshotAt_idx').on(table.snapshotAt),
+    unique('UserPnLSnapshot_userId_snapshotAt_key').on(
+      table.userId,
+      table.snapshotAt
+    ),
+  ]
+);
+
+export type UserPnLSnapshot = typeof userPnLSnapshots.$inferSelect;
+export type NewUserPnLSnapshot = typeof userPnLSnapshots.$inferInsert;
 
 // OnboardingIntent
 export const onboardingIntents = pgTable(
@@ -333,6 +464,10 @@ export const follows = pgTable(
     unique('Follow_followerId_followingId_key').on(
       table.followerId,
       table.followingId
+    ),
+    index('Follow_followerId_createdAt_idx').on(
+      table.followerId,
+      table.createdAt
     ),
     index('Follow_followerId_idx').on(table.followerId),
     index('Follow_followingId_idx').on(table.followingId),

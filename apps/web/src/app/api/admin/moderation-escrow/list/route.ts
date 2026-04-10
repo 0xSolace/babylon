@@ -74,8 +74,9 @@
  * ```
  */
 
-import { requireAdmin } from '@babylon/api';
+import { requireAdmin, withErrorHandling } from '@babylon/api';
 import { and, db, desc, eq, lt, moderationEscrows, sql } from '@babylon/db';
+import { toISO, toISOOrNull } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -88,7 +89,7 @@ const ListEscrowQuerySchema = z.object({
   offset: z.coerce.number().min(0).optional().default(0),
 });
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandling(async (req: NextRequest) => {
   await requireAdmin(req);
 
   const { searchParams } = new URL(req.url);
@@ -230,9 +231,9 @@ export async function GET(req: NextRequest) {
             displayName: escrow.refunderDisplayName,
           }
         : null,
-      refundedAt: escrow.refundedAt?.toISOString(),
-      createdAt: escrow.createdAt.toISOString(),
-      expiresAt: escrow.expiresAt.toISOString(),
+      refundedAt: toISOOrNull(escrow.refundedAt),
+      createdAt: toISO(escrow.createdAt),
+      expiresAt: toISO(escrow.expiresAt),
     })),
     pagination: {
       total,
@@ -240,4 +241,4 @@ export async function GET(req: NextRequest) {
       offset,
     },
   });
-}
+});

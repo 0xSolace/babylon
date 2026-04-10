@@ -213,12 +213,12 @@ export function ReputationLeaderboard({
 
             {/* Stats */}
             <div className="flex shrink-0 items-center gap-4">
-              {/* Reputation Points */}
+              {/* Reputation */}
               <div className="text-center">
                 <div className="font-bold text-foreground text-lg">
                   {entry.reputationPoints.toLocaleString()}
                 </div>
-                <div className="text-muted-foreground text-xs">Points</div>
+                <div className="text-muted-foreground text-xs">Reputation</div>
               </div>
 
               {/* Win Rate */}

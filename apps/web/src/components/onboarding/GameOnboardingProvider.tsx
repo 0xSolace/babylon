@@ -1,7 +1,7 @@
 'use client';
 
-import type { GameOnboardingStep } from '@babylon/db';
-import { ONBOARDING_STEP_INFO } from '@babylon/shared';
+import type { GameOnboardingStep } from '@babylon/shared';
+import { logger, ONBOARDING_STEP_INFO } from '@babylon/shared';
 import {
   createContext,
   useCallback,
@@ -18,7 +18,7 @@ import { apiFetch } from '@/utils/api-fetch';
 interface OnboardingStatus {
   currentStep: GameOnboardingStep;
   completedSteps: GameOnboardingStep[];
-  totalPointsEarned: number;
+  totalReputationEarned: number;
   isComplete: boolean;
 }
 
@@ -33,7 +33,7 @@ function isValidOnboardingStatus(data: unknown): data is OnboardingStatus {
   return (
     typeof obj.currentStep === 'string' &&
     Array.isArray(obj.completedSteps) &&
-    typeof obj.totalPointsEarned === 'number' &&
+    typeof obj.totalReputationEarned === 'number' &&
     typeof obj.isComplete === 'boolean'
   );
 }
@@ -104,7 +104,11 @@ export function GameOnboardingProvider({
               setShowTooltip(true);
             }
           } else {
-            console.error('Invalid onboarding status response shape:', data);
+            logger.error(
+              'Invalid onboarding status response shape',
+              { data },
+              'GameOnboardingProvider'
+            );
           }
         }
       } catch (error) {
@@ -113,7 +117,11 @@ export function GameOnboardingProvider({
           return;
         }
         // Onboarding is optional, but log errors for debugging
-        console.error('Failed to fetch onboarding status:', error);
+        logger.error(
+          'Failed to fetch onboarding status',
+          error instanceof Error ? error : { error },
+          'GameOnboardingProvider'
+        );
       } finally {
         // Only update loading state if not aborted
         if (!controller.signal.aborted) {
@@ -145,21 +153,22 @@ export function GameOnboardingProvider({
           typeof rawData !== 'object' ||
           rawData === null ||
           typeof (rawData as Record<string, unknown>).success !== 'boolean' ||
-          typeof (rawData as Record<string, unknown>).pointsAwarded !==
+          typeof (rawData as Record<string, unknown>).reputationAwarded !==
             'number' ||
           typeof (rawData as Record<string, unknown>).nextStep !== 'string' ||
           typeof (rawData as Record<string, unknown>).isComplete !== 'boolean'
         ) {
-          console.error(
-            'Invalid response shape from game-complete-step API:',
-            rawData
+          logger.error(
+            'Invalid response shape from game-complete-step API',
+            { rawData },
+            'GameOnboardingProvider'
           );
           return;
         }
 
         const data = rawData as {
           success: boolean;
-          pointsAwarded: number;
+          reputationAwarded: number;
           nextStep: GameOnboardingStep;
           isComplete: boolean;
         };
@@ -175,7 +184,8 @@ export function GameOnboardingProvider({
               ...prev,
               completedSteps: [...prev.completedSteps, step],
               currentStep: data.nextStep,
-              totalPointsEarned: prev.totalPointsEarned + data.pointsAwarded,
+              totalReputationEarned:
+                prev.totalReputationEarned + data.reputationAwarded,
               isComplete: data.isComplete,
             };
           });
@@ -183,7 +193,11 @@ export function GameOnboardingProvider({
       }
     } catch (error) {
       // Onboarding is optional, but log errors for debugging
-      console.error('Failed to complete onboarding step:', error);
+      logger.error(
+        'Failed to complete onboarding step',
+        error instanceof Error ? error : { error },
+        'GameOnboardingProvider'
+      );
     }
   }, []);
 
@@ -203,14 +217,22 @@ export function GameOnboardingProvider({
         const responseText = await response
           .text()
           .catch(() => '(failed to read body)');
-        console.error('Skip onboarding request failed:', {
-          status: response.status,
-          statusText: response.statusText,
-          body: responseText,
-        });
+        logger.error(
+          'Skip onboarding request failed',
+          {
+            status: response.status,
+            statusText: response.statusText,
+            body: responseText,
+          },
+          'GameOnboardingProvider'
+        );
       }
     } catch (error) {
-      console.error('Failed to skip onboarding:', error);
+      logger.error(
+        'Failed to skip onboarding',
+        error instanceof Error ? error : { error },
+        'GameOnboardingProvider'
+      );
     }
   }, []);
 

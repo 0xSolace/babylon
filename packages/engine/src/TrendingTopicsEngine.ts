@@ -507,7 +507,10 @@ export class TrendingTopicsEngine {
       })
       .join('\n');
 
-    const prompt = renderPrompt(trendingTopics, { topicsList });
+    const prompt = renderPrompt(trendingTopics, {
+      topicsList,
+      previousTrends: '',
+    });
     const params = getPromptParams(trendingTopics);
 
     const rawResponse = await this.llm.generateJSON<Record<string, unknown>>(

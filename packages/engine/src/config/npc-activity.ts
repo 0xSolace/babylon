@@ -34,6 +34,7 @@
  */
 
 import { logger } from '@babylon/shared';
+import { clamp01 } from '../utils/math-utils';
 
 // =============================================================================
 // HELPER FUNCTIONS
@@ -70,6 +71,24 @@ function envPositiveNumber(key: string, defaultValue: number): number {
 }
 
 /**
+ * Parse an environment variable as a non-negative number (>= 0) with bounds checking.
+ * Returns the default and logs a warning if the value is < 0.
+ * Use for values where 0 is valid (e.g., to disable a feature).
+ */
+function envNonNegativeNumber(key: string, defaultValue: number): number {
+  const value = envNumber(key, defaultValue);
+  if (value < 0) {
+    logger.warn(
+      `${key}=${value} must be non-negative (>= 0), using default ${defaultValue}`,
+      { key, value, defaultValue },
+      'npc-activity'
+    );
+    return defaultValue;
+  }
+  return value;
+}
+
+/**
  * Parse an environment variable as a probability (0.0-1.0) with bounds checking.
  * Clamps the value to valid probability range to prevent configuration errors.
  */
@@ -82,7 +101,7 @@ function envProbability(key: string, defaultValue: number): number {
       'npc-activity'
     );
   }
-  return Math.max(0, Math.min(1, value));
+  return clamp01(value);
 }
 
 /**
@@ -99,7 +118,7 @@ function envScore(key: string, defaultValue: number): number {
       'npc-activity'
     );
   }
-  return Math.max(0, Math.min(1, value));
+  return clamp01(value);
 }
 
 /**
@@ -130,23 +149,6 @@ function envBoolean(key: string, defaultValue: boolean): boolean {
   return defaultValue;
 }
 
-/**
- * Parse an environment variable as a non-negative number (>= 0) with bounds checking.
- * Returns the default and logs a warning if the value is < 0.
- */
-function envNonNegativeNumber(key: string, defaultValue: number): number {
-  const value = envNumber(key, defaultValue);
-  if (value < 0) {
-    logger.warn(
-      `${key}=${value} must be non-negative (>= 0), using default ${defaultValue}`,
-      { key, value, defaultValue },
-      'npc-activity'
-    );
-    return defaultValue;
-  }
-  return value;
-}
-
 // =============================================================================
 // POSTING CONFIGURATION
 // =============================================================================
@@ -170,21 +172,23 @@ export const NPC_POSTING_CONFIG = {
   /**
    * Maximum posts per day per NPC to prevent spam.
    * Same for all tiers - fair rotation.
+   * Lower cap = more unique NPCs get a turn to post.
    *
-   * @default 4 (NPCs should post regularly)
+   * @default 3 (balanced - encourages diversity across NPCs)
    * @env NPC_MAX_POSTS_PER_DAY
    */
-  maxPostsPerDay: envPositiveNumber('NPC_MAX_POSTS_PER_DAY', 4),
+  maxPostsPerDay: envPositiveNumber('NPC_MAX_POSTS_PER_DAY', 3),
 
   /**
    * Minimum hours between posts for the same NPC.
    * Prevents same NPC posting multiple times per tick.
    * A value of 0 allows back-to-back posting (useful for testing).
+   * Higher value = slower individual pace = more variety across NPCs.
    *
-   * @default 2 (reasonable spacing)
+   * @default 3 (balanced pacing for diverse feed)
    * @env NPC_MIN_HOURS_BETWEEN_POSTS
    */
-  minHoursBetweenPosts: envNonNegativeNumber('NPC_MIN_HOURS_BETWEEN_POSTS', 2),
+  minHoursBetweenPosts: envNonNegativeNumber('NPC_MIN_HOURS_BETWEEN_POSTS', 3),
 
   /**
    * Boost multiplier when actor was mentioned by a player.
@@ -202,6 +206,48 @@ export const NPC_POSTING_CONFIG = {
    * @env NPC_AFFILIATION_BOOST
    */
   affiliationBoost: envNumber('NPC_AFFILIATION_BOOST', 1.2),
+} as const;
+
+// =============================================================================
+// TRADING CONFIGURATION
+// =============================================================================
+
+/**
+ * Configuration for NPC trading behavior.
+ *
+ * Controls how often NPCs consider trading and the limits on their trading activity.
+ */
+export const NPC_TRADING_CONFIG = {
+  /**
+   * Base probability for an NPC to consider trading per tick (0.0 - 1.0).
+   * Higher than posting since trading is a core game mechanic.
+   *
+   * @default 0.6 (60% chance to consider trading per tick)
+   * @env NPC_TRADE_PROBABILITY
+   */
+  baseProbability: envProbability('NPC_TRADE_PROBABILITY', 0.6),
+
+  /**
+   * Maximum trades per day per NPC to prevent excessive trading.
+   * Higher than posts since trading is more central to gameplay.
+   *
+   * @default 20
+   * @env NPC_MAX_TRADES_PER_DAY
+   */
+  maxTradesPerDay: envPositiveNumber('NPC_MAX_TRADES_PER_DAY', 20),
+
+  /**
+   * Minimum minutes between trades for the same NPC.
+   * Prevents same NPC trading multiple times per tick.
+   * A value of 0 allows back-to-back trading (useful for testing).
+   *
+   * @default 5 (5 minute cooldown)
+   * @env NPC_MIN_MINUTES_BETWEEN_TRADES
+   */
+  minMinutesBetweenTrades: envNonNegativeNumber(
+    'NPC_MIN_MINUTES_BETWEEN_TRADES',
+    5
+  ),
 } as const;
 
 // =============================================================================
@@ -340,12 +386,12 @@ export const NPC_ENGAGEMENT_CONFIG = {
    * Probability that a discourse interaction becomes a quote-post instead of a reply.
    * Only applies when engaging with an original post (not a reply thread).
    *
-   * @default 0.65 (65% quote-posts, 35% direct replies)
+   * @default 0.30 (30% quote-posts, 70% direct replies)
    * @env NPC_DISCOURSE_QUOTE_PROBABILITY
    */
   discourseQuoteProbability: envProbability(
     'NPC_DISCOURSE_QUOTE_PROBABILITY',
-    0.65
+    0.3
   ),
 
   /**
@@ -363,6 +409,54 @@ export const NPC_ENGAGEMENT_CONFIG = {
    * @env NPC_ENGAGEMENT_POSTS_TO_CONSIDER
    */
   postsToConsider: envPositiveNumber('NPC_ENGAGEMENT_POSTS_TO_CONSIDER', 40),
+} as const;
+
+// =============================================================================
+// DIVERSITY CONFIGURATION (TikTok-inspired feed diversity)
+// =============================================================================
+
+/**
+ * Configuration for feed diversity mechanisms.
+ *
+ * Controls how NPC actions are distributed to prevent clustering and create
+ * an organic social media feel. Based on TikTok/Twitter feed algorithms.
+ */
+export const NPC_DIVERSITY_CONFIG = {
+  /**
+   * Maximum consecutive same action type allowed (TikTok-style).
+   * Used by the action diversity tracker to prevent clustering.
+   * E.g., 1 means never allow 2 likes in a row.
+   *
+   * @default 1 (TikTok rule: never consecutive same type)
+   * @env NPC_MAX_CONSECUTIVE_SAME_ACTION
+   */
+  maxConsecutiveSameAction: envPositiveNumber(
+    'NPC_MAX_CONSECUTIVE_SAME_ACTION',
+    1
+  ),
+
+  /**
+   * Timestamp stagger window in milliseconds.
+   * Actions within a tick get timestamps spread across this window.
+   * Set to 0 to disable timestamp staggering.
+   *
+   * @default 300000 (5 minutes)
+   * @env NPC_TIMESTAMP_STAGGER_MS
+   */
+  timestampStaggerMs: envNonNegativeNumber(
+    'NPC_TIMESTAMP_STAGGER_MS',
+    5 * 60 * 1000
+  ),
+
+  /**
+   * Number of recent actions to track for diversity checking.
+   * Larger values provide more context for detecting clustering patterns.
+   * Must be at least as large as maxConsecutiveSameAction.
+   *
+   * @default 5
+   * @env NPC_MAX_RECENT_ACTIONS
+   */
+  maxRecentActions: envPositiveNumber('NPC_MAX_RECENT_ACTIONS', 5),
 } as const;
 
 // =============================================================================
@@ -783,11 +877,13 @@ export const NPC_FOLLOWING_CONFIG = {
 export const NPC_TICK_CONFIG = {
   /**
    * Number of NPCs to process per tick.
+   * Higher batch size = more NPCs considered = better rotation across all NPCs.
+   * With 140 NPCs and ~59 active at any time, 12/tick ensures good coverage.
    *
-   * @default 5
+   * @default 12 (increased for better diversity across NPCs)
    * @env NPC_TICK_BATCH_SIZE
    */
-  batchSize: envPositiveNumber('NPC_TICK_BATCH_SIZE', 5),
+  batchSize: envPositiveNumber('NPC_TICK_BATCH_SIZE', 12),
 
   /**
    * Maximum consecutive errors before aborting tick (circuit breaker).
@@ -818,7 +914,9 @@ export const NPC_TICK_CONFIG = {
  */
 export const NPC_ACTIVITY_CONFIG = {
   posting: NPC_POSTING_CONFIG,
+  trading: NPC_TRADING_CONFIG,
   engagement: NPC_ENGAGEMENT_CONFIG,
+  diversity: NPC_DIVERSITY_CONFIG,
   socialActions: NPC_SOCIAL_ACTIONS_CONFIG,
   groupDynamics: NPC_GROUP_DYNAMICS_CONFIG,
   contentPacing: NPC_CONTENT_PACING_CONFIG,
@@ -871,6 +969,10 @@ export const NPC_ACTIVITY_PRESETS = {
     NPC_GROUP_INVITE_PROBABILITY: '0.08',
     NPC_DM_PROBABILITY: '0.05',
     NPC_MIN_INTERACTIONS_FOR_ACTION: '1',
+    // Trading - balanced defaults
+    NPC_TRADE_PROBABILITY: '0.6',
+    NPC_MAX_TRADES_PER_DAY: '20',
+    NPC_MIN_MINUTES_BETWEEN_TRADES: '5',
   },
 
   /**
@@ -901,6 +1003,10 @@ export const NPC_ACTIVITY_PRESETS = {
     NPC_MIN_INTERACTION_QUALITY: '0.4',
     NPC_JOIN_GROUP_PROBABILITY: '0.15',
     NPC_USER_INVITE_PROBABILITY: '0.12',
+    // High trading - engagement-heavy NPCs play the game more
+    NPC_TRADE_PROBABILITY: '0.8',
+    NPC_MAX_TRADES_PER_DAY: '30',
+    NPC_MIN_MINUTES_BETWEEN_TRADES: '3',
   },
 
   /**
@@ -928,6 +1034,10 @@ export const NPC_ACTIVITY_PRESETS = {
     NPC_JOIN_GROUP_PROBABILITY: '0.15',
     NPC_USER_INVITE_PROBABILITY: '0.12',
     NPC_TARGET_POSTS_PER_HOUR: '15',
+    // Higher trading activity
+    NPC_TRADE_PROBABILITY: '0.75',
+    NPC_MAX_TRADES_PER_DAY: '25',
+    NPC_MIN_MINUTES_BETWEEN_TRADES: '3',
   },
 
   /**
@@ -942,6 +1052,10 @@ export const NPC_ACTIVITY_PRESETS = {
     NPC_SHARE_PROBABILITY: '0.01',
     NPC_COMMENT_PROBABILITY: '0.005',
     NPC_TARGET_POSTS_PER_HOUR: '3',
+    // Low trading - reduced NPC market activity
+    NPC_TRADE_PROBABILITY: '0.2',
+    NPC_MAX_TRADES_PER_DAY: '5',
+    NPC_MIN_MINUTES_BETWEEN_TRADES: '15',
   },
 
   /**
@@ -956,6 +1070,10 @@ export const NPC_ACTIVITY_PRESETS = {
     NPC_SHARE_PROBABILITY: '0.2',
     NPC_COMMENT_PROBABILITY: '0.1',
     NPC_TARGET_POSTS_PER_HOUR: '60',
+    // Very high trading for automated testing
+    NPC_TRADE_PROBABILITY: '0.9',
+    NPC_MAX_TRADES_PER_DAY: '50',
+    NPC_MIN_MINUTES_BETWEEN_TRADES: '0',
   },
 } as const;
 
@@ -1004,8 +1122,18 @@ export function logCurrentConfig(): void {
     'npc-activity'
   );
   logger.info(
+    'NPC Activity Configuration - Trading',
+    NPC_TRADING_CONFIG,
+    'npc-activity'
+  );
+  logger.info(
     'NPC Activity Configuration - Engagement',
     NPC_ENGAGEMENT_CONFIG,
+    'npc-activity'
+  );
+  logger.info(
+    'NPC Activity Configuration - Diversity',
+    NPC_DIVERSITY_CONFIG,
     'npc-activity'
   );
   logger.info(
@@ -1034,4 +1162,35 @@ export function logCurrentConfig(): void {
     'npc-activity'
   );
   logger.info('NPC Activity Configuration - Footer', {}, 'npc-activity');
+}
+
+// =============================================================================
+// TRADING CONFIGURATION GETTERS
+// =============================================================================
+
+/**
+ * Get the base probability for an NPC to consider trading.
+ *
+ * @returns The trading probability (0.0 - 1.0)
+ */
+export function getTradingProbability(): number {
+  return NPC_TRADING_CONFIG.baseProbability;
+}
+
+/**
+ * Get the maximum number of trades per day per NPC.
+ *
+ * @returns The maximum trades per day
+ */
+export function getMaxTradesPerDay(): number {
+  return NPC_TRADING_CONFIG.maxTradesPerDay;
+}
+
+/**
+ * Get the minimum minutes between trades for the same NPC.
+ *
+ * @returns The minimum minutes between trades
+ */
+export function getMinMinutesBetweenTrades(): number {
+  return NPC_TRADING_CONFIG.minMinutesBetweenTrades;
 }

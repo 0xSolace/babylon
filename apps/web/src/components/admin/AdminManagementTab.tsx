@@ -1,6 +1,6 @@
 'use client';
 
-import { cn } from '@babylon/shared';
+import { cn, formatDate } from '@babylon/shared';
 import {
   AlertTriangle,
   RefreshCw,
@@ -11,7 +11,6 @@ import {
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import { toast } from 'sonner';
 import { Avatar } from '@/components/shared/Avatar';
 import { Skeleton } from '@/components/shared/Skeleton';
 
@@ -131,10 +130,7 @@ export function AdminManagementTab() {
       throw new Error(error.message || 'Failed to add admin');
     }
 
-    const result = await response.json();
-    toast.success(
-      `${result.user.displayName || result.user.username || 'User'} is now an admin`
-    );
+    await response.json();
     setShowAddModal(false);
     setSearchQuery('');
     setAvailableUsers([]);
@@ -157,22 +153,11 @@ export function AdminManagementTab() {
       throw new Error(error.message || 'Failed to remove admin');
     }
 
-    const result = await response.json();
-    toast.success(
-      `${result.user.displayName || result.user.username || 'User'} is no longer an admin`
-    );
+    await response.json();
     setShowRemoveModal(false);
     setSelectedUser(null);
     fetchAdmins(true);
     setProcessing(false);
-  };
-
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
   };
 
   const AdminRow = ({ admin }: { admin: AdminUser }) => {
@@ -317,7 +302,7 @@ export function AdminManagementTab() {
 
       {/* Add Admin Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4">
           <div className="flex max-h-[80vh] w-full max-w-md flex-col rounded-2xl border border-border bg-card p-6">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="font-bold text-xl">Add Admin</h2>
@@ -408,7 +393,7 @@ export function AdminManagementTab() {
 
       {/* Remove Admin Confirmation Modal */}
       {showRemoveModal && selectedUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6">
             <div className="mb-4 flex items-center gap-3 text-orange-500">
               <AlertTriangle className="h-6 w-6" />

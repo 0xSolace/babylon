@@ -18,7 +18,7 @@
  */
 'use client';
 
-import { cn } from '@babylon/shared';
+import { cn, formatDateTime } from '@babylon/shared';
 import {
   AlertTriangle,
   Check,
@@ -201,21 +201,9 @@ export function ContentModerationTab() {
         return;
       }
 
-      toast.success(
-        actionType === 'approve' ? 'Content approved' : 'Content hidden'
-      );
       setShowActionModal(false);
       setSelectedItem(null);
       fetchQueue(true);
-    });
-  };
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
     });
   };
 
@@ -246,7 +234,7 @@ export function ContentModerationTab() {
               )}
             </div>
             <div className="text-muted-foreground text-xs">
-              {formatDate(item.createdAt)}
+              {formatDateTime(item.createdAt)}
             </div>
           </div>
         </div>
@@ -481,7 +469,7 @@ export function ContentModerationTab() {
 
       {/* Action Modal */}
       {showActionModal && selectedItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-lg rounded-2xl border border-border bg-card p-6">
             <h3 className="mb-4 font-bold text-xl">
               {actionType === 'approve' ? 'Approve Content' : 'Hide Content'}

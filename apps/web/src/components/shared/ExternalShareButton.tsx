@@ -1,8 +1,10 @@
+'use client';
+
 /**
- * External share button component with tracking and points rewards.
+ * External share button component with tracking and reputation rewards.
  *
  * Provides sharing functionality to Twitter/X, Farcaster, and copy link.
- * Tracks shares for authenticated users and awards points. Shows verification
+ * Tracks shares for authenticated users and awards reputation. Shows verification
  * modal after sharing to verify the share was posted.
  *
  * @example
@@ -42,6 +44,8 @@ interface ExternalShareButtonProps {
   url?: string;
   text?: string;
   className?: string;
+  /** Render share buttons inline (side by side) instead of a dropdown */
+  inline?: boolean;
 }
 
 /**
@@ -56,6 +60,7 @@ export function ExternalShareButton({
   url,
   text,
   className = '',
+  inline = false,
 }: ExternalShareButtonProps) {
   const { authenticated, user } = useAuth();
   const [showMenu, setShowMenu] = useState(false);
@@ -94,7 +99,7 @@ export function ExternalShareButton({
         const data = await response.json();
         const shares = data.shares || [];
 
-        // Track which platforms have already earned points
+        // Track which platforms have already earned reputation
         const earned = new Set<string>();
         shares.forEach((share: { platform: string }) => {
           earned.add(share.platform);
@@ -131,8 +136,9 @@ export function ExternalShareButton({
             url: shareUrl,
             userId: user.id,
           })
-        : { shareActionId: null, pointsAwarded: 0, alreadyAwarded: false };
-    if (result.pointsAwarded > 0) {
+        : { shareActionId: null, reputationAwarded: 0, alreadyAwarded: false };
+    const reputationAwarded = result.reputationAwarded;
+    if (reputationAwarded > 0) {
       setShared(true);
       setTimeout(() => setShared(false), 2000);
     }
@@ -173,8 +179,9 @@ export function ExternalShareButton({
             url: shareUrl,
             userId: user.id,
           })
-        : { shareActionId: null, pointsAwarded: 0, alreadyAwarded: false };
-    if (result.pointsAwarded > 0) {
+        : { shareActionId: null, reputationAwarded: 0, alreadyAwarded: false };
+    const reputationAwarded = result.reputationAwarded;
+    if (reputationAwarded > 0) {
       setShared(true);
       setTimeout(() => setShared(false), 2000);
     }
@@ -205,6 +212,41 @@ export function ExternalShareButton({
     setTimeout(() => setShared(false), 2000);
     setShowMenu(false);
   };
+
+  if (inline) {
+    return (
+      <div className={`flex flex-col gap-2 sm:flex-row ${className}`}>
+        <button
+          onClick={handleShareToTwitter}
+          className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-foreground transition-colors hover:bg-muted/50"
+        >
+          <Twitter className="h-4 w-4 text-blue-400" />
+          <span className="font-medium text-sm">Share to X</span>
+        </button>
+        <button
+          onClick={handleShareToFarcaster}
+          className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-foreground transition-colors hover:bg-muted/50"
+        >
+          <FarcasterIcon className="h-4 w-4 text-purple-400" />
+          <span className="font-medium text-sm">Share to Farcaster</span>
+        </button>
+
+        {/* Verification Modal */}
+        {showVerification && pendingVerification && user && (
+          <ShareVerificationModal
+            isOpen={showVerification}
+            onClose={() => {
+              setShowVerification(false);
+              setPendingVerification(null);
+            }}
+            shareId={pendingVerification.shareId}
+            platform={pendingVerification.platform}
+            userId={user.id}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="relative">

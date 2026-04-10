@@ -47,7 +47,7 @@ export const balanceTransactions = pgTable(
   ]
 );
 
-// PointsTransaction
+// PointsTransaction - for reputation points (integer), NOT trading balance
 export const pointsTransactions = pgTable(
   'PointsTransaction',
   {
@@ -63,6 +63,8 @@ export const pointsTransactions = pgTable(
     paymentRequestId: text('paymentRequestId').unique(),
     paymentTxHash: text('paymentTxHash'),
     paymentVerified: boolean('paymentVerified').notNull().default(false),
+    // Payment provider: 'crypto' for on-chain payments, 'stripe' for card payments
+    paymentProvider: text('paymentProvider'),
   },
   (table) => [
     index('PointsTransaction_createdAt_idx').on(table.createdAt),
@@ -72,6 +74,7 @@ export const pointsTransactions = pgTable(
       table.userId,
       table.createdAt
     ),
+    index('PointsTransaction_paymentProvider_idx').on(table.paymentProvider),
   ]
 );
 
@@ -100,6 +103,35 @@ export const tradingFees = pgTable(
     index('TradingFee_userId_createdAt_idx').on(table.userId, table.createdAt),
   ]
 );
+
+/**
+ * Durable queue for trading fee processing when inline FeeProcessor retries are exhausted.
+ * Rows are removed in the same DB transaction as FeeService.processTradingFee to avoid double charges.
+ */
+export const tradingFeeOutbox = pgTable(
+  'TradingFeeOutbox',
+  {
+    id: text('id').primaryKey(),
+    userId: text('userId').notNull(),
+    tradeType: text('tradeType').notNull(),
+    /** Notional trade amount (same semantics as FeeProcessor `amount`). */
+    tradeAmount: decimal('tradeAmount', { precision: 24, scale: 8 }).notNull(),
+    tradeId: text('tradeId'),
+    marketId: text('marketId'),
+    lastError: text('lastError'),
+    createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('TradingFeeOutbox_createdAt_idx').on(table.createdAt),
+    index('TradingFeeOutbox_userId_createdAt_idx').on(
+      table.userId,
+      table.createdAt
+    ),
+  ]
+);
+
+export type TradingFeeOutboxRow = typeof tradingFeeOutbox.$inferSelect;
+export type NewTradingFeeOutboxRow = typeof tradingFeeOutbox.$inferInsert;
 
 // Feedback
 export const feedbacks = pgTable(

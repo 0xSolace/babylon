@@ -1,16 +1,22 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
+import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { NftGrid, RevealModal } from '@/components/nft';
 import { PageContainer } from '@/components/shared/PageContainer';
 import { useAuth } from '@/hooks/useAuth';
 import { useNftMint } from '@/hooks/useNftMint';
 import type { NftGalleryResponse, NftSummary } from '@/types/nft';
+import { apiFetch } from '@/utils/api-fetch';
 
 type ViewTab = 'all' | 'mine';
 
 export default function NftGalleryPage() {
   const { authenticated, user } = useAuth();
+  const router = useRouter();
   const {
     eligibility,
     isCheckingEligibility,
@@ -39,6 +45,7 @@ export default function NftGalleryPage() {
   // Modals
   const [showEligibilityModal, setShowEligibilityModal] = useState(false);
   const showRevealModal = flowState === 'revealing';
+  const [ensuringChatAccess, setEnsuringChatAccess] = useState(false);
 
   // Debounce search
   useEffect(() => {
@@ -87,12 +94,6 @@ export default function NftGalleryPage() {
   const isMyNft = (nft: NftSummary) => {
     if (!user) return false;
     if (nft.owner?.user?.id === user.id) return true;
-    if (
-      user.walletAddress &&
-      nft.owner?.walletAddress?.toLowerCase() ===
-        user.walletAddress.toLowerCase()
-    )
-      return true;
     return false;
   };
 
@@ -113,8 +114,52 @@ export default function NftGalleryPage() {
     fetchNfts();
   };
 
+  const handleOpenGatedChat = async () => {
+    if (!authenticated) return;
+    if (myNftCount === 0) return;
+
+    setEnsuringChatAccess(true);
+    try {
+      const response = await apiFetch('/api/nft/chat/ensure', {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        const json = (await response.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        toast.error(json?.error ?? 'Failed to unlock chat access');
+        return;
+      }
+
+      router.push('/chats');
+    } catch {
+      toast.error('Failed to unlock chat access');
+    } finally {
+      setEnsuringChatAccess(false);
+    }
+  };
+
+  const mintStepState = {
+    preparing: flowState === 'preparing',
+    minting: flowState === 'minting',
+    confirming: flowState === 'confirming',
+  };
+
+  const mintStepIndex = mintStepState.confirming
+    ? 2
+    : mintStepState.minting
+      ? 1
+      : 0;
+
+  const mintStatusMessage = mintStepState.preparing
+    ? 'Preparing your claim...'
+    : mintStepState.minting
+      ? 'Submitting transaction to Ethereum...'
+      : 'Waiting for network confirmation...';
+
   return (
-    <PageContainer noPadding className="flex h-full flex-col">
+    <PageContainer noPadding className="flex h-full flex-col pt-14 md:pt-0">
       {/* Header */}
       <div className="border-border border-b bg-card px-4 py-5">
         <div className="mx-auto max-w-5xl">
@@ -124,27 +169,41 @@ export default function NftGalleryPage() {
                 ProtoMonkeys
               </h1>
               <p className="text-muted-foreground text-sm">
-                Exclusive NFTs for top 100 players on leaderboard
+                Exclusive NFTs for top 100 players
               </p>
             </div>
 
-            {authenticated && !eligibility?.hasMinted && (
+            {authenticated && myNftCount === 0 && !eligibility?.hasMinted && (
               <button
                 onClick={handleClaimClick}
                 disabled={isMinting || isCheckingEligibility}
                 className="rounded-full bg-[#0066FF] px-5 py-2.5 font-semibold text-sm text-white shadow-md transition-all hover:scale-105 hover:bg-[#2952d9] hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
               >
-                {isCheckingEligibility ? 'Checking...' : 'Claim My NFT'}
+                {isCheckingEligibility ? 'Checking...' : 'Claim'}
               </button>
             )}
 
-            {eligibility?.hasMinted && eligibility.mintedNft && (
-              <a
-                href={`/nft/${eligibility.mintedNft.tokenId}`}
-                className="rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-2 text-green-600 text-sm transition-colors hover:bg-green-500/20"
-              >
-                View My NFT →
-              </a>
+            {authenticated && myNftCount > 0 && (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleOpenGatedChat}
+                  disabled={ensuringChatAccess}
+                  className="rounded-lg border border-[#0066FF]/30 bg-[#0066FF]/10 px-4 py-2 text-[#0066FF] text-sm transition-colors hover:bg-[#0066FF]/20 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {ensuringChatAccess
+                    ? 'Opening chat...'
+                    : 'Open FD Alpha Chat →'}
+                </button>
+                {eligibility?.mintedNft ? (
+                  <a
+                    href={`/nft/${eligibility.mintedNft.tokenId}`}
+                    className="rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-2 text-green-600 text-sm transition-colors hover:bg-green-500/20"
+                  >
+                    View My NFT →
+                  </a>
+                ) : null}
+              </div>
             )}
           </div>
 
@@ -181,7 +240,8 @@ export default function NftGalleryPage() {
                   : 'text-muted-foreground hover:bg-muted hover:text-foreground'
               }`}
             >
-              All NFTs
+              <span className="sm:hidden">All</span>
+              <span className="hidden sm:inline">All NFTs</span>
             </button>
             {authenticated && (
               <button
@@ -192,7 +252,12 @@ export default function NftGalleryPage() {
                     : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                 }`}
               >
-                My NFT{myNftCount > 0 && ` (${myNftCount})`}
+                <span className="sm:hidden">
+                  Mine{myNftCount > 0 && ` (${myNftCount})`}
+                </span>
+                <span className="hidden sm:inline">
+                  My NFT{myNftCount > 0 && ` (${myNftCount})`}
+                </span>
               </button>
             )}
           </div>
@@ -247,7 +312,7 @@ export default function NftGalleryPage() {
 
       {/* Eligibility Modal */}
       {showEligibilityModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="mx-4 w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-xl">
             {isCheckingEligibility ? (
               <div className="py-8 text-center">
@@ -350,6 +415,60 @@ export default function NftGalleryPage() {
         nft={mintedNft}
         onClose={resetFlow}
       />
+
+      {/* Mint Loading Overlay */}
+      {isMinting && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="mx-4 w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl">
+            <div className="mb-5 flex justify-center">
+              <div className="relative h-16 w-16">
+                <div className="absolute inset-0 animate-ping rounded-full bg-[#0066FF]/25" />
+                <div className="absolute inset-0 animate-spin rounded-full border-2 border-[#0066FF]/20 border-t-[#0066FF]" />
+                <div className="absolute inset-2 rounded-full bg-[#0066FF]/10" />
+              </div>
+            </div>
+
+            <h3 className="mb-2 text-center font-bold text-foreground text-lg">
+              Mint in progress
+            </h3>
+            <p className="mb-5 text-center text-muted-foreground text-sm">
+              {mintStatusMessage}
+            </p>
+
+            <div className="mb-4 grid grid-cols-3 gap-2 text-center">
+              {['Prepare', 'Submit', 'Confirm'].map((label, index) => {
+                const isActive = index === mintStepIndex;
+                const isComplete = index < mintStepIndex;
+
+                return (
+                  <div key={label} className="space-y-1">
+                    <div
+                      className={`h-1.5 rounded-full transition-colors ${
+                        isComplete || isActive
+                          ? 'bg-[#0066FF]'
+                          : 'bg-muted-foreground/20'
+                      }`}
+                    />
+                    <p
+                      className={`font-medium text-xs ${
+                        isComplete || isActive
+                          ? 'text-foreground'
+                          : 'text-muted-foreground'
+                      }`}
+                    >
+                      {label}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+
+            <p className="text-center text-muted-foreground/80 text-xs">
+              This can take around 15-30 seconds on Ethereum mainnet.
+            </p>
+          </div>
+        </div>
+      )}
     </PageContainer>
   );
 }

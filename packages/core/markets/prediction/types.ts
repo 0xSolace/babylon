@@ -24,16 +24,14 @@ export interface PredictionMarketRecord {
   id: string;
   question: string;
   description?: string | null;
+  gameId?: string | null;
+  dayNumber?: number | null;
   yesShares: number;
   noShares: number;
   liquidity: number;
   endDate: Date;
   resolved: boolean;
   resolution?: boolean | null;
-  onChainMarketId?: string | null;
-  onChainResolved?: boolean;
-  oracleCommitTxHash?: string | null;
-  oracleRevealTxHash?: string | null;
   resolutionProofUrl?: string | null;
   resolutionDescription?: string | null;
   status?: 'active' | 'resolved' | 'cancelled';
@@ -48,7 +46,7 @@ export interface PredictionPositionRecord {
   side: PredictionSide;
   shares: number;
   avgPrice: number;
-  status?: 'active' | 'closed' | 'resolved';
+  status?: 'active' | 'closed' | 'resolved' | 'cancelled' | 'voided';
   outcome?: boolean | null;
   pnl?: number;
   resolvedAt?: Date | null;
@@ -72,13 +70,23 @@ export interface PredictionPriceSnapshotRecord {
 export interface PredictionDbPort {
   getMarketById(id: string): Promise<PredictionMarketRecord | null>;
   getMarketsByIds(ids: string[]): Promise<PredictionMarketRecord[]>;
-  listMarkets?(): Promise<PredictionMarketRecord[]>;
+  listMarkets?(options?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<PredictionMarketRecord[]>;
+  /** Active (unresolved) row count; used for pagination metadata. */
+  countUnresolvedMarkets?(): Promise<number>;
   listUserPositions?(userId: string): Promise<PredictionPositionRecord[]>;
   getQuestion?(idOrNumber: string): Promise<QuestionRecord | null>;
   createMarketFromQuestion(
     question: QuestionRecord,
     initialLiquidity: number,
-    options?: { description?: string | null }
+    options?: {
+      description?: string | null;
+      gameId?: string | null;
+      dayNumber?: number | null;
+      initialYesProbability?: number;
+    }
   ): Promise<PredictionMarketRecord>;
   updateMarketState(
     marketId: string,
@@ -90,8 +98,6 @@ export interface PredictionDbPort {
         | 'liquidity'
         | 'resolved'
         | 'resolution'
-        | 'onChainMarketId'
-        | 'onChainResolved'
         | 'resolutionProofUrl'
         | 'resolutionDescription'
       >
@@ -133,6 +139,18 @@ export interface PredictionResolveInput {
   resolutionDescription?: string;
 }
 
+export interface PredictionCancelInput {
+  marketId: string;
+  reason?: string;
+  cancelledAt?: Date;
+}
+
+export interface PredictionCancelResult {
+  marketId: string;
+  positionsRefunded: number;
+  totalRefunded: number;
+}
+
 export interface PredictionTradeResult {
   positionId: string;
   marketId: string;
@@ -166,4 +184,6 @@ export interface PredictionServiceDeps {
   clock?: ClockPort;
   fees: FeeConfig;
   feeProcessor?: FeeProcessor;
+  tradeSource?: PredictionPriceSnapshotRecord['source'];
+  tradeActorType?: 'user' | 'npc';
 }

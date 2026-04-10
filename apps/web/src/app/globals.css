@@ -2,6 +2,7 @@
 @config "../../tailwind.config.ts";
 
 :root {
+  --bottom-nav-height: 56px;
   --background: #ffffff;
   --foreground: #0f1419;
   --card: #f7f8f8;
@@ -26,11 +27,11 @@
   --chart-3: #f7b928;
   --chart-4: #17bf63;
   --chart-5: #e0245e;
-  --sidebar: #fafafa;
+  --sidebar: #ffffff;
   --sidebar-foreground: #0f1419;
   --sidebar-primary: #0066FF;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #e3ecf6;
+  --sidebar-accent: #eeeeee;
   --sidebar-accent-foreground: #0066FF;
   --sidebar-border: #e1e8ed;
   --sidebar-ring: #0066FF;
@@ -79,7 +80,7 @@
   --accent-foreground: #0066FF;
   --destructive: #f4212e;
   --destructive-foreground: #ffffff;
-  --border: #2f3336;
+  --border: #393d41;
   --input: #22303c;
   --ring: #0066FF;
   --chart-1: #0066FF;
@@ -87,13 +88,13 @@
   --chart-3: #f7b928;
   --chart-4: #17bf63;
   --chart-5: #e0245e;
-  --sidebar: #0a0a0a;
+  --sidebar: #000000;
   --sidebar-foreground: #d9d9d9;
   --sidebar-primary: #0066FF;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #1a1a1a;
+  --sidebar-accent: #2a2a2a;
   --sidebar-accent-foreground: #0066FF;
-  --sidebar-border: #2f3336;
+  --sidebar-border: #393d41;
   --sidebar-ring: #0066FF;
   --scrollbar-track: #000000;
   --scrollbar-thumb: #0066FF;
@@ -119,6 +120,10 @@
   --shadow-lg: 0px 2px 0px 0px hsl(226 89% 58% / 0.00), 0px 4px 6px -1px hsl(226 89% 58% / 0.00);
   --shadow-xl: 0px 2px 0px 0px hsl(226 89% 58% / 0.00), 0px 8px 10px -1px hsl(226 89% 58% / 0.00);
   --shadow-2xl: 0px 2px 0px 0px hsl(226 89% 58% / 0.00);
+}
+
+.writing-vertical-lr {
+  writing-mode: vertical-lr;
 }
 
 /* @tailwind-css v4 theme block */
@@ -162,11 +167,6 @@
   --font-mono: var(--font-mono);
   --font-serif: var(--font-serif);
 
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-
   --shadow-2xs: var(--shadow-2xs);
   --shadow-xs: var(--shadow-xs);
   --shadow-sm: var(--shadow-sm);
@@ -183,12 +183,58 @@ body {
   font-feature-settings: "rlig" 1, "calt" 1;
   /* Prevent native pull-to-refresh and overscroll effects */
   overscroll-behavior-y: contain;
-  overflow-y: auto;
+}
+
+body {
+  --toast-band-height: 72px;
+}
+
+.app-shell-root {
+  transition: padding-top 0.2s ease;
+}
+
+body:has([data-sonner-toast]) .app-shell-root {
+  padding-top: var(--toast-band-height);
+}
+
+body [data-sonner-toaster] {
+  position: fixed !important;
+  top: 0 !important;
+  right: 0 !important;
+  left: 0 !important;
+  inset: 0 0 auto 0 !important;
+  width: 100vw !important;
+  transform: none !important;
+  padding: 0 !important;
+  z-index: 2147483647 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0 !important;
+  background: var(--background);
+  border-bottom: 1px solid var(--border);
+}
+
+body [data-sonner-toaster][data-x-position='center'] {
+  right: 0 !important;
+  left: 0 !important;
+}
+
+body [data-sonner-toaster] [data-sonner-toast] {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  border-right: 0 !important;
+  border-left: 0 !important;
 }
 
 /* Prevent pull-to-refresh on the entire app */
 html {
   overscroll-behavior-y: contain;
+  /* Always show scrollbar and reserve space to prevent layout shift */
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
 }
 
 /* All buttons and links should have pointer cursor */
@@ -199,17 +245,6 @@ a[href] {
 
 button:disabled {
   cursor: not-allowed;
-}
-
-/* Allow rounded elements to maintain their rounded state */
-[class*="rounded-full"] {
-  border-radius: 9999px !important;
-}
-
-/* Allow bottom nav to have rounded bottom corners */
-.bottom-nav-rounded {
-  border-bottom-left-radius: 12px !important;
-  border-bottom-right-radius: 12px !important;
 }
 
 @keyframes accordion-down {
@@ -363,26 +398,12 @@ button:disabled {
   box-shadow: inset 5px 5px 5px rgba(0, 0, 0, 0.1), inset -5px -5px 5px rgba(255, 255, 255, 0.05);
 }
 
-.chat-button {
-  box-shadow: inset 3px 3px 3px rgba(0, 0, 0, 0.1), inset -3px -3px 3px rgba(255, 255, 255, 0.05);
-  transition: all 0.3s ease;
-}
-
-.chat-button:hover:not(:disabled) {
+.message-input {
   box-shadow: none;
 }
 
-.message-input {
-  box-shadow: inset 3px 3px 5px rgba(0, 0, 0, 0.15), inset -3px -3px 5px rgba(255, 255, 255, 0.05);
-  transition: all 0.3s ease;
-}
-
-.message-input:focus {
-  box-shadow: inset 3px 3px 5px var(--primary-glow, rgba(0, 102, 255, 0.2)), inset -3px -3px 5px var(--primary-glow-secondary, rgba(0, 102, 255, 0.1));
-}
-
 .message-bubble {
-  box-shadow: 3px 3px 8px rgba(0, 0, 0, 0.15), -3px -3px 8px rgba(255, 255, 255, 0.05);
+  box-shadow: none;
 }
 
 .chat-tab {
@@ -399,18 +420,147 @@ button:disabled {
   box-shadow: inset 5px 5px 5px rgba(0, 0, 0, 0.3), inset -5px -5px 5px rgba(255, 255, 255, 0.02);
 }
 
-.dark .chat-button {
-  box-shadow: inset 3px 3px 3px rgba(0, 0, 0, 0.3), inset -3px -3px 3px rgba(255, 255, 255, 0.02);
-}
-
 .dark .message-input {
-  box-shadow: inset 3px 3px 5px rgba(0, 0, 0, 0.3), inset -3px -3px 5px rgba(255, 255, 255, 0.02);
+  box-shadow: none;
 }
 
 .dark .message-bubble {
-  box-shadow: 3px 3px 8px rgba(0, 0, 0, 0.3), -3px -3px 8px rgba(255, 255, 255, 0.02);
+  box-shadow: none;
 }
 
 .dark .chat-tab {
   box-shadow: inset 3px 3px 5px rgba(0, 0, 0, 0.3), inset -3px -3px 5px rgba(255, 255, 255, 0.02);
+}
+
+/* Confetti Animation (used by RevealModal, OutcomeNotificationPopup) */
+@keyframes confetti {
+  0% {
+    transform: translateY(-10vh) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(110vh) rotate(720deg);
+    opacity: 0;
+  }
+}
+
+.animate-confetti {
+  animation: confetti 3s ease-out forwards;
+}
+
+/* Confetti burst — two separate animations layered:
+   1. burst: fast explosive outward (horizontal + initial vertical)
+   2. fall:  smooth continuous gravity pull (vertical only)
+   Layering via separate elements so each has its own easing curve. */
+
+@keyframes confetti-burst-out {
+  0% {
+    transform: translate(0, 0) scale(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--cx), var(--cy)) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes confetti-fall-gravity {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(var(--fall-distance)) rotate(var(--spin));
+    opacity: 1;
+  }
+}
+
+@keyframes confetti-fade {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes confetti-sway {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(var(--sway-amount));
+  }
+  75% {
+    transform: translateX(calc(var(--sway-amount) * -0.6));
+  }
+}
+
+/* Wave container — stays hidden until its delay, then appears */
+@keyframes confetti-wave-in {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+/* Outer wrapper: burst outward fast */
+.confetti-burst-wrapper {
+  animation: confetti-burst-out 0.4s cubic-bezier(0, 0.7, 0.3, 1) forwards;
+}
+
+/* Middle wrapper: continuous gravity + delayed slow fade. */
+.confetti-gravity {
+  animation:
+    confetti-fall-gravity 5s cubic-bezier(0.2, 0, 1, 1) forwards,
+    confetti-fade 1.5s ease-out 2s forwards;
+}
+
+/* Inner piece: gentle sway oscillation */
+.confetti-piece {
+  animation: confetti-sway var(--sway-speed) ease-in-out infinite;
+}
+
+/* 3D tumble — each particle gets a unique rotation axis */
+@keyframes confetti-3d-spin {
+  0% {
+    transform: rotateX(0deg) rotateY(0deg);
+  }
+  100% {
+    transform: rotateX(var(--rot-x)) rotateY(var(--rot-y));
+  }
+}
+
+.confetti-3d-spin {
+  animation: confetti-sway var(--sway-speed) ease-in-out infinite,
+    confetti-3d-spin var(--spin-speed) linear infinite;
+}
+
+/* Daily Login Modal - Confetti Animation */
+@keyframes shrink-bar {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes confetti-fall {
+  0% {
+    transform: translateY(-10px) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(110vh) rotate(720deg);
+    opacity: 0;
+  }
+}
+
+/* Ticker embed - scrolling strip */
+@keyframes ticker-scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
 }

@@ -1,22 +1,8 @@
 'use client';
 
 import type { PerpPosition, UserPredictionPosition } from '@babylon/shared';
-import { logger } from '@babylon/shared';
+import { logger, toNumber } from '@babylon/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
-
-/**
- * Helper to safely convert API values to numbers.
- */
-function toNumber(value: unknown, fallback = 0): number {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value === 'string') {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
-  }
-  return fallback;
-}
 
 // Re-export for convenience
 export type { UserPredictionPosition } from '@babylon/shared';
@@ -67,6 +53,7 @@ interface ApiPredictionPositionPayload {
   currentProbability?: NumericLike;
   resolved?: boolean;
   resolution?: boolean | null;
+  status?: string;
 }
 
 /**
@@ -213,6 +200,7 @@ export function useUserPositions(
             unrealizedPnL: toNumber(pos.unrealizedPnL ?? 0),
             resolved: Boolean(pos.resolved),
             resolution: pos.resolution ?? null,
+            status: pos.status,
           };
         }
       ) as UserPredictionPosition[];

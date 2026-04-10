@@ -1,13 +1,14 @@
 import {
   type PerpPosition as DbPerpPosition,
   db as defaultDb,
+  organizations,
   perpMarketSnapshots,
   perpPositions,
   type Transaction,
 } from '@babylon/db';
 import { generateSnowflakeId } from '@babylon/shared';
 import type { InferInsertModel } from 'drizzle-orm';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, asc, count, eq, isNull } from 'drizzle-orm';
 import type {
   PerpDbPort,
   PerpMarketRecord,
@@ -33,15 +34,50 @@ export class PerpDbAdapter implements PerpDbPort {
     this.dbClient = dbClient ?? defaultDb;
   }
 
-  async listMarkets(): Promise<PerpMarketRecord[]> {
-    const snapshots = await this.dbClient.select().from(perpMarketSnapshots);
-    if (snapshots.length === 0) return [];
+  /**
+   * WHY no WHERE clause: countMarkets counts everything in perpMarketSnapshots,
+   * matching what listMarkets() returns without options. The perps table has one
+   * row per ticker (snapshot, not historical), so count = number of instruments.
+   */
+  async countMarkets(): Promise<number> {
+    const [row] = await this.dbClient
+      .select({ c: count() })
+      .from(perpMarketSnapshots);
+    return Number(row?.c ?? 0);
+  }
 
-    // Name is stored directly in the snapshot - no need to join with organizations
-    return snapshots.map((s) => ({
+  /**
+   * WHY orderBy ticker ASC: Ensures deterministic page boundaries. Without a
+   * stable sort, rows can shift between pages as prices change, causing
+   * duplicates or gaps in paginated responses.
+   */
+  async listMarkets(options?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<PerpMarketRecord[]> {
+    const base = this.dbClient
+      .select({
+        s: perpMarketSnapshots,
+        orgName: organizations.name,
+        orgImage: organizations.imageUrl,
+      })
+      .from(perpMarketSnapshots)
+      .leftJoin(
+        organizations,
+        eq(perpMarketSnapshots.organizationId, organizations.id)
+      )
+      .orderBy(asc(perpMarketSnapshots.ticker));
+    const rows =
+      options?.limit != null
+        ? await base.limit(options.limit).offset(options.offset ?? 0)
+        : await base;
+    if (rows.length === 0) return [];
+
+    return rows.map(({ s, orgName, orgImage }) => ({
       ticker: s.ticker,
       organizationId: s.organizationId,
-      name: s.name ?? undefined,
+      name: orgName ?? s.name ?? undefined,
+      imageUrl: orgImage ?? null,
       currentPrice: Number(s.currentPrice),
       price24hAgo: s.price24hAgo ? Number(s.price24hAgo) : undefined,
       change24h: Number(s.change24h ?? 0),
@@ -58,6 +94,14 @@ export class PerpDbAdapter implements PerpDbPort {
       }) as PerpMarketRecord['fundingRate'],
       maxLeverage: Number(s.maxLeverage ?? 100),
       minOrderSize: Number(s.minOrderSize ?? 10),
+      bidPrice: s.bidPrice ? Number(s.bidPrice) : undefined,
+      askPrice: s.askPrice ? Number(s.askPrice) : undefined,
+      spreadBps: s.spreadBps ? Number(s.spreadBps) : undefined,
+      bidDepth: s.bidDepth ? Number(s.bidDepth) : undefined,
+      askDepth: s.askDepth ? Number(s.askDepth) : undefined,
+      liquidityRegime:
+        (s.liquidityRegime as PerpMarketRecord['liquidityRegime']) ?? undefined,
+      quoteUpdatedAt: s.quoteUpdatedAt ?? undefined,
       markPrice: s.markPrice ? Number(s.markPrice) : undefined,
       indexPrice: s.indexPrice ? Number(s.indexPrice) : undefined,
     }));
@@ -245,6 +289,13 @@ export class PerpDbAdapter implements PerpDbPort {
         | 'volume24h'
         | 'openInterest'
         | 'fundingRate'
+        | 'bidPrice'
+        | 'askPrice'
+        | 'spreadBps'
+        | 'bidDepth'
+        | 'askDepth'
+        | 'liquidityRegime'
+        | 'quoteUpdatedAt'
         | 'markPrice'
         | 'indexPrice'
         | 'maxLeverage'
@@ -318,6 +369,13 @@ export class PerpDbAdapter implements PerpDbPort {
         fundingRate: updates.fundingRate ?? current.fundingRate,
         maxLeverage: updates.maxLeverage ?? current.maxLeverage,
         minOrderSize: updates.minOrderSize ?? current.minOrderSize,
+        bidPrice: updates.bidPrice ?? current.bidPrice,
+        askPrice: updates.askPrice ?? current.askPrice,
+        spreadBps: updates.spreadBps ?? current.spreadBps,
+        bidDepth: updates.bidDepth ?? current.bidDepth,
+        askDepth: updates.askDepth ?? current.askDepth,
+        liquidityRegime: updates.liquidityRegime ?? current.liquidityRegime,
+        quoteUpdatedAt: updates.quoteUpdatedAt ?? current.quoteUpdatedAt,
         markPrice: updates.markPrice ?? current.markPrice,
         indexPrice: updates.indexPrice ?? current.indexPrice,
         updatedAt: now,

@@ -100,6 +100,7 @@
 import {
   authenticate,
   BusinessLogicError,
+  checkProgress,
   ensureUserForAuth,
   successResponse,
   withErrorHandling,
@@ -120,6 +121,7 @@ import {
 } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { ensureEngineServices } from '@/lib/engine/ensure-engine-services';
+import { POST as createCommentPOST } from '../comments/route';
 
 /**
  * POST /api/posts/[id]/reply
@@ -137,20 +139,19 @@ export const POST = withErrorHandling(
     const user = await authenticate(request);
     const { id: postId } = PostIdParamSchema.parse(await context.params);
 
-    // 2. Parse and validate request body
-    const body = await request.json();
-    const { content, marketId, sentiment } = ReplyToPostSchema.parse(body);
-
     // 3. Extract NPC/author ID from post ID
     const parseResult = parsePostId(postId);
 
-    // Require valid format for replies (unlike likes, which can use defaults)
+    // Fall back to the generic comments endpoint for standard post IDs.
+    // `/reply` is used as a compatibility endpoint by some clients, while the
+    // canonical app flow uses `/comments` for normal posts.
     if (!parseResult.success) {
-      throw new BusinessLogicError(
-        'Invalid post ID format',
-        'INVALID_POST_ID_FORMAT'
-      );
+      return createCommentPOST(request, context);
     }
+
+    // 2. Parse and validate request body
+    const body = await request.json();
+    const { content, marketId, sentiment } = ReplyToPostSchema.parse(body);
 
     const { gameId, authorId: npcId, timestamp } = parseResult.metadata;
 
@@ -312,6 +313,8 @@ export const POST = withErrorHandling(
       },
       'POST /api/posts/[id]/reply'
     );
+
+    void checkProgress(user.userId, { type: 'comment_created' });
 
     return successResponse(
       {

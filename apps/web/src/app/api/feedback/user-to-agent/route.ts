@@ -93,7 +93,6 @@
  * ```
  */
 
-import { submitFeedbackToAgent0 } from '@babylon/agents';
 import {
   authenticate,
   BusinessLogicError,
@@ -172,14 +171,6 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     interactionType: body.interactionType ?? 'user_to_agent',
   });
 
-  // Submit to Agent0 network (fire-and-forget with error handling)
-  submitFeedbackToAgent0(feedback.id).catch((error) => {
-    logger.error('Failed to submit feedback to Agent0', {
-      feedbackId: feedback.id,
-      error,
-    });
-  });
-
   const metrics = await db.agentPerformanceMetrics.findUnique({
     where: { userId: toAgent.id },
     select: {
@@ -208,7 +199,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 /**
  * GET endpoint to retrieve feedback for an agent
  */
-export async function GET(request: NextRequest) {
+export const GET = withErrorHandling(async (request: NextRequest) => {
   const { searchParams } = new URL(request.url);
   const agentIdParam = searchParams.get('agentId')!;
   const limitParam = searchParams.get('limit');
@@ -276,4 +267,4 @@ export async function GET(request: NextRequest) {
       hasMore: offset + limit < total,
     },
   });
-}
+});

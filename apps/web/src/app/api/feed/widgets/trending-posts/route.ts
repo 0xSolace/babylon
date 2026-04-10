@@ -81,7 +81,7 @@
 
 import { optionalAuth, successResponse, withErrorHandling } from '@babylon/api';
 import { asPublic, asUser } from '@babylon/db';
-import { logger, TrendingPostsQuerySchema } from '@babylon/shared';
+import { logger, TrendingPostsQuerySchema, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
 interface TrendingPost {
@@ -331,7 +331,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         authorId: post.authorId,
         authorName: user?.displayName || user?.username || post.authorId,
         authorUsername: user?.username || null,
-        timestamp: post.timestamp.toISOString(),
+        timestamp: toISO(post.timestamp),
         likeCount,
         commentCount,
         shareCount,

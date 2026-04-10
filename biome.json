@@ -10,6 +10,8 @@
     "includes": [
       "**",
       "!**/.next",
+      "!**/.next-synpress*",
+      "!**/.next-chroma*",
       "!**/dist",
       "!**/.turbo",
       "!**/node_modules",
@@ -23,8 +25,12 @@
       "!**/*.md",
       "!**/*.mdx",
       "!**/babylon-platform-artchitecture",
+      "!**/babylon-ai-trading-platform",
       "!**/genesis.json",
-      "!**/drizzle/migrations"
+      "!**/drizzle/migrations",
+      "!packages/training/data/benchmarks/scenarios/**",
+      "!packages/training/book/mermaid-init.js",
+      "!packages/training/book/mermaid.min.js"
     ]
   },
   "formatter": {
@@ -52,7 +58,8 @@
         "useConst": "error"
       },
       "suspicious": {
-        "noExplicitAny": "error"
+        "noExplicitAny": "error",
+        "noConsole": "error"
       },
       "nursery": {
         "useSortedClasses": {
@@ -107,6 +114,34 @@
       ],
       "linter": {
         "enabled": false
+      }
+    },
+    {
+      "includes": [
+        "apps/web/sentry.*.config.ts",
+        "apps/web/instrumentation*.ts",
+        "apps/web/next.config.ts",
+        "packages/engine/src/prompts/complete-example.ts",
+        "scripts/**",
+        "apps/cli/**",
+        "packages/testing/**",
+        "packages/examples/**",
+        "**/__tests__/**",
+        "**/examples/**",
+        "**/scripts/**",
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx",
+        "packages/training/src/benchmark/**",
+        "packages/api/src/dev-credentials.ts"
+      ],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
+          }
+        }
       }
     },
     {

@@ -1,14 +1,10 @@
 'use client';
 
-import { cn } from '@babylon/shared';
 import {
-  ArrowDownRight,
-  ArrowUpRight,
-  MessageCircle,
-  MessageSquare,
-  TrendingDown,
-  TrendingUp,
-} from 'lucide-react';
+  BABYLON_POINTS_SYMBOL,
+  cn,
+  formatCompactCurrency,
+} from '@babylon/shared';
 import { memo, useState } from 'react';
 import {
   type AgentActivity,
@@ -44,8 +40,8 @@ export const AgentActivityCard = memo(function AgentActivityCard({
   return (
     <div
       className={cn(
-        'group relative cursor-pointer rounded-lg border border-zinc-800 p-4 transition-colors hover:border-zinc-700',
-        'bg-zinc-900/50 hover:bg-zinc-900/80',
+        'group relative cursor-pointer rounded-lg border border-border p-4 transition-colors hover:border-border/80',
+        'bg-card/50 hover:bg-card/80',
         className
       )}
       onClick={() => setExpanded((prev) => !prev)}
@@ -61,28 +57,18 @@ export const AgentActivityCard = memo(function AgentActivityCard({
       aria-label={`${getActivityTitle(activity)}. Click to ${expanded ? 'collapse' : 'expand'} details.`}
     >
       <div className="flex items-start gap-3">
-        {/* Activity Icon */}
-        <div
-          className={cn(
-            'flex h-9 w-9 shrink-0 items-center justify-center rounded-full',
-            getActivityIconBackground(activity)
-          )}
-        >
-          {getActivityIcon(activity)}
-        </div>
-
         <div className="min-w-0 flex-1">
           {/* Header Row */}
           <div className="flex flex-wrap items-center gap-2">
             {showAgent && activity.agent && (
-              <span className="font-medium text-sm text-white">
+              <span className="font-medium text-foreground text-sm">
                 {activity.agent.name}
               </span>
             )}
-            <span className="font-medium text-sm text-zinc-300">
+            <span className="font-medium text-foreground text-sm">
               {getActivityTitle(activity)}
             </span>
-            <span className="text-xs text-zinc-500">{timeAgo}</span>
+            <span className="text-muted-foreground text-xs">{timeAgo}</span>
           </div>
 
           {/* Activity-specific content */}
@@ -99,57 +85,6 @@ export const AgentActivityCard = memo(function AgentActivityCard({
     </div>
   );
 });
-
-// Helper: Get activity icon
-function getActivityIcon(activity: AgentActivity) {
-  if (isTradeActivity(activity)) {
-    const { side, action } = activity.data;
-    const isLong = side === 'long' || side === 'yes';
-    const isOpen = action === 'open';
-
-    if (isOpen) {
-      return isLong ? (
-        <ArrowUpRight className="h-5 w-5 text-emerald-400" />
-      ) : (
-        <ArrowDownRight className="h-5 w-5 text-red-400" />
-      );
-    }
-    return isLong ? (
-      <TrendingUp className="h-5 w-5 text-emerald-400" />
-    ) : (
-      <TrendingDown className="h-5 w-5 text-red-400" />
-    );
-  }
-
-  if (isPostActivity(activity)) {
-    return <MessageSquare className="h-5 w-5 text-blue-400" />;
-  }
-
-  if (isCommentActivity(activity)) {
-    return <MessageCircle className="h-5 w-5 text-purple-400" />;
-  }
-
-  if (isMessageActivity(activity)) {
-    return <MessageCircle className="h-5 w-5 text-amber-400" />;
-  }
-
-  return <MessageSquare className="h-5 w-5 text-zinc-400" />;
-}
-
-// Helper: Get icon background color
-function getActivityIconBackground(activity: AgentActivity): string {
-  if (isTradeActivity(activity)) {
-    const isLong =
-      activity.data.side === 'long' || activity.data.side === 'yes';
-    return isLong ? 'bg-emerald-900/30' : 'bg-red-900/30';
-  }
-
-  if (isPostActivity(activity)) return 'bg-blue-900/30';
-  if (isCommentActivity(activity)) return 'bg-purple-900/30';
-  if (isMessageActivity(activity)) return 'bg-amber-900/30';
-
-  return 'bg-zinc-800';
-}
 
 // Helper: Get activity title
 function getActivityTitle(activity: AgentActivity): string {
@@ -181,31 +116,34 @@ function renderActivityContent(activity: AgentActivity, expanded: boolean) {
     return (
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2 text-sm">
-          <span className="text-zinc-400">
+          <span className="text-muted-foreground">
             {marketType === 'perp' ? ticker : 'Prediction'}
           </span>
-          <span className="text-zinc-600">•</span>
-          <span className="font-mono text-white">
-            ${amount.toLocaleString()}
+          <span className="text-muted-foreground/60">•</span>
+          <span className="font-mono text-foreground">
+            {BABYLON_POINTS_SYMBOL}
+            {amount.toLocaleString()}
           </span>
-          <span className="text-zinc-600">@</span>
-          <span className="font-mono text-zinc-300">
+          <span className="text-muted-foreground/60">@</span>
+          <span className="font-mono text-foreground/80">
             {marketType === 'perp'
-              ? `$${price.toLocaleString()}`
+              ? `${BABYLON_POINTS_SYMBOL}${price.toLocaleString()}`
               : `${(price * 100).toFixed(1)}%`}
           </span>
         </div>
 
         {marketQuestion && (
-          <p className="line-clamp-2 text-sm text-zinc-400">{marketQuestion}</p>
+          <p className="line-clamp-2 text-muted-foreground text-sm">
+            {marketQuestion}
+          </p>
         )}
 
         {expanded && reasoning && (
-          <div className="mt-3 rounded-md border border-zinc-700 bg-zinc-800/50 p-3">
-            <p className="mb-1 font-medium text-xs text-zinc-500 uppercase">
+          <div className="mt-3 rounded-md border border-border bg-muted/50 p-3">
+            <p className="mb-1 font-medium text-muted-foreground text-xs uppercase">
               Reasoning
             </p>
-            <p className="text-sm text-zinc-300">{reasoning}</p>
+            <p className="text-foreground/80 text-sm">{reasoning}</p>
           </div>
         )}
       </div>
@@ -215,7 +153,10 @@ function renderActivityContent(activity: AgentActivity, expanded: boolean) {
   if (isPostActivity(activity)) {
     return (
       <p
-        className={cn('text-sm text-zinc-400', expanded ? '' : 'line-clamp-2')}
+        className={cn(
+          'text-muted-foreground text-sm',
+          expanded ? '' : 'line-clamp-2'
+        )}
       >
         {activity.data.contentPreview}
       </p>
@@ -225,7 +166,10 @@ function renderActivityContent(activity: AgentActivity, expanded: boolean) {
   if (isCommentActivity(activity)) {
     return (
       <p
-        className={cn('text-sm text-zinc-400', expanded ? '' : 'line-clamp-2')}
+        className={cn(
+          'text-muted-foreground text-sm',
+          expanded ? '' : 'line-clamp-2'
+        )}
       >
         {activity.data.contentPreview}
       </p>
@@ -236,7 +180,7 @@ function renderActivityContent(activity: AgentActivity, expanded: boolean) {
     return (
       <p
         className={cn(
-          'text-sm text-zinc-400 italic',
+          'text-muted-foreground text-sm italic',
           expanded ? '' : 'line-clamp-2'
         )}
       >
@@ -256,15 +200,12 @@ function PnLBadge({ pnl }: { pnl: number }) {
       className={cn(
         'shrink-0 rounded-md px-2.5 py-1 font-medium font-mono text-sm',
         isPositive
-          ? 'border border-emerald-800 bg-emerald-900/30 text-emerald-400'
-          : 'border border-red-800 bg-red-900/30 text-red-400'
+          ? 'border border-emerald-300 bg-emerald-100 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400'
+          : 'border border-red-300 bg-red-100 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400'
       )}
     >
-      {isPositive ? '+' : ''}$
-      {pnl.toLocaleString(undefined, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      })}
+      {isPositive ? '+' : ''}
+      {formatCompactCurrency(pnl)}
     </div>
   );
 }

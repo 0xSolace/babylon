@@ -74,7 +74,7 @@ async function checkGameStatus(): Promise<void> {
   console.log(`Actors: ${staticActorCount} static, ${stateCount} with state`);
 
   if (staticActorCount === 0) {
-    logger.warn('No actors defined! Check packages/engine/src/data/actors/');
+    logger.warn('No actors defined! Check the active pack actor definitions.');
   }
 
   const questionCountResult = await db

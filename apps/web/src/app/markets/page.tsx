@@ -1,39 +1,19 @@
 'use client';
 
-import dynamic from 'next/dynamic';
+export const dynamic = 'force-dynamic';
+
+import nextDynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useState, useTransition } from 'react';
-import { MarketsToggle } from '@/components/shared/MarketsToggle';
+import { useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import { PageContainer } from '@/components/shared/PageContainer';
-import { Skeleton, WidgetPanelSkeleton } from '@/components/shared/Skeleton';
-import type { MarketTab, PerpMarket, PredictionMarket } from '@/types/markets';
-import {
-  DashboardTabContent,
-  LoginPrompt,
-  MarketsSearchInput,
-  PerpsTabContent,
-  PredictionsTabContent,
-} from './_components';
-import { useMarketsPageData } from './_hooks';
+import { PositionsTab } from '@/components/wallet/v2/positions-tab';
+import { useAuth } from '@/hooks/useAuth';
+import { useUserPositionsPolling } from '@/stores/userPositionsStore';
+import { invalidateWalletBalance } from '@/stores/walletBalanceStore';
+import { MarketsTradingTerminal } from './_components/terminal/MarketsTradingTerminal';
 
-// Lazy load modals - not needed for initial render
-const CategoryPnLShareModal = dynamic(
-  () =>
-    import('@/components/markets/CategoryPnLShareModal').then((m) => ({
-      default: m.CategoryPnLShareModal,
-    })),
-  { ssr: false }
-);
-
-const PortfolioPnLShareModal = dynamic(
-  () =>
-    import('@/components/markets/PortfolioPnLShareModal').then((m) => ({
-      default: m.PortfolioPnLShareModal,
-    })),
-  { ssr: false }
-);
-
-const BuyPointsModal = dynamic(
+const BuyPointsModal = nextDynamic(
   () =>
     import('@/components/points/BuyPointsModal').then((m) => ({
       default: m.BuyPointsModal,
@@ -41,346 +21,98 @@ const BuyPointsModal = dynamic(
   { ssr: false }
 );
 
-// Lazy load sidebar - only needed on desktop
-const MarketsWidgetSidebar = dynamic(
-  () =>
-    import('@/components/markets/MarketsWidgetSidebar').then((m) => ({
-      default: m.MarketsWidgetSidebar,
-    })),
-  { ssr: false }
-);
-
 /**
- * Valid tab values from URL params.
- */
-const VALID_TABS: MarketTab[] = ['dashboard', 'perps', 'predictions'];
-
-/**
- * Parse tab from URL search params.
- */
-function parseTabFromParams(params: URLSearchParams): MarketTab {
-  const tab = params.get('tab');
-  if (tab && VALID_TABS.includes(tab as MarketTab)) {
-    return tab as MarketTab;
-  }
-  return 'dashboard';
-}
-
-/**
- * Markets page component.
+ * Markets route (`/markets`): page shell (layout, Stripe return handling, buy points modal).
  *
- * Main dashboard for trading perpetual futures and prediction markets.
- * Supports three views: Dashboard (overview), Perps (perpetual markets),
- * and Predictions (prediction markets).
- *
- * Features:
- * - Real-time market data via SSE
- * - User positions management
- * - Portfolio P&L tracking
- * - Search and filtering
- * - Responsive layout (desktop sidebar, mobile full-width)
- * - URL-based tab navigation (?tab=perps, ?tab=predictions)
+ * The full trading terminal UI — market list, charts, order entry, filters — is implemented
+ * in `./_components/terminal/MarketsTradingTerminal.tsx`, not in this file.
  */
 export default function MarketsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [isPending, startTransition] = useTransition();
-
-  // Initialize tab from URL params for deep linking support
-  const [activeTab, setActiveTab] = useState<MarketTab>(() =>
-    parseTabFromParams(searchParams)
-  );
+  const { ready, authenticated, user } = useAuth();
+  const userId = authenticated ? user?.id : undefined;
   const [showBuyPointsModal, setShowBuyPointsModal] = useState(false);
-  const [showPnLShareModal, setShowPnLShareModal] = useState(false);
-  const [showCategoryPnLShareModal, setShowCategoryPnLShareModal] = useState<
-    'perps' | 'predictions' | null
-  >(null);
 
-  // Sync URL params with tab state (only when URL changes externally)
-  // Intentionally excludes activeTab from deps to avoid feedback loop:
-  // - URL change → state update (this effect)
-  // - State change → URL update (handleTabChange)
-  // biome-ignore lint/correctness/useExhaustiveDependencies: One-way sync from URL to state
+  // Poll positions for the sidebar
+  useUserPositionsPolling(userId ?? null);
+
+  // Ref guard to prevent Stripe redirect effect from firing multiple times
+  const stripeHandledRef = useRef(false);
+
+  // Handle Stripe Checkout success/cancel redirects
+  // When user returns from Stripe, show appropriate toast and clean URL
   useEffect(() => {
-    const urlTab = parseTabFromParams(searchParams);
-    if (urlTab !== activeTab) {
-      startTransition(() => {
-        setActiveTab(urlTab);
-      });
+    // Prevent re-entry if already handled (can happen before router.replace completes)
+    if (stripeHandledRef.current) return;
+
+    const stripeSuccess = searchParams.get('stripe_success');
+    const stripeCancelled = searchParams.get('stripe_cancelled');
+
+    if (stripeSuccess === 'true') {
+      stripeHandledRef.current = true;
+      // Payment received - points are credited via webhook asynchronously
+      // Message is conservative since webhook timing is not guaranteed
+      const showToast = () => {
+        toast.success(
+          'Payment received! Your points will be credited shortly.',
+          {
+            duration: 5000,
+            description: 'Your balance will update automatically.',
+          }
+        );
+        invalidateWalletBalance();
+      };
+      // Small delay to allow webhook to complete (typically < 1 second)
+      const timeout = setTimeout(showToast, 1000);
+
+      // Clean up URL params after showing toast
+      const url = new URL(window.location.href);
+      url.searchParams.delete('stripe_success');
+      url.searchParams.delete('session_id');
+      router.replace(url.pathname + url.search, { scroll: false });
+
+      return () => clearTimeout(timeout);
+    } else if (stripeCancelled === 'true') {
+      stripeHandledRef.current = true;
+      invalidateWalletBalance();
+      // Clean up URL params
+      const url = new URL(window.location.href);
+      url.searchParams.delete('stripe_cancelled');
+      router.replace(url.pathname + url.search, { scroll: false });
     }
-  }, [searchParams]);
-
-  // Handle tab change with URL update - uses startTransition for smooth UX
-  const handleTabChange = useCallback(
-    (tab: MarketTab) => {
-      // Use startTransition to mark this as a non-urgent update
-      // This prevents flickering by allowing React to keep showing old content
-      startTransition(() => {
-        setActiveTab(tab);
-      });
-      // Update URL without full navigation
-      const url = tab === 'dashboard' ? '/markets' : `/markets?tab=${tab}`;
-      router.replace(url, { scroll: false });
-    },
-    [router]
-  );
-
-  // All data and computed values from centralized hook
-  const data = useMarketsPageData();
-
-  // Navigation handlers - memoized to prevent child re-renders
-  const handleMarketClick = useCallback(
-    (market: PerpMarket) => {
-      router.push(`/markets/perps/${market.ticker}?from=dashboard`);
-    },
-    [router]
-  );
-
-  const handlePredictionClick = useCallback(
-    (prediction: PredictionMarket) => {
-      router.push(`/markets/predictions/${prediction.id}?from=dashboard`);
-    },
-    [router]
-  );
-
-  // Modal handlers - memoized to prevent child re-renders
-  const handleShowPnLShare = useCallback(() => setShowPnLShareModal(true), []);
-  const handleClosePnLShare = useCallback(
-    () => setShowPnLShareModal(false),
-    []
-  );
-  const handleShowBuyPoints = useCallback(
-    () => setShowBuyPointsModal(true),
-    []
-  );
-  const handleCloseBuyPoints = useCallback(
-    () => setShowBuyPointsModal(false),
-    []
-  );
-  const handleShowPerpsPnLShare = useCallback(
-    () => setShowCategoryPnLShareModal('perps'),
-    []
-  );
-  const handleShowPredictionsPnLShare = useCallback(
-    () => setShowCategoryPnLShareModal('predictions'),
-    []
-  );
-  const handleCloseCategoryPnLShare = useCallback(
-    () => setShowCategoryPnLShareModal(null),
-    []
-  );
-
-  // Loading state
-  if (data.loading) {
-    return (
-      <PageContainer noPadding className="flex flex-col">
-        <div className="space-y-6 p-4">
-          <div className="flex gap-0">
-            {['Dashboard', 'Perps', 'Predictions'].map((tab) => (
-              <div key={tab} className="flex-1 px-4 py-2.5">
-                <Skeleton className="mx-auto h-5 w-20" />
-              </div>
-            ))}
-          </div>
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-            <WidgetPanelSkeleton />
-            <WidgetPanelSkeleton />
-          </div>
-          <WidgetPanelSkeleton />
-        </div>
-      </PageContainer>
-    );
-  }
-
-  // Render active tab content
-  const renderTabContent = (isMobile: boolean) => {
-    switch (activeTab) {
-      case 'dashboard':
-        return (
-          <DashboardTabContent
-            authenticated={data.authenticated}
-            onLogin={data.login}
-            portfolioPnL={data.portfolioPnL}
-            portfolioLoading={data.portfolioLoading}
-            portfolioError={data.portfolioError}
-            onShowPnLShare={handleShowPnLShare}
-            onShowBuyPoints={handleShowBuyPoints}
-            perpPositions={data.perpPositions}
-            predictionPositions={data.predictionPositions}
-            onPositionClosed={data.handlePositionsRefresh}
-            onPositionSold={data.handlePositionsRefresh}
-            trendingMarkets={data.trendingMarkets}
-            topPredictions={data.topPredictions}
-            onMarketClick={handleMarketClick}
-            onPredictionClick={handlePredictionClick}
-          />
-        );
-      case 'perps':
-        return (
-          <PerpsTabContent
-            authenticated={data.authenticated}
-            perpPnLData={data.perpPnLData}
-            portfolioLoading={data.portfolioLoading}
-            portfolioError={data.portfolioError}
-            portfolioUpdatedAt={data.portfolioUpdatedAt}
-            onShowCategoryPnLShare={handleShowPerpsPnLShare}
-            onRefreshPortfolio={data.refreshPortfolio}
-            perpPositions={data.perpPositions}
-            onPositionClosed={data.handlePositionsRefresh}
-            filteredMarkets={data.filteredPerpMarkets}
-            onMarketClick={handleMarketClick}
-          />
-        );
-      case 'predictions':
-        return (
-          <PredictionsTabContent
-            authenticated={data.authenticated}
-            predictionPnLData={data.predictionPnLData}
-            portfolioLoading={data.portfolioLoading}
-            portfolioError={data.portfolioError}
-            portfolioUpdatedAt={data.portfolioUpdatedAt}
-            onShowCategoryPnLShare={handleShowPredictionsPnLShare}
-            onRefreshPortfolio={data.refreshPortfolio}
-            predictionPositions={data.predictionPositions}
-            onPositionSold={data.handlePositionsRefresh}
-            predictionSort={data.predictionSort}
-            onSortChange={data.setPredictionSort}
-            activePredictions={data.activePredictions}
-            resolvedPredictions={data.resolvedPredictions}
-            onPredictionClick={handlePredictionClick}
-            predictionsError={data.predictionsError}
-            compact={isMobile}
-          />
-        );
-    }
-  };
+    return undefined;
+  }, [searchParams, router]);
 
   return (
-    <PageContainer noPadding className="flex flex-col">
-      {/* Desktop Layout */}
-      <div className="hidden flex-1 overflow-hidden xl:flex">
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden border-[rgba(120,120,120,0.5)] lg:border-r lg:border-l">
-          {/* Header */}
-          <div className="sticky top-0 z-10 flex-shrink-0 bg-background shadow-sm">
-            <div className="px-3 sm:px-4 lg:px-6">
-              <MarketsToggle
-                activeTab={activeTab}
-                onTabChange={handleTabChange}
-              />
+    <PageContainer
+      noPadding
+      className="mt-14 flex h-[calc(100dvh-56px-var(--bottom-nav-height))] min-h-0 flex-col overflow-hidden md:mt-0 md:h-dvh"
+    >
+      <div className="relative flex flex-1 overflow-hidden">
+        {/* Main trading terminal */}
+        <div className="flex min-w-0 flex-1 flex-col border-border bg-background/20 lg:border-l">
+          <MarketsTradingTerminal
+            onRequestBuyPoints={() => setShowBuyPointsModal(true)}
+          />
+        </div>
+
+        {/* Right sidebar — Positions (same as wallet page) */}
+        {ready && authenticated && userId && (
+          <div className="hidden w-96 flex-none flex-col overflow-y-auto border-border border-l xl:flex">
+            <div className="p-4">
+              <PositionsTab userId={userId} />
             </div>
-            {activeTab !== 'dashboard' && (
-              <div className="px-3 pb-3 sm:px-4 lg:px-6">
-                <MarketsSearchInput
-                  value={data.searchQuery}
-                  onChange={data.setSearchQuery}
-                  activeTab={activeTab}
-                />
-              </div>
-            )}
           </div>
-
-          {/* Content */}
-          <div
-            className={`flex-1 overflow-y-auto transition-opacity duration-150 ${
-              isPending ? 'opacity-80' : 'opacity-100'
-            }`}
-          >
-            {renderTabContent(false)}
-          </div>
-
-          {/* Login prompt for non-dashboard tabs */}
-          {!data.authenticated && activeTab !== 'dashboard' && (
-            <LoginPrompt onLogin={data.login} />
-          )}
-        </div>
-
-        {/* Widget Sidebar */}
-        <MarketsWidgetSidebar
-          onMarketClick={(market) => {
-            router.push(`/markets/perps/${market.ticker}?from=dashboard`);
-          }}
-          onPredictionClick={(marketId) => {
-            router.push(`/markets/predictions/${marketId}?from=dashboard`);
-          }}
-        />
-      </div>
-
-      {/* Mobile/Tablet Layout */}
-      <div className="flex flex-1 flex-col overflow-hidden xl:hidden">
-        {/* Header */}
-        <div className="sticky top-0 z-10 flex-shrink-0 bg-background shadow-sm">
-          <div className="px-3 sm:px-4">
-            <MarketsToggle
-              activeTab={activeTab}
-              onTabChange={handleTabChange}
-            />
-          </div>
-          {activeTab !== 'dashboard' && (
-            <div className="px-3 pb-3 sm:px-4">
-              <MarketsSearchInput
-                value={data.searchQuery}
-                onChange={data.setSearchQuery}
-                activeTab={activeTab}
-              />
-            </div>
-          )}
-        </div>
-
-        {/* Content */}
-        <div
-          className={`flex-1 overflow-y-auto transition-opacity duration-150 ${
-            isPending ? 'opacity-80' : 'opacity-100'
-          }`}
-        >
-          {renderTabContent(true)}
-        </div>
-
-        {/* Login prompt for non-dashboard tabs */}
-        {!data.authenticated && activeTab !== 'dashboard' && (
-          <LoginPrompt onLogin={data.login} />
         )}
       </div>
-
-      {/* Lazy loaded modals */}
-      {showPnLShareModal && (
-        <PortfolioPnLShareModal
-          isOpen={showPnLShareModal}
-          onClose={handleClosePnLShare}
-          data={data.portfolioPnL}
-          user={data.user ?? null}
-          lastUpdated={data.portfolioUpdatedAt}
-        />
-      )}
-
-      {showCategoryPnLShareModal === 'perps' && (
-        <CategoryPnLShareModal
-          isOpen={true}
-          onClose={handleCloseCategoryPnLShare}
-          category="perps"
-          data={data.perpPnLData}
-          user={data.user ?? null}
-          lastUpdated={data.portfolioUpdatedAt}
-        />
-      )}
-
-      {showCategoryPnLShareModal === 'predictions' && (
-        <CategoryPnLShareModal
-          isOpen={true}
-          onClose={handleCloseCategoryPnLShare}
-          category="predictions"
-          data={data.predictionPnLData}
-          user={data.user ?? null}
-          lastUpdated={data.portfolioUpdatedAt}
-        />
-      )}
 
       {showBuyPointsModal && (
         <BuyPointsModal
           isOpen={showBuyPointsModal}
-          onClose={handleCloseBuyPoints}
+          onClose={() => setShowBuyPointsModal(false)}
           onSuccess={() => {
-            data.triggerBalanceRefresh();
-            data.refetchData();
+            invalidateWalletBalance();
           }}
         />
       )}

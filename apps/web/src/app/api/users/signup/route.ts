@@ -90,13 +90,14 @@ import type { JsonValue } from '@babylon/api';
 import {
   authenticate,
   ConflictError,
+  cachedDb,
   getHashedClientIp,
-  getOrCreateReferralCode,
-  getPrivyClient,
   InternalServerError,
+  isReferralCodeAvailableForUser,
   notifyNewAccount,
-  PointsService,
+  ReputationService,
   successResponse,
+  TradingBalanceFundingService,
   withErrorHandling,
 } from '@babylon/api';
 import {
@@ -112,16 +113,15 @@ import {
   withRetry,
   withTransaction,
 } from '@babylon/db';
+import { UserAlphaGroupAssignmentService } from '@babylon/engine';
 import type { OnboardingProfilePayload } from '@babylon/shared';
 import {
-  checkForAdminEmail,
   generateSnowflakeId,
   logger,
   OnboardingProfileSchema,
   POINTS,
-  type PrivyUserWithEmails,
+  toISO,
 } from '@babylon/shared';
-import type { User as PrivyUser } from '@privy-io/server-auth';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { trackServerEvent } from '@/lib/posthog/server';
@@ -139,69 +139,6 @@ interface SignupRequestBody {
   privacyPolicyAccepted?: boolean;
 }
 
-type PrivyWalletLite = {
-  id?: string | null;
-  address?: string;
-  chainType?: string;
-  walletClientType?: string | null;
-};
-
-type PrivyUserWithSmartWallet = PrivyUser &
-  PrivyUserWithEmails & {
-    smartWallet?: { address?: string | null };
-    wallet?: PrivyWalletLite;
-  };
-
-function pickEmbeddedEvmWallet(
-  user: PrivyUserWithSmartWallet
-): PrivyWalletLite | null {
-  const candidates: PrivyWalletLite[] = [];
-  if (user.wallet) candidates.push(user.wallet);
-  if (Array.isArray(user.linkedAccounts)) {
-    for (const acc of user.linkedAccounts) {
-      if (acc?.type === 'wallet') candidates.push(acc);
-    }
-  }
-  return (
-    candidates.find(
-      (w) =>
-        (w.walletClientType === 'privy' || Boolean(w.id)) &&
-        (!w.chainType || w.chainType === 'ethereum') &&
-        typeof w.address === 'string'
-    ) ?? null
-  );
-}
-
-async function ensureSmartWalletAddress(
-  privyClient: ReturnType<typeof getPrivyClient>,
-  privyId: string
-): Promise<{
-  smartWalletAddress: string | null;
-  embeddedWalletAddress: string | null;
-}> {
-  const user = (await privyClient.getUser(privyId)) as PrivyUserWithSmartWallet;
-  let smartWalletAddress = user.smartWallet?.address?.toLowerCase() ?? null;
-  let embeddedWallet = pickEmbeddedEvmWallet(user);
-
-  if (!smartWalletAddress) {
-    // Note: createEthereumWallet must be true when creating a smart wallet
-    // If user already has an embedded wallet, Privy will skip creating a new one
-    const updated = (await privyClient.createWallets({
-      userId: privyId,
-      createEthereumSmartWallet: true,
-      createEthereumWallet: true,
-    })) as PrivyUserWithSmartWallet;
-
-    smartWalletAddress = updated.smartWallet?.address?.toLowerCase() ?? null;
-    embeddedWallet = embeddedWallet ?? pickEmbeddedEvmWallet(updated);
-  }
-
-  return {
-    smartWalletAddress,
-    embeddedWalletAddress: embeddedWallet?.address?.toLowerCase() ?? null,
-  };
-}
-
 const SignupSchema = OnboardingProfileSchema.extend({
   identityToken: z
     .string()
@@ -213,6 +150,8 @@ const SignupSchema = OnboardingProfileSchema.extend({
 
 export const POST = withErrorHandling(async (request: NextRequest) => {
   const authUser = await authenticate(request);
+  const privyId = authUser.privyId ?? authUser.userId;
+
   const body = (await request.json()) as
     | SignupRequestBody
     | Record<string, JsonValue>;
@@ -228,53 +167,22 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   const referralCode = rawReferralCode?.trim() || null;
 
   const canonicalUserId = authUser.dbUserId ?? authUser.userId;
-  const privyId = authUser.privyId ?? authUser.userId;
-  // Prefer Privy smart wallet (AA) address over legacy/linked wallets
-  let walletAddress = authUser.walletAddress?.toLowerCase() ?? null;
 
   // Capture and hash IP address for self-referral detection
   const registrationIpHash = getHashedClientIp(request.headers);
 
-  // Fetch identity data from Privy if token provided
+  // Phase 2: Privy identity token replaced by Steward. Social usernames come
+  // from the user's profile payload or are populated at social login time.
   let identityFarcasterUsername: string | undefined;
   let identityTwitterUsername: string | undefined;
-  let adminEmailResult: ReturnType<typeof checkForAdminEmail> = {
-    adminEmail: null,
-    allVerifiedEmails: [],
+  const adminEmailResult = {
+    adminEmail: null as string | null,
+    allVerifiedEmails: [] as string[],
   };
-
-  if (identityToken) {
-    const privyClient = getPrivyClient();
-    const identityUser = (await privyClient.getUserFromIdToken(
-      identityToken
-    )) as PrivyUserWithSmartWallet;
-
-    identityFarcasterUsername = identityUser.farcaster?.username ?? undefined;
-    identityTwitterUsername = identityUser.twitter?.username ?? undefined;
-    // SECURITY: Get verified emails from Privy, not from user input
-    // Check ALL linked emails to support users who linked admin email after initial signup
-    adminEmailResult = checkForAdminEmail(identityUser);
-  } else {
-    logger.info(
-      'Signup received no identity token; proceeding with provided payload only',
-      undefined,
-      'POST /api/users/signup'
-    );
-  }
 
   // Check for imported social data from onboarding flow
   const importedTwitter = parsedProfile.importedFrom === 'twitter';
   const importedFarcaster = parsedProfile.importedFrom === 'farcaster';
-
-  // Ensure smart wallet exists and prefer its address for DB persistence
-  const privyClient = getPrivyClient();
-  const { smartWalletAddress, embeddedWalletAddress } =
-    await ensureSmartWalletAddress(privyClient, privyId);
-  walletAddress =
-    smartWalletAddress ??
-    embeddedWalletAddress ??
-    authUser.walletAddress?.toLowerCase() ??
-    null;
 
   // Wrap transaction with retry logic for connection errors
   const result = await withRetry(
@@ -291,22 +199,6 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
         if (existingUsername && existingUsername.id !== canonicalUserId) {
           throw new ConflictError('Username is already taken', 'User.username');
-        }
-
-        // Check if wallet address is already linked to another user
-        if (walletAddress) {
-          const [existingWallet] = await tx
-            .select({ id: users.id })
-            .from(users)
-            .where(eq(users.walletAddress, walletAddress))
-            .limit(1);
-
-          if (existingWallet && existingWallet.id !== canonicalUserId) {
-            throw new ConflictError(
-              'Wallet address is already linked to another account',
-              'User.walletAddress'
-            );
-          }
         }
 
         // Resolve referral (if provided AND not already set)
@@ -359,14 +251,24 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
           );
         }
 
+        const normalizedProfileEmail =
+          parsedProfile.email?.trim().toLowerCase() || null;
+        const profileEmailVerified = normalizedProfileEmail
+          ? adminEmailResult.allVerifiedEmails.some(
+              (verifiedEmail) =>
+                verifiedEmail.toLowerCase() === normalizedProfileEmail
+            )
+          : false;
+
         const baseUserData: Partial<typeof users.$inferInsert> = {
           username: parsedProfile.username,
+          referralCode: parsedProfile.username,
           displayName: parsedProfile.displayName,
-          email: parsedProfile.email || null,
+          email: normalizedProfileEmail,
+          emailVerified: profileEmailVerified,
           bio: parsedProfile.bio ?? '',
           profileImageUrl: parsedProfile.profileImageUrl ?? null,
           coverImageUrl: parsedProfile.coverImageUrl ?? null,
-          walletAddress,
           profileComplete: true,
           profileSetupCompletedAt: new Date(), // Track when profile was completed
           hasUsername: true,
@@ -394,6 +296,19 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
               }
             : {}),
         };
+
+        const isUsernameReferralCodeAvailable =
+          await isReferralCodeAvailableForUser(
+            canonicalUserId,
+            parsedProfile.username
+          );
+
+        if (!isUsernameReferralCodeAvailable) {
+          throw new ConflictError(
+            `Username "${parsedProfile.username}" is already used as a referral code by another user`,
+            'User.referralCode'
+          );
+        }
 
         // Handle Farcaster from Privy identity or onboarding import
         if (identityFarcasterUsername || importedFarcaster) {
@@ -561,11 +476,35 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     throw error;
   });
 
-  // Generate referral code for new user (ensures they can refer others immediately)
-  await getOrCreateReferralCode(result.user.id);
+  // Invalidate identifier caches for the new/updated user (clears negative cache)
+  await cachedDb.invalidateUserIdentifierCaches({
+    id: result.user.id,
+    privyId: result.user.privyId,
+    username: result.user.username,
+  });
 
-  // Award points for social account linking
-  const pointsAwarded = {
+  // Fund the user's trading balance with the welcome bonus (idempotent).
+  const userId = result.user.id;
+  const welcomeBonus = POINTS.INITIAL_SIGNUP;
+  const welcomeBonusResult =
+    await TradingBalanceFundingService.awardWelcomeBonus(userId, welcomeBonus);
+
+  if (!welcomeBonusResult.success) {
+    throw new InternalServerError(
+      welcomeBonusResult.error ?? 'Failed to fund signup welcome bonus'
+    );
+  }
+
+  if (!welcomeBonusResult.alreadyProcessed) {
+    logger.info(
+      'Welcome bonus funded to trading balance at profile completion',
+      { userId, amount: welcomeBonus },
+      'POST /api/users/signup'
+    );
+  }
+
+  // Award reputation for social account linking.
+  const reputationBreakdown = {
     farcaster: 0,
     twitter: 0,
     wallet: 0,
@@ -574,25 +513,25 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     referralBonus: 0,
   };
 
-  // Award referral points if user was referred
+  // Award referral reputation if user was referred.
   if (result.referrerId) {
-    // Award points to REFERRER
-    const referralResult = await PointsService.awardReferralSignup(
+    // Award reputation to the referrer.
+    const referralResult = await ReputationService.awardReferralSignup(
       result.referrerId,
       result.user.id
     );
-    pointsAwarded.referral = referralResult.pointsAwarded;
+    reputationBreakdown.referral = referralResult.reputationAwarded;
 
-    // Only proceed with referral rewards if referrer was successfully awarded
+    // Only proceed with referral rewards if the referrer was successfully awarded.
     if (referralResult.success) {
-      // Award bonus to NEW USER (referee) for using referral code
-      const refereeBonus = await PointsService.awardPoints(
+      // Award bonus reputation to the new user for using a referral code.
+      const refereeBonus = await ReputationService.awardReputation(
         result.user.id,
         POINTS.REFERRAL_BONUS,
         'referral_bonus',
         { referrerId: result.referrerId }
       );
-      pointsAwarded.referralBonus = refereeBonus.pointsAwarded;
+      reputationBreakdown.referralBonus = refereeBonus.reputationAwarded;
 
       // Update referral status to completed
       if (result.referralRecordId) {
@@ -628,12 +567,12 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       }
 
       logger.info(
-        'Awarded referral points to both referrer and referee',
+        'Awarded referral reputation to both referrer and referee',
         {
           referrerId: result.referrerId,
           referredUserId: result.user.id,
-          referrerPoints: referralResult.pointsAwarded,
-          refereeBonus: refereeBonus.pointsAwarded,
+          referrerReputation: referralResult.reputationAwarded,
+          refereeReputationBonus: refereeBonus.reputationAwarded,
         },
         'POST /api/users/signup'
       );
@@ -663,17 +602,17 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     const farcasterUsername =
       parsedProfile.farcasterUsername ?? identityFarcasterUsername;
     if (farcasterUsername) {
-      const pointsResult = await PointsService.awardFarcasterLink(
+      const pointsResult = await ReputationService.awardFarcasterLink(
         result.user.id,
         farcasterUsername
       );
-      pointsAwarded.farcaster = pointsResult.pointsAwarded;
+      reputationBreakdown.farcaster = pointsResult.reputationAwarded;
       logger.info(
-        'Awarded Farcaster link points',
+        'Awarded Farcaster link reputation',
         {
           userId: result.user.id,
           username: farcasterUsername,
-          points: pointsResult.pointsAwarded,
+          reputation: pointsResult.reputationAwarded,
         },
         'POST /api/users/signup'
       );
@@ -683,52 +622,35 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     const twitterUsername =
       parsedProfile.twitterUsername ?? identityTwitterUsername;
     if (twitterUsername) {
-      const pointsResult = await PointsService.awardTwitterLink(
+      const pointsResult = await ReputationService.awardTwitterLink(
         result.user.id,
         twitterUsername
       );
-      pointsAwarded.twitter = pointsResult.pointsAwarded;
+      reputationBreakdown.twitter = pointsResult.reputationAwarded;
       logger.info(
-        'Awarded Twitter link points',
+        'Awarded Twitter link reputation',
         {
           userId: result.user.id,
           username: twitterUsername,
-          points: pointsResult.pointsAwarded,
+          reputation: pointsResult.reputationAwarded,
         },
         'POST /api/users/signup'
       );
     }
   }
-  if (walletAddress) {
-    const pointsResult = await PointsService.awardWalletConnect(
-      result.user.id,
-      walletAddress
-    );
-    pointsAwarded.wallet = pointsResult.pointsAwarded;
-    logger.info(
-      'Awarded wallet connect points',
-      {
-        userId: result.user.id,
-        address: walletAddress,
-        points: pointsResult.pointsAwarded,
-      },
-      'POST /api/users/signup'
-    );
-  }
-
   if (!result.user.pointsAwardedForProfile) {
-    const pointsResult = await PointsService.awardProfileCompletion(
+    const pointsResult = await ReputationService.awardProfileCompletion(
       result.user.id
     );
-    pointsAwarded.profile = pointsResult.pointsAwarded;
+    reputationBreakdown.profile = pointsResult.reputationAwarded;
     logger.info(
-      'Awarded profile completion points',
-      { userId: result.user.id, points: pointsResult.pointsAwarded },
+      'Awarded profile completion reputation',
+      { userId: result.user.id, reputation: pointsResult.reputationAwarded },
       'POST /api/users/signup'
     );
   }
 
-  const totalPointsAwarded = Object.values(pointsAwarded).reduce(
+  const totalReputationAwarded = Object.values(reputationBreakdown).reduce(
     (sum, p) => sum + p,
     0
   );
@@ -738,8 +660,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     {
       userId: result.user.id,
       hasReferrer: Boolean(result.referrerId),
-      pointsAwarded: pointsAwarded,
-      totalPointsAwarded: totalPointsAwarded,
+      reputationBreakdown,
+      totalReputationAwarded,
       hasFarcaster: result.user.hasFarcaster,
       hasTwitter: result.user.hasTwitter,
     },
@@ -757,10 +679,87 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     hasProfileImage: result.user.hasProfileImage,
     hasBio: result.user.hasBio,
     onChainRegistered: result.user.onChainRegistered,
-    pointsAwarded: totalPointsAwarded,
-    pointsBreakdown: pointsAwarded,
+    reputationAwarded: totalReputationAwarded,
+    reputationBreakdown,
     importedFrom: parsedProfile.importedFrom || null,
   });
+
+  // Assign default alpha groups (async, non-blocking)
+  // New users get access to NPC group chats from day one
+  // This runs after the main signup flow to avoid blocking the response
+  if (!isWaitlist) {
+    UserAlphaGroupAssignmentService.assignDefaultGroups(result.user.id)
+      .then((assignmentResult) => {
+        if (assignmentResult.groupsAssigned > 0) {
+          logger.info(
+            'Assigned default alpha groups to new user',
+            {
+              userId: result.user.id,
+              groupsAssigned: assignmentResult.groupsAssigned,
+              assignments: assignmentResult.assignments.map((a) => ({
+                npc: a.npcName,
+                tier: a.tier,
+              })),
+            },
+            'POST /api/users/signup'
+          );
+          // Track successful assignment for monitoring
+          trackServerEvent(result.user.id, 'alpha_group_assignment.success', {
+            groupsAssigned: assignmentResult.groupsAssigned,
+            assignments: assignmentResult.assignments.map((a) => a.npcName),
+          }).catch((err) => {
+            logger.debug(
+              'Tracking event failed',
+              { error: err, event: 'alpha_group_assignment.success' },
+              'POST /api/users/signup'
+            );
+          });
+        }
+        if (assignmentResult.errors.length > 0) {
+          logger.warn(
+            'Some default group assignments had errors',
+            {
+              userId: result.user.id,
+              errors: assignmentResult.errors,
+            },
+            'POST /api/users/signup'
+          );
+          // Track partial failures for monitoring
+          trackServerEvent(
+            result.user.id,
+            'alpha_group_assignment.partial_failure',
+            {
+              groupsAssigned: assignmentResult.groupsAssigned,
+              errorCount: assignmentResult.errors.length,
+            }
+          ).catch((err) => {
+            logger.debug(
+              'Tracking event failed',
+              { error: err, event: 'alpha_group_assignment.partial_failure' },
+              'POST /api/users/signup'
+            );
+          });
+        }
+      })
+      .catch((error) => {
+        // Log but don't fail signup - alpha group assignment is non-critical
+        logger.warn(
+          'Failed to assign default alpha groups',
+          { userId: result.user.id, error: String(error) },
+          'POST /api/users/signup'
+        );
+        // Track failures for monitoring and alerting
+        trackServerEvent(result.user.id, 'alpha_group_assignment.failure', {
+          error: String(error),
+        }).catch((err) => {
+          logger.debug(
+            'Tracking event failed',
+            { error: err, event: 'alpha_group_assignment.failure' },
+            'POST /api/users/signup'
+          );
+        });
+      });
+  }
 
   return successResponse({
     user: {
@@ -786,8 +785,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       hasTwitter: result.user.hasTwitter,
       farcasterUsername: result.user.farcasterUsername,
       twitterUsername: result.user.twitterUsername,
-      createdAt: result.user.createdAt.toISOString(),
-      updatedAt: result.user.updatedAt.toISOString(),
+      createdAt: toISO(result.user.createdAt),
+      updatedAt: toISO(result.user.updatedAt),
     },
     referral: result.referrerId
       ? {
@@ -795,5 +794,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
           referralRecordId: result.referralRecordId,
         }
       : null,
+    reputationAwarded: totalReputationAwarded,
+    reputationBreakdown,
   });
 });

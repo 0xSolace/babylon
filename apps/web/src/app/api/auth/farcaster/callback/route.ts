@@ -59,9 +59,9 @@
  *               properties:
  *                 success:
  *                   type: boolean
- *                 pointsAwarded:
+ *                 reputationAwarded:
  *                   type: number
- *                 newTotal:
+ *                 newReputationTotal:
  *                   type: number
  *       400:
  *         description: Invalid payload or expired state
@@ -89,15 +89,15 @@
  *   })
  * });
  *
- * const { pointsAwarded, newTotal } = await result.json();
- * console.log(`Earned ${pointsAwarded} points!`);
+ * const { reputationAwarded, newReputationTotal } = await result.json();
+ * console.log(`Earned ${reputationAwarded} reputation!`);
  * ```
  *
  * @see {@link /lib/services/points-service} Points service
  * @see {@link https://docs.neynar.com} Neynar API documentation
  */
 
-import { PointsService, withErrorHandling } from '@babylon/api';
+import { ReputationService, withErrorHandling } from '@babylon/api';
 import { db } from '@babylon/db';
 import { logger } from '@babylon/shared';
 import { createAppClient, viemConnector } from '@farcaster/auth-client';
@@ -211,11 +211,14 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   });
 
   // Award points if this is the first time linking Farcaster
-  const pointsResult = await PointsService.awardFarcasterLink(userId, username);
+  const pointsResult = await ReputationService.awardFarcasterLink(
+    userId,
+    username
+  );
 
   // Check if this qualifies a referral (award bonus to referrer)
   if (pointsResult.success) {
-    await PointsService.checkAndQualifyReferral(userId).catch((error) => {
+    await ReputationService.checkAndQualifyReferral(userId).catch((error) => {
       // Log error but don't fail the request if qualification check fails
       logger.warn(
         `Failed to check and qualify referral for user ${userId}`,
@@ -231,15 +234,15 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       userId,
       farcasterUsername: username,
       fid: fid,
-      pointsAwarded: pointsResult.pointsAwarded,
+      reputationAwarded: pointsResult.reputationAwarded,
     },
     'FarcasterCallback'
   );
 
   return NextResponse.json({
     success: true,
-    pointsAwarded: pointsResult.pointsAwarded,
-    newTotal: pointsResult.newTotal,
+    reputationAwarded: pointsResult.reputationAwarded,
+    newReputationTotal: pointsResult.newReputationTotal,
   });
 });
 

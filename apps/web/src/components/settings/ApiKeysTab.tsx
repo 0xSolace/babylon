@@ -1,14 +1,7 @@
 'use client';
 
 import { logger } from '@babylon/shared';
-import {
-  AlertTriangle,
-  CheckCircle2,
-  Copy,
-  Key,
-  Plus,
-  Trash2,
-} from 'lucide-react';
+import { Copy, Plus, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
@@ -178,63 +171,13 @@ export function ApiKeysTab() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="space-y-2">
-        <h2 className="flex items-center gap-2 font-bold text-2xl">
-          <Key className="h-6 w-6 text-[#0066FF]" />
-          API Keys
-        </h2>
-        <p className="text-muted-foreground text-sm">
-          Generate and manage API keys for MCP authentication. Use these keys to
-          connect external AI agents (Cursor, Claude, OpenAI) to your Babylon
-          account.
-        </p>
-      </div>
-
-      {/* Security Warning */}
-      <div className="rounded-lg border border-yellow-500/50 bg-yellow-500/10 p-4">
-        <div className="flex items-start gap-3">
-          <AlertTriangle className="h-5 w-5 shrink-0 text-yellow-500" />
-          <div className="space-y-1">
-            <p className="font-semibold text-sm text-yellow-500">
-              Keep your API keys secure
-            </p>
-            <p className="text-sm text-yellow-500/90">
-              API keys provide full access to your account. Never share them or
-              commit them to version control. If a key is compromised, revoke it
-              immediately.
-            </p>
-          </div>
-        </div>
-      </div>
-
       {/* New Key Display (shown once after generation) */}
       {newKey && (
-        <div className="rounded-lg border border-green-500/50 bg-green-500/10 p-4">
-          <div className="flex items-start gap-3">
-            <CheckCircle2 className="h-5 w-5 shrink-0 text-green-500" />
-            <div className="min-w-0 flex-1 space-y-2">
-              <p className="font-semibold text-green-500 text-sm">
-                API Key Generated
-              </p>
-              <p className="text-green-500/90 text-sm">
-                {newKey.message} Copy and save this key now - you won't be able
-                to see it again.
-              </p>
-              <div className="flex items-center gap-2">
-                <code className="min-w-0 flex-1 break-all rounded bg-background px-3 py-2 font-mono text-sm">
-                  {newKey.apiKey}
-                </code>
-                <button
-                  onClick={() => handleCopyKey(newKey.apiKey)}
-                  className="flex shrink-0 items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 transition-colors hover:bg-muted"
-                  title="Copy API key"
-                >
-                  <Copy className="h-4 w-4" />
-                  <span className="text-sm">Copy</span>
-                </button>
-              </div>
-            </div>
+        <div className="space-y-2 rounded-lg border border-green-500/50 bg-green-500/10 p-4">
+          <div className="flex items-center justify-between">
+            <p className="font-semibold text-green-500 text-sm">
+              API Key Generated
+            </p>
             <button
               onClick={() => setNewKey(null)}
               className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
@@ -242,11 +185,28 @@ export function ApiKeysTab() {
               ×
             </button>
           </div>
+          <p className="text-green-500/90 text-sm">
+            {newKey.message} Copy and save this key now - you won't be able to
+            see it again.
+          </p>
+          <div className="flex items-center gap-2">
+            <code className="min-w-0 flex-1 break-all rounded bg-background px-3 py-2 font-mono text-sm">
+              {newKey.apiKey}
+            </code>
+            <button
+              onClick={() => handleCopyKey(newKey.apiKey)}
+              className="flex shrink-0 items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 transition-colors hover:bg-muted"
+              title="Copy API key"
+            >
+              <Copy className="h-4 w-4" />
+              <span className="text-sm">Copy</span>
+            </button>
+          </div>
         </div>
       )}
 
       {/* Generate New Key */}
-      <div className="rounded-lg border border-border bg-muted/50 p-4">
+      <div className="rounded-lg border border-border p-4">
         <h3 className="mb-3 font-semibold">Generate New API Key</h3>
         <div className="flex gap-2">
           <input
@@ -276,7 +236,6 @@ export function ApiKeysTab() {
           </div>
         ) : keys.length === 0 ? (
           <div className="rounded-lg border border-border p-8 text-center">
-            <Key className="mx-auto mb-3 h-12 w-12 text-muted-foreground" />
             <p className="mb-1 font-medium">No API keys yet</p>
             <p className="text-muted-foreground text-sm">
               Generate your first API key to start using MCP with external AI
@@ -339,6 +298,18 @@ export function ApiKeysTab() {
             agents on your behalf
           </p>
         </div>
+      </div>
+
+      {/* Security Warning */}
+      <div className="space-y-1 rounded-lg border border-yellow-500/50 bg-yellow-500/10 p-4">
+        <p className="font-semibold text-sm text-yellow-500">
+          Keep your API keys secure
+        </p>
+        <p className="text-sm text-yellow-500/90">
+          API keys provide full access to your account. Never share them or
+          commit them to version control. If a key is compromised, revoke it
+          immediately.
+        </p>
       </div>
     </div>
   );

@@ -77,15 +77,21 @@ PROVABLE & DEFINABLE:
 
 EXAMPLES OF DISTINCT QUESTIONS:
 Instead of multiple "Will X announce Y?" questions, vary:
-- "Will TeslAI's share price exceed $500 before Day 15?"
+- "Will the Global AI Treaty get ratified before Day 15?"
 - "Will OpenAGI's SMH-9000 pass external audit?"
-- "Will AIlon Musk and Sam AIltman have public confrontation?"
+- "Will SpAIceX's Mars mission encounter a critical delay?"
 - "Will MSDNC break exclusive on leaked documents?"
-- "Will The Fud intervene in the market?"
+- "Will the Senate pass the automation tax bill?"
+
+ANTI-TEMPLATE RULES:
+- Never reuse the same sentence scaffold across the batch.
+- Vary lead structures across the batch: person-led, company-led, metric-led, regulator/media-led, and product/event-led.
+- If two questions start with the same named subject or same verb phrase, rewrite one.
+- Avoid repetitive filler patterns such as "announce X by Y", "ban X in Y labs", or "launch X within Y" appearing multiple times in one batch.
 
 BUILDING ON RESOLVED QUESTIONS:
-If "Will AIlon announce X?" resolved YES, good follow-ups:
-- "Will AIlon's X launch on schedule?"
+If "Will [actor] announce X?" resolved YES, good follow-ups:
+- "Will [actor]'s X launch on schedule?"
 - "Will competitors respond to X announcement?"
 - "Will X face regulatory scrutiny?"
 

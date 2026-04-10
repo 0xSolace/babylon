@@ -212,7 +212,6 @@ export function AgentSettings({ agent, onUpdate }: AgentSettingsProps) {
         return;
       }
 
-      toast.success('Agent updated successfully');
       setProfileImage({ file: null, preview: null }); // Reset image state
       onUpdate();
       setSaving(false);
@@ -252,7 +251,6 @@ export function AgentSettings({ agent, onUpdate }: AgentSettingsProps) {
     });
 
     if (res.ok) {
-      toast.success('Agent deleted successfully');
       router.push('/agents');
     } else {
       const error = await res.json();

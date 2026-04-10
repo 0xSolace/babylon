@@ -2,13 +2,91 @@
  * Global error handler and middleware for API routes
  */
 
-import { DatabaseError } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import * as BabylonDb from '@babylon/db';
+import { logger, BabylonError as SharedBabylonError } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { ZodError } from 'zod';
+import { z } from 'zod';
 import { ApiError, BabylonError, isAuthenticationError } from './errors';
 import type { JsonValue } from './types';
+
+const DatabaseErrorCtor = (
+  BabylonDb as { DatabaseError?: new (...args: unknown[]) => Error }
+).DatabaseError;
+
+const SENSITIVE_HEADER_KEYS = new Set([
+  'authorization',
+  'cookie',
+  'set-cookie',
+  'x-vercel-oidc-token',
+  'x-vercel-proxy-signature',
+  'x-vercel-sc-headers',
+]);
+
+function sanitizeHeaders(headers: Headers): Record<string, string> {
+  const headersObj: Record<string, string> = {};
+  headers.forEach((value, key) => {
+    const lowerKey = key.toLowerCase();
+    if (SENSITIVE_HEADER_KEYS.has(lowerKey)) {
+      headersObj[key] = '[REDACTED]';
+      return;
+    }
+    // Heuristic redaction for custom headers that may contain secrets
+    if (/(token|secret|api[-_]?key|signature)/i.test(lowerKey)) {
+      headersObj[key] = '[REDACTED]';
+      return;
+    }
+    headersObj[key] = value;
+  });
+  return headersObj;
+}
+
+function serializeErrorCause(cause: unknown): Record<string, JsonValue> | null {
+  if (!cause) return null;
+  if (cause instanceof Error) {
+    const anyCause = cause as Error & {
+      code?: string;
+      detail?: string;
+      hint?: string;
+    };
+    const out: Record<string, JsonValue> = {
+      name: anyCause.name,
+      message: anyCause.message,
+    };
+    if (anyCause.code) out.code = anyCause.code;
+    if (anyCause.detail) out.detail = anyCause.detail;
+    if (anyCause.hint) out.hint = anyCause.hint;
+    return out;
+  }
+  if (typeof cause === 'object') {
+    // Best-effort: avoid serializing large/recursive objects
+    return { message: String(cause) };
+  }
+  return { message: String(cause) };
+}
+
+const SENSITIVE_CONTEXT_KEY_PATTERN =
+  /(token|secret|password|authorization|cookie|jwt|api[-_]?key|signature|session|credential|wallet|private[-_]?key)/i;
+
+/**
+ * Shallow-sanitizes a BabylonError context object before sending to Sentry.
+ * Redacts values whose key matches sensitive patterns; preserves safe primitives.
+ */
+function sanitizeErrorContext(
+  ctx: Record<string, JsonValue>
+): Record<string, JsonValue> {
+  const out: Record<string, JsonValue> = {};
+  for (const [key, value] of Object.entries(ctx)) {
+    if (SENSITIVE_CONTEXT_KEY_PATTERN.test(key)) {
+      out[key] = '[REDACTED]';
+    } else if (typeof value === 'string' && value.length > 200) {
+      out[key] = `[string:${value.length}]`;
+    } else {
+      out[key] = value;
+    }
+  }
+  return out;
+}
 
 /**
  * Options for error tracking and logging
@@ -29,6 +107,35 @@ export interface ErrorHandlerOptions {
   captureError?: (error: Error, context: Record<string, JsonValue>) => void;
 }
 
+let defaultErrorCapture: ErrorHandlerOptions['captureError'];
+
+/**
+ * Sets a global default error capture callback used by withErrorHandling.
+ * Route-level options.captureError still takes precedence when provided.
+ */
+export function setDefaultErrorCapture(
+  captureError?: ErrorHandlerOptions['captureError']
+): void {
+  defaultErrorCapture = captureError;
+}
+
+function resolveErrorHandlerOptions(
+  options?: ErrorHandlerOptions
+): ErrorHandlerOptions | undefined {
+  if (options?.captureError) {
+    return options;
+  }
+
+  if (!defaultErrorCapture) {
+    return options;
+  }
+
+  return {
+    ...options,
+    captureError: defaultErrorCapture,
+  };
+}
+
 /**
  * Main error handler that processes all errors and returns appropriate responses
  */
@@ -41,13 +148,7 @@ export function errorHandler(
   const errorContext = {
     url: request.url,
     method: request.method,
-    headers: (() => {
-      const headersObj: Record<string, string> = {};
-      request.headers.forEach((value, key) => {
-        headersObj[key] = value;
-      });
-      return headersObj;
-    })(),
+    headers: sanitizeHeaders(request.headers),
     timestamp: new Date().toISOString(),
   };
 
@@ -57,6 +158,22 @@ export function errorHandler(
       error: String(error),
       ...errorContext,
     });
+
+    // Best-effort capture for non-Error thrown values (rare, but can happen).
+    if (options?.captureError) {
+      const normalized = new Error(String(error));
+      normalized.name = 'NonErrorThrown';
+      options.captureError(normalized, {
+        request: {
+          url: request.url,
+          method: request.method,
+          headers: sanitizeHeaders(request.headers),
+        },
+        error: {
+          message: String(error),
+        },
+      });
+    }
 
     return NextResponse.json(
       {
@@ -93,7 +210,7 @@ export function errorHandler(
   }
 
   // Handle validation errors early - these are expected client input issues
-  if (error instanceof ZodError) {
+  if (error instanceof z.ZodError) {
     // Skip logging for test tokens to reduce noise in test output
     const authHeader = request.headers.get('authorization');
     const isTestToken = authHeader?.includes('test-token');
@@ -125,8 +242,43 @@ export function errorHandler(
     );
   }
 
+  const userId = request.headers.get('x-user-id') || null;
+
   // Handle legacy/simple API errors used by many routes
   if (error instanceof ApiError) {
+    if (error.statusCode >= 500) {
+      logger.error('ApiError (5xx)', {
+        error: error.message,
+        code: error.code,
+        statusCode: error.statusCode,
+        ...errorContext,
+      });
+
+      if (options?.captureError) {
+        try {
+          options.captureError(error, {
+            request: {
+              url: new URL(request.url).pathname,
+              method: request.method,
+              headers: sanitizeHeaders(request.headers),
+            },
+            ...(userId ? { user: { id: userId } } : {}),
+          });
+        } catch (captureErr) {
+          logger.warn('Error capture callback threw for ApiError', {
+            error: String(captureErr),
+          });
+        }
+      }
+    } else {
+      logger.warn('ApiError (4xx)', {
+        error: error.message,
+        code: error.code,
+        statusCode: error.statusCode,
+        ...errorContext,
+      });
+    }
+
     const errorData: Record<string, JsonValue> = { error: error.message };
 
     if (process.env.NODE_ENV === 'development') {
@@ -142,40 +294,42 @@ export function errorHandler(
   }
 
   // Handle client errors (4xx) at lower log level - these are expected behavior
-  if (
+  // Check both local BabylonError and @babylon/shared BabylonError (separate class hierarchies)
+  const isLocalBabylonClient =
     error instanceof BabylonError &&
     error.statusCode >= 400 &&
-    error.statusCode < 500
-  ) {
-    // Log 4xx client errors at warn level (expected behavior for invalid requests)
+    error.statusCode < 500;
+  const isSharedBabylonClient =
+    error instanceof SharedBabylonError &&
+    error.statusCode >= 400 &&
+    error.statusCode < 500;
+
+  if (isLocalBabylonClient || isSharedBabylonClient) {
     logger.warn('Client error', {
       error: error.message,
-      code: error.code,
-      statusCode: error.statusCode,
+      code: (error as BabylonError | SharedBabylonError).code,
+      statusCode: (error as BabylonError | SharedBabylonError).statusCode,
       name: error.name,
       ...errorContext,
     });
   } else {
-    // Log unexpected errors at ERROR level
+    const maybeCause = (error as Error & { cause?: unknown }).cause;
     logger.error('API Error', {
       error: error.message,
       stack: error.stack,
       name: error.name,
+      cause: serializeErrorCause(maybeCause),
       ...errorContext,
     });
   }
 
   // Track error with analytics (async, don't await to avoid slowing down response)
   // Skip tracking authentication errors, validation errors, and 4xx client errors as they're expected behavior
-  const userId = request.headers.get('x-user-id') || null;
-  const isClientError =
-    error instanceof BabylonError &&
-    error.statusCode >= 400 &&
-    error.statusCode < 500;
+  const isClientError = isLocalBabylonClient || isSharedBabylonClient;
   if (
     options?.trackError &&
     !isAuthenticationError(error) &&
-    !(error instanceof ZodError) &&
+    !(error instanceof z.ZodError) &&
     !isClientError
   ) {
     void options.trackError(userId, error, {
@@ -185,40 +339,49 @@ export function errorHandler(
   }
 
   // Capture error in error tracking (only for server errors, not client errors like validation)
-  // Skip capturing validation errors, authentication errors, and known operational errors
-  const shouldCaptureInErrorTracking =
-    options?.captureError &&
-    error instanceof Error &&
-    !(error instanceof ZodError) &&
-    !(
-      error instanceof BabylonError &&
+  // ZodError and AuthenticationError are excluded via early returns above.
+  // BabylonError operational 4xx (e.g. ValidationError, BadRequestError) are excluded here.
+  const isOperational4xx =
+    (error instanceof BabylonError &&
       error.isOperational &&
-      error.statusCode < 500
-    ) &&
-    !isAuthenticationError(error) &&
-    error.name !== 'ValidationError';
+      error.statusCode < 500) ||
+    (error instanceof SharedBabylonError &&
+      error.isOperational &&
+      error.statusCode < 500);
+  const shouldCaptureInErrorTracking =
+    options?.captureError && error instanceof Error && !isOperational4xx;
 
   if (shouldCaptureInErrorTracking && options.captureError) {
     const context: Record<string, JsonValue> = {
       request: {
-        url: request.url,
+        url: new URL(request.url).pathname,
         method: request.method,
-        headers: (() => {
-          const headersObj: Record<string, string> = {};
-          request.headers.forEach((value, key) => {
-            headersObj[key] = value;
-          });
-          return headersObj;
-        })(),
+        headers: sanitizeHeaders(request.headers),
       },
     };
     if (userId) {
       context.user = { id: userId };
     }
     if (error instanceof BabylonError && error.context) {
-      context.error = { context: error.context, code: error.code };
+      context.error = {
+        context: sanitizeErrorContext(error.context),
+        code: error.code,
+      };
+    } else if (error instanceof SharedBabylonError && error.context) {
+      context.error = {
+        context: sanitizeErrorContext(
+          error.context as Record<string, JsonValue>
+        ),
+        code: error.code,
+      };
     }
-    options.captureError(error, context);
+    try {
+      options.captureError(error, context);
+    } catch (captureErr) {
+      logger.warn('Error capture callback threw', {
+        error: String(captureErr),
+      });
+    }
   }
 
   // Handle Babylon errors (our custom errors)
@@ -243,9 +406,25 @@ export function errorHandler(
     });
   }
 
+  // Handle @babylon/shared domain errors (separate class hierarchy from local BabylonError)
+  if (error instanceof SharedBabylonError) {
+    const errorData: Record<string, JsonValue> = { error: error.message };
+    if (error.context?.details) {
+      errorData.details = error.context.details as JsonValue;
+    }
+    if (process.env.NODE_ENV === 'development') {
+      errorData.code = error.code;
+      if (error.stack) {
+        errorData.stack = error.stack;
+      }
+    }
+
+    return NextResponse.json(errorData, { status: error.statusCode });
+  }
+
   // Handle database errors
-  if (error instanceof DatabaseError) {
-    return handleDatabaseError(error);
+  if (DatabaseErrorCtor && error instanceof DatabaseErrorCtor) {
+    return handleDatabaseError(error as Error & { code?: string });
   }
 
   if (error instanceof Error) {
@@ -297,9 +476,7 @@ export function errorHandler(
  * Handle database-specific errors
  * Uses PostgreSQL error codes (23xxx series for integrity constraints)
  */
-function handleDatabaseError(
-  error: DatabaseError & { code?: string }
-): NextResponse {
+function handleDatabaseError(error: Error & { code?: string }): NextResponse {
   const errorCode = 'code' in error ? error.code : undefined;
   switch (errorCode) {
     case '23505': // PostgreSQL unique_violation
@@ -388,36 +565,33 @@ export interface RouteContext {
  */
 // Overload 1: Handler without context (for routes without dynamic params)
 export function withErrorHandling(
-  handler: (req: NextRequest) => Promise<NextResponse> | NextResponse,
+  handler: (req: NextRequest) => Promise<Response> | Response,
   options?: ErrorHandlerOptions
-): (req: NextRequest) => Promise<NextResponse>;
+): (req: NextRequest) => Promise<Response>;
 
 // Overload 2: Handler with context (for routes with dynamic params)
 export function withErrorHandling<TContext extends RouteContext = RouteContext>(
   handler: (
     req: NextRequest,
     context: TContext
-  ) => Promise<NextResponse> | NextResponse,
+  ) => Promise<Response> | Response,
   options?: ErrorHandlerOptions
-): (req: NextRequest, context: TContext) => Promise<NextResponse>;
+): (req: NextRequest, context: TContext) => Promise<Response>;
 
 // Implementation
 export function withErrorHandling<TContext extends RouteContext = RouteContext>(
   handler: (
     req: NextRequest,
     context?: TContext
-  ) => Promise<NextResponse> | NextResponse,
+  ) => Promise<Response> | Response,
   options?: ErrorHandlerOptions
-): (req: NextRequest, context?: TContext) => Promise<NextResponse> {
-  return async (
-    req: NextRequest,
-    context?: TContext
-  ): Promise<NextResponse> => {
+): (req: NextRequest, context?: TContext) => Promise<Response> {
+  return async (req: NextRequest, context?: TContext): Promise<Response> => {
     try {
       const response = await handler(req, context!);
       return response;
     } catch (error) {
-      return errorHandler(error, req, options);
+      return errorHandler(error, req, resolveErrorHandlerOptions(options));
     }
   };
 }
@@ -428,9 +602,10 @@ export function withErrorHandling<TContext extends RouteContext = RouteContext>(
  */
 export function asyncHandler<TContext extends RouteContext = RouteContext>(
   setup?: () => Promise<void>,
-  handler?: (req: NextRequest, context?: TContext) => Promise<NextResponse>,
-  teardown?: () => Promise<void>
-): (req: NextRequest, context?: TContext) => Promise<NextResponse> {
+  handler?: (req: NextRequest, context?: TContext) => Promise<Response>,
+  teardown?: () => Promise<void>,
+  options?: ErrorHandlerOptions
+): (req: NextRequest, context?: TContext) => Promise<Response> {
   return async (req: NextRequest, context?: TContext) => {
     try {
       if (setup) {
@@ -447,7 +622,7 @@ export function asyncHandler<TContext extends RouteContext = RouteContext>(
       }
       return result;
     } catch (error) {
-      return errorHandler(error, req);
+      return errorHandler(error, req, resolveErrorHandlerOptions(options));
     }
   };
 }
@@ -481,5 +656,21 @@ export function successResponse<T>(
   statusCode = 200,
   headers?: HeadersInit
 ): NextResponse {
-  return NextResponse.json(data, { status: statusCode, headers });
+  const responseHeaders = new Headers(headers);
+  if (!responseHeaders.has('content-type')) {
+    responseHeaders.set('content-type', 'application/json; charset=utf-8');
+  }
+
+  const body = JSON.stringify(data, (_key, value) =>
+    typeof value === 'bigint' ? value.toString() : value
+  );
+
+  if (body === undefined) {
+    throw new TypeError('Value is not JSON serializable');
+  }
+
+  return new NextResponse(body, {
+    status: statusCode,
+    headers: responseHeaders,
+  });
 }

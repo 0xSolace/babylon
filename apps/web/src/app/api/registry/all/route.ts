@@ -47,13 +47,45 @@
  * ```
  */
 
-import { SubgraphClient } from '@babylon/agents';
-import { optionalAuth, successResponse, withErrorHandling } from '@babylon/api';
+import {
+  addPublicReadHeaders,
+  publicRateLimit,
+  successResponse,
+  withErrorHandling,
+} from '@babylon/api';
 import type { DrizzleClient } from '@babylon/db';
 import { asPublic } from '@babylon/db';
 import { StaticDataRegistry } from '@babylon/engine';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+
+function mapAgent0SummaryToEntity(
+  summary: Record<string, unknown>,
+  _entityType: 'agent' | 'app'
+): Record<string, unknown> {
+  return {
+    type: _entityType,
+    name: summary.name,
+    description: summary.description,
+    imageUrl: summary.image,
+    walletAddress: summary.walletAddress,
+    metadataCID: summary.agentURI,
+    mcpEndpoint: summary.mcp,
+    a2aEndpoint: summary.a2a,
+    capabilities: {
+      supportedTrusts: summary.supportedTrusts,
+      a2aSkills: summary.a2aSkills,
+      mcpTools: summary.mcpTools,
+      mcpPrompts: summary.mcpPrompts,
+      mcpResources: summary.mcpResources,
+      oasfSkills: summary.oasfSkills,
+      oasfDomains: summary.oasfDomains,
+      x402support: summary.x402support,
+    },
+    reputationScore: summary.averageValue,
+    totalFeedbackCount: summary.feedbackCount,
+  };
+}
 
 /**
  * GET /api/registry/all
@@ -65,17 +97,15 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const search = searchParams.get('search') || '';
   const onChainOnly = searchParams.get('onChainOnly') === 'true';
 
-  // Optional auth - registry is public
-  await optionalAuth(request).catch(() => null);
+  const { error, rateLimitInfo } = await publicRateLimit(request);
+  if (error) return error;
 
   // Fetch users from database
   const fetchUsers = async () => {
     const dbOperation = async (db: DrizzleClient) => {
       const conditions: Record<string, unknown>[] = [];
 
-      if (onChainOnly) {
-        conditions.push({ onChainRegistered: true });
-      }
+      void onChainOnly; // onChainOnly filter (Agent0/on-chain) removed in Phase 1.
 
       if (search) {
         conditions.push({
@@ -142,15 +172,10 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           username: user.username,
           bio: user.bio,
           imageUrl: user.profileImageUrl,
-          walletAddress: user.walletAddress,
           isActor: user.isActor,
           isBanned: user.isBanned,
           isScammer: user.isScammer,
           isCSAM: user.isCSAM,
-          onChainRegistered: user.onChainRegistered,
-          nftTokenId: user.nftTokenId,
-          agent0TokenId: user.agent0TokenId,
-          agent0MetadataCID: user.agent0MetadataCID,
           registrationTxHash: user.registrationTxHash,
           registrationTimestamp: user.registrationTimestamp,
           createdAt: user.createdAt,
@@ -259,60 +284,11 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     return await asPublic(dbOperation);
   };
 
-  const fetchAgents = async () => {
-    const subgraphClient = new SubgraphClient();
-    const agents = await subgraphClient.searchAgents({
-      type: 'agent',
-      limit: 100,
-    });
-
-    return agents.map((agent) => {
-      let parsedCapabilities: unknown = {};
-      if (agent.capabilities) {
-        parsedCapabilities = JSON.parse(agent.capabilities);
-      }
-
-      return {
-        type: 'agent',
-        id: `agent0-${agent.tokenId}`,
-        tokenId: agent.tokenId,
-        name: agent.name,
-        walletAddress: agent.walletAddress,
-        metadataCID: agent.metadataCID,
-        mcpEndpoint: agent.mcpEndpoint,
-        a2aEndpoint: agent.a2aEndpoint,
-        capabilities: parsedCapabilities,
-        reputation: agent.reputation,
-      };
-    });
-  };
-
-  const fetchApps = async () => {
-    const subgraphClient = new SubgraphClient();
-    const apps = await subgraphClient.getGamePlatforms({
-      minTrustScore: 0,
-    });
-
-    return apps.map((app) => {
-      let parsedCapabilities: unknown = {};
-      if (app.capabilities) {
-        parsedCapabilities = JSON.parse(app.capabilities);
-      }
-
-      return {
-        type: 'app',
-        id: `app-${app.tokenId}`,
-        tokenId: app.tokenId,
-        name: app.name,
-        walletAddress: app.walletAddress,
-        metadataCID: app.metadataCID,
-        mcpEndpoint: app.mcpEndpoint,
-        a2aEndpoint: app.a2aEndpoint,
-        capabilities: parsedCapabilities,
-        reputation: app.reputation || 0,
-      };
-    });
-  };
+  // Agent0 external agent/app discovery removed in Phase 1.
+  const fetchAgents = async () =>
+    [] as ReturnType<typeof mapAgent0SummaryToEntity>[];
+  const fetchApps = async () =>
+    [] as ReturnType<typeof mapAgent0SummaryToEntity>[];
 
   // Fetch based on entity type
   // Note: When searching for 'users', we also include static actors (AI NPCs)
@@ -332,10 +308,24 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     actors = await fetchActors();
   }
   if (!entityType || entityType === 'all' || entityType === 'agents') {
-    agents = await fetchAgents();
+    agents = await fetchAgents().catch((error) => {
+      logger.warn(
+        'Agent0 agent search failed',
+        { error: error instanceof Error ? error.message : String(error) },
+        'GET /api/registry/all'
+      );
+      return [];
+    });
   }
   if (!entityType || entityType === 'all' || entityType === 'apps') {
-    apps = await fetchApps();
+    apps = await fetchApps().catch((error) => {
+      logger.warn(
+        'Agent0 app search failed',
+        { error: error instanceof Error ? error.message : String(error) },
+        'GET /api/registry/all'
+      );
+      return [];
+    });
   }
 
   const result = {
@@ -358,5 +348,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     'GET /api/registry/all'
   );
 
-  return successResponse(result);
+  const res = successResponse(result);
+  if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
+  return res;
 });

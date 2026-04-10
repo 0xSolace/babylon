@@ -8,11 +8,16 @@
  * - Apply price impact from user trades in real-time
  */
 
-import { broadcastToChannel } from '@babylon/api';
 import {
+  broadcastToChannel,
+  invalidateMarketsApiPerpsSnapshot,
+} from '@babylon/api';
+import {
+  isOpenPerpPositionStateValid,
   PerpDbAdapter,
   PerpMarketService,
   type PerpServiceDeps,
+  type PriceImpactPort,
 } from '@babylon/core/markets/perps';
 import type {
   BroadcastPort,
@@ -41,6 +46,7 @@ import {
   logger,
   PERP_MARKET_CONFIG,
 } from '@babylon/shared';
+import { createTradingFeeOutboxAdapter } from '@/lib/services/trading-fee-outbox';
 
 /**
  * Creates a WalletPort adapter that wraps WalletService methods.
@@ -114,6 +120,49 @@ export const perpFeeConfig: FeeConfig = {
 };
 
 /**
+ * Creates a PriceImpactPort adapter that applies price impact
+ * and returns the resulting market price.
+ *
+ * Used by PerpMarketService to prevent self-impact exploits (BF-75):
+ * the service calls this after opening/adding/flipping positions
+ * to adjust entry prices to post-impact values.
+ */
+export function createPriceImpactAdapter(): PriceImpactPort {
+  return {
+    async applyAndGetPrice(ticker: string): Promise<number | undefined> {
+      await applyUserTradePriceImpact(ticker);
+
+      // Read updated price from the DB after impact was applied
+      const perpDb = new PerpDbAdapter();
+      const markets = await perpDb.listMarkets();
+      const market = markets.find(
+        (m) => m.ticker.toUpperCase() === ticker.toUpperCase()
+      );
+      return market?.currentPrice;
+    },
+
+    async getBasePrice(ticker: string): Promise<number | undefined> {
+      const normalizedTicker = ticker.toUpperCase();
+
+      const [snapshot] = await db
+        .select({ organizationId: perpMarketSnapshots.organizationId })
+        .from(perpMarketSnapshots)
+        .where(eq(perpMarketSnapshots.ticker, normalizedTicker))
+        .limit(1);
+      if (!snapshot) return undefined;
+
+      const [state] = await db
+        .select({ basePrice: organizationState.basePrice })
+        .from(organizationState)
+        .where(eq(organizationState.id, snapshot.organizationId))
+        .limit(1);
+
+      return state ? Number(state.basePrice ?? 100) : undefined;
+    },
+  };
+}
+
+/**
  * Options for creating PerpMarketService.
  */
 export interface CreatePerpServiceOptions {
@@ -121,6 +170,8 @@ export interface CreatePerpServiceOptions {
   withFeeProcessor?: boolean;
   /** Include broadcast adapter for SSE updates. Default: false */
   withBroadcast?: boolean;
+  /** Include price impact adapter to prevent self-impact exploits. Default: false */
+  withPriceImpact?: boolean;
 }
 
 /**
@@ -130,6 +181,7 @@ export interface CreatePerpServiceOptions {
  * - Reduce code duplication across API routes
  * - Ensure consistent configuration
  * - Enable optional SSE broadcast for real-time updates
+ * - Prevent self-impact exploits via price impact adjustment
  *
  * @example
  * ```ts
@@ -140,6 +192,7 @@ export interface CreatePerpServiceOptions {
  * const service = createPerpMarketService({
  *   withFeeProcessor: true,
  *   withBroadcast: true,
+ *   withPriceImpact: true,
  * });
  * ```
  */
@@ -158,38 +211,21 @@ export function createPerpMarketService(
 
   if (options.withFeeProcessor) {
     deps.feeProcessor = createFeeProcessorAdapter();
+    deps.tradingFeeOutbox = createTradingFeeOutboxAdapter();
+  }
+
+  if (options.withPriceImpact) {
+    deps.priceImpact = createPriceImpactAdapter();
   }
 
   return new PerpMarketService(deps);
 }
 
 /**
- * Price impact uses centralized config from @babylon/shared.
+ * Applies price impact from a user trade in real-time using constant-product AMM.
  *
- * With LIQUIDITY_FACTOR = 20 and SYNTHETIC_SUPPLY = 10000:
- * - effectiveSupply = 500
- * - $100 trade → ~0.02% impact
- * - $1000 trade → ~0.2% impact
- * - $5000 trade → ~1% impact
- *
- * This makes our simulation markets 20x less liquid than real exchanges,
- * providing visible price impact from user trades.
- *
- * @see PERP_MARKET_CONFIG in @babylon/shared
- */
-
-/**
- * Applies price impact from a user trade in real-time.
- *
- * This mirrors the logic in game-tick.ts `updateMarketPricesFromTrades`,
- * but executes immediately after each user trade to provide real-time
- * price feedback.
- *
- * Formula:
- * - netHoldings = sum(long positions) - sum(short positions)
- * - newMarketCap = baseMarketCap + netHoldings
- * - newPrice = newMarketCap / syntheticSupply
- * - Clamped to ±10% per trade and 25%-400% of initial price
+ * Each market is a virtual x*y=k pool (INITIAL_BASE_RESERVE × quoteReserve).
+ * Trades shift reserves along the curve — larger trades get worse fills naturally.
  *
  * @param ticker - The market ticker (e.g., "AIPHB")
  */
@@ -254,6 +290,8 @@ export async function applyUserTradePriceImpact(ticker: string): Promise<void> {
       .select({
         side: perpPositions.side,
         size: perpPositions.size,
+        leverage: perpPositions.leverage,
+        userId: perpPositions.userId,
       })
       .from(perpPositions)
       .where(
@@ -265,9 +303,26 @@ export async function applyUserTradePriceImpact(ticker: string): Promise<void> {
 
     // 4. Calculate net holdings (longs - shorts)
     let netHoldings = 0;
+    let invalidPositions = 0;
     for (const pos of openPositions) {
+      if (!isOpenPerpPositionStateValid(pos)) {
+        invalidPositions++;
+        continue;
+      }
+
       const size = Number(pos.size);
       netHoldings += pos.side === 'long' ? size : -size;
+    }
+
+    if (invalidPositions > 0) {
+      logger.warn(
+        'Ignoring invalid open perp positions during price impact calculation',
+        {
+          ticker: normalizedTicker,
+          invalidPositions,
+        },
+        'PerpPriceImpact'
+      );
     }
 
     // 5. Calculate new price using centralized vAMM formula with liquidity factor
@@ -280,10 +335,8 @@ export async function applyUserTradePriceImpact(ticker: string): Promise<void> {
 
     // 6. Only update if price actually changed meaningfully (at least 0.001% or $0.01)
     const change = newPrice - currentPrice;
-    const effectiveSupply =
-      PERP_MARKET_CONFIG.SYNTHETIC_SUPPLY / PERP_MARKET_CONFIG.LIQUIDITY_FACTOR;
     logger.info(
-      `Price impact calculation: netHoldings=${netHoldings}, newPrice=${newPrice.toFixed(4)}, change=${change.toFixed(4)}, effectiveSupply=${effectiveSupply}`,
+      `Price impact calculation: netHoldings=${netHoldings}, newPrice=${newPrice.toFixed(4)}, change=${change.toFixed(4)}`,
       {
         ticker: normalizedTicker,
         netHoldings,
@@ -291,7 +344,7 @@ export async function applyUserTradePriceImpact(ticker: string): Promise<void> {
         change,
         currentPrice,
         initialPrice,
-        liquidityFactor: PERP_MARKET_CONFIG.LIQUIDITY_FACTOR,
+        baseReserve: PERP_MARKET_CONFIG.INITIAL_BASE_RESERVE,
       },
       'PerpPriceImpact'
     );
@@ -330,6 +383,7 @@ export async function applyUserTradePriceImpact(ticker: string): Promise<void> {
         metadata: { ticker: normalizedTicker },
       },
     ]);
+    void invalidateMarketsApiPerpsSnapshot();
   } catch (error) {
     // Don't throw - price impact is enhancement, not critical path
     logger.error(

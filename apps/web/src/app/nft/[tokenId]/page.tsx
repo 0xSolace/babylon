@@ -4,7 +4,6 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
-import { toast } from 'sonner';
 import { Avatar } from '@/components/shared/Avatar';
 import { PageContainer } from '@/components/shared/PageContainer';
 import { Skeleton } from '@/components/shared/Skeleton';
@@ -44,9 +43,8 @@ export default function NftDetailPage() {
     fetchNft();
   }, [fetchNft]);
 
-  const handleCopy = async (text: string, label: string) => {
+  const handleCopy = async (text: string) => {
     await navigator.clipboard.writeText(text);
-    toast.success(`${label} copied`);
   };
 
   const handleShare = async () => {
@@ -58,7 +56,6 @@ export default function NftDetailPage() {
       await navigator.share({ title: nft.name, url });
     } else {
       await navigator.clipboard.writeText(url);
-      toast.success('Link copied');
     }
   };
 
@@ -101,6 +98,8 @@ export default function NftDetailPage() {
     );
   }
 
+  const isMinted = !!nft.currentOwner;
+
   const ownerName =
     nft.currentOwner?.user?.displayName ??
     nft.currentOwner?.user?.username ??
@@ -129,7 +128,7 @@ export default function NftDetailPage() {
       <div className="grid gap-6 lg:grid-cols-2 lg:gap-8">
         {/* Image */}
         <div className="relative mx-auto aspect-square w-full max-w-md overflow-hidden rounded-xl border border-border bg-muted lg:max-w-none">
-          {!imageError ? (
+          {isMinted && !imageError ? (
             <Image
               src={nft.imageUrl}
               alt={nft.name}
@@ -139,15 +138,41 @@ export default function NftDetailPage() {
               priority
               onError={() => setImageError(true)}
             />
-          ) : (
+          ) : isMinted && imageError ? (
             <div className="flex h-full w-full items-center justify-center text-6xl">
               🖼️
             </div>
+          ) : (
+            /* Unminted: placeholder with reveal overlay */
+            <>
+              <Image
+                src="/icon-1024.png"
+                alt={`Babylon #${nft.tokenId}`}
+                fill
+                className="object-cover"
+                sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 40vw"
+                priority
+              />
+              <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                <span className="rounded-md bg-black/60 px-4 py-2 text-center font-medium text-sm text-white leading-tight">
+                  Will Reveal
+                  <br />
+                  When Minted
+                </span>
+              </div>
+            </>
           )}
 
           <div className="absolute top-3 left-3 rounded bg-black/70 px-2 py-1 font-medium text-sm text-white">
             #{nft.tokenId}
           </div>
+
+          {/* Claimed indicator */}
+          {isMinted && (
+            <div className="absolute top-3 right-3 rounded bg-green-500 px-2 py-1 font-medium text-sm text-white">
+              ✓ Minted
+            </div>
+          )}
         </div>
 
         {/* Details */}
@@ -155,13 +180,22 @@ export default function NftDetailPage() {
           {/* Title & Description */}
           <div>
             <h1 className="mb-1 font-bold text-foreground text-xl sm:mb-2 sm:text-2xl">
-              {nft.name}
+              {isMinted
+                ? nft.name.endsWith(`#${nft.tokenId}`)
+                  ? nft.name
+                  : `${nft.name} #${nft.tokenId}`
+                : `ProtoMonkey #${nft.tokenId}`}
             </h1>
-            {nft.description && (
+            {isMinted && nft.description ? (
               <p className="text-muted-foreground text-sm sm:text-base">
                 {nft.description}
               </p>
-            )}
+            ) : !isMinted ? (
+              <p className="text-muted-foreground/60 text-sm italic sm:text-base">
+                This NFT has not been minted yet. The image and metadata will be
+                revealed once it is claimed.
+              </p>
+            ) : null}
           </div>
 
           {/* Owner */}
@@ -192,7 +226,7 @@ export default function NftDetailPage() {
                   ) : (
                     <button
                       onClick={() =>
-                        handleCopy(nft.currentOwner!.walletAddress, 'Address')
+                        handleCopy(nft.currentOwner!.walletAddress)
                       }
                       className="font-mono text-foreground text-sm hover:text-[#0066FF]"
                     >
@@ -202,7 +236,7 @@ export default function NftDetailPage() {
                 </div>
               </div>
             ) : (
-              <p className="text-muted-foreground">Not yet claimed</p>
+              <p className="text-muted-foreground/60 italic">Not yet claimed</p>
             )}
           </div>
 
@@ -289,9 +323,7 @@ export default function NftDetailPage() {
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Address</span>
                 <button
-                  onClick={() =>
-                    handleCopy(nft.contractAddress, 'Contract address')
-                  }
+                  onClick={() => handleCopy(nft.contractAddress)}
                   className="font-mono text-foreground hover:text-[#0066FF]"
                 >
                   {nft.contractAddress.slice(0, 6)}...

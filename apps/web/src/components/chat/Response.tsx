@@ -2,21 +2,31 @@
 
 import { cn } from '@babylon/shared';
 import { useRouter } from 'next/navigation';
-import { type ComponentProps, memo, useCallback } from 'react';
+import { type ComponentProps, memo, useCallback, useMemo } from 'react';
 import { Streamdown } from 'streamdown';
 
 type ResponseProps = ComponentProps<typeof Streamdown> & {
   onTagClick?: (tag: string) => void;
+  /**
+   * List of valid usernames for @mention formatting.
+   * When provided, only @username where username is in this list will be formatted.
+   * When not provided, all @mentions are formatted (backward compatible).
+   * Case-sensitive matching.
+   */
+  validMentions?: string[];
 };
 
 /**
  * Pre-processes text to convert @mentions and $cashtags into markdown links.
  * These links use special protocols that are intercepted on click.
  *
- * @mentions -> [mention](babylon://mention/username)
+ * @mentions -> [mention](babylon://mention/username) (only if in validMentions)
  * $cashtags -> [cashtag](babylon://cashtag/SYMBOL)
+ *
+ * @param text - The text to process
+ * @param validMentions - Optional list of valid usernames (case-sensitive)
  */
-function preprocessTags(text: string): string {
+function preprocessTags(text: string, validMentions?: Set<string>): string {
   if (!text || typeof text !== 'string') return text || '';
 
   // Match @mentions and $cashtags (excluding prices like $120k, $19.99)
@@ -26,8 +36,12 @@ function preprocessTags(text: string): string {
     /(@[\w-]+)|(\$[A-Za-z][\w]*)/g,
     (match, mention, cashtag) => {
       if (mention) {
-        // @username -> [@username](babylon://mention/username)
         const username = mention.slice(1); // Remove @
+        // If validMentions is provided, only format if username is in the set
+        if (validMentions && !validMentions.has(username)) {
+          return match; // Keep as plain text
+        }
+        // @username -> [@username](babylon://mention/username)
         return `[${mention}](babylon://mention/${username})`;
       }
       if (cashtag) {
@@ -50,16 +64,34 @@ function preprocessTags(text: string): string {
  * - Headers
  * - @mentions and $cashtags (clickable, navigates to profile/token page)
  *
+ * When `validMentions` is provided, only @mentions matching those usernames
+ * will be formatted as links. This is useful in chat contexts where only
+ * chat participants should be highlighted.
+ *
  * @example
  * ```tsx
- * <Response onTagClick={(tag) => console.log('Clicked:', tag)}>
- *   Check out @username and $BTC for **great** returns!
+ * <Response
+ *   validMentions={['john', 'tcm_elizalabs']}
+ *   onTagClick={(tag) => console.log('Clicked:', tag)}
+ * >
+ *   Check out @john and $BTC for **great** returns!
  * </Response>
  * ```
  */
 export const Response = memo(
-  ({ className, children, onTagClick, ...props }: ResponseProps) => {
+  ({
+    className,
+    children,
+    onTagClick,
+    validMentions,
+    ...props
+  }: ResponseProps) => {
     const router = useRouter();
+
+    // Convert validMentions array to Set for O(1) lookup
+    const validMentionsSet = useMemo(() => {
+      return validMentions ? new Set(validMentions) : undefined;
+    }, [validMentions]);
 
     const handleClick = useCallback(
       (e: React.MouseEvent<HTMLDivElement>) => {
@@ -101,7 +133,9 @@ export const Response = memo(
 
     // Pre-process children if it's a string
     const processedChildren =
-      typeof children === 'string' ? preprocessTags(children) : children;
+      typeof children === 'string'
+        ? preprocessTags(children, validMentionsSet)
+        : children;
 
     return (
       <div onClick={handleClick}>
@@ -135,6 +169,11 @@ export const Response = memo(
             '[&_a:not([href^="babylon://"])]:break-words',
             // Blockquote
             '[&_blockquote]:my-2 [&_blockquote]:border-muted-foreground/30 [&_blockquote]:border-l-4 [&_blockquote]:pl-4 [&_blockquote]:italic',
+            // Tables - contained with horizontal scroll
+            '[&_table]:my-2 [&_table]:w-full [&_table]:border-collapse [&_table]:text-sm',
+            '[&_th]:border [&_th]:border-border [&_th]:bg-muted/50 [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:font-semibold',
+            '[&_td]:border [&_td]:border-border [&_td]:px-3 [&_td]:py-2',
+            '[&_.table-wrapper]:max-w-full [&_.table-wrapper]:overflow-x-auto',
             // Strong/Bold
             '[&_strong]:font-semibold',
             // Horizontal rule
@@ -150,7 +189,8 @@ export const Response = memo(
   },
   (prevProps, nextProps) =>
     prevProps.children === nextProps.children &&
-    prevProps.onTagClick === nextProps.onTagClick
+    prevProps.onTagClick === nextProps.onTagClick &&
+    prevProps.validMentions === nextProps.validMentions
 );
 
 Response.displayName = 'Response';

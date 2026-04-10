@@ -1,39 +1,35 @@
 /**
- * User Points History API
+ * Legacy User Points History API
  *
- * @route GET /api/users/[userId]/points-history - Get user's points transaction history
+ * @route GET /api/users/[userId]/points-history - Legacy reputation history
  * @access Authenticated
  *
  * @description
- * Returns the user's points transactions history (limited to recent transactions).
- * Used to check which rewards have already been claimed.
+ * Deprecated compatibility route that now returns only the reputation ledger.
+ * Trading balance funding has moved to `/api/users/trading-balance/funding`,
+ * and the canonical reputation route is
+ * `/api/users/[userId]/reputation-history`.
  */
 
 import {
   AuthorizationError,
   authenticate,
+  ReputationService,
   requireUserByIdentifier,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { db, desc, eq, pointsTransactions } from '@babylon/db';
-import { UserIdParamSchema } from '@babylon/shared';
+import { toISO, UserIdParamSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
-/**
- * GET /api/users/[userId]/points-history
- * Get user's points transaction history
- */
 export const GET = withErrorHandling(
   async (
     request: NextRequest,
     context: { params: Promise<{ userId: string }> }
   ) => {
-    // Authenticate user
     const authUser = await authenticate(request);
     const { userId } = UserIdParamSchema.parse(await context.params);
 
-    // Check if the authenticated user has a database record
     if (!authUser.dbUserId) {
       throw new AuthorizationError(
         'User profile not found. Please complete onboarding first.',
@@ -45,7 +41,6 @@ export const GET = withErrorHandling(
     const targetUser = await requireUserByIdentifier(userId, { id: true });
     const canonicalUserId = targetUser.id;
 
-    // Verify user is getting their own history
     if (authUser.dbUserId !== canonicalUserId) {
       throw new AuthorizationError(
         'You can only view your own points history',
@@ -54,16 +49,27 @@ export const GET = withErrorHandling(
       );
     }
 
-    // Get recent transactions (last 100)
-    const transactions = await db
-      .select()
-      .from(pointsTransactions)
-      .where(eq(pointsTransactions.userId, canonicalUserId))
-      .orderBy(desc(pointsTransactions.createdAt))
-      .limit(100);
+    const transactions =
+      await ReputationService.getReputationHistory(canonicalUserId);
 
-    return successResponse({
-      transactions,
-    });
+    return successResponse(
+      {
+        transactions: transactions.map((transaction) => ({
+          id: transaction.id,
+          userId: transaction.userId,
+          amount: transaction.reputationDelta,
+          pointsBefore: transaction.reputationBefore,
+          pointsAfter: transaction.reputationAfter,
+          reason: transaction.reason,
+          metadata: transaction.metadata,
+          createdAt: toISO(transaction.createdAt),
+        })),
+      },
+      200,
+      {
+        'x-babylon-deprecated': 'true',
+        link: '</api/users/[userId]/reputation-history>; rel="successor-version"',
+      }
+    );
   }
 );

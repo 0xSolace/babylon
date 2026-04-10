@@ -6,8 +6,11 @@
  * Commands:
  *   load     - Run load tests against the server
  *   a2a      - Run A2A protocol stress tests
+ *   scambench-seed - Seed a ScamBench scenario into Babylon chats
  */
 
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { getOption, parseArgs, wantsHelp } from '../lib/args.js';
 import { logger } from '../lib/logger.js';
 
@@ -21,6 +24,7 @@ USAGE:
 COMMANDS:
   load      Run load tests against the server
   a2a       Run A2A protocol stress tests
+  scambench-seed  Seed a ScamBench scenario into Babylon chats
 
 OPTIONS (load):
   --scenario=NAME   Test scenario: light, normal, heavy, stress (default: normal)
@@ -30,11 +34,107 @@ OPTIONS (a2a):
   --scenario=NAME   Test scenario: light, normal, heavy, rate-limit, coalition (default: normal)
   --url=URL         Base URL (default: http://localhost:3000)
 
+OPTIONS (scambench-seed):
+  --scenario-id=ID  Scenario id from the ScamBench catalog
+  --user-id=ID      Target Babylon user id
+  --catalog=PATH    Scenario catalog JSON (default: ../scambench/generated/scenario-catalog.json)
+  --target-chats=N  Ensure user is seeded into at least N NPC group chats first (default: 3)
+
 EXAMPLES:
   babylon test load                       Normal load test
   babylon test load --scenario=heavy      Heavy load test
   babylon test a2a --scenario=rate-limit  Test rate limiting
+  babylon test scambench-seed --scenario-id=group-to-dm-asymmetric-info --user-id=123
 `);
+}
+
+function resolveDefaultCatalogPath(): string {
+  const candidates = [
+    resolve(process.cwd(), '../scambench/generated/scenario-catalog.json'),
+    resolve(process.cwd(), '../../scambench/generated/scenario-catalog.json'),
+    resolve(process.cwd(), 'scambench/generated/scenario-catalog.json'),
+    resolve(
+      process.cwd(),
+      '../benchmarks/scambench/generated/scenario-catalog.json'
+    ),
+    resolve(
+      process.cwd(),
+      '../../benchmarks/scambench/generated/scenario-catalog.json'
+    ),
+    resolve(
+      process.cwd(),
+      'benchmarks/scambench/generated/scenario-catalog.json'
+    ),
+  ];
+
+  return (
+    candidates.find((candidate) => Bun.file(candidate).exists()) ??
+    candidates[0]!
+  );
+}
+
+async function runScamBenchSeed(
+  args: ReturnType<typeof parseArgs>
+): Promise<void> {
+  const scenarioId = getOption(args, 'scenario-id');
+  const userId = getOption(args, 'user-id');
+  const catalogPath = getOption(args, 'catalog') || resolveDefaultCatalogPath();
+  const targetChatsPerUser = Number(getOption(args, 'target-chats') || '3');
+
+  if (!scenarioId || !userId) {
+    logger.fail('Missing required options: --scenario-id and --user-id');
+    process.exit(1);
+  }
+
+  const catalogRaw = await readFile(resolve(catalogPath), 'utf-8');
+  const catalog = JSON.parse(catalogRaw) as {
+    scenarios?: Array<{
+      id: string;
+      name: string;
+      preamble?: unknown[];
+      liveAttacker?: { name: string };
+      stages?: unknown[];
+    }>;
+  };
+
+  const scenario = catalog.scenarios?.find((entry) => entry.id === scenarioId);
+  if (!scenario) {
+    logger.fail(`Scenario not found in catalog: ${scenarioId}`);
+    process.exit(1);
+  }
+
+  const { seedScamBenchScenario } = await import('@babylon/engine');
+  const scenarioPayload = {
+    id: scenario.id,
+    name: scenario.name,
+    preamble: Array.isArray(scenario.preamble)
+      ? (scenario.preamble as Record<string, unknown>[])
+      : [],
+    liveAttacker: scenario.liveAttacker,
+    stages: Array.isArray(scenario.stages)
+      ? (scenario.stages as Record<string, unknown>[])
+      : [],
+  };
+  const result = await seedScamBenchScenario({
+    scenario: scenarioPayload as unknown as Parameters<
+      typeof seedScamBenchScenario
+    >[0]['scenario'],
+    targetUserId: userId,
+    targetChatsPerUser: Number.isFinite(targetChatsPerUser)
+      ? Math.max(1, targetChatsPerUser)
+      : 3,
+    createMissingSpeakers: true,
+  });
+
+  logger.header('ScamBench Scenario Seeded');
+  console.log(`Scenario: ${result.scenarioId}`);
+  console.log(`Target user: ${result.targetUserId}`);
+  console.log(`Auto-joined NPC chats: ${result.autoJoinedGroupChats}`);
+  console.log(`Chats seeded: ${result.chats.length}`);
+  console.log(`Messages seeded: ${result.messages.length}`);
+  console.log(
+    `Speakers created/resolved: ${Object.keys(result.speakerUserIds).join(', ')}`
+  );
 }
 
 async function runLoadTest(args: ReturnType<typeof parseArgs>): Promise<void> {
@@ -244,6 +344,10 @@ export async function runTestCommand(args: string[]): Promise<void> {
 
     case 'a2a':
       await runA2AStressTest(parsed);
+      break;
+
+    case 'scambench-seed':
+      await runScamBenchSeed(parsed);
       break;
 
     default:

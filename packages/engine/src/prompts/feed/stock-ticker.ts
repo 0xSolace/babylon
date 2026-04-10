@@ -1,9 +1,9 @@
 import { definePrompt } from '../define-prompt';
 import {
-  CONTENT_REQUIREMENTS,
+  CONTENT_REQUIREMENTS_MARKET,
   FINAL_REMINDERS,
   IMPORTANT_RULES,
-  WORLD_CONTEXT_HEADER,
+  WORLD_CONTEXT_HEADER_WITH_TRADES,
 } from '../shared-sections';
 
 /**
@@ -42,7 +42,7 @@ VOLUME: {{volume}}
 Event catalyst: {{eventCatalyst}}
 Connected storyline: {{connectedNarrative}}
 
-${WORLD_CONTEXT_HEADER}
+${WORLD_CONTEXT_HEADER_WITH_TRADES}
 
 Create a brief, professional stock ticker post.
 
@@ -54,7 +54,7 @@ Requirements:
 
 ${IMPORTANT_RULES}
 
-${CONTENT_REQUIREMENTS}
+${CONTENT_REQUIREMENTS_MARKET}
 
 Example: "{{ticker}} \${{currentPrice}} {{direction}} {{priceChange}}% on news of [brief event mention]"
 

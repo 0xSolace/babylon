@@ -15,6 +15,15 @@
 // =============================================================================
 
 export * from './constants';
+export {
+  AGENT_TRANSFER_IN_TRANSACTION_TYPE,
+  AGENT_TRANSFER_OUT_TRANSACTION_TYPE,
+  CANONICAL_AGENT_TRANSFER_TRANSACTION_TYPES,
+  CANONICAL_PEER_TRANSFER_TRANSACTION_TYPES,
+  PEER_TRANSFER_IN_TRANSACTION_TYPE,
+  PEER_TRANSFER_OUT_TRANSACTION_TYPE,
+} from './constants/constants';
+export * from './model-pilot-inquiry';
 
 // =============================================================================
 // Types (all types are client-safe - they're just TypeScript interfaces)
@@ -27,6 +36,12 @@ export * from './types';
 // =============================================================================
 
 export * from './game-types';
+
+// =============================================================================
+// Pack Types (PackManifest, PackActor, PackOrganization, etc.)
+// =============================================================================
+
+export * from './pack-types';
 
 // =============================================================================
 // Perps Types
@@ -58,16 +73,28 @@ export * from './utils/logger';
 export * from './utils/name-replacement';
 // OASF skill mapper (pure functions)
 export * from './utils/oasf-skill-mapper';
+// Post utilities (pure functions)
+export * from './utils/post-utils';
 // Profile utilities (pure functions)
 export * from './utils/profile';
 // Retry utilities (pure functions)
 export * from './utils/retry';
+export * from './utils/reward-notifications';
 // Singleton utility (pure function)
 export * from './utils/singleton';
 // Snowflake ID generator (pure functions)
 export * from './utils/snowflake';
+// Transaction utilities (pure functions)
+export * from './utils/transactions';
 // UI utilities (cn function for Tailwind)
 export * from './utils/ui';
+// User identifier classification (pure functions)
+export * from './utils/user-identifier';
+// Username utilities (pure functions)
+export * from './utils/username';
+// UUID generation (cross-browser compatible UUID v4)
+export * from './utils/uuid';
+export * from './utils/wallet';
 
 // =============================================================================
 // Error Classes (client-safe)
@@ -82,12 +109,6 @@ export * from './errors';
 export * from './auth';
 
 // =============================================================================
-// Contracts (ABIs and addresses - pure data)
-// =============================================================================
-
-export * from './contracts';
-
-// =============================================================================
 // Onboarding utilities
 // =============================================================================
 
@@ -98,6 +119,14 @@ export * from './onboarding';
 // =============================================================================
 
 export * from './validation';
+export type {
+  LeaderboardMetric,
+  LeaderboardScope,
+} from './validation/schemas/common';
+export {
+  LEADERBOARD_METRICS,
+  LEADERBOARD_SCOPES,
+} from './validation/schemas/common';
 
 // =============================================================================
 // Referral utilities
@@ -116,6 +145,12 @@ export * from './share';
 // =============================================================================
 
 export * from './config';
+
+// =============================================================================
+// DAG Trace Bridge (cross-package LLM call forwarding for observability)
+// =============================================================================
+
+export * from './dag-trace-bridge';
 
 // =============================================================================
 // NOT EXPORTED (Server-only modules - import from @babylon/api):

@@ -18,7 +18,7 @@
  */
 'use client';
 
-import { cn, type JsonValue } from '@babylon/shared';
+import { cn, formatDateTime, type JsonValue } from '@babylon/shared';
 import { AlertCircle, DollarSign } from 'lucide-react';
 import { useCallback, useEffect, useState, useTransition } from 'react';
 import { toast } from 'sonner';
@@ -92,24 +92,13 @@ export function HumanReviewTab() {
       return;
     }
 
-    toast.success(
-      `Appeal ${action === 'approve' ? 'approved' : 'denied'} successfully`
-    );
     setShowActionModal(false);
     setSelectedAppeal(null);
     fetchAppeals();
   };
 
-  const formatDate = (date: Date | null) => {
-    if (!date) return 'N/A';
-    return new Date(date).toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    });
-  };
+  const formatDate = (date: Date | null) =>
+    date ? formatDateTime(date) : 'N/A';
 
   if (loading) {
     return (
@@ -284,7 +273,7 @@ function ActionModal({ appeal, onAction, onClose }: ActionModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4">
       <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-border bg-card p-6">
         <h2 className="mb-4 font-bold text-xl">Review Appeal</h2>
 

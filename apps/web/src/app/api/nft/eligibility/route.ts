@@ -1,73 +1,55 @@
 import { authenticate, successResponse, withErrorHandling } from '@babylon/api';
-import { db, eq, nftCollection, nftSnapshot } from '@babylon/db';
+import { checkEligibility } from '@babylon/api/services/nft-mint-service';
+import { toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
-import type { EligibilityResponse } from '@/types/nft';
+import type { EligibilityApiResponse, EligibilityResponse } from '@/types/nft';
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
   const authUser = await authenticate(request);
   const userId = authUser.dbUserId ?? authUser.userId;
 
-  const [snapshotEntry] = await db
-    .select({
-      id: nftSnapshot.id,
-      userId: nftSnapshot.userId,
-      walletAddress: nftSnapshot.walletAddress,
-      rank: nftSnapshot.rank,
-      points: nftSnapshot.points,
-      snapshotTakenAt: nftSnapshot.snapshotTakenAt,
-      hasMinted: nftSnapshot.hasMinted,
-      mintedTokenId: nftSnapshot.mintedTokenId,
-      mintedAt: nftSnapshot.mintedAt,
-      mintTxHash: nftSnapshot.mintTxHash,
-    })
-    .from(nftSnapshot)
-    .where(eq(nftSnapshot.userId, userId))
-    .limit(1);
+  let result: Awaited<ReturnType<typeof checkEligibility>>;
+  try {
+    result = await checkEligibility(userId);
+  } catch (error) {
+    const causeCode = (error as { cause?: { code?: string } } | null)?.cause
+      ?.code;
+    const code = causeCode ?? (error as { code?: string } | null)?.code;
 
-  if (!snapshotEntry) {
-    return successResponse({
-      eligible: false,
-      status: 'not_eligible',
-      hasMinted: false,
-      reason: 'not_in_top_100',
-    } satisfies EligibilityResponse);
+    // Missing tables/columns in the DB should not surface as a hard 500 on the waitlist host.
+    if (code === '42P01' || code === '42703') {
+      const payload = {
+        eligible: false,
+        status: 'not_eligible',
+        hasMinted: false,
+        reason: 'snapshot_unavailable',
+      } satisfies EligibilityResponse;
+
+      return successResponse({
+        success: true,
+        data: payload,
+      } satisfies EligibilityApiResponse);
+    }
+    throw error;
   }
 
-  if (snapshotEntry.hasMinted && snapshotEntry.mintedTokenId !== null) {
-    const [mintedNft] = await db
-      .select({
-        tokenId: nftCollection.tokenId,
-        name: nftCollection.name,
-        thumbnailUrl: nftCollection.thumbnailUrl,
-      })
-      .from(nftCollection)
-      .where(eq(nftCollection.tokenId, snapshotEntry.mintedTokenId))
-      .limit(1);
-
-    return successResponse({
-      eligible: true,
-      status: 'already_minted',
-      snapshotRank: snapshotEntry.rank,
-      snapshotPoints: snapshotEntry.points,
-      snapshotTakenAt: snapshotEntry.snapshotTakenAt.toISOString(),
-      hasMinted: true,
-      mintedNft: mintedNft
-        ? {
-            tokenId: mintedNft.tokenId,
-            name: mintedNft.name,
-            thumbnailUrl: mintedNft.thumbnailUrl ?? '',
-            txHash: snapshotEntry.mintTxHash ?? '',
-          }
-        : undefined,
-    } satisfies EligibilityResponse);
-  }
+  const payload = {
+    eligible: result.eligible,
+    status: result.status,
+    ...(result.snapshotRank != null && { snapshotRank: result.snapshotRank }),
+    ...(result.snapshotPoints != null && {
+      snapshotPoints: result.snapshotPoints,
+    }),
+    ...(result.snapshotTakenAt != null && {
+      snapshotTakenAt: toISO(result.snapshotTakenAt),
+    }),
+    hasMinted: result.hasMinted,
+    ...(result.mintedNft && { mintedNft: result.mintedNft }),
+    ...(result.reason && { reason: result.reason }),
+  } satisfies EligibilityResponse;
 
   return successResponse({
-    eligible: true,
-    status: 'eligible',
-    snapshotRank: snapshotEntry.rank,
-    snapshotPoints: snapshotEntry.points,
-    snapshotTakenAt: snapshotEntry.snapshotTakenAt.toISOString(),
-    hasMinted: false,
-  } satisfies EligibilityResponse);
+    success: true,
+    data: payload,
+  } satisfies EligibilityApiResponse);
 });

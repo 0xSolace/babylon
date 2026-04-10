@@ -9,18 +9,84 @@
  * Allows admins to resolve markets, extend end dates, or cancel markets.
  */
 
+import type { JsonValue } from '@babylon/api';
 import {
+  broadcastToChannel,
   checkRateLimitAndDuplicates,
+  invalidateMarketsApiPredictionsList,
+  invalidateMarketsApiPredictionsListAndAllPositions,
   logAdminModify,
   RATE_LIMIT_CONFIGS,
   requireAdmin,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { db, desc, eq, markets, positions, withTransaction } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import {
+  PredictionDbAdapter,
+  PredictionMarketService,
+} from '@babylon/core/markets/prediction';
+import {
+  db,
+  desc,
+  eq,
+  markets,
+  positions,
+  questions,
+  timeframedMarkets,
+  withTransaction,
+} from '@babylon/db';
+import {
+  FEE_CONFIG,
+  invalidateAfterPredictionTrade,
+  WalletService,
+} from '@babylon/engine';
+import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
+import { notifyResolvedMarketOwners } from '@/lib/services/market-resolution-notifications';
+
+/**
+ * Build PredictionMarketService for admin operations
+ */
+const buildPredictionService = (marketId: string) =>
+  new PredictionMarketService({
+    db: new PredictionDbAdapter(),
+    wallet: {
+      debit: ({ userId, amount, reason, description, relatedId }) =>
+        WalletService.debit(
+          userId,
+          amount,
+          reason,
+          description ?? '',
+          relatedId
+        ),
+      credit: ({ userId, amount, reason, description, relatedId }) =>
+        WalletService.credit(
+          userId,
+          amount,
+          reason,
+          description ?? '',
+          relatedId
+        ),
+      recordPnL: ({ userId, pnl, reason, relatedId }) =>
+        WalletService.recordPnL(userId, pnl, reason, relatedId).then(
+          () => undefined
+        ),
+      getBalance: (userId: string) => WalletService.getBalance(userId),
+    },
+    broadcast: {
+      emit: (channel, payload) =>
+        broadcastToChannel(channel, payload as Record<string, JsonValue>),
+    },
+    cache: { invalidate: () => invalidateAfterPredictionTrade(marketId) },
+    clock: { now: () => new Date() },
+    fees: {
+      tradingFeeRate: FEE_CONFIG.TRADING_FEE_RATE,
+      platformShare: FEE_CONFIG.PLATFORM_SHARE,
+      referrerShare: FEE_CONFIG.REFERRER_SHARE,
+      minFeeAmount: FEE_CONFIG.MIN_FEE_AMOUNT,
+    },
+  });
 
 const MarketActionSchema = z.object({
   action: z.enum(['resolve', 'extend', 'void']),
@@ -151,30 +217,59 @@ export const POST = withErrorHandling(
         return successResponse({ error: 'Market already resolved' }, 400);
       }
 
-      // Use transaction to ensure atomic updates of market and positions
+      // Use transaction to ensure atomic updates of market, positions, questions, and timeframedMarkets
+      const resolvedAt = new Date();
+      const service = buildPredictionService(marketId);
+
+      await service.resolve({
+        marketId,
+        winningSide: resolution ? 'yes' : 'no',
+        resolvedAt,
+        resolutionDescription:
+          reason || `Resolved by admin as ${resolution ? 'YES' : 'NO'}`,
+      });
+
       await withTransaction(async (tx) => {
         await tx
-          .update(markets)
-          .set({
-            resolved: true,
-            resolution,
-            resolutionDescription:
-              reason || `Resolved by admin as ${resolution ? 'YES' : 'NO'}`,
-            updatedAt: new Date(),
-          })
-          .where(eq(markets.id, marketId));
-
-        // Update positions
-        await tx
-          .update(positions)
+          .update(questions)
           .set({
             status: 'resolved',
-            outcome: resolution,
-            resolvedAt: new Date(),
-            updatedAt: new Date(),
+            resolvedOutcome: resolution,
+            resolutionReviewedAt: resolvedAt,
+            resolutionReviewedBy: admin.userId,
+            updatedAt: resolvedAt,
           })
-          .where(eq(positions.marketId, marketId));
+          .where(eq(questions.id, marketId));
+
+        // Update timeframedMarkets linked to this question
+        await tx
+          .update(timeframedMarkets)
+          .set({
+            isActive: false,
+            isResolved: true,
+            resolvedAt,
+            updatedAt: resolvedAt,
+          })
+          .where(eq(timeframedMarkets.questionId, marketId));
       });
+
+      let notificationsCreated = 0;
+
+      try {
+        notificationsCreated = await notifyResolvedMarketOwners(marketId);
+      } catch (notificationError) {
+        logger.error(
+          'Market resolution succeeded but notification delivery failed',
+          {
+            marketId,
+            error:
+              notificationError instanceof Error
+                ? notificationError.message
+                : String(notificationError),
+          },
+          'POST /api/admin/markets/[marketId]'
+        );
+      }
 
       await logAdminModify({
         adminId: admin.userId,
@@ -187,11 +282,14 @@ export const POST = withErrorHandling(
         metadata: { action: 'resolve', question: market.question },
       });
 
+      void invalidateMarketsApiPredictionsListAndAllPositions();
+
       return successResponse({
         success: true,
         action: 'resolve',
         resolution,
         marketId,
+        notificationsCreated,
       });
     }
 
@@ -223,61 +321,90 @@ export const POST = withErrorHandling(
         adminId: admin.userId,
         resourceType: 'market',
         resourceId: marketId,
-        previousValue: { endDate: market.endDate.toISOString() },
-        newValue: { endDate: newEnd.toISOString(), reason: reason ?? null },
+        previousValue: { endDate: toISO(market.endDate) },
+        newValue: { endDate: toISO(newEnd), reason: reason ?? null },
         ipAddress: request.headers.get('x-forwarded-for') ?? undefined,
         userAgent: request.headers.get('user-agent') ?? undefined,
         metadata: { action: 'extend', question: market.question },
       });
 
+      void invalidateMarketsApiPredictionsList();
+
       return successResponse({
         success: true,
         action: 'extend',
-        newEndDate: newEnd.toISOString(),
+        newEndDate: toISO(newEnd),
         marketId,
       });
     }
 
     if (action === 'void') {
-      // Use transaction to ensure atomic updates of market and positions
-      await withTransaction(async (tx) => {
-        // Void the market - refund all positions
-        await tx
-          .update(markets)
-          .set({
-            resolved: true,
-            resolution: null,
-            resolutionDescription: reason || 'Market voided by admin',
-            updatedAt: new Date(),
-          })
-          .where(eq(markets.id, marketId));
-
-        // Mark all positions as voided
-        await tx
-          .update(positions)
-          .set({
-            status: 'voided',
-            resolvedAt: new Date(),
-            updatedAt: new Date(),
-          })
-          .where(eq(positions.marketId, marketId));
+      // Use PredictionMarketService.cancel() to properly refund all positions
+      const service = buildPredictionService(marketId);
+      const result = await service.cancel({
+        marketId,
+        reason: reason || 'Market voided by admin',
       });
+
+      // Also update questions and timeframedMarkets tables for consistency
+      const cancelledAt = new Date();
+      await withTransaction(async (tx) => {
+        // Update the question table (market.id matches question.id)
+        await tx
+          .update(questions)
+          .set({
+            status: 'cancelled',
+            updatedAt: cancelledAt,
+          })
+          .where(eq(questions.id, marketId));
+
+        // Update timeframedMarkets linked to this question
+        await tx
+          .update(timeframedMarkets)
+          .set({
+            isActive: false,
+            isResolved: true,
+            resolvedAt: cancelledAt,
+            updatedAt: cancelledAt,
+          })
+          .where(eq(timeframedMarkets.questionId, marketId));
+      });
+
+      logger.info(
+        'Market voided via cancel()',
+        {
+          marketId,
+          positionsRefunded: result.positionsRefunded,
+          totalRefunded: result.totalRefunded,
+          adminId: admin.userId,
+        },
+        'POST /api/admin/markets/[marketId]'
+      );
 
       await logAdminModify({
         adminId: admin.userId,
         resourceType: 'market',
         resourceId: marketId,
         previousValue: { status: 'active' },
-        newValue: { status: 'voided', reason: reason ?? null },
+        newValue: {
+          status: 'cancelled',
+          reason: reason ?? null,
+          positionsRefunded: result.positionsRefunded,
+          totalRefunded: result.totalRefunded,
+        },
         ipAddress: request.headers.get('x-forwarded-for') ?? undefined,
         userAgent: request.headers.get('user-agent') ?? undefined,
         metadata: { action: 'void', question: market.question },
       });
 
+      void invalidateMarketsApiPredictionsListAndAllPositions();
+
       return successResponse({
         success: true,
         action: 'void',
         marketId,
+        positionsRefunded: result.positionsRefunded,
+        totalRefunded: result.totalRefunded,
       });
     }
 

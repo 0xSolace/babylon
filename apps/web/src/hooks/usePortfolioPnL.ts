@@ -1,11 +1,18 @@
 'use client';
 
-import type { PortfolioPnLSnapshot } from '@babylon/engine/client';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { PortfolioBreakdownSnapshot } from '@babylon/engine/client';
+import { useMemo } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import {
+  fetchPortfolioBreakdownSnapshot,
+  isAbortError,
+  usePortfolioBreakdown,
+  usePortfolioBreakdownPolling,
+} from '@/stores/portfolioBreakdownStore';
 
 // Re-export for components that import from this hook
-export type { PortfolioPnLSnapshot } from '@babylon/engine/client';
+export type { PortfolioBreakdownSnapshot } from '@babylon/engine/client';
+export { fetchPortfolioBreakdownSnapshot, isAbortError };
 
 /**
  * Return type for the usePortfolioPnL hook.
@@ -16,176 +23,57 @@ interface UsePortfolioPnLResult {
   /** Any error that occurred while fetching portfolio data */
   error: string | null;
   /** Portfolio PnL snapshot containing all calculated metrics */
-  data: PortfolioPnLSnapshot | null;
+  data: PortfolioBreakdownSnapshot | null;
   /** Function to manually refresh portfolio data */
   refresh: () => Promise<void>;
   /** Timestamp of last successful update */
   lastUpdated: number | null;
 }
 
-function toNumber(value: unknown, fallback = 0): number {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
-  }
+interface UsePortfolioPnLOptions {
+  userId?: string | null;
+}
 
-  if (typeof value === 'string') {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
-  }
-
-  return fallback;
+interface UsePortfolioPnLPollingOptions extends UsePortfolioPnLOptions {
+  intervalMs?: number;
 }
 
 /**
  * Hook for fetching and managing portfolio profit and loss (PnL) data.
  *
- * Calculates comprehensive portfolio metrics including:
- * - Lifetime PnL (realized gains/losses)
- * - Unrealized PnL from open positions (perpetuals and predictions)
- * - Net contributions (deposits minus withdrawals)
- * - Account equity (net contributions + total PnL)
- * - Available balance
- *
- * Automatically fetches data when the user is authenticated and refreshes
- * when the user changes. Supports manual refresh and cancellation of
- * in-flight requests.
- *
- * @returns Portfolio PnL state including loading status, error, data, and refresh function.
- *
- * @example
- * ```tsx
- * const { data, loading, refresh } = usePortfolioPnL();
- *
- * if (loading) return <div>Loading...</div>;
- * if (data) {
- *   return (
- *     <div>
- *       <p>Total PnL: ${data.totalPnL}</p>
- *       <p>Account Equity: ${data.accountEquity}</p>
- *     </div>
- *   );
- * }
- * ```
+ * Fetches a canonical portfolio breakdown for consistent P/L:
+ * - Wallet (user-held points)
+ * - Agents (agent-held points)
+ * - Positions (mark-to-market value of open positions)
+ * - Available (wallet + agents)
+ * - Original amount (baseline)
+ * - Total assets
+ * - Total P/L
  */
-export function usePortfolioPnL(): UsePortfolioPnLResult {
+export function usePortfolioPnL(
+  options: UsePortfolioPnLOptions = {}
+): UsePortfolioPnLResult {
   const { user, authenticated } = useAuth();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [data, setData] = useState<PortfolioPnLSnapshot | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
-
-  const refresh = useCallback(async () => {
-    if (!authenticated || !user?.id) {
-      setData(null);
-      setLoading(false);
-      setError(null);
-      setLastUpdated(null);
-      return;
-    }
-
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-
-    const abortController = new AbortController();
-    abortControllerRef.current = abortController;
-
-    setLoading(true);
-    setError(null);
-
-    const [balanceRes, positionsRes] = await Promise.all([
-      fetch(`/api/users/${encodeURIComponent(user.id)}/balance`, {
-        signal: abortController.signal,
-      }),
-      fetch(`/api/markets/positions/${encodeURIComponent(user.id)}`, {
-        signal: abortController.signal,
-      }),
-    ]);
-
-    // Check response status before processing
-    if (!balanceRes.ok || !positionsRes.ok) {
-      setError('Failed to fetch portfolio data');
-      setLoading(false);
-      return;
-    }
-
-    // Check if request was aborted before parsing
-    if (abortController.signal.aborted) {
-      return;
-    }
-
-    let balanceJson: Record<string, unknown>;
-    let positionsJson: {
-      perpetuals?: { positions?: Array<{ unrealizedPnL?: number }> };
-      predictions?: { positions?: Array<{ unrealizedPnL?: number }> };
-    };
-    try {
-      [balanceJson, positionsJson] = await Promise.all([
-        balanceRes.json() as Promise<Record<string, unknown>>,
-        positionsRes.json() as Promise<typeof positionsJson>,
-      ]);
-    } catch {
-      setError('Failed to parse portfolio data');
-      setLoading(false);
-      return;
-    }
-
-    // Check if request was aborted after parsing
-    if (abortController.signal.aborted) {
-      return;
-    }
-
-    const totalDeposited = toNumber(balanceJson.totalDeposited);
-    const totalWithdrawn = toNumber(balanceJson.totalWithdrawn);
-    const lifetimePnL = toNumber(balanceJson.lifetimePnL);
-    const availableBalance = toNumber(balanceJson.balance);
-
-    const perpUnrealized = (positionsJson?.perpetuals?.positions ?? []).reduce(
-      (sum, position) => sum + toNumber(position?.unrealizedPnL),
-      0
-    );
-
-    const predictionUnrealized = (
-      positionsJson?.predictions?.positions ?? []
-    ).reduce((sum, position) => sum + toNumber(position?.unrealizedPnL), 0);
-
-    const totalUnrealizedPnL = perpUnrealized + predictionUnrealized;
-    const totalPnL = lifetimePnL + totalUnrealizedPnL;
-    const netContributions = totalDeposited - totalWithdrawn;
-    const accountEquity = netContributions + totalPnL;
-
-    setData({
-      lifetimePnL,
-      netContributions,
-      totalDeposited,
-      totalWithdrawn,
-      availableBalance,
-      unrealizedPerpPnL: perpUnrealized,
-      unrealizedPredictionPnL: predictionUnrealized,
-      totalUnrealizedPnL,
-      totalPnL,
-      accountEquity,
-    });
-    setLastUpdated(Date.now());
-    setLoading(false);
-  }, [authenticated, user?.id]);
-
-  useEffect(() => {
-    refresh();
-
-    return () => {
-      abortControllerRef.current?.abort();
-    };
-  }, [refresh]);
-
-  const memoizedData = useMemo(() => data, [data]);
+  const targetUserId =
+    options.userId ?? (authenticated ? (user?.id ?? null) : null);
+  const result = usePortfolioBreakdown(targetUserId);
+  const memoizedData = useMemo(() => result.data, [result.data]);
 
   return {
-    loading,
-    error,
+    loading: result.loading,
+    error: result.error,
     data: memoizedData,
-    refresh,
-    lastUpdated,
+    refresh: result.refresh,
+    lastUpdated: result.lastUpdated,
   };
+}
+
+export function usePortfolioPnLPolling(
+  options: UsePortfolioPnLPollingOptions = {}
+) {
+  const { user, authenticated } = useAuth();
+  const targetUserId =
+    options.userId ?? (authenticated ? (user?.id ?? null) : null);
+
+  usePortfolioBreakdownPolling(targetUserId, options.intervalMs ?? 15000);
 }

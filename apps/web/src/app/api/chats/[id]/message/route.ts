@@ -38,6 +38,9 @@
  *                 type: string
  *                 minLength: 1
  *                 description: Message content
+ *               replyToMessageId:
+ *                 type: string
+ *                 description: Optional ID of the message being replied to
  *     responses:
  *       201:
  *         description: Message sent successfully
@@ -94,6 +97,7 @@ import {
   authenticate,
   BusinessLogicError,
   broadcastChatMessage,
+  checkProgress,
   checkRateLimitAndDuplicates,
   DUPLICATE_DETECTION_CONFIGS,
   NFTVerificationService,
@@ -103,6 +107,7 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
+import { requireNftChatAccess } from '@babylon/api/services/nft-chat-gating-service';
 import {
   and,
   asUser,
@@ -111,6 +116,7 @@ import {
   eq,
   groupMembers,
   hasBlocked,
+  messages,
   users,
 } from '@babylon/db';
 import {
@@ -122,9 +128,11 @@ import {
   ChatMessageCreateSchema,
   generateSnowflakeId,
   logger,
+  toISO,
 } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { trackServerEvent } from '@/lib/posthog/server';
+import { getOtherDmParticipantId } from '../../_lib/dm-chat-id';
 
 /**
  * POST /api/chats/[id]/message
@@ -150,7 +158,7 @@ export const POST = withErrorHandling(
 
     // 2. Validate request body
     const body = await request.json();
-    const { content } = ChatMessageCreateSchema.parse(body);
+    const { content, replyToMessageId } = ChatMessageCreateSchema.parse(body);
 
     // 3. Apply rate limiting and duplicate detection
     const rateLimitError = checkRateLimitAndDuplicates(
@@ -181,25 +189,12 @@ export const POST = withErrorHandling(
 
     // If chat doesn't exist and it's a DM format, create it automatically
     if (!chat && chatId.startsWith('dm-')) {
-      // Extract user IDs from DM chat ID format: dm-{id1}-{id2}
-      const dmPrefix = 'dm-';
-      const idsString = chatId.substring(dmPrefix.length);
-      const participantIds = idsString.split('-');
+      const otherUserId = getOtherDmParticipantId(chatId, user.userId);
 
-      // Verify the current user is one of the participants
-      if (!participantIds.includes(user.userId)) {
+      if (!otherUserId) {
         throw new BusinessLogicError(
           'Invalid DM chat participants',
           'INVALID_DM_PARTICIPANTS'
-        );
-      }
-
-      // Get the other participant ID
-      const otherUserId = participantIds.find((id) => id !== user.userId);
-      if (!otherUserId) {
-        throw new BusinessLogicError(
-          'Invalid DM chat format',
-          'INVALID_DM_FORMAT'
         );
       }
 
@@ -303,15 +298,28 @@ export const POST = withErrorHandling(
           );
         }
 
-        // Check if users have blocked each other
+        // Check if the other participant is an NPC or has blocked the user
         const otherParticipant = chatParticipantsList.find(
           (p) => p.userId !== user.userId
         );
         if (otherParticipant) {
-          const [isBlocked, hasBlockedMe] = await Promise.all([
+          const [otherUser, isBlocked, hasBlockedMe] = await Promise.all([
+            db
+              .select({ isActor: users.isActor })
+              .from(users)
+              .where(eq(users.id, otherParticipant.userId))
+              .limit(1)
+              .then((rows) => rows[0] ?? null),
             hasBlocked(user.userId, otherParticipant.userId),
             hasBlocked(otherParticipant.userId, user.userId),
           ]);
+
+          if (otherUser?.isActor) {
+            throw new BusinessLogicError(
+              'Cannot send direct messages to NPC actors. Use group chats to interact with NPCs.',
+              'CANNOT_DM_ACTOR'
+            );
+          }
 
           if (isBlocked || hasBlockedMe) {
             throw new BusinessLogicError(
@@ -332,6 +340,8 @@ export const POST = withErrorHandling(
           );
         }
 
+        await requireNftChatAccess(user, chatId);
+
         // Verify NFT ownership for NFT-gated chats (cached)
         if (chat.nftGated && chat.requiredNftContractAddress) {
           const [userData] = await db
@@ -351,20 +361,22 @@ export const POST = withErrorHandling(
             // Remove user from chat since they no longer have NFT access
             // Wrap in transaction for consistency
             await db.transaction(async (tx) => {
-              await tx
-                .update(groupMembers)
-                .set({
-                  isActive: false,
-                  kickedAt: new Date(),
-                  kickReason: 'Lost NFT access',
-                })
-                .where(
-                  and(
-                    eq(groupMembers.groupId, chatId),
-                    eq(groupMembers.userId, user.userId),
-                    eq(groupMembers.isActive, true)
-                  )
-                );
+              if (chat.groupId) {
+                await tx
+                  .update(groupMembers)
+                  .set({
+                    isActive: false,
+                    kickedAt: new Date(),
+                    kickReason: 'Lost NFT access',
+                  })
+                  .where(
+                    and(
+                      eq(groupMembers.groupId, chat.groupId),
+                      eq(groupMembers.userId, user.userId),
+                      eq(groupMembers.isActive, true)
+                    )
+                  );
+              }
 
               await tx
                 .delete(chatParticipants)
@@ -430,7 +442,51 @@ export const POST = withErrorHandling(
       );
     }
 
-    // 7. Create message
+    // 7. Validate reply target and build reply snippet (if replying)
+    const effectiveReplyToMessageId = !isGameChat
+      ? replyToMessageId
+      : undefined;
+    let replyToMessage: {
+      id: string;
+      content: string;
+      senderId: string;
+      senderName?: string;
+    } | null = null;
+
+    if (effectiveReplyToMessageId) {
+      const [replyMsg] = await db
+        .select({
+          id: messages.id,
+          content: messages.content,
+          senderId: messages.senderId,
+          senderName: users.displayName,
+        })
+        .from(messages)
+        .leftJoin(users, eq(users.id, messages.senderId))
+        .where(
+          and(
+            eq(messages.id, effectiveReplyToMessageId),
+            eq(messages.chatId, chatId)
+          )
+        )
+        .limit(1);
+
+      if (!replyMsg) {
+        throw new BusinessLogicError(
+          'Invalid reply target message',
+          'INVALID_REPLY_TARGET'
+        );
+      }
+
+      replyToMessage = {
+        id: replyMsg.id,
+        content: replyMsg.content.slice(0, 200),
+        senderId: replyMsg.senderId,
+        senderName: replyMsg.senderName ?? undefined,
+      };
+    }
+
+    // 8. Create message
     let message = null;
     let membership = null;
 
@@ -453,6 +509,7 @@ export const POST = withErrorHandling(
             chatId,
             senderId: user.userId,
             createdAt: new Date(),
+            replyToMessageId: effectiveReplyToMessageId ?? null,
           },
         });
 
@@ -487,19 +544,21 @@ export const POST = withErrorHandling(
       membership = result.membership;
     }
 
-    // 10. Broadcast message via SSE (await for reliability)
+    // 9. Broadcast message via SSE (await for reliability)
     await broadcastChatMessage(chatId, {
       id: message.id,
       content: message.content,
       chatId: message.chatId,
       senderId: message.senderId,
       type: message.type ?? 'user',
-      createdAt: message.createdAt.toISOString(),
+      createdAt: toISO(message.createdAt),
       isGameChat,
       isDMChat,
+      replyToMessageId: effectiveReplyToMessageId ?? undefined,
+      replyToMessage,
     });
 
-    // 11. Send notifications to other participants
+    // 12. Send notifications to other participants
     if (!isGameChat) {
       if (isDMChat) {
         // For DMs, notify the other participant
@@ -536,7 +595,7 @@ export const POST = withErrorHandling(
       }
     }
 
-    // 12. Return success with feedback
+    // 13. Return success with feedback
     logger.info(
       'Message sent successfully',
       {
@@ -557,6 +616,10 @@ export const POST = withErrorHandling(
     }).catch((error) => {
       logger.warn('Failed to track message_sent event', { error });
     });
+
+    if (isGroupChat) {
+      void checkProgress(user.userId, { type: 'group_message_sent' });
+    }
 
     return successResponse(
       {

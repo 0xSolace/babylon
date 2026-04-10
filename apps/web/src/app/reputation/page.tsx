@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { IDENTITY_REGISTRY_BASE_SEPOLIA } from '@babylon/shared';
 import { Award, Medal, Target, Trophy } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -75,7 +77,7 @@ export default function ReputationPage() {
     return () => clearInterval(interval);
   }, [authenticated, user]);
 
-  const hasNft = Boolean(user?.nftTokenId || user?.onChainRegistered);
+  const hasNft = false;
 
   if (!authenticated) {
     return (
@@ -121,7 +123,7 @@ export default function ReputationPage() {
         <div className="py-6 text-center">
           <h1 className="mb-2 font-bold text-3xl">Reputation Dashboard</h1>
           <p className="text-muted-foreground">
-            Composite score = PnL (40%) + feedback (40%) + activity (20%)
+            Reputation = PnL (40%) + feedback (40%) + activity (20%)
           </p>
         </div>
 
@@ -130,7 +132,7 @@ export default function ReputationPage() {
             <div className="mb-2 flex items-center gap-3">
               <Award className="h-5 w-5 text-primary" />
               <span className="text-muted-foreground text-sm uppercase tracking-wide">
-                Score
+                Reputation
               </span>
             </div>
             <p className="font-bold text-3xl text-foreground">
@@ -195,9 +197,7 @@ export default function ReputationPage() {
               <label className="mb-1 block text-muted-foreground text-sm">
                 Token ID
               </label>
-              <p className="font-mono text-foreground">
-                #{user?.nftTokenId ?? 'N/A'}
-              </p>
+              <p className="font-mono text-foreground">#N/A</p>
             </div>
             <div>
               <label className="mb-1 block text-muted-foreground text-sm">
@@ -219,7 +219,7 @@ export default function ReputationPage() {
 
         <div className="rounded-lg border border-border bg-card p-6">
           <h2 className="mb-4 font-semibold text-lg">
-            How the Score Is Calculated
+            How Reputation Is Calculated
           </h2>
           <div className="space-y-3 text-muted-foreground text-sm">
             <p>

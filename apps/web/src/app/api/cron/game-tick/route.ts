@@ -64,9 +64,15 @@ import {
   checkLookaheadStatus,
   executeGameTick,
   generateAheadIfNeeded,
+  StaticDataRegistry,
+  WorldStateSnapshotService,
 } from '@babylon/engine';
-import { logger } from '@babylon/shared';
+import { logger, toISOOrNull } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+import {
+  isInternalCronSchedulerEnabled,
+  triggerScheduledCrons,
+} from '@/lib/cron-scheduler';
 import { ensureEngineServices } from '@/lib/engine/ensure-engine-services';
 
 export const maxDuration = 800;
@@ -100,23 +106,17 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   const startTime = Date.now();
   const lockId = `tick-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
 
-  // 1.5. Relay to staging if REDIRECT_CRON_STAGING is enabled
+  // 1.5. Relay to staging if REDIRECT_CRON_STAGING is enabled (fan-out)
   const relayResult = await relayCronToStaging(request, 'game-tick');
   if (relayResult.forwarded) {
     logger.info(
-      'Cron execution relayed to staging - skipping local execution',
+      'Cron execution relayed to staging (fan-out: continuing local execution)',
       {
         status: relayResult.status,
         error: relayResult.error,
       },
       'Cron'
     );
-    return successResponse({
-      success: true,
-      skipped: true,
-      reason: 'Relayed to staging environment',
-      relayStatus: relayResult.status,
-    });
   }
 
   // 1.6. Check GAME_START environment variable (manual override)
@@ -205,9 +205,9 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
           isRunning: result?.isRunning,
           isContinuous: result?.isContinuous,
           currentDay: result?.currentDay,
-          pausedAt: result?.pausedAt?.toISOString(),
-          startedAt: result?.startedAt?.toISOString(),
-          lastTickAt: result?.lastTickAt?.toISOString(),
+          pausedAt: toISOOrNull(result?.pausedAt),
+          startedAt: toISOOrNull(result?.startedAt),
+          lastTickAt: toISOOrNull(result?.lastTickAt),
           rawIsRunning: result?.isRunning,
           rawIsRunningType: typeof result?.isRunning,
         },
@@ -243,8 +243,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         isRunningBoolean: isRunningValue === true,
         isRunningFalsy: !isRunningValue,
         currentDay: gameState.currentDay,
-        pausedAt: gameState.pausedAt?.toISOString(),
-        lastTickAt: gameState.lastTickAt?.toISOString(),
+        pausedAt: toISOOrNull(gameState.pausedAt),
+        lastTickAt: toISOOrNull(gameState.lastTickAt),
       },
       'Cron'
     );
@@ -257,8 +257,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
           isRunning: gameState.isRunning,
           isRunningValue,
           currentDay: gameState.currentDay,
-          pausedAt: gameState.pausedAt?.toISOString(),
-          lastTickAt: gameState.lastTickAt?.toISOString(),
+          pausedAt: toISOOrNull(gameState.pausedAt),
+          lastTickAt: toISOOrNull(gameState.lastTickAt),
           message:
             'To start the game, use POST /api/game/control with action: "start"',
         },
@@ -273,8 +273,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
           id: gameState.id,
           isRunning: gameState.isRunning,
           currentDay: gameState.currentDay,
-          pausedAt: gameState.pausedAt?.toISOString(),
-          lastTickAt: gameState.lastTickAt?.toISOString(),
+          pausedAt: toISOOrNull(gameState.pausedAt),
+          lastTickAt: toISOOrNull(gameState.lastTickAt),
         },
       });
     }
@@ -287,7 +287,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         'Buffer sufficient - skipping content generation',
         {
           minutesAhead: bufferStatus.minutesAhead,
-          latestTimestamp: bufferStatus.latestTimestamp?.toISOString(),
+          latestTimestamp: toISOOrNull(bufferStatus.latestTimestamp),
         },
         'Cron'
       );
@@ -308,6 +308,14 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         'Cron'
       );
 
+      // Trigger additional crons on non-production environments
+      let internalCrons:
+        | { triggered: string[]; failed: string[]; skipped: string[] }
+        | undefined;
+      if (isInternalCronSchedulerEnabled()) {
+        internalCrons = await triggerScheduledCrons();
+      }
+
       return successResponse({
         success: true,
         skipped: false,
@@ -315,6 +323,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         bufferMinutes: bufferStatus.minutesAhead,
         duration,
         result,
+        internalCrons,
       });
     }
 
@@ -324,7 +333,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       {
         currentAhead: bufferStatus.minutesAhead,
         target: 15,
-        latestTimestamp: bufferStatus.latestTimestamp?.toISOString(),
+        latestTimestamp: toISOOrNull(bufferStatus.latestTimestamp),
       },
       'Cron'
     );
@@ -338,7 +347,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       {
         generated: lookaheadResult.generated,
         windowsGenerated: lookaheadResult.windowsGenerated,
-        newLatestTimestamp: lookaheadResult.newLatestTimestamp?.toISOString(),
+        newLatestTimestamp: toISOOrNull(lookaheadResult.newLatestTimestamp),
       },
       'Cron'
     );
@@ -371,6 +380,38 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       marketsUpdated: result.marketsUpdated,
     });
 
+    // Trigger additional crons on non-production environments
+    // This ensures staging/preview gets all cron jobs running
+    let internalCrons:
+      | { triggered: string[]; failed: string[]; skipped: string[] }
+      | undefined;
+    if (isInternalCronSchedulerEnabled()) {
+      logger.info(
+        'Triggering internal cron scheduler (non-production)',
+        undefined,
+        'Cron'
+      );
+      internalCrons = await triggerScheduledCrons();
+    }
+
+    // Capture world state snapshot for trajectory linking (non-critical, don't fail tick)
+    const windowId = new Date().toISOString().slice(0, 13) + ':00';
+    await WorldStateSnapshotService.captureSnapshot(
+      windowId,
+      StaticDataRegistry.getPackId() ?? undefined
+    ).catch((snapshotError: unknown) => {
+      logger.warn(
+        'World state snapshot capture failed',
+        {
+          error:
+            snapshotError instanceof Error
+              ? snapshotError.message
+              : String(snapshotError),
+        },
+        'Cron'
+      );
+    });
+
     return successResponse({
       success: true,
       duration,
@@ -380,6 +421,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         windowsGenerated: lookaheadResult.windowsGenerated,
       },
       result,
+      internalCrons,
     });
   } finally {
     // Always release lock, even on error

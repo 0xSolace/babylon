@@ -12,13 +12,13 @@
  */
 
 import { agentService } from '@babylon/agents';
-import { authenticateUser } from '@babylon/api';
+import { authenticateUser, withErrorHandling } from '@babylon/api';
 import { balanceTransactions, db, desc, eq, users } from '@babylon/db';
-import { BABYLON_POINTS_SYMBOL, logger } from '@babylon/shared';
+import { BABYLON_POINTS_SYMBOL, logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
-export async function GET(
+export const GET = withErrorHandling(async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ agentId: string }> }
 ) {
@@ -84,12 +84,12 @@ export async function GET(
       balanceAfter: Number(tx.balanceAfter),
       description: tx.description,
       relatedId: tx.relatedId,
-      createdAt: tx.createdAt.toISOString(),
+      createdAt: toISO(tx.createdAt),
     })),
   });
-}
+});
 
-export async function POST(
+export const POST = withErrorHandling(async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ agentId: string }> }
 ) {
@@ -173,4 +173,4 @@ export async function POST(
       { status: 400 }
     );
   }
-}
+});

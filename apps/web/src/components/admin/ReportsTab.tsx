@@ -20,7 +20,7 @@
  */
 'use client';
 
-import { cn } from '@babylon/shared';
+import { cn, logger } from '@babylon/shared';
 import { AlertCircle, CheckCircle, Clock, Flag, XCircle } from 'lucide-react';
 import { useCallback, useEffect, useState, useTransition } from 'react';
 import { toast } from 'sonner';
@@ -131,7 +131,11 @@ export function ReportsTab() {
 
           const response = await fetch(`/api/admin/reports?${params}`);
           if (!response.ok) {
-            console.error('Failed to fetch reports:', response.status);
+            logger.error(
+              'Failed to fetch reports',
+              { status: response.status },
+              'ReportsTab'
+            );
             setLoading(false);
             return;
           }
@@ -140,7 +144,11 @@ export function ReportsTab() {
           setReports(data.reports || []);
           setLoading(false);
         } catch (err) {
-          console.error('Error fetching reports:', err);
+          logger.error(
+            'Error fetching reports',
+            err instanceof Error ? err : { error: err },
+            'ReportsTab'
+          );
           setLoading(false);
         }
       };
@@ -163,7 +171,11 @@ export function ReportsTab() {
         const data = await response.json();
         setStats(data);
       } catch (err) {
-        console.error('Error fetching report stats:', err);
+        logger.error(
+          'Error fetching report stats',
+          err instanceof Error ? err : { error: err },
+          'ReportsTab'
+        );
       }
     };
     void fetchLogic();
@@ -191,7 +203,6 @@ export function ReportsTab() {
       return;
     }
 
-    toast.success(`Report ${action} successfully`);
     setShowActionModal(false);
     setSelectedReport(null);
     fetchReports(true);
@@ -214,7 +225,6 @@ export function ReportsTab() {
     }
 
     const data = await response.json();
-    toast.success('Report evaluated successfully');
 
     // Refresh reports to show evaluation
     await fetchReports(true);
@@ -627,7 +637,7 @@ function EvaluationModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4">
       <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-border bg-card p-6">
         <h2 className="mb-4 font-bold text-xl">Report Evaluation</h2>
 
@@ -759,7 +769,7 @@ function ActionModal({ report, onClose, onAction }: ActionModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4">
       <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-border bg-card p-6">
         <h2 className="mb-4 font-bold text-xl">Take Action on Report</h2>
 

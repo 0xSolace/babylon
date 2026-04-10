@@ -47,7 +47,8 @@ import {
   AuthorizationError,
   authenticate,
   BusinessLogicError,
-  PointsService,
+  invalidateCache,
+  ReputationService,
   requireUserByIdentifier,
   successResponse,
   withErrorHandling,
@@ -120,28 +121,33 @@ export const POST = withErrorHandling(
 
       return successResponse({
         verified: true,
-        message: 'You already received points for this action.',
-        points: {
+        message: 'You already received reputation for this action.',
+        reputation: {
           awarded: 0,
-          newTotal: 0,
+          newReputationTotal: 0,
         },
       });
     }
 
-    // Award points (trusted system - no API verification)
-    const pointsResult =
-      await PointsService.awardTwitterFollow(canonicalUserId);
+    // Award reputation (trusted system - no API verification).
+    const reputationResult =
+      await ReputationService.awardTwitterFollow(canonicalUserId);
 
-    let pointsAwarded = 0;
-    let newPointsTotal = 0;
+    let reputationAwarded = 0;
+    let newReputationTotal = 0;
 
-    if (pointsResult.success) {
-      pointsAwarded = pointsResult.pointsAwarded;
-      newPointsTotal = pointsResult.newTotal;
+    if (reputationResult.success) {
+      reputationAwarded = reputationResult.reputationAwarded;
+      newReputationTotal = reputationResult.newReputationTotal;
+
+      // Ensure the waitlist dashboard reflects new reputation immediately.
+      await invalidateCache(canonicalUserId, {
+        namespace: 'waitlist:position',
+      });
 
       logger.info(
-        `Awarded ${pointsAwarded} points for Twitter follow (trusted)`,
-        { userId: canonicalUserId, pointsAwarded },
+        `Awarded ${reputationAwarded} reputation for Twitter follow (trusted)`,
+        { userId: canonicalUserId, reputationAwarded },
         'POST /api/users/[userId]/verify-twitter-follow'
       );
     }
@@ -149,12 +155,12 @@ export const POST = withErrorHandling(
     return successResponse({
       verified: true,
       message:
-        pointsAwarded > 0
-          ? `Thank you for following! You earned ${pointsAwarded} points.`
+        reputationAwarded > 0
+          ? `Thank you for following! You earned ${reputationAwarded} reputation.`
           : 'Follow reward claimed successfully!',
-      points: {
-        awarded: pointsAwarded,
-        newTotal: newPointsTotal,
+      reputation: {
+        awarded: reputationAwarded,
+        newReputationTotal,
       },
     });
   }

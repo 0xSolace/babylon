@@ -1,7 +1,7 @@
 'use client';
 
 import { cn, logger } from '@babylon/shared';
-import { UserMinus, UserPlus } from 'lucide-react';
+import { Minus, Plus, UserMinus, UserPlus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/shared/Skeleton';
@@ -32,7 +32,7 @@ interface FollowButtonProps {
   userId: string;
   initialFollowing?: boolean;
   size?: 'sm' | 'md' | 'lg';
-  variant?: 'button' | 'icon';
+  variant?: 'button' | 'icon' | 'circle';
   className?: string;
   onFollowChange?: (isFollowing: boolean) => void;
   onFollowerCountChange?: (delta: number) => void; // +1 for follow, -1 for unfollow
@@ -40,7 +40,7 @@ interface FollowButtonProps {
 
 export function FollowButton({
   userId,
-  initialFollowing = false,
+  initialFollowing,
   size = 'md',
   variant = 'button',
   className,
@@ -48,13 +48,19 @@ export function FollowButton({
   onFollowerCountChange,
 }: FollowButtonProps) {
   const { authenticated, user } = useAuth();
-  const [isFollowing, setIsFollowing] = useState(initialFollowing);
+  const [isFollowing, setIsFollowing] = useState(initialFollowing ?? false);
   const [isLoading, setIsLoading] = useState(false);
-  const [isChecking, setIsChecking] = useState(true);
+  const [isChecking, setIsChecking] = useState(initialFollowing === undefined);
   const { trackFollow } = useSocialTracking();
 
   // Check follow status on mount
   useEffect(() => {
+    if (initialFollowing !== undefined) {
+      setIsFollowing(initialFollowing);
+      setIsChecking(false);
+      return;
+    }
+
     // Check if viewing own profile (userId could be username or user ID)
     const isOwnProfile =
       user &&
@@ -100,7 +106,7 @@ export function FollowButton({
     };
 
     checkFollowStatus();
-  }, [authenticated, user, userId]);
+  }, [authenticated, initialFollowing, user, userId]);
 
   const handleFollow = async () => {
     if (!authenticated || !user) {
@@ -220,6 +226,33 @@ export function FollowButton({
     md: 'p-2',
     lg: 'p-2.5',
   };
+
+  if (variant === 'circle') {
+    if (isChecking) return null;
+
+    return (
+      <button
+        onClick={handleFollow}
+        disabled={isLoading}
+        className={cn(
+          'flex items-center justify-center rounded-full border-2 border-background transition-colors',
+          isFollowing
+            ? 'bg-red-500 hover:bg-red-600'
+            : 'bg-primary hover:bg-primary/80',
+          isLoading && 'cursor-not-allowed opacity-50',
+          'h-5 w-5',
+          className
+        )}
+        aria-label={isFollowing ? 'Unfollow' : 'Follow'}
+      >
+        {isFollowing ? (
+          <Minus className="h-3 w-3 text-white" />
+        ) : (
+          <Plus className="h-3 w-3 text-white" />
+        )}
+      </button>
+    );
+  }
 
   if (variant === 'icon') {
     // Show subtle skeleton during loading to prevent layout shift

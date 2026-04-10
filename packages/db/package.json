@@ -22,12 +22,13 @@
   "scripts": {
     "lint": "biome lint .",
     "typecheck": "tsc -b .",
-    "db:generate": "tsx ../../node_modules/drizzle-kit/bin.cjs generate",
-    "db:migrate": "tsx ../../node_modules/drizzle-kit/bin.cjs migrate",
-    "db:push": "tsx ../../node_modules/drizzle-kit/bin.cjs push",
-    "db:pull": "tsx ../../node_modules/drizzle-kit/bin.cjs pull",
-    "db:studio": "tsx ../../node_modules/drizzle-kit/bin.cjs studio",
-    "db:check": "tsx ../../node_modules/drizzle-kit/bin.cjs check"
+    "db:generate": "drizzle-kit generate --config=drizzle.config.cjs",
+    "db:migrate": "drizzle-kit migrate --config=drizzle.config.cjs",
+    "db:push": "drizzle-kit push --config=drizzle.config.cjs",
+    "db:pull": "drizzle-kit pull --config=drizzle.config.cjs",
+    "db:studio": "drizzle-kit studio --config=drizzle.config.cjs",
+    "db:check": "drizzle-kit check --config=drizzle.config.cjs",
+    "db:sync-migrations": "tsx scripts/sync-migrations.ts"
   },
   "dependencies": {
     "@babylon/shared": "workspace:*",
@@ -39,6 +40,7 @@
     "postgres": "^3.4.7"
   },
   "devDependencies": {
+    "@elizaos/plugin-sql": "2.0.0-alpha.17",
     "@types/node": "^24.10.0",
     "drizzle-kit": "^0.31.8",
     "tsx": "^4.19.4",

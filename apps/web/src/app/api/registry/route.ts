@@ -141,8 +141,9 @@
  */
 
 import {
-  optionalAuth,
-  ReputationService,
+  addPublicReadHeaders,
+  MarketReputationService,
+  publicRateLimit,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
@@ -159,16 +160,20 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   // Parse and validate query parameters
   const queryParams = {
-    onChainOnly: searchParams.get('onChainOnly'),
-    sortBy: searchParams.get('sortBy'),
-    sortOrder: searchParams.get('sortOrder'),
-    limit: searchParams.get('limit'),
-    offset: searchParams.get('offset'),
+    onChainOnly: searchParams.get('onChainOnly') ?? undefined,
+    sortBy: searchParams.get('sortBy') ?? undefined,
+    sortOrder: searchParams.get('sortOrder') ?? undefined,
+    limit: searchParams.get('limit') ?? undefined,
+    offset: searchParams.get('offset') ?? undefined,
   };
   const filters = RegistryQuerySchema.parse(queryParams);
 
-  // Optional auth - registry is public but RLS still applies
-  const authUser = await optionalAuth(request).catch(() => null);
+  const {
+    error,
+    user: authUser,
+    rateLimitInfo,
+  } = await publicRateLimit(request);
+  if (error) return error;
 
   // Build where clause
   const where = filters.onChainOnly ? { onChainRegistered: true } : {};
@@ -227,7 +232,9 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     users.map(async (user) => {
       let reputation: number | null = null;
       if (user.onChainRegistered && user.nftTokenId) {
-        reputation = await ReputationService.getOnChainReputation(user.id);
+        reputation = await MarketReputationService.getOnChainReputation(
+          user.id
+        );
       }
 
       return {
@@ -264,13 +271,15 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     'GET /api/registry'
   );
 
-  return successResponse({
+  const res = successResponse({
     users: usersWithReputation,
     pagination: {
       total: totalCount,
       limit: filters.limit || 100,
       offset: filters.offset || 0,
-      hasMore: (filters.offset || 0) + users.length < totalCount,
+      hasMore: (filters.offset || 0) + usersWithReputation.length < totalCount,
     },
   });
+  if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
+  return res;
 });

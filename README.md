@@ -5,13 +5,11 @@
   <p><strong>A multiplayer prediction market game with autonomous AI agents and continuous RL training</strong></p>
   
   <p>
-    <a href="https://github.com/BabylonSocial/babylon"><img src="https://img.shields.io/badge/build-passing-brightgreen" alt="Build Status"></a>
-    <a href="https://github.com/BabylonSocial/babylon"><img src="https://img.shields.io/badge/tests-passing-brightgreen" alt="Tests"></a>
     <a href="https://docs.babylon.market"><img src="https://img.shields.io/badge/docs-available-blue" alt="Documentation"></a>
     <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.0-blue" alt="TypeScript"></a>
     <a href="https://soliditylang.org/"><img src="https://img.shields.io/badge/Solidity-0.8-363636" alt="Solidity"></a>
+    <a href="https://arxiv.org/abs/2501.06781"><img src="https://img.shields.io/badge/arXiv-2501.06781-b31b1b.svg" alt="Paper" width=116 height=20></a>
   </p>
-
 </div>
 
 
@@ -19,7 +17,7 @@
 
 A real-time prediction market game with autonomous NPCs, perpetual futures, and gamified social mechanics.
 
-**NOTE**: This is currently in development. We expect to launch publicly around December 1st, 2025. This repo will change heavily in the meantime.
+**NOTE**: This project is under active development. Expect incomplete features and moving interfaces.
 
 ## 📦 Installation
 
@@ -149,6 +147,8 @@ bun run test:e2e           # E2E tests
 bun run contracts:test     # Smart contracts
 ```
 
+To skip chain-dependent tests (e.g. in CI when Hardhat/localnet is not available), set `SKIP_CHAIN_TESTS=1`.
+
 ---
 
 ## 🚢 Deploy to Vercel
@@ -161,10 +161,22 @@ vercel deploy --prod
 **Required Environment Variables:**
 
 - `DATABASE_URL` - PostgreSQL connection
-- `NEXT_PUBLIC_PRIVY_APP_ID` - Authentication
-- `OPENAI_API_KEY` - AI agents
+- `NEXT_PUBLIC_PRIVY_APP_ID` (or `PRIVY_APP_ID`) - Privy App ID
+- `PRIVY_APP_SECRET` - Privy backend secret
+- `CRON_SECRET` - Cron authentication
+- At least one LLM key: `GROQ_API_KEY` or `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`
 
-See `.env.example` for complete list.
+Validate your env files before running the app:
+
+```bash
+bun run env:validate
+# optional profiles:
+bun run env:validate:staging
+bun run env:validate:production
+```
+
+Feature-specific requirements are validated conditionally (Agent0, SendGrid, NFT gating, on-chain perps).
+See `.env.example` for the full list.
 
 ---
 
@@ -200,7 +212,8 @@ forge script script/DeployProtoMonkeysNFT.s.sol:DeployProtoMonkeysNFTLocal \
 
 # 3. Set the deployed address in .env
 NFT_CONTRACT_ADDRESS=<deployed_address>
-NFT_CHAIN_ID=31337
+NEXT_PUBLIC_CHAIN_ID=31337
+NFT_CHAIN_ID=31337 # (legacy, optional) must match NEXT_PUBLIC_CHAIN_ID/CHAIN_ID
 NFT_SIGNER_PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 
 # 4. Seed NFT collection and snapshots
@@ -213,7 +226,8 @@ bun run scripts/seed-nft-snapshot-local.ts
 ```bash
 # NFT Contract Configuration
 NFT_CONTRACT_ADDRESS=0x...          # Set after deployment
-NFT_CHAIN_ID=1                      # 1 = Mainnet, 11155111 = Sepolia, 31337 = Local
+NEXT_PUBLIC_CHAIN_ID=1              # 1 = Mainnet, 11155111 = Sepolia, 31337 = Local
+NFT_CHAIN_ID=1                      # (legacy, optional) must match NEXT_PUBLIC_CHAIN_ID/CHAIN_ID
 NFT_SIGNER_PRIVATE_KEY=0x...        # Backend signer private key (NEVER COMMIT)
 NFT_SIGNER_ADDRESS=0x...            # Public address of signer
 NFT_BASE_URI=https://babylon.market/api/nft/metadata/
@@ -236,7 +250,8 @@ forge script script/DeployProtoMonkeysNFT.s.sol:DeployProtoMonkeysNFT \
 
 # Update environment
 NFT_CONTRACT_ADDRESS=<deployed_address>
-NFT_CHAIN_ID=11155111
+NEXT_PUBLIC_CHAIN_ID=11155111
+NFT_CHAIN_ID=11155111 # (legacy, optional) must match NEXT_PUBLIC_CHAIN_ID/CHAIN_ID
 ```
 
 ### Ethereum Mainnet
@@ -251,7 +266,8 @@ forge script script/DeployProtoMonkeysNFT.s.sol:DeployProtoMonkeysNFT \
 
 # Update environment
 NFT_CONTRACT_ADDRESS=<deployed_address>
-NFT_CHAIN_ID=1
+NEXT_PUBLIC_CHAIN_ID=1
+NFT_CHAIN_ID=1 # (legacy, optional) must match NEXT_PUBLIC_CHAIN_ID/CHAIN_ID
 ```
 
 ### Post-Deployment Setup
@@ -281,8 +297,6 @@ forge test --match-contract ProtoMonkeysNFT -vvv
 | `/api/nft/mint/confirm` | Verify on-chain mint, update database |
 | `/api/nft/metadata/[tokenId]` | ERC-721 metadata endpoint |
 
-See [`docs/nft-drop-implementation-plan.md`](docs/nft-drop-implementation-plan.md) for complete technical details.
-
 ---
 
 ## 📚 Documentation
@@ -292,6 +306,9 @@ See [`docs/nft-drop-implementation-plan.md`](docs/nft-drop-implementation-plan.m
 - Smart Contracts: `bun run deploy:local|testnet`
 - RL Training: See `packages/training/README.md`
 - Game Control: `babylon game start|pause|status` (via CLI)
+- **Agent skills & LLM-facing docs**: We expose A2A and MCP; agents need an up-to-date reference.
+  - `bun run docs:generate` — Pulls vendor docs and regenerates skills packages.
+  - `bun run skills:generate` — Skills markdown only. `bun run skills:package` — Full package.
 
 ---
 

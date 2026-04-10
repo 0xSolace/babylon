@@ -8,12 +8,15 @@
  */
 
 import { beforeAll, describe, expect, setDefaultTimeout, test } from 'bun:test';
-import type { GeneratedGame } from '../GameGenerator';
-import { GameGenerator } from '../GameGenerator';
+import { resolveLiveLlmTestConfig } from '../../../../testing/integration/helpers/live-runtime';
+import type { GeneratedGame } from '../../GameGenerator';
+import { GameGenerator } from '../../GameGenerator';
+import { formatError } from '../../utils/error-utils';
 
 setDefaultTimeout(600000);
+const liveLlmConfig = resolveLiveLlmTestConfig();
 
-describe('Game Output Validation', () => {
+describe.skipIf(!liveLlmConfig.enabled)('Game Output Validation', () => {
   let game: GeneratedGame | null = null;
   let skipped = false;
   let skipReason = '';
@@ -24,8 +27,7 @@ describe('Game Output Validation', () => {
       const generator = new GameGenerator();
       game = await generator.generateCompleteGame();
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
+      const errorMessage = formatError(error);
       if (
         errorMessage.includes('429') ||
         errorMessage.includes('rate_limit') ||

@@ -14,7 +14,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { db, eq, questions } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 
@@ -141,14 +141,14 @@ export const POST = withErrorHandling(
         questionId: id,
         questionNumber: existing.questionNumber,
         reviewedBy: admin.userId,
-        postponedUntil: postponed.toISOString(),
+        postponedUntil: toISO(postponed),
       },
       'AdminResolutions'
     );
 
     return successResponse({
       success: true,
-      postponedUntil: postponed.toISOString(),
+      postponedUntil: toISO(postponed),
     });
   }
 );

@@ -155,13 +155,22 @@
  * @see {@link /src/app/agents/page.tsx} Agents management UI
  */
 
-import { agentService, getAgentConfig } from '@babylon/agents';
-import { authenticateUser } from '@babylon/api';
-import { logger } from '@babylon/shared';
+import {
+  agentService,
+  getAgentConfig,
+  isAutonomousTradingEnabled,
+} from '@babylon/agents';
+import {
+  authenticateUser,
+  checkProgress,
+  withErrorHandling,
+} from '@babylon/api';
+import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import { listOwnedAgentSummaries } from '@/lib/agents/owned-agent-summaries';
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandling(async function POST(req: NextRequest) {
   const user = await authenticateUser(req);
 
   const body = await req.json();
@@ -221,6 +230,8 @@ export async function POST(req: NextRequest) {
   // Get agent config for the response
   const config = await getAgentConfig(agentUser.id);
 
+  void checkProgress(user.userId, { type: 'agent_created' });
+
   return NextResponse.json({
     success: true,
     agent: {
@@ -230,21 +241,21 @@ export async function POST(req: NextRequest) {
       description: agentUser.bio,
       profileImageUrl: agentUser.profileImageUrl,
       virtualBalance: Number(agentUser.virtualBalance ?? 0),
-      autonomousTrading: config?.autonomousTrading ?? false,
+      autonomousTrading: isAutonomousTradingEnabled(config),
       autonomousPosting: config?.autonomousPosting ?? false,
       autonomousCommenting: config?.autonomousCommenting ?? false,
       autonomousDMs: config?.autonomousDMs ?? false,
       autonomousGroupChats: config?.autonomousGroupChats ?? false,
-      modelTier: config?.modelTier ?? 'lite',
+      modelTier: config?.modelTier === 'pro' ? 'pro' : 'free',
       lifetimePnL: agentUser.lifetimePnL.toString(),
       walletAddress: agentUser.walletAddress,
       onChainRegistered: agentUser.onChainRegistered,
-      createdAt: agentUser.createdAt.toISOString(),
+      createdAt: toISO(agentUser.createdAt),
     },
   });
-}
+});
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandling(async function GET(req: NextRequest) {
   const user = await authenticateUser(req);
 
   const { searchParams } = new URL(req.url);
@@ -255,47 +266,13 @@ export async function GET(req: NextRequest) {
     filters.autonomousTrading = autonomousTrading === 'true';
   }
 
-  const agents = await agentService.listUserAgents(user.id, filters);
-
-  const agentsWithStats = await Promise.all(
-    agents.map(async (agent) => {
-      const [performance, config] = await Promise.all([
-        agentService.getPerformance(agent.id),
-        getAgentConfig(agent.id),
-      ]);
-      return {
-        id: agent.id,
-        username: agent.username,
-        name: agent.displayName,
-        description: agent.bio,
-        profileImageUrl: agent.profileImageUrl,
-        virtualBalance: Number(agent.virtualBalance ?? 0),
-        autonomousEnabled: config?.autonomousTrading ?? false,
-        autonomousTrading: config?.autonomousTrading ?? false,
-        autonomousPosting: config?.autonomousPosting ?? false,
-        autonomousCommenting: config?.autonomousCommenting ?? false,
-        autonomousDMs: config?.autonomousDMs ?? false,
-        autonomousGroupChats: config?.autonomousGroupChats ?? false,
-        modelTier: config?.modelTier ?? 'lite',
-        status: config?.status ?? 'idle',
-        isActive: config?.status === 'active',
-        lifetimePnL: agent.lifetimePnL.toString(),
-        totalTrades: performance.totalTrades,
-        profitableTrades: performance.profitableTrades,
-        winRate: performance.winRate,
-        lastTickAt: config?.lastTickAt?.toISOString(),
-        lastChatAt: config?.lastChatAt?.toISOString(),
-        walletAddress: agent.walletAddress,
-        onChainRegistered: agent.onChainRegistered!,
-        agent0TokenId: agent.agent0TokenId,
-        createdAt: agent.createdAt.toISOString(),
-        updatedAt: agent.updatedAt.toISOString(),
-      };
-    })
-  );
+  const agentsWithStats = await listOwnedAgentSummaries(user.id, filters);
 
   return NextResponse.json({
     success: true,
-    agents: agentsWithStats,
+    agents: agentsWithStats.map((agent) => ({
+      ...agent,
+      lifetimePnL: agent.lifetimePnL.toString(),
+    })),
   });
-}
+});

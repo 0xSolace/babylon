@@ -7,7 +7,7 @@
  * @description
  * Updates user profile information including username, display name, bio, images,
  * and social media visibility settings. Includes rate limiting, on-chain profile
- * updates, points awards for profile completion, and backend signing support.
+ * updates, reputation awards for profile completion, and backend signing support.
  *
  * @openapi
  * /api/users/{userId}/update-profile:
@@ -47,9 +47,6 @@
  *                 type: boolean
  *               showWalletPublic:
  *                 type: boolean
- *               onchainTxHash:
- *                 type: string
- *                 description: Transaction hash for on-chain profile update
  *     responses:
  *       200:
  *         description: Profile updated successfully
@@ -62,11 +59,8 @@
  *                   type: object
  *                 message:
  *                   type: string
- *                 pointsAwarded:
+ *                 reputationRewards:
  *                   type: array
- *                 onchain:
- *                   type: object
- *                   nullable: true
  *       400:
  *         description: Username taken or rate limit exceeded
  *       401:
@@ -89,27 +83,23 @@
  *
  */
 
-import type { JsonValue } from '@babylon/api';
 import {
   AuthorizationError,
   authenticate,
   BusinessLogicError,
+  cachedDb,
   checkProfileUpdateRateLimit,
-  confirmOnchainProfileUpdate,
-  isBackendSigningEnabled,
+  isReferralCodeAvailableForUser,
   logProfileUpdate,
   notifyProfileComplete,
-  PointsService,
+  ReputationService,
   requireUserByIdentifier,
   successResponse,
-  updateProfileBackendSigned,
   withErrorHandling,
 } from '@babylon/api';
 import { and, db, eq, ne, sql, users } from '@babylon/db';
-import type { StringRecord } from '@babylon/shared';
 import { logger, UpdateUserSchema, UserIdParamSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
-import type { Address } from 'viem';
 import { trackServerEvent } from '@/lib/posthog/server';
 
 /**
@@ -121,12 +111,12 @@ import { trackServerEvent } from '@/lib/posthog/server';
  *
  * Updates user profile information including username, display name, bio, images, and social
  * media visibility settings. Includes rate limiting, username uniqueness validation, on-chain
- * profile updates (optional), points awards for profile completion, and backend signing support.
+ * profile updates (optional), reputation awards for profile completion, and backend signing support.
  * Only the profile owner can update their own profile.
  *
  * @param request - Next.js request containing profile update fields
  * @param context - Route context with user ID parameter (must match authenticated user)
- * @returns Updated user object with points awarded and on-chain transaction info
+ * @returns Updated user object with reputation rewards and on-chain transaction info
  * @throws {400} Username taken, rate limit exceeded, or invalid input
  * @throws {401} Unauthorized
  * @throws {403} Cannot update another user's profile
@@ -164,7 +154,6 @@ export const POST = withErrorHandling(
       showTwitterPublic,
       showFarcasterPublic,
       showWalletPublic,
-      onchainTxHash,
     } = parsedBody;
 
     // Check username uniqueness only if username is being updated (case-insensitive)
@@ -201,9 +190,6 @@ export const POST = withErrorHandling(
         hasProfileImage: users.hasProfileImage,
         usernameChangedAt: users.usernameChangedAt,
         pointsAwardedForProfile: users.pointsAwardedForProfile,
-        walletAddress: users.walletAddress,
-        onChainRegistered: users.onChainRegistered,
-        nftTokenId: users.nftTokenId,
       })
       .from(users)
       .where(eq(users.id, canonicalUserId))
@@ -225,99 +211,20 @@ export const POST = withErrorHandling(
 
     await checkProfileUpdateRateLimit(canonicalUserId, isUsernameChanging);
 
-    const hasOnchainProfileChanges = [
-      normalizedUsername !== undefined &&
-        normalizedUsername !== (currentUser!.username ?? ''),
-      normalizedDisplayName !== undefined &&
-        normalizedDisplayName !== (currentUser!.displayName ?? ''),
-      normalizedBio !== undefined && normalizedBio !== (currentUser!.bio ?? ''),
-    ].some(Boolean);
-
-    const requiresOnchainUpdate =
-      hasOnchainProfileChanges &&
-      currentUser!.onChainRegistered &&
-      currentUser!.nftTokenId;
-
-    let onchainMetadata: StringRecord<JsonValue> | null = null;
-    let backendSignedTxHash: `0x${string}` | undefined;
-
-    if (requiresOnchainUpdate) {
-      if (isBackendSigningEnabled()) {
-        logger.info(
-          'Using backend signing for profile update',
-          { userId: canonicalUserId },
-          'POST /api/users/[userId]/update-profile'
-        );
-
-        const endpoint = `https://babylon.market/agent/${currentUser!.walletAddress!.toLowerCase()}`;
-        const metadata = {
-          name: normalizedDisplayName!,
-          username: normalizedUsername!,
-          bio: normalizedBio!,
-          profileImageUrl: normalizedProfileImageUrl!,
-          coverImageUrl: normalizedCoverImageUrl!,
-        };
-
-        const result = await updateProfileBackendSigned({
-          userAddress: currentUser!.walletAddress! as Address,
-          metadata,
-          endpoint,
-        });
-
-        backendSignedTxHash = result.txHash;
-        // ProfileMetadata is structurally compatible with StringRecord<JsonValue>
-        // (all fields are string | null, which are JsonValue types)
-        onchainMetadata = result.metadata as unknown as StringRecord<JsonValue>;
-
-        logger.info(
-          'Backend-signed profile update successful',
-          { userId: canonicalUserId, txHash: backendSignedTxHash },
-          'POST /api/users/[userId]/update-profile'
-        );
-
-        logger.error(
-          'Backend signing failed',
-          { userId: canonicalUserId },
-          'POST /api/users/[userId]/update-profile'
-        );
-      } else {
-        const onchainResult = await confirmOnchainProfileUpdate({
-          userId: canonicalUserId,
-          walletAddress: currentUser!.walletAddress!,
-          txHash: onchainTxHash! as `0x${string}`,
-        });
-
-        onchainMetadata = onchainResult.metadata as StringRecord<JsonValue>;
-
-        logger.info(
-          'Confirmed user-signed on-chain profile update',
-          {
-            userId: canonicalUserId,
-            txHash: onchainTxHash,
-            tokenId: onchainResult.tokenId,
-          },
-          'POST /api/users/[userId]/update-profile'
-        );
-      }
-    }
+    // On-chain sync is handled by a separate background job.
+    // Profile updates are now database-first - we save to DB immediately
+    // and the chain sync job will update on-chain state later.
+    //
 
     // Update referral code if username is changing and username is available
     const referralCodeUpdate: { referralCode?: string } = {};
     if (isUsernameChanging && normalizedUsername) {
-      // Check if username is available as referral code (not taken by another user)
-      const [existingUserWithCode] = await db
-        .select({ id: users.id })
-        .from(users)
-        .where(
-          and(
-            eq(users.referralCode, normalizedUsername),
-            ne(users.id, canonicalUserId)
-          )
-        )
-        .limit(1);
+      const isReferralCodeAvailable = await isReferralCodeAvailableForUser(
+        canonicalUserId,
+        normalizedUsername
+      );
 
-      // Only update referral code if username is available
-      if (!existingUserWithCode) {
+      if (isReferralCodeAvailable) {
         referralCodeUpdate.referralCode = normalizedUsername;
       }
     }
@@ -382,12 +289,27 @@ export const POST = withErrorHandling(
         referralCount: users.referralCount,
         referralCode: users.referralCode,
         usernameChangedAt: users.usernameChangedAt,
-        onChainRegistered: users.onChainRegistered,
-        nftTokenId: users.nftTokenId,
+        profileChainSyncNeeded: users.profileChainSyncNeeded,
+        privyId: users.privyId,
       });
 
-    // Award points for profile milestones
-    const pointsAwarded: { reason: string; amount: number }[] = [];
+    // Refresh identifier caches after any profile update because these caches now
+    // store full user rows, not just identifiers.
+    if (updatedUser) {
+      await cachedDb.invalidateUserIdentifierCaches(
+        {
+          id: updatedUser.id,
+          privyId: updatedUser.privyId,
+          username: updatedUser.username,
+        },
+        {
+          username: isUsernameChanging ? currentUser!.username : undefined,
+        }
+      );
+    }
+
+    // Award reputation for profile milestones.
+    const reputationRewards: { reason: string; amount: number }[] = [];
 
     if (!currentUser!.pointsAwardedForProfile && updatedUser) {
       const hasUsername =
@@ -399,19 +321,22 @@ export const POST = withErrorHandling(
 
       if (hasUsername && hasImage && hasBio) {
         const result =
-          await PointsService.awardProfileCompletion(canonicalUserId);
-        if (result.success && result.pointsAwarded > 0) {
-          pointsAwarded.push({
+          await ReputationService.awardProfileCompletion(canonicalUserId);
+        if (result.success && result.reputationAwarded > 0) {
+          reputationRewards.push({
             reason: 'profile_completion',
-            amount: result.pointsAwarded,
+            amount: result.reputationAwarded,
           });
           logger.info(
-            `Awarded ${result.pointsAwarded} points to user ${canonicalUserId} for completing profile (username + image + bio)`,
-            { userId: canonicalUserId, points: result.pointsAwarded },
+            `Awarded ${result.reputationAwarded} reputation to user ${canonicalUserId} for completing profile (username + image + bio)`,
+            { userId: canonicalUserId, reputation: result.reputationAwarded },
             'POST /api/users/[userId]/update-profile'
           );
 
-          await notifyProfileComplete(canonicalUserId, result.pointsAwarded);
+          await notifyProfileComplete(
+            canonicalUserId,
+            result.reputationAwarded
+          );
           logger.info(
             'Profile completion notification sent',
             { userId: canonicalUserId },
@@ -420,26 +345,26 @@ export const POST = withErrorHandling(
 
           // Award referral qualification bonus to referrer if user was referred
           const referralQualificationResult =
-            await PointsService.checkAndQualifyReferral(canonicalUserId).catch(
-              (error) => {
-                // Log error but don't fail the request if qualification check fails
-                logger.warn(
-                  `Failed to check and qualify referral for user ${canonicalUserId}`,
-                  { userId: canonicalUserId, error },
-                  'POST /api/users/[userId]/update-profile'
-                );
-                return null;
-              }
-            );
+            await ReputationService.checkAndQualifyReferral(
+              canonicalUserId
+            ).catch((error) => {
+              // Log error but don't fail the request if qualification check fails
+              logger.warn(
+                `Failed to check and qualify referral for user ${canonicalUserId}`,
+                { userId: canonicalUserId, error },
+                'POST /api/users/[userId]/update-profile'
+              );
+              return null;
+            });
           if (
             referralQualificationResult &&
             referralQualificationResult.success
           ) {
             logger.info(
-              `Awarded ${referralQualificationResult.pointsAwarded} referral qualification points to referrer`,
+              `Awarded ${referralQualificationResult.reputationAwarded} referral qualification reputation to referrer`,
               {
                 referredUserId: canonicalUserId,
-                points: referralQualificationResult.pointsAwarded,
+                reputation: referralQualificationResult.reputationAwarded,
               },
               'POST /api/users/[userId]/update-profile'
             );
@@ -448,10 +373,10 @@ export const POST = withErrorHandling(
       }
     }
 
-    if (pointsAwarded.length > 0) {
+    if (reputationRewards.length > 0) {
       logger.info(
-        `Awarded points for profile updates: ${pointsAwarded.map((p) => `${p.reason}(+${p.amount})`).join(', ')}`,
-        { userId: canonicalUserId, pointsAwarded },
+        `Awarded reputation for profile updates: ${reputationRewards.map((reward) => `${reward.reason}(+${reward.amount})`).join(', ')}`,
+        { userId: canonicalUserId, reputationRewards },
         'POST /api/users/[userId]/update-profile'
       );
     }
@@ -460,20 +385,13 @@ export const POST = withErrorHandling(
     const fieldsUpdated = Object.keys(parsedBody).filter(
       (key) => parsedBody[key as keyof typeof parsedBody] !== undefined
     );
-    await logProfileUpdate(
-      canonicalUserId,
-      fieldsUpdated,
-      Boolean(backendSignedTxHash),
-      backendSignedTxHash || onchainTxHash
-    );
+    await logProfileUpdate(canonicalUserId, fieldsUpdated, false);
 
     logger.info(
       'Profile updated successfully',
       {
         userId: canonicalUserId,
-        pointsAwarded: pointsAwarded.length,
-        onchainConfirmed: requiresOnchainUpdate,
-        backendSigned: Boolean(backendSignedTxHash),
+        reputationRewardsCount: reputationRewards.length,
       },
       'POST /api/users/[userId]/update-profile'
     );
@@ -491,9 +409,10 @@ export const POST = withErrorHandling(
         normalizedBio !== undefined && normalizedBio !== currentUser!.bio,
       usernameChanged: isUsernameChanging,
       profileComplete: updatedUser?.profileComplete ?? false,
-      pointsAwarded: pointsAwarded.reduce((sum, p) => sum + p.amount, 0),
-      onchainUpdate: requiresOnchainUpdate,
-      backendSigned: Boolean(backendSignedTxHash),
+      reputationAwarded: reputationRewards.reduce(
+        (sum, reward) => sum + reward.amount,
+        0
+      ),
     }).catch((error) => {
       logger.warn('Failed to track profile_updated event', { error });
     });
@@ -501,14 +420,11 @@ export const POST = withErrorHandling(
     return successResponse({
       user: updatedUser,
       message: 'Profile updated successfully',
-      pointsAwarded,
-      onchain: requiresOnchainUpdate
-        ? {
-            txHash: backendSignedTxHash || onchainTxHash,
-            metadata: onchainMetadata,
-            backendSigned: Boolean(backendSignedTxHash),
-          }
-        : null,
+      reputationAwarded: reputationRewards.reduce(
+        (sum, reward) => sum + reward.amount,
+        0
+      ),
+      reputationRewards,
     });
   }
 );

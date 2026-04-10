@@ -5,13 +5,18 @@
  * Uses the StaticDataRegistry to access actor definitions.
  *
  * NOTE: All character data (personality, postStyle, voice, postExample, domain)
- * is defined in packages/engine/src/data/actors/*.ts files.
+ * is sourced from the currently loaded pack actor definitions.
  * This module provides derived configuration and utility functions.
  *
  * @module services/npc-character-config
  */
 
 import { logger } from '@babylon/shared';
+import {
+  type RngFunction,
+  randomChance,
+  shuffleArray,
+} from '../utils/randomization';
 import { StaticDataRegistry } from './static-data-registry';
 
 /**
@@ -138,27 +143,15 @@ const OFFDOMAIN_PROBABILITIES: Record<PersonalityType, number> = {
 };
 
 /**
- * Known rivalries between actors (actor ID pairs)
- * These are NPCs who naturally disagree with each other
- */
-const KNOWN_RIVALRIES: Array<[string, string]> = [
-  ['sam-ailtman', 'dairiio-amodei'], // OpenAGI vs Aitropic (acceleration vs safety)
-  ['ailon-musk', 'mark-zuckerborg'], // TeslAI vs MetAI
-  ['ailon-musk', 'jeff-baizos'], // SpaceAIX vs Blue Origain
-  ['trump-terminal', 'nancy-pelosai'], // Political opposition
-  ['trump-terminal', 'rachel-maiddow'], // Political opposition
-  ['ben-shapairo', 'haisan-piker'], // Political opposition
-  ['peter-thail', 'marc-aindreessen'], // VC philosophical differences
-  ['eliezer-yudkowskai', 'guillaime-verdon'], // AI doomer vs e/acc
-];
-
-/**
- * Build rivalry map for quick lookup
+ * Build rivalry map for quick lookup.
+ * Loads rivalries dynamically from StaticDataRegistry (pack data)
+ * instead of a hardcoded array.
  */
 function buildRivalryMap(): Map<string, string[]> {
   const map = new Map<string, string[]>();
+  const rivalries = StaticDataRegistry.getRivalries();
 
-  for (const [a, b] of KNOWN_RIVALRIES) {
+  for (const [a, b] of rivalries) {
     map.set(a, [...(map.get(a) || []), b]);
     map.set(b, [...(map.get(b) || []), a]);
   }
@@ -166,7 +159,18 @@ function buildRivalryMap(): Map<string, string[]> {
   return map;
 }
 
-const RIVALRY_MAP = buildRivalryMap();
+/** Lazily-built rivalry map — rebuilt each time it's accessed to reflect current pack data */
+let _rivalryMapCache: Map<string, string[]> | null = null;
+let _rivalryMapPackId: string | null = null;
+
+function getRivalryMap(): Map<string, string[]> {
+  const currentPackId = StaticDataRegistry.getPackId();
+  if (_rivalryMapCache === null || _rivalryMapPackId !== currentPackId) {
+    _rivalryMapCache = buildRivalryMap();
+    _rivalryMapPackId = currentPackId;
+  }
+  return _rivalryMapCache;
+}
 
 /**
  * Domain keywords for topic matching
@@ -314,7 +318,7 @@ export function getCharacterConfig(actorId: string): CharacterConfig {
 
   const personalityType = derivePersonalityType(actor.personality);
   const domains = actor.domain || [];
-  const rivals = RIVALRY_MAP.get(actorId) || [];
+  const rivals = getRivalryMap().get(actorId) || [];
   const voicePatterns = deriveVoicePatterns(actorId, actor.postStyle);
   const templatePosts = actor.postExample || [];
 
@@ -347,7 +351,7 @@ export function getCharacterConfigOrDefault(actorId: string): CharacterConfig {
 
   const personalityType = derivePersonalityType(actor.personality);
   const domains = actor.domain || [];
-  const rivals = RIVALRY_MAP.get(actorId) || [];
+  const rivals = getRivalryMap().get(actorId) || [];
   const voicePatterns = deriveVoicePatterns(actorId, actor.postStyle);
   const templatePosts = actor.postExample || [];
 
@@ -431,11 +435,13 @@ export function checkVoiceConsistency(
  *
  * @param actorId - The actor's ID
  * @param topicText - The topic/question text
+ * @param rng - Optional random number generator (defaults to Math.random)
  * @returns Whether the actor should post about this topic
  */
 export function shouldPostAboutTopic(
   actorId: string,
-  topicText: string
+  topicText: string,
+  rng: RngFunction = Math.random
 ): boolean {
   const actor = StaticDataRegistry.getActor(actorId);
   const config = getCharacterConfigOrDefault(actorId);
@@ -504,7 +510,7 @@ export function shouldPostAboutTopic(
   const scaledProbability =
     config.offDomainProbability * (1 - engagementThreshold);
 
-  if (Math.random() < scaledProbability) {
+  if (randomChance(scaledProbability, rng)) {
     logger.debug(
       `Actor ${actorId} posting off-domain`,
       { topicText: topicText.substring(0, 50), probability: scaledProbability },
@@ -520,25 +526,15 @@ export function shouldPostAboutTopic(
  * Check if actor should generate an organic (non-question) post
  *
  * @param actorId - The actor's ID
+ * @param rng - Optional random number generator (defaults to Math.random)
  * @returns Whether to generate an organic post
  */
-export function shouldGenerateOrganicPost(actorId: string): boolean {
+export function shouldGenerateOrganicPost(
+  actorId: string,
+  rng: RngFunction = Math.random
+): boolean {
   const config = getCharacterConfigOrDefault(actorId);
-  return Math.random() < config.organicPostProbability;
-}
-
-/**
- * Fisher-Yates shuffle for uniform randomness
- */
-function fisherYatesShuffle<T>(array: T[]): T[] {
-  const shuffled = [...array];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    const temp = shuffled[i];
-    shuffled[i] = shuffled[j] as T;
-    shuffled[j] = temp as T;
-  }
-  return shuffled;
+  return randomChance(config.organicPostProbability, rng);
 }
 
 /**
@@ -546,17 +542,22 @@ function fisherYatesShuffle<T>(array: T[]): T[] {
  *
  * @param actorId - The actor's ID
  * @param count - Number of templates to return
+ * @param rng - Optional random number generator (defaults to Math.random)
  * @returns Array of template posts
  */
-export function getTemplatePosts(actorId: string, count: number = 3): string[] {
+export function getTemplatePosts(
+  actorId: string,
+  count: number = 3,
+  rng: RngFunction = Math.random
+): string[] {
   const config = getCharacterConfigOrDefault(actorId);
 
   if (config.templatePosts.length === 0) {
     return [];
   }
 
-  // Shuffle using Fisher-Yates and take requested count
-  const shuffled = fisherYatesShuffle(config.templatePosts);
+  // Shuffle using shared utility and take requested count
+  const shuffled = shuffleArray(config.templatePosts, rng);
   return shuffled.slice(0, Math.min(count, shuffled.length));
 }
 
@@ -567,7 +568,7 @@ export function getTemplatePosts(actorId: string, count: number = 3): string[] {
  * @returns Array of rival actor IDs
  */
 export function getActorRivals(actorId: string): string[] {
-  return RIVALRY_MAP.get(actorId) || [];
+  return getRivalryMap().get(actorId) || [];
 }
 
 /**

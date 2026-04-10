@@ -54,11 +54,16 @@ export function getStaticAssetUrl(path: string, cdnBaseUrl?: string): string {
   return normalizedPath;
 }
 
+/** Count of preset profile images under {@link AGENT_DEFAULT_PROFILE_DIR} (`pfp-001.png` …). */
+export const TOTAL_AGENT_DEFAULT_PROFILE_PICTURES = 150;
+
+const AGENT_DEFAULT_PROFILE_DIR = '/assets/user-pfps';
+
 /**
  * Get deterministic fallback profile image based on ID
  *
  * @description Returns a random-looking but deterministic profile image from
- * the user-profiles set based on a hash of the ID.
+ * the `user-pfps` preset set based on a hash of the ID.
  *
  * @param {string} id - User or entity ID
  * @param {string} [cdnBaseUrl] - Optional CDN base URL
@@ -68,16 +73,55 @@ export function getFallbackProfileImageUrl(
   id: string,
   cdnBaseUrl?: string
 ): string {
-  // Hash the id to get a number between 1-100
   const hash = Array.from(id).reduce(
     (acc, char) => acc + char.charCodeAt(0),
     0
   );
-  const profileNum = (hash % 100) + 1;
+  const profileNum = (hash % TOTAL_AGENT_DEFAULT_PROFILE_PICTURES) + 1;
   return getStaticAssetUrl(
-    `/assets/user-profiles/profile-${profileNum}.jpg`,
+    `${AGENT_DEFAULT_PROFILE_DIR}/pfp-${String(profileNum).padStart(3, '0')}.png`,
     cdnBaseUrl
   );
+}
+
+/**
+ * Default profile image path for new agents (randomized at creation in the web app).
+ * Same numbered set as {@link getFallbackProfileImageUrl} (`pfp-001.png` … `pfp-${TOTAL}`).
+ */
+export function getAgentDefaultProfileImageUrl(
+  index1Based: number,
+  cdnBaseUrl?: string
+): string {
+  const n = Math.min(
+    TOTAL_AGENT_DEFAULT_PROFILE_PICTURES,
+    Math.max(1, Math.floor(index1Based))
+  );
+  return getStaticAssetUrl(
+    `${AGENT_DEFAULT_PROFILE_DIR}/pfp-${String(n).padStart(3, '0')}.png`,
+    cdnBaseUrl
+  );
+}
+
+/** Uniform random index in 1..TOTAL_AGENT_DEFAULT_PROFILE_PICTURES for new agent avatars. */
+export function randomAgentDefaultProfileIndex(): number {
+  return Math.floor(Math.random() * TOTAL_AGENT_DEFAULT_PROFILE_PICTURES) + 1;
+}
+
+/**
+ * Parse preset index from a static URL: `pfp-NNN.png` (user-pfps), or legacy
+ * `profile-N.jpg` / `monkey-N.jpg`.
+ */
+export function parseAgentPresetProfileIndex(
+  url: string | null | undefined
+): number | undefined {
+  if (!url) return undefined;
+  const pfp = url.match(/pfp-(\d+)\.png/i);
+  if (pfp?.[1]) return parseInt(pfp[1], 10);
+  const monkey = url.match(/monkey-(\d+)\.jpg/);
+  if (monkey?.[1]) return parseInt(monkey[1], 10);
+  const profile = url.match(/profile-(\d+)\.jpg/);
+  if (profile?.[1]) return parseInt(profile[1], 10);
+  return undefined;
 }
 
 /**

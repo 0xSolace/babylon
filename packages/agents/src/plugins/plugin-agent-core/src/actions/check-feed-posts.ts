@@ -5,6 +5,8 @@
  * Similar to what users see on the /feed page.
  */
 
+import type { MessageTag } from '@babylon/shared';
+import { getTimeAgo } from '@babylon/shared';
 import type {
   Action,
   ActionResult,
@@ -15,20 +17,9 @@ import type {
 } from '@elizaos/core';
 import { logger } from '../../../../shared/logger';
 
-/**
- * Format relative time (e.g., "2h ago", "15m ago")
- */
-function getTimeAgo(date: Date): string {
-  const now = Date.now();
-  const diffMs = now - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return 'just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  return `${diffDays}d ago`;
+/** Extended ActionResult with optional tag for UI */
+interface ActionResultWithTag extends ActionResult {
+  tag?: MessageTag;
 }
 
 interface FeedPost {
@@ -37,6 +28,7 @@ interface FeedPost {
   authorId: string;
   authorName: string;
   authorUsername?: string;
+  authorProfileImageUrl?: string | null;
   timestamp: string;
   likeCount?: number;
   commentCount?: number;
@@ -62,7 +54,7 @@ export const checkFeedPostsAction: Action = {
       description: 'Number of posts to retrieve (default: 10, max: 50)',
       required: false,
     },
-  },
+  } as unknown as Action['parameters'],
 
   examples: [
     [
@@ -125,10 +117,14 @@ export const checkFeedPostsAction: Action = {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
-      const response = await fetch(`${baseUrl}/api/posts?limit=${limit}`, {
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
+      let response: Response;
+      try {
+        response = await fetch(`${baseUrl}/api/posts?limit=${limit}`, {
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       if (!response.ok) {
         throw new Error(`Failed to fetch feed: ${response.status}`);
@@ -162,6 +158,7 @@ export const checkFeedPostsAction: Action = {
         content: post.content,
         authorName: post.authorName || post.authorUsername || 'Unknown',
         authorId: post.authorId,
+        authorProfileImageUrl: post.authorProfileImageUrl,
         timeAgo: getTimeAgo(new Date(post.timestamp)),
         likeCount: post.likeCount ?? 0,
         commentCount: post.commentCount ?? 0,
@@ -203,7 +200,18 @@ export const checkFeedPostsAction: Action = {
             commentCount: p.commentCount,
           })),
         },
-      };
+        // Tag for sidebar display
+        tag: {
+          type: 'feed',
+          label: 'Feed',
+          icon: 'Newspaper',
+          data: {
+            posts: formattedPosts,
+            count: feedPosts.length,
+            hasMore: data.hasMore,
+          },
+        },
+      } as ActionResultWithTag;
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       logger.error('[CHECK_FEED_POSTS] Error:', errorMsg);

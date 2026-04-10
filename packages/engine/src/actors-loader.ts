@@ -1,14 +1,14 @@
 /**
  * Actors Data Loader
  *
- * Loads actors, organizations, and relationships from TypeScript data files.
- * Uses direct imports for optimal performance and type safety.
+ * Loads compatibility actor and organization data for legacy callers.
+ * Actor records are pack-backed and exposed as `ActorData` for older APIs.
  *
  * **Architecture:**
- * - Individual TypeScript files for each actor and org
- * - Index files export all entities
- * - In-memory caching for performance
- * - Direct imports for single-entity lookups
+ * - Default actor roster is sourced from the active pack
+ * - Compatibility mappers expose pack actors as `ActorData`
+ * - Organizations still use the existing compatibility source files
+ * - In-memory caching avoids repeated cloning work
  *
  * **Performance:**
  * - First load: <1ms (direct imports, no file I/O)
@@ -82,7 +82,7 @@ function initializeCache(): void {
 }
 
 /**
- * Loads all actors data from TypeScript imports
+ * Loads all compatibility actor and organization data
  *
  * @deprecated Use StaticDataRegistry.getAllActors() and StaticDataRegistry.getAllOrganizations() instead.
  * This function maintains a separate cache from StaticDataRegistry, causing memory duplication.
@@ -117,8 +117,7 @@ export function loadActorsData(options?: LoadActorsOptions): ActorsDatabase {
 }
 
 /**
- * Loads a single actor by ID - OPTIMIZED with caching
- * Checks cache first, then looks up from imported data
+ * Loads a single actor by ID from the pack-backed compatibility cache.
  *
  * **Performance:** Direct cache lookup, no I/O
  *
@@ -157,7 +156,7 @@ export function loadOrganizationById(orgId: string): Organization | null {
 }
 
 /**
- * Get all actor IDs from the imported data
+ * Get all actor IDs from the compatibility cache.
  * Useful when you only need IDs for lookups
  *
  * @returns Array of actor IDs

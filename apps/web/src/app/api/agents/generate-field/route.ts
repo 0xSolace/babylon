@@ -101,6 +101,7 @@ import {
   authenticateUser,
   checkRateLimitAndDuplicates,
   RATE_LIMIT_CONFIGS,
+  withErrorHandling,
 } from '@babylon/api';
 import { isPromptLoggingEnabled, logPrompt } from '@babylon/engine';
 import { logger } from '@babylon/shared';
@@ -161,7 +162,7 @@ function extractContent(raw: string): string | null {
   return parsed.content.trim().replace(/^["']|["']$/g, ''); // Remove leading/trailing quotes
 }
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandling(async function POST(req: NextRequest) {
   const user = await authenticateUser(req);
 
   // Apply rate limiting - 10 field generations per minute
@@ -219,7 +220,7 @@ export async function POST(req: NextRequest) {
     let generatedValue: string | undefined;
 
     try {
-      // Use Groq qwen/qwen3-32b if available, otherwise fall back to Claude
+      // Use Groq openai/gpt-oss-120b if available, otherwise fall back to Claude
       if (process.env.GROQ_API_KEY) {
         const groq = createGroq({
           apiKey: process.env.GROQ_API_KEY,
@@ -227,7 +228,7 @@ export async function POST(req: NextRequest) {
         });
 
         const result = await generateText({
-          model: groq.languageModel('qwen/qwen3-32b'),
+          model: groq.languageModel('openai/gpt-oss-120b'),
           prompt,
           system: systemPrompt,
           temperature: isRetry ? 0.6 : 0.8, // Lower temperature on retry for more predictable output
@@ -248,7 +249,7 @@ export async function POST(req: NextRequest) {
             output: generatedValue,
             metadata: {
               provider: 'groq',
-              model: 'qwen/qwen3-32b',
+              model: 'openai/gpt-oss-120b',
               temperature: isRetry ? 0.6 : 0.8,
               maxTokens: MAX_TOKENS,
             },
@@ -387,7 +388,7 @@ export async function POST(req: NextRequest) {
     success: true,
     value: cleanedValue,
   });
-}
+});
 
 /**
  * Trading strategy archetypes for variety in generation

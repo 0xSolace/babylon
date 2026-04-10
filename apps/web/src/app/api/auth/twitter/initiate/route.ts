@@ -35,9 +35,14 @@
  * @see {@link https://developer.twitter.com/en/docs/authentication/oauth-2-0} Twitter OAuth 2.0
  */
 
-import { authenticate } from '@babylon/api';
+import { authenticate, withErrorHandling } from '@babylon/api';
 import { db } from '@babylon/db';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+import {
+  generateSnowflakeId,
+  getWaitlistBaseUrl,
+  logger,
+  toISO,
+} from '@babylon/shared';
 import crypto from 'crypto';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -56,7 +61,7 @@ function generateCodeChallenge(verifier: string): string {
   return crypto.createHash('sha256').update(verifier).digest('base64url');
 }
 
-export async function GET(request: NextRequest) {
+export const GET = withErrorHandling(async function GET(request: NextRequest) {
   const authUser = await authenticate(request);
   const userId = authUser.userId;
 
@@ -85,7 +90,7 @@ export async function GET(request: NextRequest) {
       userId,
       state,
       oauthRecordId: oauthRecord.id,
-      expiresAt: oauthRecord.expiresAt.toISOString(),
+      expiresAt: toISO(oauthRecord.expiresAt),
     },
     'TwitterInitiate'
   );
@@ -95,7 +100,7 @@ export async function GET(request: NextRequest) {
   authUrl.searchParams.set('client_id', process.env.TWITTER_CLIENT_ID!);
   authUrl.searchParams.set(
     'redirect_uri',
-    `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/twitter/callback`
+    `${getWaitlistBaseUrl()}/api/auth/twitter/callback`
   );
   authUrl.searchParams.set(
     'scope',
@@ -112,4 +117,4 @@ export async function GET(request: NextRequest) {
   );
 
   return NextResponse.redirect(authUrl.toString());
-}
+});

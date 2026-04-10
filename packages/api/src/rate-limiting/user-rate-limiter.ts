@@ -7,6 +7,7 @@
  */
 
 import { logger } from '@babylon/shared';
+
 import { randomUUID } from 'crypto';
 import { getRedisClient, isRedisAvailable } from '../redis/client';
 
@@ -46,6 +47,11 @@ export const RATE_LIMIT_CONFIGS = {
     actionType: 'like_comment',
   }, // 20 likes per minute
   SHARE_POST: { maxRequests: 5, windowMs: 60000, actionType: 'share_post' }, // 5 shares per minute
+  FEED_EVENT_BATCH: {
+    maxRequests: 120,
+    windowMs: 60000,
+    actionType: 'feed_event_batch',
+  }, // 120 telemetry batches per minute per user
 
   // Social actions
   FOLLOW_USER: { maxRequests: 10, windowMs: 60000, actionType: 'follow_user' }, // 10 follows per minute
@@ -61,6 +67,11 @@ export const RATE_LIMIT_CONFIGS = {
     windowMs: 60000,
     actionType: 'send_message',
   }, // 20 messages per minute
+  REACTION_TOGGLE: {
+    maxRequests: 30,
+    windowMs: 60000,
+    actionType: 'reaction_toggle',
+  }, // 30 reaction toggles per minute
   TYPING_INDICATOR: {
     maxRequests: 60,
     windowMs: 60000,
@@ -77,12 +88,33 @@ export const RATE_LIMIT_CONFIGS = {
     actionType: 'submit_feedback',
   }, // 5 feedback submissions per minute
 
+  /** Public research / model pilot form (/research); no auth — keyed by IP only */
+  MODEL_PILOT_INQUIRY: {
+    maxRequests: 5,
+    windowMs: 60000,
+    actionType: 'model_pilot_inquiry',
+  },
+
+  // On-chain registration (expensive operation, limit aggressively)
+  ONCHAIN_REGISTRATION: {
+    maxRequests: 3,
+    windowMs: 3600000,
+    actionType: 'onchain_registration',
+  }, // 3 attempts per hour
+
   // Profile updates
   UPDATE_PROFILE: {
     maxRequests: 5,
     windowMs: 60000,
     actionType: 'update_profile',
   }, // 5 updates per minute
+
+  // SIWE Authentication
+  SIWE_NONCE: {
+    maxRequests: 10,
+    windowMs: 60000,
+    actionType: 'siwe_nonce',
+  }, // 10 nonce requests per minute per IP
 
   // Agent actions
   GENERATE_AGENT_PROFILE: {
@@ -95,6 +127,11 @@ export const RATE_LIMIT_CONFIGS = {
     windowMs: 60000,
     actionType: 'generate_agent_field',
   }, // 10 field generations per minute
+  GENERATE_AGENT_AVATAR: {
+    maxRequests: 8,
+    windowMs: 60000,
+    actionType: 'generate_agent_avatar',
+  }, // fal.ai image gen — keep tight
 
   // Market actions
   OPEN_POSITION: {
@@ -147,7 +184,7 @@ export const RATE_LIMIT_CONFIGS = {
     actionType: 'public_balance_fetch_anonymous',
   }, // 10 fetches per minute for anonymous bucket (shared, stricter)
 
-  // NFT image proxy (GitHub API protection)
+  // NFT image proxy (IPFS gateway protection)
   PUBLIC_NFT_IMAGE: {
     maxRequests: 60,
     windowMs: 60000,
@@ -160,6 +197,97 @@ export const RATE_LIMIT_CONFIGS = {
     windowMs: 60000,
     actionType: 'public_nft_image_anonymous',
   }, // 10 fetches per minute for anonymous bucket
+
+  // External agent endpoints
+  EXTERNAL_AGENT_DISCOVER: {
+    maxRequests: 60,
+    windowMs: 60000,
+    actionType: 'external_agent_discover',
+  }, // 60 discovery requests per minute (default, can be overridden by agent's discoveryRateLimit)
+  EXTERNAL_AGENT_REGISTER: {
+    maxRequests: 5,
+    windowMs: 3600000,
+    actionType: 'external_agent_register',
+  }, // 5 registrations per hour per user
+
+  // A2A transfer operations (stricter limit for points/token transfers)
+  A2A_TRANSFER_OPS: {
+    maxRequests: Number(process.env.A2A_TRANSFER_RATE_LIMIT) || 10,
+    windowMs: 60000,
+    actionType: 'a2a_transfer_ops',
+  }, // 10 transfers per minute (configurable via env)
+
+  /**
+   * Public read endpoints (GETs that allow unauthenticated access).
+   * WHY tiered: Anonymous callers are keyed by IP (or shared "anonymous" when IP
+   * is unknown) so we can limit abuse without requiring sign-in. Authenticated users
+   * and API keys get higher limits because they are accountable and we want to avoid
+   * blocking legitimate apps. WHY 60/180/30: 60/min per IP allows normal browsing
+   * while curbing scrapers; 180/min per user supports power users and API clients;
+   * 30/min anonymous is a strict fallback when we cannot distinguish callers (e.g.
+   * behind some proxies) so we still limit total load.
+   */
+  PUBLIC_READ: {
+    maxRequests: 60,
+    windowMs: 60000,
+    actionType: 'public_read',
+  },
+  PUBLIC_READ_AUTHED: {
+    maxRequests: 180,
+    windowMs: 60000,
+    actionType: 'public_read_authed',
+  },
+  PUBLIC_READ_ANONYMOUS: {
+    maxRequests: 30,
+    windowMs: 60000,
+    actionType: 'public_read_anonymous',
+  },
+
+  /**
+   * SSE/firehose token or connection rate (long-lived connections).
+   * WHY stricter than read: Each "request" is a new connection or token that may
+   * stay open for minutes, so we allow fewer per minute (5 per IP, 20 per user,
+   * 2 anonymous). Prevents a single actor from opening many firehose connections
+   * without auth.
+   */
+  PUBLIC_FIREHOSE: {
+    maxRequests: 5,
+    windowMs: 60000,
+    actionType: 'public_firehose',
+  },
+  PUBLIC_FIREHOSE_AUTHED: {
+    maxRequests: 20,
+    windowMs: 60000,
+    actionType: 'public_firehose_authed',
+  },
+  PUBLIC_FIREHOSE_ANONYMOUS: {
+    maxRequests: 2,
+    windowMs: 60000,
+    actionType: 'public_firehose_anonymous',
+  },
+
+  // Wallet read endpoints (authenticated, per-user)
+  WALLET_READ: {
+    maxRequests: 60,
+    windowMs: 60000,
+    actionType: 'wallet_read',
+  }, // 60 reads per minute per user (tokens, nfts, transactions)
+
+  // Wallet write endpoints (sendToken, sendNft)
+  WALLET_TRANSFER: {
+    maxRequests: 10,
+    windowMs: 60000,
+    actionType: 'wallet_transfer',
+  }, // 10 transfers per minute per user
+
+  // Step-up auth / limit elevation requests
+  // Reserved for the elevated-limit step-up auth flow (WalletTransferLimit.elevatedUntil).
+  // Wire to a dedicated endpoint when limit elevation UI is built.
+  WALLET_STEP_UP: {
+    maxRequests: 5,
+    windowMs: 300000,
+    actionType: 'wallet_step_up',
+  }, // 5 step-up requests per 5 minutes
 
   // Default fallback
   DEFAULT: { maxRequests: 30, windowMs: 60000, actionType: 'default' }, // 30 requests per minute

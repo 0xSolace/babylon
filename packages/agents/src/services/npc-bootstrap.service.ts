@@ -22,12 +22,9 @@ import {
 } from '@babylon/engine';
 import type { ActorData, AgentCapabilities } from '@babylon/shared';
 import {
-  getCurrentChainId,
-  IDENTITY_REGISTRY_BASE_SEPOLIA,
   logger,
   mapActorToOASFDomains,
   mapActorToOASFSkills,
-  REPUTATION_SYSTEM_BASE_SEPOLIA,
 } from '@babylon/shared';
 import { agentRuntimeManager } from '../runtime/AgentRuntimeManager';
 import { AgentStatus, AgentType } from '../types/agent-registry';
@@ -191,8 +188,13 @@ export class NPCBootstrapService {
         throw new Error(`ActorData not found for actor ${actor.id}`);
       }
 
-      // Build NPC system prompt from ActorData
-      const systemPrompt = this.buildNpcSystemPrompt(actorData);
+      // Try to get full PackActor for richer Eliza character fields
+      const packActor = StaticDataRegistry.getPackActor(actor.id);
+
+      // Build NPC system prompt — prefer PackActor system prompt if available
+      const systemPrompt = packActor?.system
+        ? packActor.system
+        : this.buildNpcSystemPrompt(actorData);
 
       // Build NPC capabilities from ActorData
       const capabilities = this.buildNpcCapabilities(actorData);
@@ -314,13 +316,6 @@ export class NPCBootstrapService {
       // Platform and user type
       platform: 'babylon',
       userType: 'npc',
-
-      // Game network configuration (from canonical config)
-      gameNetwork: {
-        chainId: getCurrentChainId(),
-        registryAddress: IDENTITY_REGISTRY_BASE_SEPOLIA,
-        reputationAddress: REPUTATION_SYSTEM_BASE_SEPOLIA,
-      },
 
       // OASF Taxonomy Support (Agent0 SDK v0.31.0)
       skills: oasfSkills,

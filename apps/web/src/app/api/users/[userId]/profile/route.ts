@@ -113,14 +113,15 @@
  */
 
 import {
-  cachedDb,
+  addPublicReadHeaders,
   findUserByIdentifier,
-  optionalAuth,
+  publicRateLimit,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { logger, UserIdParamSchema } from '@babylon/shared';
+import { logger, toISO, toISOOrNull, UserIdParamSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+import { getOptionalProfileStats } from '@/lib/users/profile-stats';
 
 /**
  * GET Handler for User Profile
@@ -162,45 +163,21 @@ export const GET = withErrorHandling(
     request: NextRequest,
     context: { params: Promise<{ userId: string }> }
   ) => {
+    const { error, rateLimitInfo } = await publicRateLimit(request);
+    if (error) return error;
+
     const params = await context.params;
     const { userId } = UserIdParamSchema.parse(params);
 
-    // Optional authentication
-    await optionalAuth(request);
+    // findUserByIdentifier returns a fully-typed User and shares the same cache as
+    // findUserByIdentifierWithSelect (both use classification-based routing + Redis cache).
+    const dbUser = await findUserByIdentifier(userId);
 
-    // Get user profile - use findUserByIdentifier to handle new Privy users gracefully
-    const dbUser = await findUserByIdentifier(userId, {
-      id: true,
-      walletAddress: true,
-      username: true,
-      displayName: true,
-      bio: true,
-      profileImageUrl: true,
-      coverImageUrl: true,
-      isActor: true,
-      profileComplete: true,
-      hasUsername: true,
-      hasBio: true,
-      hasProfileImage: true,
-      onChainRegistered: true,
-      nftTokenId: true,
-      virtualBalance: true,
-      lifetimePnL: true,
-      reputationPoints: true,
-      earnedPoints: true,
-      invitePoints: true,
-      bonusPoints: true,
-      referralCount: true,
-      referralCode: true,
-      hasFarcaster: true,
-      hasTwitter: true,
-      farcasterUsername: true,
-      twitterUsername: true,
-      usernameChangedAt: true,
-      createdAt: true,
-    });
-
-    // If user doesn't exist yet (new Privy user who hasn't completed signup), return null
+    // If user doesn't exist, findUserByIdentifierWithSelect returns null for non-existent users
+    // WHY return { user: null } instead of throwing NotFoundError?
+    // - This route is public (no auth required) and handles new Privy users gracefully
+    // - New Privy users may authenticate before completing signup, so they won't exist in DB yet
+    // - Returning null allows frontend to handle "user not found" vs "user needs onboarding" states
     if (!dbUser) {
       logger.info(
         "User not found - new Privy user who hasn't completed signup",
@@ -213,15 +190,18 @@ export const GET = withErrorHandling(
     }
 
     // Get cached profile stats (followers, following, posts, etc.)
-    const stats = await cachedDb.getUserProfileStats(dbUser.id);
-
-    logger.info(
-      'User profile fetched successfully',
-      { userId, stats },
+    const stats = await getOptionalProfileStats(
+      dbUser.id,
       'GET /api/users/[userId]/profile'
     );
 
-    return successResponse({
+    logger.info(
+      'User profile fetched successfully',
+      { userId, statsAvailable: Boolean(stats) },
+      'GET /api/users/[userId]/profile'
+    );
+
+    const res = successResponse({
       user: {
         id: dbUser.id,
         walletAddress: dbUser.walletAddress,
@@ -231,12 +211,17 @@ export const GET = withErrorHandling(
         profileImageUrl: dbUser.profileImageUrl,
         coverImageUrl: dbUser.coverImageUrl,
         isActor: dbUser.isActor,
+        isAgent: dbUser.isAgent,
+        managedBy: dbUser.managedBy,
         profileComplete: dbUser.profileComplete,
         hasUsername: dbUser.hasUsername,
         hasBio: dbUser.hasBio,
         hasProfileImage: dbUser.hasProfileImage,
         onChainRegistered: dbUser.onChainRegistered,
         nftTokenId: dbUser.nftTokenId,
+        // WHY Number() conversion? virtualBalance and lifetimePnL are decimal types
+        // stored as strings in the database. We convert to numbers for JSON response.
+        // WHY ?? 0 fallback? Defensive programming - if somehow null, default to 0
         virtualBalance: Number(dbUser.virtualBalance ?? 0),
         lifetimePnL: Number(dbUser.lifetimePnL ?? 0),
         reputationPoints: dbUser.reputationPoints,
@@ -249,17 +234,15 @@ export const GET = withErrorHandling(
         hasTwitter: dbUser.hasTwitter,
         farcasterUsername: dbUser.farcasterUsername,
         twitterUsername: dbUser.twitterUsername,
-        usernameChangedAt: dbUser.usernameChangedAt?.toISOString() || null,
-        createdAt: dbUser.createdAt.toISOString(),
-        stats: stats || {
-          positions: 0,
-          comments: 0,
-          reactions: 0,
-          followers: 0,
-          following: 0,
-          posts: 0,
-        },
+        // WHY optional chaining for usernameChangedAt? Field is nullable (only set when username changes)
+        // WHY || null? If toISOString() somehow returns empty string, return null instead
+        usernameChangedAt: toISOOrNull(dbUser.usernameChangedAt),
+        // WHY no optional chaining for createdAt? Field is NOT NULL in schema (always present)
+        createdAt: toISO(dbUser.createdAt),
+        stats,
       },
     });
+    if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
+    return res;
   }
 );

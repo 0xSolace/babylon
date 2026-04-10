@@ -50,9 +50,16 @@
  * ```
  */
 
-import { requireUserByIdentifier } from '@babylon/api';
+import {
+  addPublicReadHeaders,
+  publicRateLimit,
+  requireUserByIdentifier,
+  withErrorHandling,
+} from '@babylon/api';
 import { db } from '@babylon/db';
 import { NPCInvestmentManager } from '@babylon/engine';
+import { toISO } from '@babylon/shared';
+import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
 interface RouteParams {
@@ -61,7 +68,13 @@ interface RouteParams {
   }>;
 }
 
-export async function GET(_request: Request, { params }: RouteParams) {
+export const GET = withErrorHandling(async function GET(
+  request: NextRequest,
+  { params }: RouteParams
+) {
+  const { error, rateLimitInfo } = await publicRateLimit(request);
+  if (error) return error;
+
   const { actorId } = await params;
 
   const actor = await requireUserByIdentifier(actorId);
@@ -116,10 +129,10 @@ export async function GET(_request: Request, { params }: RouteParams) {
     currentPrice: Number.parseFloat(pos.currentPrice!.toString()),
     unrealizedPnL: Number.parseFloat(pos.unrealizedPnL!.toString()),
     leverage: pos.leverage,
-    createdAt: pos.openedAt.toISOString(),
+    createdAt: toISO(pos.openedAt),
   }));
 
-  return NextResponse.json({
+  const res = NextResponse.json({
     success: true,
     actorId: actor.id,
     actorName: actor.displayName!,
@@ -135,4 +148,6 @@ export async function GET(_request: Request, { params }: RouteParams) {
     },
     positions: formattedPositions,
   });
-}
+  if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
+  return res;
+});

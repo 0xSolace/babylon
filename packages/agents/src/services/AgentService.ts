@@ -16,7 +16,6 @@
 import {
   agentLogs,
   agentMessages,
-  agentPerformanceMetrics,
   agentPointsTransactions,
   agentTrades,
   and,
@@ -25,6 +24,7 @@ import {
   desc,
   eq,
   lt,
+  sql,
   type User,
   type UserAgentConfig,
   userAgentConfigs,
@@ -32,14 +32,8 @@ import {
   withTransaction,
 } from '@babylon/db';
 import type { AgentCapabilities } from '@babylon/shared';
-import {
-  BABYLON_POINTS_SYMBOL,
-  getCurrentChainId,
-  IDENTITY_REGISTRY_BASE_SEPOLIA,
-  REPUTATION_SYSTEM_BASE_SEPOLIA,
-} from '@babylon/shared';
+import { BABYLON_POINTS_SYMBOL } from '@babylon/shared';
 import { AuthorizationError } from '../errors';
-import { agentIdentityService } from '../identity/AgentIdentityService';
 import { agentRuntimeManager } from '../runtime/AgentRuntimeManager';
 import { logger } from '../shared/logger';
 import { generateSnowflakeId } from '../shared/snowflake';
@@ -91,9 +85,10 @@ export class AgentServiceV2 {
   /**
    * Creates a new agent (creates a full User with isAgent=true)
    *
-   * Creates a complete user account with agent capabilities, wallet, and
-   * initial configuration. The agent can immediately participate in all
-   * platform activities.
+   * Creates a complete user account with agent capabilities and initial
+   * configuration. Wallet readiness is provisioned asynchronously after
+   * creation; wallet-specific actions must remain gated until the agent
+   * reaches a ready state.
    *
    * @param params - Agent creation parameters
    * @returns Created user/agent entity
@@ -309,11 +304,6 @@ export class AgentServiceV2 {
         x402Support: true,
         platform: 'babylon',
         userType: 'user_controlled',
-        gameNetwork: {
-          chainId: getCurrentChainId(),
-          registryAddress: IDENTITY_REGISTRY_BASE_SEPOLIA,
-          reputationAddress: REPUTATION_SYSTEM_BASE_SEPOLIA,
-        },
         skills: [],
         domains: [],
       };
@@ -333,23 +323,19 @@ export class AgentServiceV2 {
       );
     }
 
-    if (this.shouldAutoSetupAgentIdentity()) {
-      void this.setupAgentIdentity(agentUserId);
-    }
-
-    // Add agent to Command Center (team chat)
+    // Add agent to Agents (team chat)
     // This creates the team chat if it doesn't exist (first agent)
     try {
       await teamChatService.addAgentToTeamChat(managerUserId, agentUserId);
       logger.info(
-        `Agent ${agentUserId} added to Command Center`,
+        `Agent ${agentUserId} added to Agents`,
         undefined,
         'AgentService'
       );
     } catch (error) {
       // Log but don't fail agent creation - team chat can be synced later
       logger.error(
-        `Failed to add agent ${agentUserId} to Command Center: ${error}`,
+        `Failed to add agent ${agentUserId} to Agents: ${error}`,
         { managerUserId, agentUserId },
         'AgentService'
       );
@@ -431,6 +417,7 @@ export class AgentServiceV2 {
       name: string;
       description: string;
       profileImageUrl: string;
+      coverImageUrl: string;
       system: string;
       bio: string[]; // Bio array for ElizaOS agentMessageExamples
       personality: string;
@@ -461,6 +448,8 @@ export class AgentServiceV2 {
     if (updates.description) userUpdates.bio = updates.description;
     if (updates.profileImageUrl !== undefined)
       userUpdates.profileImageUrl = updates.profileImageUrl;
+    if (updates.coverImageUrl !== undefined)
+      userUpdates.coverImageUrl = updates.coverImageUrl;
 
     if (Object.keys(userUpdates).length > 1) {
       await db.update(users).set(userUpdates).where(eq(users.id, agentUserId));
@@ -523,10 +512,10 @@ export class AgentServiceV2 {
     );
     if (!agentWithConfig) throw new Error('Agent not found');
 
-    // Remove agent from Command Center BEFORE deleting (so we can still get agent info)
+    // Remove agent from Agents BEFORE deleting (so we can still get agent info)
     await teamChatService.removeAgentFromTeamChat(managerUserId, agentUserId);
     logger.info(
-      `Agent ${agentUserId} removed from Command Center`,
+      `Agent ${agentUserId} removed from Agents`,
       undefined,
       'AgentService'
     );
@@ -637,44 +626,38 @@ export class AgentServiceV2 {
     );
     if (!agentWithConfig) throw new Error('Agent not found');
 
-    // Get manager's trading balance
-    const managerResult = await db
-      .select({
-        virtualBalance: users.virtualBalance,
-      })
-      .from(users)
-      .where(eq(users.id, managerUserId))
-      .limit(1);
-
-    const manager = managerResult[0];
-    if (!manager) throw new Error('Manager not found');
-
-    const managerBalance = Number(manager.virtualBalance ?? 0);
-    if (managerBalance < amount) {
-      throw new Error(
-        `Insufficient trading balance. Have: $${managerBalance.toFixed(2)}, Need: $${amount.toFixed(2)}`
-      );
-    }
-
-    // Get agent's current balance and totalDeposited
-    const agentResult = await db
-      .select({
-        virtualBalance: users.virtualBalance,
-        totalDeposited: users.totalDeposited,
-      })
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
-
-    const agentBalance = Number(agentResult[0]?.virtualBalance ?? 0);
-    const agentTotalDeposited = Number(agentResult[0]?.totalDeposited ?? 0);
-
     await withTransaction(async (tx) => {
+      // Read balances INSIDE transaction with FOR UPDATE to prevent races
+      const [manager] = await tx
+        .select({ virtualBalance: users.virtualBalance })
+        .from(users)
+        .where(eq(users.id, managerUserId))
+        .for('update');
+
+      if (!manager) throw new Error('Manager not found');
+
+      const managerBalance = Number(manager.virtualBalance ?? 0);
+      if (managerBalance < amount) {
+        throw new Error(
+          `Insufficient trading balance. Have: $${managerBalance.toFixed(2)}, Need: $${amount.toFixed(2)}`
+        );
+      }
+
+      const [agent] = await tx
+        .select({
+          virtualBalance: users.virtualBalance,
+        })
+        .from(users)
+        .where(eq(users.id, agentUserId))
+        .for('update');
+
+      const agentBalance = Number(agent?.virtualBalance ?? 0);
+
       // Debit from manager
       await tx
         .update(users)
         .set({
-          virtualBalance: String(managerBalance - amount),
+          virtualBalance: sql`CAST(CAST(${users.virtualBalance} AS DECIMAL) - ${amount} AS TEXT)`,
           updatedAt: new Date(),
         })
         .where(eq(users.id, managerUserId));
@@ -683,8 +666,8 @@ export class AgentServiceV2 {
       await tx
         .update(users)
         .set({
-          virtualBalance: String(agentBalance + amount),
-          totalDeposited: String(agentTotalDeposited + amount),
+          virtualBalance: sql`CAST(CAST(${users.virtualBalance} AS DECIMAL) + ${amount} AS TEXT)`,
+          totalDeposited: sql`CAST(CAST(${users.totalDeposited} AS DECIMAL) + ${amount} AS TEXT)`,
           updatedAt: new Date(),
         })
         .where(eq(users.id, agentUserId));
@@ -754,42 +737,37 @@ export class AgentServiceV2 {
     );
     if (!agentWithConfig) throw new Error('Agent not found');
 
-    // Get agent's trading balance and totalWithdrawn
-    const agentResult = await db
-      .select({
-        virtualBalance: users.virtualBalance,
-        totalWithdrawn: users.totalWithdrawn,
-      })
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
-
-    const agentBalance = Number(agentResult[0]?.virtualBalance ?? 0);
-    const agentTotalWithdrawn = Number(agentResult[0]?.totalWithdrawn ?? 0);
-    if (agentBalance < amount) {
-      throw new Error(
-        `Insufficient agent trading balance. Have: $${agentBalance.toFixed(2)}, Need: $${amount.toFixed(2)}`
-      );
-    }
-
-    // Get manager's current balance
-    const managerResult = await db
-      .select({
-        virtualBalance: users.virtualBalance,
-      })
-      .from(users)
-      .where(eq(users.id, managerUserId))
-      .limit(1);
-
-    const managerBalance = Number(managerResult[0]?.virtualBalance ?? 0);
-
     await withTransaction(async (tx) => {
+      // Read balances INSIDE transaction with FOR UPDATE to prevent races
+      const [agentRow] = await tx
+        .select({
+          virtualBalance: users.virtualBalance,
+        })
+        .from(users)
+        .where(eq(users.id, agentUserId))
+        .for('update');
+
+      const agentBalance = Number(agentRow?.virtualBalance ?? 0);
+      if (agentBalance < amount) {
+        throw new Error(
+          `Insufficient agent trading balance. Have: $${agentBalance.toFixed(2)}, Need: $${amount.toFixed(2)}`
+        );
+      }
+
+      const [managerRow] = await tx
+        .select({ virtualBalance: users.virtualBalance })
+        .from(users)
+        .where(eq(users.id, managerUserId))
+        .for('update');
+
+      const managerBalance = Number(managerRow?.virtualBalance ?? 0);
+
       // Debit from agent (update both virtualBalance and totalWithdrawn)
       await tx
         .update(users)
         .set({
-          virtualBalance: String(agentBalance - amount),
-          totalWithdrawn: String(agentTotalWithdrawn + amount),
+          virtualBalance: sql`CAST(CAST(${users.virtualBalance} AS DECIMAL) - ${amount} AS TEXT)`,
+          totalWithdrawn: sql`CAST(CAST(${users.totalWithdrawn} AS DECIMAL) + ${amount} AS TEXT)`,
           updatedAt: new Date(),
         })
         .where(eq(users.id, agentUserId));
@@ -798,7 +776,7 @@ export class AgentServiceV2 {
       await tx
         .update(users)
         .set({
-          virtualBalance: String(managerBalance + amount),
+          virtualBalance: sql`CAST(CAST(${users.virtualBalance} AS DECIMAL) + ${amount} AS TEXT)`,
           updatedAt: new Date(),
         })
         .where(eq(users.id, managerUserId));
@@ -941,46 +919,17 @@ export class AgentServiceV2 {
     const agent = agentResult[0];
     if (!agent || !agent.isAgent) throw new Error('Agent not found');
 
-    // Get pre-calculated performance metrics from agentPerformanceMetrics table
-    const metricsResult = await db
-      .select()
-      .from(agentPerformanceMetrics)
-      .where(eq(agentPerformanceMetrics.userId, agentUserId))
-      .limit(1);
-
-    const metrics = metricsResult[0];
-
-    // If metrics exist, use them; otherwise fall back to calculating from trades
-    if (metrics) {
-      // Get trades for avgTradeSize calculation
-      const trades = await db
-        .select()
-        .from(agentTrades)
-        .where(eq(agentTrades.agentUserId, agentUserId));
-
-      const tradesWithPnl = trades.filter((t) => t.pnl !== null);
-      const avgTradeSize =
-        tradesWithPnl.length > 0
-          ? tradesWithPnl.reduce((sum, t) => sum + t.amount, 0) /
-            tradesWithPnl.length
-          : 0;
-
-      return {
-        lifetimePnL: Number(agent.lifetimePnL),
-        totalTrades: metrics.totalTrades,
-        profitableTrades: metrics.profitableTrades,
-        winRate: metrics.winRate,
-        avgTradeSize,
-      };
-    }
-
-    // Fallback: calculate from agentTrades if no metrics record exists
+    // Always calculate trade stats from agentTrades (source of truth)
+    // agentPerformanceMetrics is for reputation scoring, not trade stats
     const trades = await db
       .select()
       .from(agentTrades)
       .where(eq(agentTrades.agentUserId, agentUserId));
 
     const closedTrades = trades.filter((t) => t.pnl !== null);
+    const profitableTrades = closedTrades.filter(
+      (t) => t.pnl && t.pnl > 0
+    ).length;
     const avgTradeSize =
       trades.length > 0
         ? trades.reduce((sum, t) => sum + t.amount, 0) / trades.length
@@ -989,12 +938,9 @@ export class AgentServiceV2 {
     return {
       lifetimePnL: Number(agent.lifetimePnL),
       totalTrades: trades.length,
-      profitableTrades: closedTrades.filter((t) => t.pnl && t.pnl > 0).length,
+      profitableTrades,
       winRate:
-        closedTrades.length > 0
-          ? closedTrades.filter((t) => t.pnl && t.pnl > 0).length /
-            closedTrades.length
-          : 0,
+        closedTrades.length > 0 ? profitableTrades / closedTrades.length : 0,
       avgTradeSize,
     };
   }
@@ -1080,7 +1026,9 @@ export class AgentServiceV2 {
         | 'comment'
         | 'dm'
         | 'like'
-        | 'repost';
+        | 'repost'
+        | 'follow'
+        | 'transfer';
       level: 'info' | 'warn' | 'error' | 'debug';
       message: string;
       prompt?: string;
@@ -1107,47 +1055,6 @@ export class AgentServiceV2 {
       .returning();
 
     return result[0]!;
-  }
-
-  private shouldAutoSetupAgentIdentity(): boolean {
-    if (process.env.AUTO_CREATE_AGENT_WALLETS === 'false') {
-      return false;
-    }
-
-    // Require Privy credentials outside development so we do not spam errors
-    const hasPrivyConfig = Boolean(
-      process.env.NEXT_PUBLIC_PRIVY_APP_ID && process.env.PRIVY_APP_SECRET
-    );
-
-    if (!hasPrivyConfig && process.env.NODE_ENV !== 'development') {
-      logger.warn(
-        'Skipping automatic agent identity setup - Privy credentials missing',
-        undefined,
-        'AgentService'
-      );
-      return false;
-    }
-
-    return true;
-  }
-
-  private async setupAgentIdentity(agentUserId: string): Promise<void> {
-    const skipAgent0Registration = process.env.AGENT0_ENABLED !== 'true';
-
-    const agent = await agentIdentityService.setupAgentIdentity(agentUserId, {
-      skipAgent0Registration,
-    });
-
-    logger.info(
-      'Agent identity setup complete',
-      {
-        agentUserId,
-        walletProvisioned: Boolean(agent.walletAddress),
-        agent0TokenId: agent.agent0TokenId,
-        skippedAgent0: skipAgent0Registration,
-      },
-      'AgentService'
-    );
   }
 }
 

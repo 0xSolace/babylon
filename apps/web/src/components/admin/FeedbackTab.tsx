@@ -13,7 +13,12 @@
  */
 'use client';
 
-import { cn, FEEDBACK_TYPE_CONFIG, type FeedbackType } from '@babylon/shared';
+import {
+  cn,
+  FEEDBACK_TYPE_CONFIG,
+  type FeedbackType,
+  logger,
+} from '@babylon/shared';
 import {
   AlertTriangle,
   Bug,
@@ -171,7 +176,11 @@ export function FeedbackTab() {
 
       const response = await fetch(`/api/admin/feedback?${params}`);
       if (!response.ok) {
-        console.error('Failed to fetch feedback:', response.status);
+        logger.error(
+          'Failed to fetch feedback',
+          { status: response.status },
+          'FeedbackTab'
+        );
         setError(`Failed to load feedback (${response.status})`);
         setLoading(false);
         return;
@@ -481,7 +490,7 @@ export function FeedbackTab() {
           role="dialog"
           aria-modal="true"
           aria-labelledby="feedback-modal-title"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4"
           onClick={() => setSelectedFeedback(null)}
         >
           <div

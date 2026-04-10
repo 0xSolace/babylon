@@ -8,17 +8,12 @@
 /// <reference types="bun-types" />
 
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
-import type { BabylonLLMClient } from '../../engine/llm/openai-client';
-import type {
-  Actor,
-  FeedPost,
-  Organization,
-  Question,
-} from '../../shared/types';
 import { type Article, ArticleGenerator } from '../ArticleGenerator';
 import { FeedGenerator } from '../FeedGenerator';
+import type { BabylonLLMClient } from '../llm/openai-client';
 import { NewsArticlePacingEngine } from '../NewsArticlePacingEngine';
 import { TrendingTopicsEngine } from '../TrendingTopicsEngine';
+import type { Actor, FeedPost, Organization, Question } from '../types/shared';
 
 /**
  * Mock LLM client interface for testing
@@ -99,7 +94,8 @@ describe('Trending Topics & News Integration', () => {
     const mockImpl: MockLLMClient = {
       getProvider: () => 'openai',
       generateJSON: mock(async (prompt: string) => {
-        if (prompt.includes('TRENDING TOPICS')) {
+        // The trending topics prompt contains "TRENDING REQUIREMENTS" not "TRENDING TOPICS"
+        if (prompt.includes('TRENDING REQUIREMENTS')) {
           return {
             trends: [
               {
@@ -116,15 +112,16 @@ describe('Trending Topics & News Integration', () => {
         }
 
         if (prompt.includes('journalist writing for')) {
+          const content =
+            'TechCorp is reportedly preparing a major AI breakthrough announcement. '.repeat(
+              45
+            );
           return {
             response: {
               title: 'TechCorp AI Announcement Imminent, Sources Say',
               summary:
                 'Multiple sources confirm TechCorp preparing major AI reveal.',
-              content:
-                'Lorem ipsum dolor sit amet, consectetur adipiscing elit. '.repeat(
-                  50
-                ),
+              content,
               slant: 'Optimistic about breakthrough potential',
               sentiment: 'positive',
               category: 'tech',

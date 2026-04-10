@@ -232,7 +232,7 @@ export const POST = withErrorHandling(
         contentId,
         url,
         pointsAwarded: false,
-        verified: false, // Must be verified before points are awarded
+        verified: false, // Must be verified before reputation is awarded.
       })
       .returning();
 
@@ -250,12 +250,13 @@ export const POST = withErrorHandling(
 
     return successResponse({
       shareAction,
-      points: {
-        awarded: 0, // Points will be awarded after verification
-        newTotal: 0,
+      reputation: {
+        awarded: 0, // Reputation is awarded after verification.
+        newReputationTotal: 0,
         alreadyAwarded: false,
       },
-      message: 'Share action created. Please verify your post to earn points.',
+      message:
+        'Share action created. Please verify your post to earn reputation.',
     });
   }
 );

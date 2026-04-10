@@ -1,10 +1,10 @@
 import { definePrompt } from '../define-prompt';
 import {
   ANTI_REPETITION_RULES,
-  CONTENT_REQUIREMENTS,
+  CONTENT_REQUIREMENTS_MARKET,
   FINAL_REMINDERS,
   IMPORTANT_RULES,
-  WORLD_CONTEXT_HEADER,
+  WORLD_CONTEXT_HEADER_WITH_TRADES,
 } from '../shared-sections';
 
 /**
@@ -48,7 +48,7 @@ YOUR MOOD: {{mood}}
 Related events: {{relatedEvents}}
 Related questions: {{relatedQuestions}}
 
-${WORLD_CONTEXT_HEADER}
+${WORLD_CONTEXT_HEADER_WITH_TRADES}
 
 ${ANTI_REPETITION_RULES}
 
@@ -63,7 +63,7 @@ Requirements:
 
 ${IMPORTANT_RULES}
 
-${CONTENT_REQUIREMENTS}
+${CONTENT_REQUIREMENTS_MARKET}
 
 VALUE RANGES:
 - sentiment: -1 (very negative) to 1 (very positive)

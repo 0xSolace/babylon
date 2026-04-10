@@ -25,8 +25,8 @@
  *               properties:
  *                 profilePictureIndex:
  *                   type: integer
- *                   minimum: 0
- *                   maximum: 99
+ *                   minimum: 1
+ *                   maximum: 150
  *                 bannerIndex:
  *                   type: integer
  *                   minimum: 0
@@ -39,11 +39,10 @@
  * ```
  */
 
-import { successResponse } from '@babylon/api';
-import { logger } from '@babylon/shared';
+import { successResponse, withErrorHandling } from '@babylon/api';
+import { logger, TOTAL_AGENT_DEFAULT_PROFILE_PICTURES } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
-const TOTAL_PROFILE_PICTURES = 100;
 const TOTAL_BANNERS = 100;
 
 interface RandomAssets {
@@ -55,9 +54,9 @@ interface RandomAssets {
  * GET /api/onboarding/random-assets
  * Get random profile picture and banner indices
  */
-export async function GET(_request: NextRequest) {
+export const GET = withErrorHandling(async function GET(_request: NextRequest) {
   const profilePictureIndex =
-    Math.floor(Math.random() * TOTAL_PROFILE_PICTURES) + 1;
+    Math.floor(Math.random() * TOTAL_AGENT_DEFAULT_PROFILE_PICTURES) + 1;
   const bannerIndex = Math.floor(Math.random() * TOTAL_BANNERS) + 1;
 
   const assets: RandomAssets = {
@@ -72,4 +71,4 @@ export async function GET(_request: NextRequest) {
   );
 
   return successResponse(assets);
-}
+});

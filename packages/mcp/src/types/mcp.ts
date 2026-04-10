@@ -274,9 +274,14 @@ export interface GetTradeHistoryArgs {
 }
 
 // Social Features - Args
+export interface GetPostArgs {
+  postId: string;
+}
+
 export interface CreatePostArgs {
   content: string;
   type?: 'post' | 'article';
+  mediaUrl?: string;
 }
 
 export interface DeletePostArgs {
@@ -355,6 +360,11 @@ export interface SearchUsersArgs {
   limit?: number;
 }
 
+export interface SearchAgentsArgs {
+  query: string;
+  limit?: number;
+}
+
 export interface GetUserWalletArgs {
   userId: string;
 }
@@ -402,6 +412,10 @@ export interface MarkNotificationsReadArgs {
   notificationIds: string[];
 }
 
+export interface GetPortfolioArgs {
+  // No arguments
+}
+
 export interface GetGroupInvitesArgs {
   // No arguments
 }
@@ -418,12 +432,19 @@ export interface DeclineGroupInviteArgs {
 export interface GetLeaderboardArgs {
   page?: number;
   pageSize?: number;
+  type?: 'wallet' | 'team';
   pointsType?: 'all' | 'earned' | 'referral';
   minPoints?: number;
 }
 
 export interface GetSystemStatsArgs {
   // No arguments
+}
+
+export interface ResolveMarketArgs {
+  marketId: string;
+  resolution: boolean;
+  reason?: string;
 }
 
 // Referrals & Rewards - Args
@@ -574,13 +595,6 @@ export interface GetFavoritePostsArgs {
   offset?: number;
 }
 
-// Points Transfer - Args
-export interface TransferPointsArgs {
-  recipientId: string;
-  amount: number;
-  message?: string;
-}
-
 // Tool-specific return types (internal, before conversion to MCP format)
 export interface GetMarketsResult {
   markets: Array<{
@@ -691,10 +705,15 @@ export interface GetTradeHistoryResult {
 }
 
 // Social Features - Results
+export interface GetPostResult extends StringRecord<JsonValue> {
+  // API response from /api/posts/[id]
+}
+
 export interface CreatePostResult {
   success: boolean;
   postId: string;
   content: string;
+  mediaUrl?: string | null;
 }
 
 export interface DeletePostResult {
@@ -791,6 +810,17 @@ export interface SearchUsersResult {
   }>;
 }
 
+export interface SearchAgentsResult {
+  agents: Array<{
+    id: string;
+    username: string | null;
+    displayName: string | null;
+    profileImageUrl: string | null;
+    bio: string | null;
+    type: 'agent' | 'npc';
+  }>;
+}
+
 export interface GetUserWalletResult {
   walletAddress: string | null;
   virtualBalance: string;
@@ -863,6 +893,10 @@ export interface MarkNotificationsReadResult {
   markedCount: number;
 }
 
+export interface GetPortfolioResult extends StringRecord<JsonValue> {
+  // Aggregated balance + positions snapshot
+}
+
 export interface GetGroupInvitesResult {
   invites: Array<{
     id: string;
@@ -903,6 +937,12 @@ export interface GetSystemStatsResult {
   posts: number;
   markets: number;
   activeMarkets: number;
+}
+
+export interface ResolveMarketResult {
+  success: boolean;
+  marketId: string;
+  resolution: boolean;
 }
 
 // Referrals & Rewards - Results
@@ -1149,14 +1189,6 @@ export interface GetFavoritePostsResult {
   }>;
 }
 
-// Points Transfer - Results
-export interface TransferPointsResult {
-  success: boolean;
-  transactionId: string;
-  amount: number;
-  recipientId: string;
-}
-
 // Union type for all tool results (internal)
 export type MCPToolResult =
   | GetMarketsResult
@@ -1173,6 +1205,7 @@ export type MCPToolResult =
   | GetPerpetualsResult
   | GetTradesResult
   | GetTradeHistoryResult
+  | GetPostResult
   | CreatePostResult
   | DeletePostResult
   | LikePostResult
@@ -1190,6 +1223,7 @@ export type MCPToolResult =
   | GetFollowersResult
   | GetFollowingResult
   | SearchUsersResult
+  | SearchAgentsResult
   | GetUserWalletResult
   | GetUserStatsResult
   | GetChatsResult
@@ -1200,11 +1234,13 @@ export type MCPToolResult =
   | GetUnreadCountResult
   | GetNotificationsResult
   | MarkNotificationsReadResult
+  | GetPortfolioResult
   | GetGroupInvitesResult
   | AcceptGroupInviteResult
   | DeclineGroupInviteResult
   | GetLeaderboardResult
   | GetSystemStatsResult
+  | ResolveMarketResult
   | GetReferralCodeResult
   | GetReferralsResult
   | GetReferralStatsResult
@@ -1233,5 +1269,4 @@ export type MCPToolResult =
   | FavoriteProfileResult
   | UnfavoriteProfileResult
   | GetFavoritesResult
-  | GetFavoritePostsResult
-  | TransferPointsResult;
+  | GetFavoritePostsResult;

@@ -249,18 +249,6 @@ export const STORY_SEEDS: Array<{
     ],
   },
 
-  // Crypto stories
-  {
-    template: '{protocol} upgrade sparks debate in {community}',
-    beat: 'crypto',
-    variables: ['scaling', 'governance', 'tokenomics', 'security'],
-  },
-  {
-    template: 'DeFi {metric} hits {milestone} amid {market_condition}',
-    beat: 'crypto',
-    variables: ['TVL', 'volume', 'users', 'transactions'],
-  },
-
   // AI stories
   {
     template: '{ai_development} raises new questions about {concern}',

@@ -1,4 +1,5 @@
 import { type Plugin } from '@elizaos/core';
+import { TrajectoryLoggerService } from './TrajectoryLoggerService';
 
 /**
  * Trajectory Logger Plugin
@@ -6,15 +7,15 @@ import { type Plugin } from '@elizaos/core';
  * Collects complete agent interaction trajectories for RL training.
  * Records LLM calls, provider access, actions, environment state, and computes rewards.
  *
- * @remarks TrajectoryLoggerService is exported but not registered as a service
- * since it doesn't fully implement the Service interface. Use the exported functions directly.
+ * Registers the runtime service so Babylon can retrieve a single
+ * plugin-owned trajectory logger instance per runtime.
  */
 export const trajectoryLoggerPlugin: Plugin = {
   name: '@elizaos/plugin-trajectory-logger',
   description:
     'Collects complete agent interaction trajectories for RL training. Records LLM calls, provider access, actions, environment state, and computes rewards from game knowledge.',
   dependencies: [],
-  services: [],
+  services: [TrajectoryLoggerService],
 };
 
 export default trajectoryLoggerPlugin;
@@ -35,16 +36,8 @@ export * from './types';
 // - logLLMCallFromAction()
 // - logProviderFromAction()
 
-// ==========================================
-// PRIMARY: Game-Knowledge Rewards
-// Use this if you have perfect game information!
-// ==========================================
-export * from './game-rewards';
-// Exports:
-// - computeTrajectoryReward()
-// - computeStepReward()
-// - buildGameStateFromDB()
-// - recomputeTrajectoryRewards()
+// Game-Knowledge Rewards: REMOVED (was dead stubs).
+// Canonical reward computation is in @babylon/training: reward-judgments.ts
 
 // ==========================================
 // TRAJECTORY FORMAT CONVERSION
@@ -81,13 +74,8 @@ export * from './integration';
 // - withTrajectoryLogging()
 
 // ==========================================
-// OPTIONAL: AI Judge Rewards
-// Only use if you DON'T have game knowledge
-// (game-rewards.ts is usually better!)
+// REWARD SCORING
+// Deterministic judge is auto-called in endTrajectory().
+// For manual scoring, import from @babylon/training directly:
+//   import { computeDeterministicRewardJudgment } from '@babylon/training/training/reward-judgments'
 // ==========================================
-export * from './reward-service';
-// Exports:
-// - RewardService
-// - createRewardService()
-// - scoreTrajectory()
-// - scoreTrajectoryGroup() (RULER)

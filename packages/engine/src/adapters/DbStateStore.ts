@@ -16,7 +16,7 @@ import {
   questions,
   worldEvents,
 } from '@babylon/db';
-import { generateSnowflakeId } from '@babylon/shared';
+import { generateSnowflakeId, logger } from '@babylon/shared';
 import type {
   ActiveMarket,
   ActiveQuestion,
@@ -31,7 +31,13 @@ import type {
   TradeInput,
   TradeResult,
 } from '../GameTick';
+import { persistArticle } from '../services/article-persistence';
 import { StaticDataRegistry } from '../services/static-data-registry';
+import {
+  generateTagsFromPost,
+  storeTagsForPost,
+} from '../services/tag-service';
+import { formatError } from '../utils/error-utils';
 
 export class DbStateStore implements GameStateStore {
   async getActiveQuestions(): Promise<ActiveQuestion[]> {
@@ -143,6 +149,22 @@ export class DbStateStore implements GameStateStore {
       gameId: 'continuous',
     });
 
+    // Fire-and-forget: generate and store tags so NPC posts surface in
+    // tag-filtered feeds. Non-blocking — tag failure never breaks post creation.
+    void generateTagsFromPost(post.content)
+      .then(async (generatedTags) => {
+        if (generatedTags.length > 0) {
+          await storeTagsForPost(id, generatedTags);
+        }
+      })
+      .catch((tagError) => {
+        logger.warn(
+          'Failed to generate/store NPC post tags (non-blocking)',
+          { postId: id, error: formatError(tagError) },
+          'DbStateStore'
+        );
+      });
+
     return id;
   }
 
@@ -165,21 +187,31 @@ export class DbStateStore implements GameStateStore {
   }
 
   async createArticle(article: ArticleInput): Promise<string> {
-    const id = await generateSnowflakeId();
+    // Delegate to shared persistence service (bypasses rate limit for simulation use)
+    const result = await persistArticle(
+      {
+        title: article.title,
+        summary: article.summary,
+        content: article.content,
+        authorOrgId: article.authorOrgId,
+        gameId: 'continuous',
+        category: article.category,
+        timestamp: article.timestamp,
+      },
+      { checkRateLimit: false, generateImage: false }
+    );
 
-    await db.insert(posts).values({
-      id,
-      type: 'article',
-      articleTitle: article.title,
-      content: article.summary,
-      fullContent: article.content,
-      authorId: article.authorOrgId,
-      timestamp: article.timestamp,
-      category: article.category,
-      gameId: 'continuous',
-    });
+    if (!result.success) {
+      if (result.rateLimited) {
+        throw new Error(
+          `Rate limited: Article creation blocked by rate limiter${result.error ? ` - ${result.error}` : ''}`
+        );
+      }
+      throw new Error(result.error || 'Failed to persist article');
+    }
 
-    return id;
+    // With discriminated union, articleId is guaranteed to exist when success is true
+    return result.articleId;
   }
 
   /**

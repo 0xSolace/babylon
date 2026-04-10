@@ -1,6 +1,6 @@
 'use client';
 
-import { cn } from '@babylon/shared';
+import { cn, getActorProfileUrl, getProfileUrl } from '@babylon/shared';
 import {
   AlertCircle,
   Ban,
@@ -9,13 +9,10 @@ import {
   ExternalLink,
   Flag,
   Search,
-  Shield,
   Star,
   TrendingUp,
   UserCircle,
   Users,
-  Wallet,
-  X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
@@ -38,11 +35,8 @@ const RegistryEntitySchema = z.object({
   bio: z.string().optional(),
   description: z.string().optional(),
   imageUrl: z.string().optional(),
-  walletAddress: z.string().optional(),
   isActor: z.boolean().optional(),
-  onChainRegistered: z.boolean().optional(),
   nftTokenId: z.number().nullable().optional(),
-  agent0TokenId: z.number().nullable().optional(),
   tokenId: z.number().optional(),
   metadataCID: z.string().optional(),
   mcpEndpoint: z.string().optional(),
@@ -128,7 +122,6 @@ export function RegistryTab() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [onChainOnly, setOnChainOnly] = useState(false);
   const [activeTab, setActiveTab] = useState<
     'all' | 'users' | 'actors' | 'agents' | 'apps'
   >('all');
@@ -148,7 +141,6 @@ export function RegistryTab() {
 
     const params = new URLSearchParams();
     if (search) params.set('search', search);
-    if (onChainOnly) params.set('onChainOnly', 'true');
 
     fetch(`/api/registry/all?${params}`)
       .then((response) => {
@@ -170,20 +162,20 @@ export function RegistryTab() {
       .finally(() => {
         setLoading(false);
       });
-  }, [search, onChainOnly]);
+  }, [search]);
 
   useEffect(() => {
     fetchRegistry();
   }, [fetchRegistry]);
 
-  // Debounced re-fetch when search/onChainOnly changes (with 300ms delay)
+  // Debounced re-fetch when search changes (with 300ms delay)
   useEffect(() => {
-    if (!search && !onChainOnly) return; // Skip if no filters applied
+    if (!search) return; // Skip if no filters applied
     const timer = setTimeout(() => {
       fetchRegistry();
     }, 300);
     return () => clearTimeout(timer);
-  }, [search, onChainOnly, fetchRegistry]);
+  }, [search, fetchRegistry]);
 
   const renderBadge = (
     _type: string,
@@ -220,14 +212,17 @@ export function RegistryTab() {
       }
     };
 
-    const getProfileUrl = () => {
-      if (entity.type === 'user' && entity.username) {
-        return `/profile/${entity.username}`;
+    const getEntityProfileUrl = () => {
+      if (entity.type === 'user') {
+        return getProfileUrl(entity.id, entity.username);
+      }
+      if (entity.type === 'actor') {
+        return getActorProfileUrl(entity.id);
       }
       return null;
     };
 
-    const profileUrl = getProfileUrl();
+    const profileUrl = getEntityProfileUrl();
 
     const cardContent = (
       <>
@@ -315,51 +310,6 @@ export function RegistryTab() {
         </div>
 
         <div className="space-y-3 px-4 py-3">
-          {entity.onChainRegistered && (
-            <div className="flex items-center gap-2 rounded-xl border border-green-500/20 bg-green-500/5 px-3 py-2 text-sm">
-              <Shield className="h-4 w-4 shrink-0 text-green-500" />
-              <span className="flex-1 font-medium text-green-500">
-                On-chain registered
-              </span>
-              {entity.nftTokenId && (
-                <span className="rounded-lg bg-green-500/10 px-2 py-0.5 font-mono text-xs">
-                  #{entity.nftTokenId}
-                </span>
-              )}
-            </div>
-          )}
-
-          {entity.agent0TokenId && (
-            <div className="flex items-center gap-2 rounded-xl border border-blue-500/20 bg-blue-500/5 px-3 py-2 text-sm">
-              <Bot className="h-4 w-4 shrink-0 text-blue-500" />
-              <span className="flex-1 font-medium text-blue-500">
-                Agent0 Token
-              </span>
-              <span className="rounded-lg bg-blue-500/10 px-2 py-0.5 font-mono text-xs">
-                #{entity.agent0TokenId}
-              </span>
-            </div>
-          )}
-
-          {entity.walletAddress && (
-            <div className="flex items-center gap-2 text-sm">
-              <Wallet className="h-4 w-4 shrink-0 text-blue-400" />
-              <code className="flex-1 truncate font-mono text-muted-foreground text-xs">
-                {entity.walletAddress.slice(0, 6)}...
-                {entity.walletAddress.slice(-4)}
-              </code>
-              <button
-                onClick={(e) => {
-                  e.preventDefault();
-                  navigator.clipboard.writeText(entity.walletAddress!);
-                }}
-                className="text-blue-500 text-xs transition-colors hover:text-blue-400"
-              >
-                Copy
-              </button>
-            </div>
-          )}
-
           <div className="grid grid-cols-2 gap-2">
             {entity.balance && (
               <div className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-sm">
@@ -573,21 +523,6 @@ export function RegistryTab() {
           {/* Admin Actions */}
           {entity.type === 'user' && !entity.isActor && (
             <div className="flex gap-2 border-border border-t pt-3">
-              {entity.agent0TokenId && (
-                <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setSelectedEntity(entity);
-                    setShowFeedbackModal(true);
-                  }}
-                  className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-blue-500/20 px-3 py-2 font-medium text-blue-500 text-sm transition-colors hover:bg-blue-500/30"
-                  title="Give feedback"
-                >
-                  <Star className="h-4 w-4" />
-                  Feedback
-                </button>
-              )}
               <button
                 onClick={(e) => {
                   e.preventDefault();
@@ -724,19 +659,6 @@ export function RegistryTab() {
             placeholder="Search by name, username, or description..."
           />
         </div>
-        <button
-          onClick={() => setOnChainOnly(!onChainOnly)}
-          className={cn(
-            'flex items-center gap-2 whitespace-nowrap rounded-full px-4 py-2 font-semibold transition-all duration-200',
-            onChainOnly
-              ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-              : 'border border-border bg-muted text-muted-foreground hover:bg-muted/80'
-          )}
-        >
-          <Shield className="h-4 w-4" />
-          On-chain Only
-          {onChainOnly && <X className="h-4 w-4" />}
-        </button>
       </div>
 
       {data && (
@@ -901,7 +823,7 @@ export function RegistryTab() {
 
       {/* Feedback Modal */}
       {showFeedbackModal && selectedEntity && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6">
             <h2 className="mb-4 font-bold text-xl">Give Feedback</h2>
             <p className="mb-4 text-muted-foreground">
@@ -928,7 +850,7 @@ export function RegistryTab() {
 
       {/* Ban Modal */}
       {showBanModal && selectedEntity && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6">
             <h2 className="mb-4 font-bold text-xl">
               {selectedEntity.isBanned ? 'Unban User' : 'Ban User'}

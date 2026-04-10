@@ -1,10 +1,11 @@
 'use client';
 
 import { getCurrentChainId } from '@babylon/shared';
-import { usePrivy } from '@privy-io/react-auth';
+
 import { Check, ExternalLink, Loader2, Shield } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/hooks/useAuth';
 import type { ChatDetails } from './types';
 
 interface NftVerificationBannerProps {
@@ -27,7 +28,7 @@ export function NftVerificationBanner({
   chatDetails,
   currentUserId,
 }: NftVerificationBannerProps) {
-  const { getAccessToken } = usePrivy();
+  const { getAccessToken } = useAuth();
   const [verificationStatus, setVerificationStatus] =
     useState<VerificationStatus | null>(null);
   const [checking, setChecking] = useState(false);

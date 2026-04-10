@@ -25,7 +25,7 @@
  *         name: limit
  *         schema:
  *           type: integer
- *         description: Maximum results to return
+ *         description: Maximum results to return (capped at 100)
  *     responses:
  *       200:
  *         description: Leaderboard retrieved successfully
@@ -34,17 +34,51 @@
  *             schema:
  *               type: object
  *               properties:
+ *                 success:
+ *                   type: boolean
  *                 leaderboard:
  *                   type: array
  *                   items:
  *                     type: object
  *                     properties:
+ *                       rank:
+ *                         type: integer
  *                       actorId:
  *                         type: string
- *                       totalValue:
- *                         type: number
- *                       pnl:
- *                         type: number
+ *                       actorName:
+ *                         type: string
+ *                       personality:
+ *                         type: string
+ *                         nullable: true
+ *                       profileImageUrl:
+ *                         type: string
+ *                         nullable: true
+ *                       poolId:
+ *                         type: string
+ *                       performance:
+ *                         type: object
+ *                         properties:
+ *                           totalValue:
+ *                             type: number
+ *                           roi:
+ *                             type: number
+ *                           realizedPnL:
+ *                             type: number
+ *                           unrealizedPnL:
+ *                             type: number
+ *                           positionCount:
+ *                             type: integer
+ *                           utilization:
+ *                             type: number
+ *                 metadata:
+ *                   type: object
+ *                   properties:
+ *                     count:
+ *                       type: integer
+ *                     limit:
+ *                       type: integer
+ *                     minValue:
+ *                       type: number
  *
  * @example
  * ```typescript
@@ -54,118 +88,189 @@
  */
 
 import {
-  and,
+  addPublicReadHeaders,
+  publicRateLimit,
+  withErrorHandling,
+} from '@babylon/api';
+import {
+  actorState,
   db,
-  desc,
   eq,
-  gte,
   inArray,
-  isNull,
+  perpPositions,
   poolPositions,
   pools,
 } from '@babylon/db';
-import { StaticDataRegistry } from '@babylon/engine';
+import {
+  buildFallbackMetricsByPool,
+  NPCInvestmentManager,
+  type PoolMetrics,
+  StaticDataRegistry,
+} from '@babylon/engine';
+import { logger } from '@babylon/shared';
+import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
-export async function GET(request: Request) {
+const parseLimit = (raw: string | null) => {
+  if (!raw) return 50;
+  const parsed = Number.parseInt(raw, 10);
+  return Math.min(Number.isNaN(parsed) ? 50 : parsed, 100);
+};
+
+const parseMinValue = (raw: string | null) => {
+  if (!raw) return 0;
+  const parsed = Number.parseFloat(raw);
+  return Number.isNaN(parsed) ? 0 : parsed;
+};
+
+export const GET = withErrorHandling(async function GET(request: NextRequest) {
+  const { error, rateLimitInfo } = await publicRateLimit(request);
+  if (error) return error;
+
   const { searchParams } = new URL(request.url);
 
   const limitParam = searchParams.get('limit');
   const minValueParam = searchParams.get('minValue');
 
-  const limit = limitParam ? Number.parseInt(limitParam, 10) : 50;
-  const minValue = minValueParam ? Number.parseFloat(minValueParam) : 0;
+  const limit = parseLimit(limitParam);
+  const minValue = parseMinValue(minValueParam);
 
-  // Fetch pools with filter
-  const poolsList = await db
+  const activePools = await db
     .select()
     .from(pools)
-    .where(
-      and(eq(pools.isActive, true), gte(pools.totalValue, String(minValue)))
-    )
-    .orderBy(desc(pools.totalValue))
-    .limit(limit);
+    .where(eq(pools.isActive, true));
 
-  const actorIds = poolsList.map((p) => p.npcActorId);
-  const actorsMap = new Map(
-    actorIds
-      .map((id) => StaticDataRegistry.getActor(id))
-      .filter((a): a is NonNullable<typeof a> => a !== null)
-      .map((a) => [
-        a.id,
-        {
-          id: a.id,
-          name: a.name,
-          profileImageUrl: a.profileImageUrl,
-          personality: a.personality,
-        },
-      ])
-  );
+  const activePoolIds = activePools.map((pool) => pool.id);
 
-  // Fetch open positions for all pools
-  const poolIds = poolsList.map((p) => p.id);
-  const positionsList =
-    poolIds.length > 0
-      ? await db
+  // Fetch fallback data lazily so we can serve metrics even when
+  // getPortfolioMetrics() throws (e.g. missing actorState rows).
+  let fallbackMetricsByPool: Map<string, PoolMetrics> | null = null;
+  let fallbackMetricsPromise: Promise<Map<string, PoolMetrics>> | null = null;
+
+  const loadFallbackMetrics = async () => {
+    if (fallbackMetricsByPool) return fallbackMetricsByPool;
+    if (fallbackMetricsPromise) return fallbackMetricsPromise;
+
+    fallbackMetricsPromise = (async () => {
+      if (activePoolIds.length === 0) {
+        fallbackMetricsByPool = new Map();
+        return fallbackMetricsByPool;
+      }
+
+      const [balances, positionRows, perpRows] = await Promise.all([
+        db
           .select({
+            id: actorState.id,
+            tradingBalance: actorState.tradingBalance,
+          })
+          .from(actorState)
+          .where(inArray(actorState.id, activePoolIds)),
+        db
+          .select({
+            id: poolPositions.id,
             poolId: poolPositions.poolId,
+            marketType: poolPositions.marketType,
+            size: poolPositions.size,
+            leverage: poolPositions.leverage,
             unrealizedPnL: poolPositions.unrealizedPnL,
+            realizedPnL: poolPositions.realizedPnL,
+            closedAt: poolPositions.closedAt,
           })
           .from(poolPositions)
-          .where(
-            and(
-              inArray(poolPositions.poolId, poolIds),
-              isNull(poolPositions.closedAt)
-            )
-          )
-      : [];
-  const positionsByPool = new Map<string, typeof positionsList>();
-  for (const pos of positionsList) {
-    const existing = positionsByPool.get(pos.poolId) || [];
-    existing.push(pos);
-    positionsByPool.set(pos.poolId, existing);
-  }
+          .where(inArray(poolPositions.poolId, activePoolIds)),
+        db
+          .select({
+            id: perpPositions.id,
+            userId: perpPositions.userId,
+            size: perpPositions.size,
+            leverage: perpPositions.leverage,
+            unrealizedPnL: perpPositions.unrealizedPnL,
+            realizedPnL: perpPositions.realizedPnL,
+            closedAt: perpPositions.closedAt,
+          })
+          .from(perpPositions)
+          .where(inArray(perpPositions.userId, activePoolIds)),
+      ]);
 
-  const leaderboard = poolsList.map((pool, index) => {
-    const totalValue = Number.parseFloat(pool.totalValue?.toString() || '0');
-    const availableBalance = Number.parseFloat(
-      pool.availableBalance?.toString() || '0'
-    );
-    const initialValue = Number.parseFloat(
-      pool.totalDeposits?.toString() || '0'
-    );
+      fallbackMetricsByPool = buildFallbackMetricsByPool(
+        activePools,
+        balances,
+        positionRows,
+        perpRows
+      );
+      return fallbackMetricsByPool;
+    })();
 
-    const poolPositionsList = positionsByPool.get(pool.id) || [];
-    const unrealizedPnL = poolPositionsList.reduce((sum: number, pos) => {
-      return sum + Number.parseFloat(pos.unrealizedPnL?.toString() || '0');
-    }, 0);
+    try {
+      return await fallbackMetricsPromise;
+    } finally {
+      fallbackMetricsPromise = null;
+    }
+  };
 
-    const roi =
-      initialValue > 0 ? ((totalValue - initialValue) / initialValue) * 100 : 0;
+  const leaderboardRows = await Promise.all(
+    activePools.map(async (pool) => {
+      try {
+        const metrics = await NPCInvestmentManager.getPortfolioMetrics(pool.id);
+        return { pool, metrics };
+      } catch (error) {
+        const fallback = (await loadFallbackMetrics()).get(pool.id);
+        if (!fallback) {
+          logger.warn('Skipping NPC performance row due to metrics failure', {
+            poolId: pool.id,
+            actorId: pool.npcActorId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          return null;
+        }
 
-    const invested = totalValue - availableBalance;
-    const utilization = totalValue > 0 ? (invested / totalValue) * 100 : 0;
+        logger.warn('Using batched fallback NPC performance metrics', {
+          poolId: pool.id,
+          actorId: pool.npcActorId,
+          error: error instanceof Error ? error.message : String(error),
+        });
 
-    const actor = actorsMap.get(pool.npcActorId);
+        return { pool, metrics: fallback };
+      }
+    })
+  );
 
-    return {
-      rank: index + 1,
-      actorId: actor?.id || pool.npcActorId,
-      actorName: actor?.name || 'Unknown',
-      personality: actor?.personality || null,
-      profileImageUrl: actor?.profileImageUrl || null,
-      poolId: pool.id,
-      performance: {
-        totalValue: Math.round(totalValue),
-        roi: Number.parseFloat(roi.toFixed(2)),
-        unrealizedPnL: Math.round(unrealizedPnL),
-        positionCount: poolPositionsList.length,
-        utilization: Number.parseFloat(utilization.toFixed(1)),
-      },
-    };
-  });
+  const leaderboard = leaderboardRows
+    .filter(
+      (row): row is NonNullable<(typeof leaderboardRows)[number]> =>
+        row !== null && row.metrics.totalValue >= minValue
+    )
+    .sort((a, b) => b.metrics.totalValue - a.metrics.totalValue)
+    .slice(0, limit)
+    .map(({ pool, metrics }, index) => {
+      const initialValue = Number.parseFloat(
+        pool.totalDeposits?.toString() || '0'
+      );
+      const roi =
+        initialValue > 0
+          ? ((metrics.totalValue - initialValue) / initialValue) * 100
+          : 0;
+      const actor = StaticDataRegistry.getActor(pool.npcActorId);
 
-  return NextResponse.json({
+      return {
+        rank: index + 1,
+        actorId: actor?.id || pool.npcActorId,
+        actorName: actor?.name || 'Unknown',
+        personality: actor?.personality || null,
+        profileImageUrl: actor?.profileImageUrl || null,
+        poolId: pool.id,
+        performance: {
+          totalValue: Math.round(metrics.totalValue),
+          roi: Number.parseFloat(roi.toFixed(2)),
+          realizedPnL: Math.round(metrics.realizedPnL),
+          unrealizedPnL: Math.round(metrics.unrealizedPnL),
+          positionCount: metrics.positionCount,
+          utilization: Number.parseFloat(metrics.utilization.toFixed(1)),
+        },
+      };
+    });
+
+  const res = NextResponse.json({
     success: true,
     leaderboard,
     metadata: {
@@ -174,4 +279,6 @@ export async function GET(request: Request) {
       minValue,
     },
   });
-}
+  if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
+  return res;
+});

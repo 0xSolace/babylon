@@ -12,6 +12,33 @@ import type { JsonValue } from '../types';
 import { users } from './users';
 
 /**
+ * Price alert configuration for agent-monitored price thresholds.
+ * Checked every agent tick (~3 minutes). Cooldown prevents alert spam.
+ */
+export interface PriceAlert {
+  /** Snowflake ID */
+  id: string;
+  /** Must match perpMarketSnapshots.ticker (e.g., "OPENAGI", "TSLAI") */
+  tokenSymbol: string;
+  /** Threshold direction */
+  condition: 'below' | 'above';
+  /** Price threshold to trigger on */
+  threshold: number;
+  /** Where to deliver the alert */
+  deliveryChannel: 'team_chat' | 'group';
+  /** Group chat ID — required when deliveryChannel is 'group' */
+  deliveryChatId?: string;
+  /** Whether this alert is active */
+  enabled: boolean;
+  /** ISO timestamp of last trigger — used for cooldown enforcement */
+  lastTriggeredAt?: string;
+  /** Minutes between re-triggers (default 15) */
+  cooldownMinutes: number;
+  /** ISO timestamp of creation */
+  createdAt: string;
+}
+
+/**
  * UserAgentConfig - Agent configuration for users who have enabled agent features.
  * Extracted from users table to optimize for the common case (users without agents).
  * Only created when a user enables agent functionality.
@@ -35,6 +62,13 @@ export const userAgentConfigs = pgTable(
     directives: json('directives').$type<JsonValue>(),
     constraints: json('constraints').$type<JsonValue>(),
 
+    // Price alerts - monitored during each agent tick
+    priceAlerts: json('priceAlerts').$type<PriceAlert[]>().default([]),
+
+    // Agent alignment and team for simulation and RL training
+    alignment: text('alignment').notNull().default('neutral'),
+    team: text('team').notNull().default('gray'),
+
     // Agent settings
     planningHorizon: text('planningHorizon').notNull().default('single'),
     riskTolerance: text('riskTolerance').notNull().default('medium'),
@@ -50,6 +84,9 @@ export const userAgentConfigs = pgTable(
     autonomousTrading: boolean('autonomousTrading').notNull().default(true),
     autonomousDMs: boolean('autonomousDMs').notNull().default(false),
     autonomousGroupChats: boolean('autonomousGroupChats')
+      .notNull()
+      .default(false),
+    autonomousTransfers: boolean('autonomousTransfers')
       .notNull()
       .default(false),
     a2aEnabled: boolean('a2aEnabled').notNull().default(false),
@@ -68,6 +105,7 @@ export const userAgentConfigs = pgTable(
     index('UserAgentConfig_userId_idx').on(table.userId),
     index('UserAgentConfig_status_idx').on(table.status),
     index('UserAgentConfig_autonomousTrading_idx').on(table.autonomousTrading),
+    index('UserAgentConfig_alignment_team_idx').on(table.alignment, table.team),
   ]
 );
 

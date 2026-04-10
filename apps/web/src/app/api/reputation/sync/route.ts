@@ -92,7 +92,6 @@
  * @see {@link /lib/reputation/agent0-reputation-sync} Agent0 sync service
  */
 
-import { periodicReputationSync, syncUserReputationNow } from '@babylon/agents';
 import {
   requireAdmin,
   requireUserByIdentifier,
@@ -121,35 +120,15 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   let body: SyncRequest = {};
   body = (await request.json()) as SyncRequest;
 
-  if (body.userId) {
-    const user = await requireUserByIdentifier(body.userId);
-
-    const metrics = await syncUserReputationNow(user.id);
-
-    logger.info('Manual reputation sync completed', {
-      userId: user.id,
-      force: body.force,
-    });
-
-    return NextResponse.json({
-      success: true,
-      userId: user.id,
-      metrics,
-      message: 'User reputation synced successfully',
-    });
-  }
-  const results = await periodicReputationSync();
-
-  logger.info('Bulk reputation sync completed', {
-    total: results.total,
-    successful: results.results.filter((r) => r.success).length,
-    failed: results.results.filter((r) => !r.success).length,
+  // Agent0 reputation sync removed in Phase 1.
+  logger.info('Reputation sync endpoint called (Agent0 sync removed)', {
+    userId: body.userId,
   });
 
   return NextResponse.json({
     success: true,
-    ...results,
-    message: `Synced ${results.results.filter((r) => r.success).length} of ${results.total} agents`,
+    message:
+      'Agent0 reputation sync has been removed. Use internal reputation system.',
   });
 });
 
@@ -157,7 +136,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
  * GET /api/reputation/sync/status
  * Get sync status and current reputation for a user
  */
-export async function GET(request: NextRequest) {
+export const GET = withErrorHandling(async (request: NextRequest) => {
   const { searchParams } = new URL(request.url);
   const userId = searchParams.get('userId')!;
 
@@ -194,4 +173,4 @@ export async function GET(request: NextRequest) {
       totalFeedback: reputation!.metrics.totalFeedbackCount,
     },
   });
-}
+});

@@ -2,136 +2,99 @@
 
 import type { OnboardingProfilePayload } from '@babylon/shared';
 import {
-  CHAIN,
-  getWalletErrorMessage,
+  isValidOnboardingUsername,
   logger,
   POINTS,
-  WALLET_ERROR_MESSAGES,
+  sanitizeOnboardingUsername,
 } from '@babylon/shared';
-import { useIdentityToken, usePrivy } from '@privy-io/react-auth';
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
-import {
-  type ImportedProfileData,
-  OnboardingModal,
-} from '@/components/onboarding/OnboardingModal';
+// Phase 2: Privy replaced by Steward — no more usePrivy or useIdentityToken
+import { usePathname, useRouter } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ImportedProfileData } from '@/components/onboarding/UserOnboardingFlow';
+import { UserSignupOnboardingContextProvider } from '@/components/onboarding/user-signup-onboarding-context';
 import { useAuth } from '@/hooks/useAuth';
-import { useRegisterAgentTx } from '@/hooks/useRegisterAgentTx';
+import { useSignupTracking } from '@/hooks/usePostHog';
+import {
+  hasCompletedGameGuide,
+  markGameGuideCompletedLocal,
+} from '@/lib/game-guide-completion';
+import { useAuthStore } from '@/stores/authStore';
 import { apiFetch } from '@/utils/api-fetch';
-
-/**
- * Check if we're on a local network where smart wallets aren't supported.
- * Smart wallets (ERC-4337) require bundler infrastructure that only exists
- * on supported chains like Base/Base Sepolia, not on local Hardhat networks.
- */
-const isLocalNetwork = CHAIN.id === 31337;
-
-import type { JsonValue } from '@babylon/shared';
-import { type User as StoreUser, useAuthStore } from '@/stores/authStore';
 
 import { clearReferralCode, getReferralCode } from './ReferralCaptureProvider';
 
-/**
- * Onboarding stage type for multi-step onboarding flow.
- */
-type OnboardingStage = 'PROFILE' | 'ONCHAIN' | 'COMPLETED';
+function getSafeReturnTo(): string {
+  if (typeof window === 'undefined') return '/feed';
+  const raw = new URLSearchParams(window.location.search).get('returnTo');
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//')) {
+    return '/feed';
+  }
+  return raw;
+}
 
 /**
- * Onboarding provider component for managing user onboarding flow.
- *
- * Manages the complete onboarding process including profile creation,
- * on-chain registration, and social account linking. Handles full-screen
- * onboarding display, form submission, error handling, and progress tracking.
- * Integrates with Privy authentication and smart wallet registration.
- *
- * Features:
- * - Multi-stage onboarding (PROFILE, ONCHAIN, COMPLETED)
- * - Full-screen blocking onboarding (user cannot access app until complete)
- * - Profile creation form (simplified: username + picture + terms)
- * - On-chain agent registration (MANDATORY - no skip option)
- * - Social account import (Farcaster, Twitter) - skips PROFILE stage
- * - Referral code handling
- * - Error handling and retry logic
- *
- * Flow:
- * - Wallet users: PROFILE → ONCHAIN → COMPLETED
- * - Social (Farcaster/Twitter) users: ONCHAIN → COMPLETED (profile auto-imported)
- *
- * @param props - OnboardingProvider component props
- * @returns Onboarding provider element
+ * Unified first-run flow: profile signup + game guide on `/onboarding` (full page).
+ * Optional `?replayGuide=1` re-opens the tour from the user menu.
  */
 export function OnboardingProvider({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const router = useRouter();
+  const pathname = usePathname();
+
   const {
     authenticated,
     user,
     needsOnboarding,
-    needsOnchain,
     loadingProfile,
-    refresh,
+    profileFetchStatus,
     logout,
   } = useAuth();
 
-  const { user: privyUser } = usePrivy();
-
-  // Detect if user authenticated via social login (Farcaster or Twitter)
-  // These users skip the PROFILE stage - their data is auto-imported
+  // Phase 2: isSocialLogin derived from the Babylon user record (populated at login)
   const isSocialLogin = useMemo(() => {
-    if (!privyUser) return false;
-    const userWithSocial = privyUser as typeof privyUser & {
-      farcaster?: { username?: string };
-      twitter?: { username?: string };
-    };
-    return !!(
-      userWithSocial.farcaster?.username || userWithSocial.twitter?.username
-    );
-  }, [privyUser]);
+    return !!(user?.hasFarcaster || user?.hasTwitter);
+  }, [user]);
 
-  const { setUser, setNeedsOnboarding, setNeedsOnchain } = useAuthStore();
-  const { identityToken } = useIdentityToken();
-  const { registerAgent, smartWalletAddress, smartWalletReady } =
-    useRegisterAgentTx();
+  const { setUser, setNeedsOnboarding } = useAuthStore();
+  // identityToken deprecated — Steward JWT is managed server-side via httpOnly cookie
+  const identityToken: string | undefined = undefined;
+  const { trackSignupStarted, trackSignupCompleted, trackOnboardingStep } =
+    useSignupTracking();
 
-  const [stage, setStage] = useState<OnboardingStage>('PROFILE');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [guideSubmitting, setGuideSubmitting] = useState(false);
+  const guideCompleteInFlight = useRef(false);
   const [error, setError] = useState<string | null>(null);
-  const [submittedProfile, setSubmittedProfile] =
+  const [_submittedProfile, setSubmittedProfile] =
     useState<OnboardingProfilePayload | null>(null);
   const [importedProfileData, setImportedProfileData] =
     useState<ImportedProfileData | null>(null);
   const [_hasProgressedPastSocialImport, setHasProgressedPastSocialImport] =
     useState(false);
-  const [pendingOnchainSubmission, setPendingOnchainSubmission] =
-    useState<OnboardingProfilePayload | null>(null);
-  const [onchainReferralCode, setOnchainReferralCode] = useState<string | null>(
-    null
-  );
-  // Store last client-submitted registration txHash so retries can sync without re-signing
-  const [onchainTxHash, setOnchainTxHash] = useState<string | null>(null);
-
-  // Track if social user auto-submit is currently in-flight (prevents StrictMode double-invoke)
   const socialAutoSubmitRef = useRef(false);
-  // Persistent flag to prevent repeated auto-submit attempts after failure
-  // (only reset on explicit logout/cleanup, NOT on failure)
   const [socialAutoSubmitAttempted, setSocialAutoSubmitAttempted] =
     useState(false);
-  // Prevent duplicate on-chain submissions (e.g. StrictMode double-invoking effects)
-  const onchainSubmitInFlightRef = useRef(false);
 
-  // Delay onboarding display to prevent flickering
   const [isReadyToShow, setIsReadyToShow] = useState(false);
   const [hasInitialized, setHasInitialized] = useState(false);
 
-  // Wait for app to stabilize before showing onboarding
+  const [replayGuide, setReplayGuide] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    setReplayGuide(
+      pathname === '/onboarding' &&
+        new URLSearchParams(window.location.search).get('replayGuide') === '1'
+    );
+  }, [pathname]);
+
+  const guideDone = useMemo(
+    () => hasCompletedGameGuide(user?.id, user?.gameGuideCompletedAt),
+    [user?.id, user?.gameGuideCompletedAt]
+  );
+
   useEffect(() => {
     if (!authenticated || loadingProfile) {
       setIsReadyToShow(false);
@@ -139,14 +102,13 @@ export function OnboardingProvider({
       return;
     }
 
-    // If already initialized and conditions change, show immediately
     if (hasInitialized) {
       setIsReadyToShow(true);
       return;
     }
 
-    // First time: wait 1 second for app to load (shorter delay for blocking UI)
-    const delay = 1000; // Fixed 1 second delay for consistent UX
+    // Shorter delay in dev avoids a sluggish redirect while Turbopack compiles.
+    const delay = process.env.NODE_ENV === 'development' ? 0 : 1000;
     const timer = setTimeout(() => {
       setIsReadyToShow(true);
       setHasInitialized(true);
@@ -155,21 +117,19 @@ export function OnboardingProvider({
     return () => clearTimeout(timer);
   }, [authenticated, loadingProfile, hasInitialized]);
 
-  // If needsOnboarding is manually set to true, show onboarding immediately
   useEffect(() => {
-    if (needsOnboarding && authenticated && !loadingProfile) {
+    if (
+      needsOnboarding &&
+      authenticated &&
+      !loadingProfile &&
+      profileFetchStatus === 'done'
+    ) {
       setIsReadyToShow(true);
       setHasInitialized(true);
     }
-  }, [needsOnboarding, authenticated, loadingProfile]);
+  }, [needsOnboarding, authenticated, loadingProfile, profileFetchStatus]);
 
-  /**
-   * Determines if onboarding should be shown (full-screen blocking).
-   * Unlike before, this is NOT dismissible - users must complete onboarding.
-   * On-chain registration is MANDATORY.
-   */
   const shouldShowOnboarding = useMemo(() => {
-    // Check if dev mode is enabled via URL parameter
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const isDevMode = params.get('dev') === 'true';
@@ -177,14 +137,11 @@ export function OnboardingProvider({
       const isHomePage = window.location.pathname === '/';
       const isWaitlistFlow = params.get('waitlist') === 'true';
 
-      // Hide onboarding on production (babylon.market) on home page unless ?dev=true
-      // BUT allow it if user is in waitlist flow (coming from waitlist signup)
       if (isProduction && isHomePage && !isDevMode && !isWaitlistFlow) {
         return false;
       }
     }
 
-    // Don't show until ready (prevents flickering)
     if (!isReadyToShow) {
       return false;
     }
@@ -193,44 +150,80 @@ export function OnboardingProvider({
       return false;
     }
 
-    // Don't show onboarding if user is already fully registered
-    // Both profileComplete AND onChainRegistered must be true
-    if (user?.onChainRegistered && user?.profileComplete) {
+    if (profileFetchStatus !== 'done') {
       return false;
     }
 
-    // Show briefly after completion to display success message
-    if (stage === 'COMPLETED') {
+    if (user?.isActor) {
+      return false;
+    }
+
+    if (replayGuide) {
       return true;
     }
 
-    // Show onboarding when backend says user needs to complete steps
-    // On-chain registration is now MANDATORY (no skip option)
-    return Boolean(needsOnboarding || needsOnchain);
+    if (needsOnboarding) {
+      return true;
+    }
+
+    if (!guideDone) {
+      return true;
+    }
+
+    return false;
   }, [
     isReadyToShow,
     authenticated,
     loadingProfile,
-    needsOnboarding,
-    needsOnchain,
-    stage,
+    profileFetchStatus,
     user,
+    replayGuide,
+    needsOnboarding,
+    guideDone,
   ]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!shouldShowOnboarding) return;
+    if (pathname === '/onboarding' || pathname.startsWith('/onboarding/')) {
+      return;
+    }
+
+    const currentParams = new URLSearchParams(window.location.search);
+    const next = new URLSearchParams();
+    const returnPath = `${pathname}${window.location.search}`;
+    if (returnPath && returnPath !== '/onboarding') {
+      next.set('returnTo', returnPath);
+    }
+    if (currentParams.get('waitlist') === 'true') {
+      next.set('waitlist', 'true');
+    }
+    if (currentParams.get('dev') === 'true') {
+      next.set('dev', 'true');
+    }
+    const q = next.toString();
+    router.replace(`/onboarding${q ? `?${q}` : ''}`);
+  }, [shouldShowOnboarding, pathname, router]);
+
+  const phase = useMemo<'profile' | 'guide'>(() => {
+    if (replayGuide) return 'guide';
+    if (needsOnboarding) return 'profile';
+    return 'guide';
+  }, [replayGuide, needsOnboarding]);
 
   const handleProfileSubmit = useCallback(
     async (payload: OnboardingProfilePayload) => {
       setIsSubmitting(true);
       setError(null);
+      trackSignupStarted();
 
       const referralCode = getReferralCode();
 
       logger.info(
         'Identity token state during signup',
         {
-          present: Boolean(identityToken),
-          tokenPreview: identityToken
-            ? `${identityToken.slice(0, 12)}...`
-            : null,
+          present: false,
+          tokenPreview: null,
         },
         'OnboardingProvider'
       );
@@ -256,45 +249,59 @@ export function OnboardingProvider({
         }
 
         if (data.user) {
+          const u = data.user as {
+            id: string;
+            walletAddress?: string;
+            displayName?: string;
+            username?: string;
+            bio?: string;
+            profileImageUrl?: string;
+            coverImageUrl?: string;
+            profileComplete?: boolean;
+            reputationPoints?: number;
+            hasFarcaster?: boolean;
+            hasTwitter?: boolean;
+            farcasterUsername?: string;
+            twitterUsername?: string;
+            nftTokenId?: number;
+            createdAt?: string;
+            onChainRegistered?: boolean;
+            gameGuideCompletedAt?: string | null;
+          };
           setUser({
-            id: data.user.id,
-            walletAddress:
-              data.user.walletAddress ?? smartWalletAddress ?? undefined,
-            displayName: data.user.displayName ?? payload.displayName,
+            id: u.id,
+            displayName:
+              u.displayName ?? payload.displayName ?? payload.username,
             email: user?.email,
-            username: data.user.username ?? payload.username,
-            bio: data.user.bio ?? payload.bio,
+            username: u.username ?? payload.username,
+            bio: u.bio ?? payload.bio,
             profileImageUrl:
-              data.user.profileImageUrl ?? payload.profileImageUrl ?? undefined,
+              u.profileImageUrl ?? payload.profileImageUrl ?? undefined,
             coverImageUrl:
-              data.user.coverImageUrl ?? payload.coverImageUrl ?? undefined,
-            profileComplete: data.user.profileComplete ?? true,
-            reputationPoints:
-              data.user.reputationPoints ?? user?.reputationPoints,
-            hasFarcaster: data.user.hasFarcaster ?? user?.hasFarcaster,
-            hasTwitter: data.user.hasTwitter ?? user?.hasTwitter,
-            farcasterUsername:
-              data.user.farcasterUsername ?? user?.farcasterUsername,
-            twitterUsername: data.user.twitterUsername ?? user?.twitterUsername,
-            nftTokenId: data.user.nftTokenId ?? undefined,
-            createdAt: data.user.createdAt ?? user?.createdAt,
-            onChainRegistered:
-              data.user.onChainRegistered ?? user?.onChainRegistered,
+              u.coverImageUrl ?? payload.coverImageUrl ?? undefined,
+            profileComplete: u.profileComplete ?? true,
+            reputationPoints: u.reputationPoints ?? user?.reputationPoints,
+            hasFarcaster: u.hasFarcaster ?? user?.hasFarcaster,
+            hasTwitter: u.hasTwitter ?? user?.hasTwitter,
+            farcasterUsername: u.farcasterUsername ?? user?.farcasterUsername,
+            twitterUsername: u.twitterUsername ?? user?.twitterUsername,
+            createdAt: u.createdAt ?? user?.createdAt,
+            gameGuideCompletedAt: u.gameGuideCompletedAt ?? null,
           });
         }
         setNeedsOnboarding(false);
-        setNeedsOnchain(true);
 
         clearReferralCode();
         setSubmittedProfile(payload);
-        setOnchainReferralCode(referralCode ?? null);
-        setOnchainTxHash(null);
-        setPendingOnchainSubmission({ ...payload });
-        setStage('ONCHAIN');
+        trackOnboardingStep('profile', true);
+        trackSignupCompleted(data.user?.id ?? '', {
+          hasReferrer: Boolean(referralCode),
+          hasFarcaster: data.user?.hasFarcaster ?? false,
+          hasTwitter: data.user?.hasTwitter ?? false,
+        });
         setIsSubmitting(false);
       } catch (err) {
         setIsSubmitting(false);
-        // Re-throw to let caller handle the error
         throw err;
       }
     },
@@ -302,25 +309,20 @@ export function OnboardingProvider({
       user,
       setUser,
       setNeedsOnboarding,
-      setNeedsOnchain,
-      identityToken,
-      smartWalletAddress,
+      trackSignupStarted,
+      trackSignupCompleted,
+      trackOnboardingStep,
     ]
   );
 
   useEffect(() => {
     if (!authenticated) {
-      setStage('PROFILE');
       setSubmittedProfile(null);
       setError(null);
       setImportedProfileData(null);
       setHasProgressedPastSocialImport(false);
-      setPendingOnchainSubmission(null);
-      setOnchainReferralCode(null);
-      setOnchainTxHash(null);
       socialAutoSubmitRef.current = false;
       setSocialAutoSubmitAttempted(false);
-      onchainSubmitInFlightRef.current = false;
       return;
     }
 
@@ -329,34 +331,43 @@ export function OnboardingProvider({
     }
 
     if (needsOnboarding) {
-      // For social login users (Farcaster/Twitter), skip PROFILE and auto-submit
-      // They go straight to ONCHAIN stage with auto-imported profile data
-      // Check both: socialAutoSubmitRef (in-flight) and socialAutoSubmitAttempted (persistent)
       if (
         isSocialLogin &&
         importedProfileData &&
         !socialAutoSubmitRef.current &&
         !socialAutoSubmitAttempted
       ) {
-        // Mark as attempted BEFORE submission to prevent retries on failure
         setSocialAutoSubmitAttempted(true);
-        // Mark as in-flight to prevent StrictMode double-invoke
         socialAutoSubmitRef.current = true;
         logger.info(
-          'Social login user - auto-submitting profile and skipping to ONCHAIN',
+          'Social login user - auto-submitting profile',
           {
             platform: importedProfileData.platform,
             username: importedProfileData.username,
           },
           'OnboardingProvider'
         );
-        // Auto-submit profile for social users - this will trigger ONCHAIN stage
+        const sanitizedUsername = sanitizeOnboardingUsername(
+          importedProfileData.username
+        );
+        if (!isValidOnboardingUsername(sanitizedUsername)) {
+          logger.warn(
+            'Social username not valid after sanitization, falling back to manual onboarding',
+            {
+              raw: importedProfileData.username,
+              sanitized: sanitizedUsername,
+            },
+            'OnboardingProvider'
+          );
+          socialAutoSubmitRef.current = false;
+          return;
+        }
         const autoProfile: OnboardingProfilePayload = {
-          username: importedProfileData.username,
+          username: sanitizedUsername,
           displayName: importedProfileData.displayName,
-          bio: '', // Empty bio by default
+          bio: '',
           profileImageUrl: importedProfileData.profileImageUrl ?? undefined,
-          coverImageUrl: undefined, // Auto-populated by backend
+          coverImageUrl: undefined,
           importedFrom: importedProfileData.platform,
           twitterId: importedProfileData.twitterId ?? null,
           twitterUsername:
@@ -368,10 +379,9 @@ export function OnboardingProvider({
             importedProfileData.platform === 'farcaster'
               ? importedProfileData.username
               : null,
-          tosAccepted: true, // Social login implies acceptance
+          tosAccepted: true,
           privacyPolicyAccepted: true,
         };
-        // Handle auto-submit with proper error handling
         handleProfileSubmit(autoProfile).catch((submitError: Error) => {
           logger.error(
             'Social login auto-submit failed',
@@ -382,107 +392,43 @@ export function OnboardingProvider({
             'OnboardingProvider'
           );
           setError(submitError.message);
-          // Reset in-flight ref but NOT socialAutoSubmitAttempted
-          // This allows the effect to complete but prevents automatic retries
-          // User must manually submit via the PROFILE form
           socialAutoSubmitRef.current = false;
-          // Fall back to manual profile entry
-          setStage('PROFILE');
         });
         return;
       }
-      // Non-social users: start at profile setup
-      setStage('PROFILE');
-      return;
     }
-
-    if (needsOnchain) {
-      if (!submittedProfile && user) {
-        setSubmittedProfile({
-          username: user.username ?? `user_${user.id.slice(0, 8)}`,
-          displayName: user.displayName ?? user.username ?? 'New User',
-          bio: '', // Empty bio by default
-          profileImageUrl: user.profileImageUrl ?? undefined,
-          coverImageUrl: user.coverImageUrl ?? undefined,
-        });
-      }
-      setStage((prev) => (prev === 'COMPLETED' ? prev : 'ONCHAIN'));
-      return;
-    }
-
-    // User has completed onboarding - don't reset stage or show onboarding
-    // The handleProfileSubmit dependency is intentional - the socialAutoSubmitAttempted
-    // and socialAutoSubmitRef guards prevent infinite loops and repeated retries.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     authenticated,
     loadingProfile,
     needsOnboarding,
-    needsOnchain,
-    user,
-    submittedProfile,
     isSocialLogin,
     importedProfileData,
     handleProfileSubmit,
     socialAutoSubmitAttempted,
   ]);
 
-  // Automatically extract social profile data from Privy user when authenticating
+  // Phase 2: Auto-import social profile from Babylon user record
+  // Social data (farcasterUsername, twitterUsername, etc.) is populated at login
+  // by the Farcaster/Twitter auth routes before this effect runs.
   useEffect(() => {
-    if (!authenticated || !privyUser || !needsOnboarding) return;
-    if (importedProfileData) return; // Already have imported data
-    if (loadingProfile) return; // Wait for profile to load
+    if (!authenticated || !needsOnboarding || !user) return;
+    if (importedProfileData) return;
+    if (loadingProfile) return;
 
-    const userWithFarcaster = privyUser as typeof privyUser & {
-      farcaster?: {
-        username?: string;
-        displayName?: string;
-        bio?: string;
-        pfp?: string;
-        pfpUrl?: string;
-        fid?: number;
-        url?: string;
-        ownerAddress?: string;
-        verifications?: string[];
-      };
-    };
-    const userWithTwitter = privyUser as typeof privyUser & {
-      twitter?: {
-        username?: string;
-        name?: string;
-        profilePictureUrl?: string;
-        subject?: string; // Twitter user ID
-      };
-    };
-
-    // Check if user authenticated with Farcaster
-    if (userWithFarcaster.farcaster) {
-      const fc = userWithFarcaster.farcaster;
-
-      // Use pfpUrl or pfp, whichever is available
-      const profileImage = fc.pfpUrl || fc.pfp || null;
-
+    if (user.hasFarcaster && user.farcasterUsername) {
       const profileData: ImportedProfileData = {
         platform: 'farcaster',
-        username:
-          fc.username ||
-          fc.displayName?.toLowerCase().replace(/\s+/g, '_') ||
-          'farcaster_user',
-        displayName: fc.displayName || fc.username || 'Farcaster User',
-        bio: fc.bio || undefined,
-        profileImageUrl: profileImage,
-        farcasterFid: fc.fid?.toString(),
+        username: user.farcasterUsername,
+        displayName: user.displayName || user.farcasterUsername,
+        bio: user.bio || undefined,
+        profileImageUrl: user.profileImageUrl || null,
+        farcasterFid: undefined,
       };
 
       logger.info(
-        'Auto-imported Farcaster profile from Privy - will award points on signup',
+        'Auto-imported Farcaster profile from Babylon user record',
         {
           username: profileData.username,
-          displayName: profileData.displayName,
-          fid: fc.fid,
-          hasBio: !!profileData.bio,
-          hasProfileImage: !!profileImage,
-          rewardEligible: true,
           expectedPoints: POINTS.FARCASTER_LINK,
         },
         'OnboardingProvider'
@@ -493,58 +439,33 @@ export function OnboardingProvider({
       return;
     }
 
-    // Check if user authenticated with Twitter
-    if (userWithTwitter.twitter) {
-      const tw = userWithTwitter.twitter;
-
-      // Upgrade Twitter profile image to higher resolution if available
-      let profileImageUrl = tw.profilePictureUrl;
-      if (profileImageUrl && profileImageUrl.includes('_normal')) {
-        profileImageUrl = profileImageUrl.replace('_normal', '_400x400');
-      }
-
+    if (user.hasTwitter && user.twitterUsername) {
       const profileData: ImportedProfileData = {
         platform: 'twitter',
-        username: tw.username || 'twitter_user',
-        displayName: tw.name || tw.username || 'Twitter User',
-        bio: undefined, // Twitter bio not directly available from Privy, would need separate API call
-        profileImageUrl: profileImageUrl || null,
-        twitterId: tw.subject || tw.username, // Use subject (Twitter user ID) if available
+        username: user.twitterUsername,
+        displayName: user.displayName || user.twitterUsername,
+        bio: undefined,
+        profileImageUrl: user.profileImageUrl || null,
+        twitterId: undefined,
       };
 
       logger.info(
-        'Auto-imported Twitter profile from Privy - will award points on signup',
-        {
-          username: profileData.username,
-          displayName: profileData.displayName,
-          twitterId: profileData.twitterId,
-          hasProfileImage: !!profileImageUrl,
-          rewardEligible: true,
-          expectedPoints: POINTS.TWITTER_LINK,
-        },
+        'Auto-imported Twitter profile from Babylon user record',
+        { username: profileData.username, expectedPoints: POINTS.TWITTER_LINK },
         'OnboardingProvider'
       );
 
       setImportedProfileData(profileData);
       setHasProgressedPastSocialImport(true);
-      return;
     }
-
-    // For wallet-only logins, don't set imported data - let the generated profile flow handle it
-    logger.info(
-      'User authenticated with wallet only - will use generated profile',
-      { userId: privyUser.id },
-      'OnboardingProvider'
-    );
   }, [
     authenticated,
-    privyUser,
+    user,
     needsOnboarding,
     importedProfileData,
     loadingProfile,
   ]);
 
-  // Listen for social import callbacks from URL parameters (for manual social linking)
   useEffect(() => {
     if (typeof window === 'undefined' || !authenticated) return;
 
@@ -556,7 +477,6 @@ export function OnboardingProvider({
       try {
         const parsed = JSON.parse(decodeURIComponent(dataParam)) as unknown;
 
-        // Validate the imported data structure
         if (
           typeof parsed !== 'object' ||
           parsed === null ||
@@ -584,17 +504,14 @@ export function OnboardingProvider({
 
         setImportedProfileData(profileData);
         setHasProgressedPastSocialImport(true);
-        setStage('PROFILE');
       } catch (parseError) {
         logger.warn(
           'Failed to parse social profile data from URL',
           { error: parseError },
           'OnboardingProvider'
         );
-        // Clean up malformed URL params and continue without imported data
       }
 
-      // Clean up URL
       const newUrl = new URL(window.location.href);
       newUrl.searchParams.delete('social_import');
       newUrl.searchParams.delete('data');
@@ -602,277 +519,105 @@ export function OnboardingProvider({
     }
   }, [authenticated]);
 
-  const submitOnchain = useCallback(
-    async (profile: OnboardingProfilePayload, referralCode: string | null) => {
-      // Defensive check: skip if user is already fully registered
-      if (
-        user?.onChainRegistered &&
-        user?.nftTokenId &&
-        user?.profileComplete
-      ) {
-        logger.info(
-          'User already fully registered, skipping onchain submission',
-          { userId: user.id, nftTokenId: user.nftTokenId },
-          'OnboardingProvider'
-        );
-        setNeedsOnboarding(false);
-        setNeedsOnchain(false);
-        setStage('COMPLETED');
+  const handleGuideComplete = useCallback(
+    async (options?: { nextHref?: string }) => {
+      if (guideCompleteInFlight.current) return;
+      const uid = user?.id;
+      const dest = options?.nextHref ?? getSafeReturnTo();
+
+      if (!uid) {
+        router.replace(dest);
         return;
       }
 
-      const body = {
-        walletAddress: smartWalletAddress ?? null,
-        referralCode: referralCode ?? null,
-      };
+      guideCompleteInFlight.current = true;
+      setGuideSubmitting(true);
+      markGameGuideCompletedLocal(uid);
 
-      const callEndpoint = async (payload: Record<string, string | null>) => {
-        const response = await apiFetch('/api/users/onboarding/onchain', {
+      try {
+        const res = await apiFetch('/api/users/me/game-guide', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
         });
-
-        const data = await response.json();
-        if (!response.ok) {
-          const rawError = data?.error;
-          const message =
-            (typeof rawError === 'string'
-              ? rawError
-              : typeof rawError?.message === 'string'
-                ? rawError.message
-                : null) ??
-            `Failed to complete on-chain onboarding (status ${response.status})`;
-          throw new Error(message);
-        }
-        return data as {
-          onchain: Record<string, JsonValue>;
-          user: StoreUser | null;
-        };
-      };
-
-      const applyResponse = (data: {
-        onchain: Record<string, JsonValue>;
-        user: StoreUser | null;
-      }) => {
-        if (data.user) {
-          setUser({
-            id: data.user.id,
-            walletAddress: data.user.walletAddress ?? undefined,
-            displayName: data.user.displayName ?? user?.displayName,
-            email: user?.email,
-            username: data.user.username ?? undefined,
-            bio: data.user.bio ?? undefined,
-            profileImageUrl: data.user.profileImageUrl ?? undefined,
-            coverImageUrl: data.user.coverImageUrl ?? undefined,
-            profileComplete: data.user.profileComplete ?? true,
-            reputationPoints:
-              data.user.reputationPoints ?? user?.reputationPoints,
-            hasFarcaster: data.user.hasFarcaster ?? user?.hasFarcaster,
-            hasTwitter: data.user.hasTwitter ?? user?.hasTwitter,
-            farcasterUsername:
-              data.user.farcasterUsername ?? user?.farcasterUsername,
-            twitterUsername: data.user.twitterUsername ?? user?.twitterUsername,
-            nftTokenId: data.user.nftTokenId ?? undefined,
-            createdAt: data.user.createdAt ?? user?.createdAt,
-            onChainRegistered:
-              data.user.onChainRegistered ?? user?.onChainRegistered,
-          });
-        }
-        setNeedsOnboarding(false);
-        setNeedsOnchain(false);
-        setStage('COMPLETED');
-        setOnchainTxHash(null);
-        void refresh().catch(() => undefined);
-      };
-
-      const completeWithClient = async () => {
-        // On local networks (Hardhat), smart wallets (ERC-4337) don't work because
-        // there's no bundler infrastructure. Fall back to backend-signed transactions.
-        if (isLocalNetwork) {
-          logger.info(
-            'Local network detected - using backend-signed registration (no bundler available)',
-            { chainId: CHAIN.id },
-            'OnboardingProvider'
-          );
-          const data = await callEndpoint(body);
-          applyResponse(data);
-          return;
-        }
-
-        if (!smartWalletReady || !smartWalletAddress) {
-          throw new Error(WALLET_ERROR_MESSAGES.NO_EMBEDDED_WALLET);
-        }
-
-        // If we already have a tx hash from a previous attempt, reuse it so the
-        // user doesn't need to sign a second time just to sync backend state.
-        if (onchainTxHash) {
-          logger.info(
-            'Reusing existing on-chain registration txHash for backend sync',
-            { txHash: onchainTxHash },
-            'OnboardingProvider'
-          );
-          const data = await callEndpoint({
-            ...body,
-            txHash: onchainTxHash,
-          });
-          applyResponse(data);
-          return;
-        }
-
-        logger.info(
-          'Attempting client-signed on-chain registration',
-          { address: smartWalletAddress },
-          'OnboardingProvider'
-        );
-
-        // Check if wallet is already registered before submitting transaction
-        // If already registered, the server will handle syncing the state
-        const registrationResult = await registerAgent(profile).catch(
-          (txError: Error) => {
-            const errorMessage = txError.message.toLowerCase();
-            // If the error is "already registered", don't throw - let the server handle it
-            if (errorMessage.includes('already registered')) {
-              logger.info(
-                'Wallet already registered on-chain, syncing with server',
-                { address: smartWalletAddress },
-                'OnboardingProvider'
-              );
-              return 'already-registered';
-            }
-            // For other errors, re-throw
-            throw txError;
+        if (res.ok) {
+          const { gameGuideCompletedAt } = (await res.json()) as {
+            gameGuideCompletedAt: string;
+          };
+          const fresh = useAuthStore.getState().user;
+          if (fresh) {
+            setUser({ ...fresh, gameGuideCompletedAt });
           }
-        );
-
-        if (registrationResult === 'already-registered') {
-          // Call the endpoint without a txHash - server will detect existing registration
-          const data = await callEndpoint(body);
-          applyResponse(data);
-          return;
+          logger.info(
+            'Unified onboarding: game guide marked complete',
+            { userId: uid },
+            'OnboardingProvider'
+          );
+        } else {
+          logger.error(
+            'Game guide API failed (localStorage backup saved)',
+            { status: res.status, userId: uid },
+            'OnboardingProvider'
+          );
         }
-
-        const txHash = registrationResult as string;
-        // Persist txHash immediately so a server/network error won't force a re-sign
-        setOnchainTxHash(txHash);
-        logger.info(
-          'Client-submitted on-chain registration transaction',
-          { txHash },
-          'OnboardingProvider'
-        );
-
-        const data = await callEndpoint({
-          ...body,
-          txHash,
-        });
-        applyResponse(data);
-      };
-
-      const response = await completeWithClient().catch((rawError: Error) => {
-        // Use wallet-aware error message
-        const userFriendlyMessage = getWalletErrorMessage(rawError);
-        setError(userFriendlyMessage);
+      } catch (err) {
         logger.error(
-          'Failed to complete on-chain onboarding',
-          { error: rawError.message },
+          'Game guide API error',
+          {
+            error: err instanceof Error ? err.message : String(err),
+            userId: uid,
+          },
           'OnboardingProvider'
         );
-        return null;
-      });
+      } finally {
+        setGuideSubmitting(false);
+        guideCompleteInFlight.current = false;
+      }
 
-      if (!response) return;
+      trackOnboardingStep('guide', true);
+      router.replace(dest);
     },
-    [
-      onchainTxHash,
-      smartWalletReady,
-      refresh,
-      registerAgent,
-      setNeedsOnboarding,
-      setNeedsOnchain,
-      setUser,
-      smartWalletAddress,
+    [user?.id, router, setUser, trackOnboardingStep]
+  );
+
+  const onLogout = useCallback(async () => {
+    if (logout) {
+      await logout();
+    }
+  }, [logout]);
+
+  const flowContextValue = useMemo(
+    () => ({
+      phase,
+      isReplayGuide: replayGuide,
+      shouldShowOnboarding,
+      isOnboardingResolved: isReadyToShow,
+      isSubmitting,
+      guideSubmitting,
+      error,
+      onSubmitProfile: handleProfileSubmit,
+      onGuideComplete: handleGuideComplete,
+      onLogout,
       user,
+      importedData: importedProfileData,
+    }),
+    [
+      phase,
+      replayGuide,
+      shouldShowOnboarding,
+      isReadyToShow,
+      isSubmitting,
+      guideSubmitting,
+      error,
+      handleProfileSubmit,
+      handleGuideComplete,
+      onLogout,
+      user,
+      importedProfileData,
     ]
   );
 
-  useLayoutEffect(() => {
-    // On local networks, we use backend signing so smart wallet isn't required
-    const walletReady =
-      isLocalNetwork || (smartWalletReady && smartWalletAddress);
-
-    if (
-      stage !== 'ONCHAIN' ||
-      !pendingOnchainSubmission ||
-      !walletReady ||
-      isSubmitting ||
-      onchainSubmitInFlightRef.current
-    ) {
-      return;
-    }
-
-    onchainSubmitInFlightRef.current = true;
-    setIsSubmitting(true);
-    setError(null);
-    void submitOnchain(pendingOnchainSubmission, onchainReferralCode).finally(
-      () => {
-        setPendingOnchainSubmission(null);
-        setIsSubmitting(false);
-        onchainSubmitInFlightRef.current = false;
-      }
-    );
-  }, [
-    stage,
-    pendingOnchainSubmission,
-    smartWalletReady,
-    smartWalletAddress,
-    isSubmitting,
-    submitOnchain,
-    onchainReferralCode,
-  ]);
-
-  const handleRetryOnchain = useCallback(async () => {
-    if (!submittedProfile) return;
-    setError(null);
-
-    setOnchainReferralCode((prev) => prev ?? getReferralCode());
-    setPendingOnchainSubmission({ ...submittedProfile });
-  }, [submittedProfile]);
-
-  // Handler for completion - closes the onboarding screen
-  const handleComplete = useCallback(() => {
-    logger.info(
-      'User completed onboarding',
-      {
-        stage,
-        userId: user?.id,
-        onChainRegistered: user?.onChainRegistered,
-      },
-      'OnboardingProvider'
-    );
-    // Reset stage to allow re-entry if needed (defensive)
-    setStage('PROFILE');
-  }, [stage, user]);
-
-  // Full-screen blocking onboarding - user cannot access app until complete
-  // On-chain registration is MANDATORY (no skip option)
-  if (shouldShowOnboarding) {
-    return (
-      <OnboardingModal
-        isOpen
-        stage={stage}
-        isSubmitting={isSubmitting}
-        error={error}
-        isWalletReady={Boolean(smartWalletReady && smartWalletAddress)}
-        onSubmitProfile={handleProfileSubmit}
-        onRetryOnchain={handleRetryOnchain}
-        onComplete={handleComplete}
-        onLogout={logout}
-        user={user}
-        importedData={importedProfileData}
-      />
-    );
-  }
-
-  // User has completed onboarding - render children (the app)
-  return <>{children}</>;
+  return (
+    <UserSignupOnboardingContextProvider value={flowContextValue}>
+      {children}
+    </UserSignupOnboardingContextProvider>
+  );
 }

@@ -1,12 +1,12 @@
 /**
- * Agent Team Chat (Command Center) API
+ * Agent Team Chat (Agents) API
  *
  * @route GET /api/agents/team-chat - Get user's team chat info
  * @route POST /api/agents/team-chat - Ensure team chat exists (creates if needed)
  * @access Authenticated
  *
  * @description
- * Manages the unified "Command Center" group chat for a user's agents.
+ * Manages the unified "Agents" group chat for a user's agents.
  * Each user has exactly ONE team chat containing ALL their agents.
  *
  * The team chat is automatically created when the first agent is created,
@@ -18,7 +18,7 @@
  *     tags:
  *       - Agents
  *     summary: Get team chat info
- *     description: Returns the user's Command Center team chat with member list.
+ *     description: Returns the user's Agents team chat with member list.
  *     security:
  *       - PrivyAuth: []
  *     responses:
@@ -59,21 +59,20 @@
  */
 
 import { teamChatService } from '@babylon/agents';
-import { authenticateUser } from '@babylon/api';
+import { authenticateUser, withErrorHandling } from '@babylon/api';
 import {
-  and,
   chatParticipants,
   chats,
   db,
   eq,
   groupMembers,
   groups,
+  inArray,
   messages,
-  userAgentTeamChats,
-  users,
+  userAgentConfigs,
   withTransaction,
 } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
@@ -81,7 +80,7 @@ import { NextResponse } from 'next/server';
  * GET /api/agents/team-chat
  * Get user's team chat info with member list
  */
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandling(async function GET(req: NextRequest) {
   const user = await authenticateUser(req);
 
   const teamChatWithMembers = await teamChatService.getTeamChatWithMembers(
@@ -93,7 +92,7 @@ export async function GET(req: NextRequest) {
       {
         success: false,
         error: 'No team chat exists',
-        message: 'Create your first agent to initialize your Command Center.',
+        message: 'Create your first agent to initialize your Agents chat.',
       },
       { status: 404 }
     );
@@ -105,52 +104,55 @@ export async function GET(req: NextRequest) {
     'TeamChatAPI'
   );
 
+  // Fetch modelTier for each agent from userAgentConfigs
+  const agentIds = teamChatWithMembers.agents.map((a) => a.id);
+  const agentConfigs =
+    agentIds.length > 0
+      ? await db
+          .select({
+            userId: userAgentConfigs.userId,
+            modelTier: userAgentConfigs.modelTier,
+          })
+          .from(userAgentConfigs)
+          .where(inArray(userAgentConfigs.userId, agentIds))
+      : [];
+
+  // Create a map for quick lookup
+  const modelTierMap = new Map(
+    agentConfigs.map((c) => [c.userId, c.modelTier])
+  );
+
   return NextResponse.json({
     success: true,
     teamChat: {
       id: teamChatWithMembers.id,
       chatId: teamChatWithMembers.chatId,
       groupId: teamChatWithMembers.groupId,
-      createdAt: teamChatWithMembers.createdAt.toISOString(),
-      updatedAt: teamChatWithMembers.updatedAt.toISOString(),
+      createdAt: toISO(teamChatWithMembers.createdAt),
+      updatedAt: toISO(teamChatWithMembers.updatedAt),
       agents: teamChatWithMembers.agents.map((agent) => ({
         id: agent.id,
         username: agent.username,
         displayName: agent.displayName,
         profileImageUrl: agent.profileImageUrl,
         isAgent: agent.isAgent,
+        modelTier: modelTierMap.get(agent.id) ?? 'free',
+        virtualBalance: Number(agent.virtualBalance ?? 0),
       })),
       agentCount: teamChatWithMembers.agents.length,
     },
   });
-}
+});
 
 /**
  * POST /api/agents/team-chat
  * Ensure team chat exists (creates if needed) and sync existing agents
  */
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandling(async function POST(req: NextRequest) {
   const user = await authenticateUser(req);
 
-  // Per spec: Command Center is created when the user has at least one agent.
-  // Avoid creating empty Command Centers for users without agents.
-  const [agentExists] = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(and(eq(users.managedBy, user.id), eq(users.isAgent, true)))
-    .limit(1);
-
-  if (!agentExists) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'No agents found',
-        message: 'Create your first agent to initialize your Command Center.',
-      },
-      { status: 404 }
-    );
-  }
-
+  // Always create Agents chat - even with 0 agents
+  // This allows users to see the Agents UI before creating their first agent
   const teamChat = await teamChatService.ensureTeamChat(user.id);
 
   // Sync any existing agents that aren't in the team chat yet
@@ -168,26 +170,46 @@ export async function POST(req: NextRequest) {
     'TeamChatAPI'
   );
 
+  // Fetch modelTier for each agent from userAgentConfigs
+  const agentIds = agents.map((a) => a.id);
+  const agentConfigs =
+    agentIds.length > 0
+      ? await db
+          .select({
+            userId: userAgentConfigs.userId,
+            modelTier: userAgentConfigs.modelTier,
+          })
+          .from(userAgentConfigs)
+          .where(inArray(userAgentConfigs.userId, agentIds))
+      : [];
+
+  // Create a map for quick lookup
+  const modelTierMap = new Map(
+    agentConfigs.map((c) => [c.userId, c.modelTier])
+  );
+
   return NextResponse.json({
     success: true,
     teamChat: {
       id: teamChat.id,
       chatId: teamChat.chatId,
       groupId: teamChat.groupId,
-      createdAt: teamChat.createdAt.toISOString(),
-      updatedAt: teamChat.updatedAt.toISOString(),
+      createdAt: toISO(teamChat.createdAt),
+      updatedAt: toISO(teamChat.updatedAt),
       agents: agents.map((agent) => ({
         id: agent.id,
         username: agent.username,
         displayName: agent.displayName,
         profileImageUrl: agent.profileImageUrl,
         isAgent: agent.isAgent,
+        modelTier: modelTierMap.get(agent.id) ?? 'free',
+        virtualBalance: Number(agent.virtualBalance ?? 0),
       })),
       agentCount: agents.length,
     },
     syncedAgents: syncedCount,
   });
-}
+});
 
 /**
  * DELETE /api/agents/team-chat
@@ -196,7 +218,7 @@ export async function POST(req: NextRequest) {
  * ⚠️ DESTRUCTIVE OPERATION - DEVELOPMENT ONLY:
  * Disabled in production. Use only for development/testing.
  *
- * This permanently deletes all Command Center data including:
+ * This permanently deletes all Agents data including:
  * - All messages and conversation history
  * - Group membership records
  * - Chat participant records
@@ -207,9 +229,11 @@ export async function POST(req: NextRequest) {
  * - Development/testing reset
  *
  * The team chat will be recreated automatically when the user
- * visits Command Center again or when an agent is created.
+ * visits Agents again or when an agent is created.
  */
-export async function DELETE(req: NextRequest) {
+export const DELETE = withErrorHandling(async function DELETE(
+  req: NextRequest
+) {
   // Gate destructive endpoint to development only
   if (process.env.NODE_ENV === 'production') {
     return NextResponse.json(
@@ -236,19 +260,31 @@ export async function DELETE(req: NextRequest) {
   );
 
   // Delete all related data in a transaction for atomicity
+  // Need to delete all chats in the group, not just the active one
   await withTransaction(async (tx) => {
-    await tx.delete(messages).where(eq(messages.chatId, teamChat.chatId));
-    await tx
-      .delete(chatParticipants)
-      .where(eq(chatParticipants.chatId, teamChat.chatId));
-    await tx.delete(chats).where(eq(chats.id, teamChat.chatId));
+    // Get all chats in this group
+    const allChatsInGroup = await tx
+      .select({ id: chats.id })
+      .from(chats)
+      .where(eq(chats.groupId, teamChat.groupId));
+    const chatIds = allChatsInGroup.map((c) => c.id);
+
+    if (chatIds.length > 0) {
+      // Delete messages for all chats
+      await tx.delete(messages).where(inArray(messages.chatId, chatIds));
+      // Delete participants for all chats
+      await tx
+        .delete(chatParticipants)
+        .where(inArray(chatParticipants.chatId, chatIds));
+      // Delete all chats
+      await tx.delete(chats).where(inArray(chats.id, chatIds));
+    }
+
+    // Delete group members and the group itself
     await tx
       .delete(groupMembers)
       .where(eq(groupMembers.groupId, teamChat.groupId));
     await tx.delete(groups).where(eq(groups.id, teamChat.groupId));
-    await tx
-      .delete(userAgentTeamChats)
-      .where(eq(userAgentTeamChats.userId, user.id));
   });
 
   logger.info(
@@ -259,7 +295,6 @@ export async function DELETE(req: NextRequest) {
 
   return NextResponse.json({
     success: true,
-    message:
-      'Team chat deleted. Visit Command Center again to create a fresh one.',
+    message: 'Team chat deleted. Visit Agents again to create a fresh one.',
   });
-}
+});

@@ -70,8 +70,9 @@
  */
 
 import {
+  addPublicReadHeaders,
   NotFoundError,
-  optionalAuth,
+  publicRateLimit,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
@@ -86,7 +87,7 @@ import {
   sql,
   users,
 } from '@babylon/db';
-import { logger, UsernameParamSchema } from '@babylon/shared';
+import { logger, toISO, UsernameParamSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
 /**
@@ -101,8 +102,8 @@ export const GET = withErrorHandling(
     const params = await context.params;
     const { username } = UsernameParamSchema.parse(params);
 
-    // Optional authentication
-    await optionalAuth(request);
+    const { error, rateLimitInfo } = await publicRateLimit(request);
+    if (error) return error;
 
     // Get user profile by username (case-insensitive)
     const [dbUser] = await db
@@ -115,6 +116,8 @@ export const GET = withErrorHandling(
         profileImageUrl: users.profileImageUrl,
         coverImageUrl: users.coverImageUrl,
         isActor: users.isActor,
+        isAgent: users.isAgent,
+        managedBy: users.managedBy,
         profileComplete: users.profileComplete,
         hasUsername: users.hasUsername,
         hasBio: users.hasBio,
@@ -177,7 +180,7 @@ export const GET = withErrorHandling(
       'GET /api/users/by-username/[username]'
     );
 
-    return successResponse({
+    const res = successResponse({
       user: {
         id: dbUser.id,
         walletAddress: dbUser.walletAddress,
@@ -187,6 +190,8 @@ export const GET = withErrorHandling(
         profileImageUrl: dbUser.profileImageUrl,
         coverImageUrl: dbUser.coverImageUrl,
         isActor: dbUser.isActor,
+        isAgent: dbUser.isAgent,
+        managedBy: dbUser.managedBy,
         profileComplete: dbUser.profileComplete,
         hasUsername: dbUser.hasUsername,
         hasBio: dbUser.hasBio,
@@ -202,7 +207,7 @@ export const GET = withErrorHandling(
         hasTwitter: dbUser.hasTwitter,
         farcasterUsername: dbUser.farcasterUsername,
         twitterUsername: dbUser.twitterUsername,
-        createdAt: dbUser.createdAt.toISOString(),
+        createdAt: toISO(dbUser.createdAt),
         stats: {
           positions: Number(positionCount?.count || 0),
           comments: Number(commentCount?.count || 0),
@@ -212,5 +217,7 @@ export const GET = withErrorHandling(
         },
       },
     });
+    if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
+    return res;
   }
 );

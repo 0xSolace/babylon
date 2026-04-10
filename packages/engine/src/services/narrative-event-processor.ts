@@ -19,17 +19,22 @@ import {
   eq,
   type LongTermArcState,
   type MarketImpact,
-  type PendingTransition,
   questionArcPlans,
   questions,
+  type ScheduledEvent,
   type StructuredEventData,
   worldEvents,
 } from '@babylon/db';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+import { escapeRegex, generateSnowflakeId, logger } from '@babylon/shared';
 import type { BabylonLLMClient } from '../llm/openai-client';
 import { toSafeDayNumber } from '../utils/date-utils';
 import { secureRandom } from '../utils/entropy';
+import { formatError } from '../utils/error-utils';
 import { generateArticlesForArcEvent } from './event-generation-helpers';
+import {
+  parsePendingTransitionsSafe,
+  parseScheduledEventsSafe,
+} from './jsonb-validators';
 
 // Re-export the BabylonLLMClient type for callers
 export type { BabylonLLMClient } from '../llm/openai-client';
@@ -50,6 +55,28 @@ const STATE_DAY_RANGES: Record<LongTermArcState, [number, number]> = {
  * Minimum hours between event generations to prevent spam
  */
 const EVENT_COOLDOWN_HOURS = 2;
+
+/**
+ * Extract a concise topic from a full question text.
+ * Turns "Will NVAIDAI release its next-gen AI accelerator..." into
+ * "NVAIDAI's next-gen AI accelerator release"
+ */
+function extractTopicFromQuestion(questionText: string): string {
+  // Strip "Will " prefix and trailing "?" / date clauses
+  let topic = questionText
+    .replace(/^Will\s+/i, '')
+    .replace(/\s+by\s+\d{4}[-/]\d{2}[-/]\d{2}.*$/i, '')
+    .replace(/\s+before\s+(the\s+)?(close|end)\s+of\s+\d{4}.*$/i, '')
+    .replace(/\?+$/, '')
+    .trim();
+
+  // Cap length
+  if (topic.length > 80) {
+    topic = topic.slice(0, 77) + '...';
+  }
+
+  return topic;
+}
 
 /**
  * Helper to prepare world event data from an arc event.
@@ -77,23 +104,8 @@ async function prepareWorldEventData(
     pointsToward: 'YES' | 'NO' | null;
   };
 }> {
-  // Defensive guard: ensure templates exist for this event type
-  const templates = WORLD_EVENT_DESCRIPTION_TEMPLATES[structuredEvent.type];
-  const fallbackTemplate = 'An event related to {topic} occurred';
-  const safeTemplates =
-    templates && templates.length > 0 ? templates : [fallbackTemplate];
-  if (!templates || templates.length === 0) {
-    logger.warn(
-      `Missing templates for event type ${structuredEvent.type}, using fallback`,
-      { eventType: structuredEvent.type },
-      'NarrativeEventProcessor'
-    );
-  }
-  const template =
-    safeTemplates[Math.floor(secureRandom() * safeTemplates.length)]!;
-  const topic =
-    questionText.length > 80 ? questionText.slice(0, 80) + '...' : questionText;
-  const description = template.replace('{topic}', topic);
+  // Description is just the concise topic — the eventType field provides context
+  const description = extractTopicFromQuestion(questionText);
 
   const eventId = await generateSnowflakeId();
   const safeDayNumber =
@@ -123,41 +135,8 @@ async function prepareWorldEventData(
  * Description templates for world events by event type.
  * Shared between createWorldEventFromArcEvent and createWorldEventFromArcEventTx.
  */
-const WORLD_EVENT_DESCRIPTION_TEMPLATES: Record<
-  StructuredEventData['type'],
-  string[]
-> = {
-  rumor: [
-    'Unconfirmed reports suggest developments regarding {topic}',
-    'Sources claim new information about {topic}',
-    'Speculation grows around {topic}',
-  ],
-  leak: [
-    'Leaked documents reveal details about {topic}',
-    'Anonymous source exposes information on {topic}',
-    'Internal memo surfaces regarding {topic}',
-  ],
-  denial: [
-    'Officials deny reports about {topic}',
-    'Spokesperson refutes claims regarding {topic}',
-    'Strong denial issued concerning {topic}',
-  ],
-  confirmation: [
-    'Sources confirm developments in {topic}',
-    'Official statement verifies {topic}',
-    'Breaking: Confirmation on {topic}',
-  ],
-  reversal: [
-    'Unexpected reversal in {topic}',
-    'Major shift reported on {topic}',
-    'Surprise development contradicts earlier reports on {topic}',
-  ],
-  proof: [
-    'Definitive evidence emerges on {topic}',
-    'Documentation confirms outcome of {topic}',
-    'Final proof released regarding {topic}',
-  ],
-};
+// Templates removed — event descriptions are now just the extracted topic.
+// The eventType field (rumor, leak, confirmation, etc.) provides the context.
 
 /**
  * Get the expected arc state for a given day number (long-term arcs only)
@@ -198,9 +177,10 @@ export function evaluateStateTransition(
     return expectedState;
   }
 
-  // Check pending transitions
-  // Cast from unknown since JSONB columns don't have type info at runtime
-  const pending = (arc.pendingTransitions as PendingTransition[] | null) ?? [];
+  // Check pending transitions using safe parser for JSONB validation
+  const pending = parsePendingTransitionsSafe(arc.pendingTransitions, {
+    arcId: arc.id,
+  });
   for (const transition of pending) {
     if (dayNumber >= transition.triggerDay) {
       // Probability check
@@ -319,6 +299,7 @@ export async function transitionArcState(
 
 /**
  * Check if an event should be generated for this arc (long-term arcs only)
+ * DEPRECATED: Use getNextScheduledEvent for deterministic event firing.
  *
  * @param arc - The arc state to check
  * @param rand - Optional RNG function returning 0-1, defaults to secureRandom(). Pass a seeded RNG for deterministic tests.
@@ -352,30 +333,191 @@ export function shouldGenerateEvent(
 }
 
 /**
+ * Get the next scheduled event that should fire based on current day and hour.
+ *
+ * @description
+ * Checks the eventSchedule in the arc plan for unfired events that are due.
+ * Events fire when: currentDay >= baseDay AND currentHour >= jitterHours (adjusted to 0-23).
+ *
+ * @param eventSchedule - Array of scheduled events from the arc plan
+ * @param currentDay - Current game day (1-indexed)
+ * @param currentHour - Current hour of day (0-23)
+ * @returns The next event to fire, or null if none are due
+ */
+export function getNextScheduledEvent(
+  eventSchedule: ScheduledEvent[] | null | undefined,
+  currentDay: number,
+  currentHour: number = new Date().getHours()
+): ScheduledEvent | null {
+  if (!eventSchedule || eventSchedule.length === 0) {
+    return null;
+  }
+
+  // Find unfired events that are due
+  for (const event of eventSchedule) {
+    if (event.fired) continue;
+
+    // Calculate effective firing time
+    // jitterHours is applied to the baseDay (can shift forward/backward by hours)
+    const effectiveDay = event.baseDay + Math.floor(event.jitterHours / 24);
+    const effectiveHour = ((event.jitterHours % 24) + 24) % 24; // Normalize to 0-23
+
+    // Check if this event should fire
+    if (currentDay > effectiveDay) {
+      // Past the day, should fire
+      return event;
+    } else if (currentDay === effectiveDay && currentHour >= effectiveHour) {
+      // Same day, past the hour
+      return event;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Mark a scheduled event as fired and persist to database.
+ *
+ * @param questionId - The question ID for the arc plan
+ * @param eventIndex - The index of the event in the schedule to mark as fired
+ * @returns True if successfully marked, false if event not found or already fired
+ */
+export async function markScheduledEventFired(
+  questionId: string,
+  eventIndex: number
+): Promise<boolean> {
+  // Get current arc plan
+  const [arcPlan] = await db
+    .select({
+      id: questionArcPlans.id,
+      eventSchedule: questionArcPlans.eventSchedule,
+    })
+    .from(questionArcPlans)
+    .where(eq(questionArcPlans.questionId, questionId))
+    .limit(1);
+
+  if (!arcPlan || !arcPlan.eventSchedule) {
+    logger.warn(
+      'Cannot mark event fired: arc plan or schedule not found',
+      { questionId, eventIndex },
+      'NarrativeEventProcessor'
+    );
+    return false;
+  }
+
+  const schedule = parseScheduledEventsSafe(arcPlan.eventSchedule, {
+    questionId,
+  });
+  if (eventIndex < 0 || eventIndex >= schedule.length) {
+    logger.warn(
+      'Cannot mark event fired: invalid event index',
+      { questionId, eventIndex, scheduleLength: schedule.length },
+      'NarrativeEventProcessor'
+    );
+    return false;
+  }
+
+  const eventAtIndex = schedule[eventIndex];
+  if (!eventAtIndex) {
+    logger.warn(
+      'Cannot mark event fired: event not found at index',
+      { questionId, eventIndex },
+      'NarrativeEventProcessor'
+    );
+    return false;
+  }
+
+  if (eventAtIndex.fired) {
+    // Already fired, idempotent success
+    return true;
+  }
+
+  // Update the event as fired
+  const updatedSchedule = [...schedule];
+  updatedSchedule[eventIndex] = {
+    ...eventAtIndex,
+    fired: true,
+    firedAt: new Date().toISOString(),
+  };
+
+  await db
+    .update(questionArcPlans)
+    .set({ eventSchedule: updatedSchedule })
+    .where(eq(questionArcPlans.id, arcPlan.id));
+
+  logger.info(
+    'Marked scheduled event as fired',
+    {
+      questionId,
+      eventIndex,
+      eventType: eventAtIndex.eventType,
+      signalDirection: eventAtIndex.signalDirection,
+    },
+    'NarrativeEventProcessor'
+  );
+
+  return true;
+}
+
+/**
  * Generate a structured event for an arc based on current state
+ *
+ * @param arc - The arc state
+ * @param arcPlan - Actor assignments from the arc plan
+ * @param scheduledEvent - Optional scheduled event to use for deterministic event type and signal
  */
 export async function generateStructuredEvent(
   arc: ArcState,
-  arcPlan: { insiderActorIds: string[]; deceiverActorIds: string[] } | null
+  arcPlan: { insiderActorIds: string[]; deceiverActorIds: string[] } | null,
+  scheduledEvent?: ScheduledEvent
 ): Promise<StructuredEventData> {
-  // Event types appropriate for each state (long-term arcs only)
-  const stateEventTypes: Record<
-    LongTermArcState,
-    StructuredEventData['type'][]
-  > = {
-    setup: ['rumor'],
-    tension: ['rumor', 'leak', 'denial'],
-    escalation: ['leak', 'denial', 'confirmation'],
-    crisis: ['denial', 'confirmation', 'reversal'],
-    revelation: ['confirmation', 'proof'],
-    resolution: ['proof'],
-  };
+  // If we have a scheduled event, use its type and signal direction
+  let eventType: StructuredEventData['type'];
+  let signalDirection: 'YES' | 'NO' | 'NEUTRAL';
 
-  const possibleTypes = stateEventTypes[
-    arc.currentState as LongTermArcState
-  ] ?? ['rumor'];
-  const eventType =
-    possibleTypes[Math.floor(secureRandom() * possibleTypes.length)]!;
+  if (scheduledEvent) {
+    // Map scheduled event type to structured event type
+    const typeMapping: Record<
+      ScheduledEvent['eventType'],
+      StructuredEventData['type']
+    > = {
+      leak: 'leak',
+      rumor: 'rumor',
+      scandal: 'leak', // Scandals are reported as leaks
+      confirmation: 'confirmation',
+      red_herring: 'rumor', // Red herrings are disguised as rumors
+    };
+    eventType = typeMapping[scheduledEvent.eventType];
+    signalDirection = scheduledEvent.signalDirection;
+  } else {
+    // Fall back to state-based event type selection (legacy behavior)
+    const stateEventTypes: Record<
+      LongTermArcState,
+      StructuredEventData['type'][]
+    > = {
+      setup: ['rumor'],
+      tension: ['rumor', 'leak', 'denial'],
+      escalation: ['leak', 'denial', 'confirmation'],
+      crisis: ['denial', 'confirmation', 'reversal'],
+      revelation: ['confirmation', 'proof'],
+      resolution: ['proof'],
+    };
+
+    const possibleTypes = stateEventTypes[
+      arc.currentState as LongTermArcState
+    ] ?? ['rumor'];
+    eventType =
+      possibleTypes[Math.floor(secureRandom() * possibleTypes.length)]!;
+
+    // Signal direction based on event type and state
+    if (eventType === 'denial' || eventType === 'reversal') {
+      signalDirection = 'NO';
+    } else if (eventType === 'confirmation' || eventType === 'proof') {
+      signalDirection = 'YES';
+    } else {
+      signalDirection = secureRandom() > 0.5 ? 'YES' : 'NO';
+    }
+  }
 
   // Severity increases as arc progresses
   const severityByState: Record<LongTermArcState, number> = {
@@ -394,16 +536,6 @@ export async function generateStructuredEvent(
     Math.min(5, baseSeverity + Math.floor(secureRandom() * 2))
   );
   const severity = rawSeverity as 1 | 2 | 3 | 4 | 5;
-
-  // Signal direction based on event type and state
-  let signalDirection: 'YES' | 'NO' | 'NEUTRAL';
-  if (eventType === 'denial' || eventType === 'reversal') {
-    signalDirection = 'NO';
-  } else if (eventType === 'confirmation' || eventType === 'proof') {
-    signalDirection = 'YES';
-  } else {
-    signalDirection = secureRandom() > 0.5 ? 'YES' : 'NO';
-  }
 
   // Signal strength increases with severity
   const signalStrength = 0.3 + severity * 0.14;
@@ -582,10 +714,6 @@ async function getAffectedStocksForQuestion(
     const questionText = question.text;
 
     const mentionedOrgs = allOrgs.filter((org) => {
-      // Escape special regex characters in names
-      const escapeRegex = (str: string) =>
-        str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
       // Check if org name is mentioned (word boundary match)
       const namePattern = new RegExp(`\\b${escapeRegex(org.name)}\\b`, 'i');
       const nameMatch = namePattern.test(questionText);
@@ -676,7 +804,7 @@ async function getAffectedStocksForQuestion(
       'Failed to get affected stocks for question',
       {
         questionId,
-        error: error instanceof Error ? error.message : String(error),
+        error: formatError(error),
       },
       'NarrativeEventProcessor'
     );
@@ -741,8 +869,35 @@ export async function processArcTick(
     }
   }
 
-  // Check if event should be generated using post-transition state
-  const shouldGenerate = shouldGenerateEvent(effectiveArc);
+  // Get arc plan for actor assignments AND event schedule
+  const [arcPlan] = await db
+    .select({
+      id: questionArcPlans.id,
+      insiderActorIds: questionArcPlans.insiderActorIds,
+      deceiverActorIds: questionArcPlans.deceiverActorIds,
+      eventSchedule: questionArcPlans.eventSchedule,
+    })
+    .from(questionArcPlans)
+    .where(eq(questionArcPlans.questionId, arc.questionId))
+    .limit(1);
+
+  // Check for scheduled events first (deterministic approach)
+  const currentHour = new Date().getHours();
+  const parsedSchedule = arcPlan?.eventSchedule
+    ? parseScheduledEventsSafe(arcPlan.eventSchedule, {
+        questionId: arc.questionId,
+      })
+    : [];
+  const scheduledEvent =
+    parsedSchedule.length > 0
+      ? getNextScheduledEvent(parsedSchedule, dayNumber, currentHour)
+      : null;
+
+  // Determine if we should generate an event:
+  // 1. If there's a scheduled event due, use it (deterministic)
+  // 2. Otherwise, fall back to probability-based (for backwards compat with old arc plans)
+  const shouldGenerate =
+    scheduledEvent !== null || shouldGenerateEvent(effectiveArc);
   let eventGenerated = false;
 
   if (shouldGenerate) {
@@ -750,16 +905,6 @@ export async function processArcTick(
 
     // FIRST: Gather all data needed BEFORE acquiring the lock
     // This ensures we don't hold a lock while doing expensive queries/LLM calls
-
-    // Get arc plan for actor assignments
-    const [arcPlan] = await db
-      .select({
-        insiderActorIds: questionArcPlans.insiderActorIds,
-        deceiverActorIds: questionArcPlans.deceiverActorIds,
-      })
-      .from(questionArcPlans)
-      .where(eq(questionArcPlans.questionId, arc.questionId))
-      .limit(1);
 
     // Normalize null arrays to empty arrays
     const normalizedArcPlan = arcPlan
@@ -770,10 +915,24 @@ export async function processArcTick(
       : null;
 
     // Generate the structured event using post-transition state (may involve DB queries for affected stocks)
+    // If we have a scheduled event, use its signal direction
     const structuredEvent = await generateStructuredEvent(
       effectiveArc,
-      normalizedArcPlan
+      normalizedArcPlan,
+      scheduledEvent ?? undefined
     );
+
+    // If this was from a scheduled event, find its index and mark it as fired
+    let scheduledEventIndex = -1;
+    if (scheduledEvent && parsedSchedule.length > 0) {
+      scheduledEventIndex = parsedSchedule.findIndex(
+        (e) =>
+          e.baseDay === scheduledEvent.baseDay &&
+          e.jitterHours === scheduledEvent.jitterHours &&
+          e.eventType === scheduledEvent.eventType &&
+          !e.fired
+      );
+    }
 
     // Get question details before the transaction
     const questionDetails = await getQuestionDetails(effectiveArc.questionId);
@@ -835,30 +994,33 @@ export async function processArcTick(
       throw error; // Re-throw other errors
     }
 
-    // Apply market impacts AFTER the transaction succeeds (non-critical, can fail independently)
-    if (structuredEvent.marketImpacts.length > 0) {
+    // Mark scheduled event as fired (if applicable)
+    if (scheduledEventIndex >= 0) {
       try {
-        const { applyEventToMarkets } = await import('./event-market-pipeline');
-        const modifiersApplied = await applyEventToMarkets(structuredEvent);
-        logger.info(
-          `Applied ${modifiersApplied} market modifiers from event`,
-          { arcId, modifiersApplied },
-          'NarrativeEventProcessor'
-        );
-      } catch (marketError) {
+        await markScheduledEventFired(arc.questionId, scheduledEventIndex);
+      } catch (markError) {
         logger.warn(
-          'Failed to apply market impacts for arc event',
+          'Failed to mark scheduled event as fired',
           {
             arcId,
-            worldEventId,
-            error:
-              marketError instanceof Error
-                ? marketError.message
-                : String(marketError),
+            questionId: arc.questionId,
+            scheduledEventIndex,
+            error: formatError(markError),
           },
           'NarrativeEventProcessor'
         );
+        // Non-critical - event was still generated successfully
       }
+    }
+
+    // Market impacts logged but NOT applied — prices move ONLY via NPC trading.
+    // Events feed NPC context → NPCs decide to trade → trades move AMM prices.
+    if (structuredEvent.marketImpacts.length > 0) {
+      logger.info(
+        `Event has ${structuredEvent.marketImpacts.length} market signals (prices driven by NPC trading only)`,
+        { arcId, impactCount: structuredEvent.marketImpacts.length },
+        'NarrativeEventProcessor'
+      );
     }
 
     // Trigger article generation for significant events (severity >= 3)
@@ -897,10 +1059,7 @@ export async function processArcTick(
           {
             arcId,
             worldEventId,
-            error:
-              articleError instanceof Error
-                ? articleError.message
-                : String(articleError),
+            error: formatError(articleError),
           },
           'NarrativeEventProcessor'
         );
@@ -1025,3 +1184,6 @@ export class NarrativeEventProcessorService {
 
 // Singleton instance
 export const narrativeEventProcessor = new NarrativeEventProcessorService();
+
+// RSS headline → event generation was removed (dead code).
+// Events come from arc processing; headlines feed NPC context via world facts.

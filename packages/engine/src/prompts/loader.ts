@@ -7,6 +7,7 @@
  */
 
 import type { JsonValue } from '../types/common';
+import { toDateString } from '../utils/date-utils';
 import type { PromptDefinition } from './define-prompt';
 
 /**
@@ -58,6 +59,11 @@ export function renderPrompt(
       'validNpcIds',
       'validTickers',
       'previousTrades',
+      'marketSignalAnalysis',
+
+      // Actor-specific context vars
+      'antiRepetitionContext',
+      'actorRules',
 
       // Standard context vars
       'trendContext',
@@ -128,6 +134,50 @@ export function renderPrompt(
       'relatedStories',
       'relatedQuestions',
       'connectedActors',
+
+      // Article generation vars (optional - worldContext may not always be available)
+      'worldContext',
+      'previousArticles',
+      'connectedNarratives',
+      'editorialPosition',
+      'previousStances',
+      'recentContext',
+
+      // Day transition vars (optional - enrichment context for day summaries)
+      'previousDay',
+      'yesterdayHighlights',
+      'yesterdayResolutions',
+
+      // Feed character context vars (optional - enrichment when available)
+      'characterEventHistory',
+      'characterEventRelation',
+      'involvedActors',
+      'relatedNarrative',
+      'relatedNarratives',
+      'similarPreviousEvents',
+      'previousReplies',
+
+      // Organization context vars (optional - may not be available for all callers)
+      'companyNarrativePosition',
+      'previousStatements',
+      'agencyActions',
+      'organizationBehaviorContext',
+
+      // Analyst/stock context vars (optional - enrichment when available)
+      'analystTrackRecord',
+      'previousCalls',
+      'relatedEvents',
+      'eventCatalyst',
+      'connectedNarrative',
+      'recentMarketEvents',
+      'recentEventsContext',
+
+      // Scenario/trending vars (optional - enrichment context)
+      'previousScenarios',
+      'previousTrends',
+
+      // Phase context (optional - may not be set in all code paths)
+      'currentPhase',
     ],
   } = options;
 
@@ -137,7 +187,7 @@ export function renderPrompt(
   const now = new Date();
   const dateVariables: Record<string, string | number> = {
     currentDateTime: now.toLocaleString('en-US'),
-    currentDate: now.toISOString().split('T')[0] || '',
+    currentDate: toDateString(now),
     currentTime: now.toTimeString().split(' ')[0] || '',
     currentYear: now.getFullYear(),
     currentMonth: now.toLocaleString('en-US', { month: 'long' }),
@@ -165,6 +215,12 @@ export function renderPrompt(
 
     const pattern = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
     rendered = rendered.replace(pattern, stringValue);
+  }
+
+  // Replace any remaining unpopulated optional vars with empty string
+  for (const optVar of optionalVars) {
+    const pattern = new RegExp(`\\{\\{${optVar}\\}\\}`, 'g');
+    rendered = rendered.replace(pattern, '');
   }
 
   return rendered;

@@ -13,10 +13,10 @@
       "@babylon/shared/*": ["../shared/src/*"],
       "@babylon/db": ["../db/src/index.ts"],
       "@babylon/db/*": ["../db/src/*"],
-      "@babylon/contracts": ["../contracts/src/index.ts"],
-      "@babylon/contracts/*": ["../contracts/src/*"],
       "@babylon/core": ["../core/markets/index.ts"],
-      "@babylon/core/*": ["../core/*"]
+      "@babylon/core/*": ["../core/*"],
+      "@babylon/pack-default": ["../pack-default/src/index.ts"],
+      "@babylon/pack-default/*": ["../pack-default/src/*"]
     }
   },
   "include": ["src/**/*", "src/**/*.json"],
@@ -24,7 +24,7 @@
   "references": [
     { "path": "../shared" },
     { "path": "../db" },
-    { "path": "../contracts" },
-    { "path": "../core" }
+    { "path": "../core" },
+    { "path": "../pack-default" }
   ]
 }

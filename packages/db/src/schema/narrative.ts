@@ -136,6 +136,27 @@ export interface StructuredEventData {
 }
 
 /**
+ * Scheduled event for deterministic narrative firing.
+ * Events are pre-planned during arc creation and fired at specific times.
+ */
+export interface ScheduledEvent {
+  /** Base day for the event (0-indexed from question creation) */
+  baseDay: number;
+  /** Hours of jitter from base day (can be negative or positive) */
+  jitterHours: number;
+  /** Event type determines narrative impact */
+  eventType: 'leak' | 'rumor' | 'scandal' | 'confirmation' | 'red_herring';
+  /** Brief description for LLM prompt context */
+  description: string;
+  /** Signal direction this event should suggest */
+  signalDirection: 'YES' | 'NO' | 'NEUTRAL';
+  /** Whether this event has been fired */
+  fired: boolean;
+  /** Timestamp when fired (ISO string) */
+  firedAt?: string;
+}
+
+/**
  * QuestionArcPlan - Narrative arc configuration for a prediction question.
  * Stores timing milestones and actor assignments for signal generation.
  */
@@ -160,6 +181,11 @@ export const questionArcPlans = pgTable(
     phaseRatios: jsonb('phaseRatios')
       .$type<{ early: number; middle: number; late: number; climax: number }>()
       .notNull(),
+
+    // Deterministic event schedule (replaces probability-based firing)
+    eventSchedule: jsonb('eventSchedule')
+      .$type<ScheduledEvent[]>()
+      .default(sql`'[]'::jsonb`),
 
     createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
   },
@@ -258,6 +284,12 @@ export const timeframedMarkets = pgTable(
       .$type<MarketCategory>()
       .notNull()
       .default('general'),
+    topicKey: text('topicKey'),
+    topicLabel: text('topicLabel'),
+    topicDate: timestamp('topicDate', { mode: 'date' }),
+    // Granular timeframe for precise market duration tracking ('15m', '30m', '1h', etc.)
+    // Eliminates need to infer from duration, preventing misclassification at boundaries
+    granularTimeframe: text('granularTimeframe'),
 
     // Hierarchy (self-referential foreign keys)
     parentMarketId: text('parentMarketId').references(
@@ -305,7 +337,17 @@ export const timeframedMarkets = pgTable(
     index('TimeframedMarket_rootMarketId_idx').on(t.rootMarketId),
     index('TimeframedMarket_timeframe_idx').on(t.timeframe),
     index('TimeframedMarket_category_idx').on(t.category),
+    index('TimeframedMarket_topicKey_topicDate_idx').on(
+      t.topicKey,
+      t.topicDate
+    ),
+    index('TimeframedMarket_granularTimeframe_idx').on(t.granularTimeframe),
     index('TimeframedMarket_isActive_idx').on(t.isActive),
+    index('TimeframedMarket_isActive_isResolved_endTime_idx').on(
+      t.isActive,
+      t.isResolved,
+      t.endTime
+    ),
     index('TimeframedMarket_endTime_idx').on(t.endTime),
     index('TimeframedMarket_startTime_endTime_idx').on(t.startTime, t.endTime),
   ]

@@ -23,6 +23,15 @@ export {
 } from './actors-loader';
 // State Store Adapters
 export { DbStateStore, InMemoryStateStore } from './adapters';
+// Alpha Group Configuration
+export {
+  ALPHA_GROUP_CONFIG,
+  type AlphaGroupConfig,
+  calculateNextEligibleDate,
+  DOMAIN_FOCUS_WEIGHTS,
+  getFocusWeightsForDomains,
+  shouldResetDeclineCount,
+} from './config/alpha-group-config';
 // Content Pacing Configuration
 export {
   CONTENT_PACING,
@@ -36,20 +45,26 @@ export {
   FEE_CONFIG,
   type FeeTransactionType,
   type FeeType,
+  isValidFeeType,
 } from './config/fees';
 // NPC Activity Configuration
 export {
+  getMaxTradesPerDay,
+  getMinMinutesBetweenTrades,
   getPreset,
+  getTradingProbability,
   logCurrentConfig,
   NPC_ACTIVITY_CONFIG,
   NPC_ACTIVITY_PRESETS,
   NPC_CONTENT_PACING_CONFIG,
+  NPC_DIVERSITY_CONFIG,
   NPC_ENGAGEMENT_CONFIG,
   NPC_FOLLOWING_CONFIG,
   NPC_GROUP_DYNAMICS_CONFIG,
   NPC_POSTING_CONFIG,
   NPC_SOCIAL_ACTIONS_CONFIG,
   NPC_TICK_CONFIG,
+  NPC_TRADING_CONFIG,
   type NPCActivityConfig,
   type NPCActivityPresetName,
 } from './config/npc-activity';
@@ -140,11 +155,10 @@ export { type ActiveMarketSummary, gameService } from './game-service';
 export {
   executeGameTick,
   type GameTickResult as ExecuteGameTickResult,
-  publishOracleCommitments,
-  publishOracleReveals,
   resolveQuestionPayouts,
   updateMarketPricesFromTrades,
 } from './game-tick';
+export { cosineSimilarity, getEmbedding } from './llm/embedding-client';
 export {
   cleanMarkdownCodeBlocks,
   extractJsonFromText,
@@ -157,6 +171,11 @@ export {
   setTokenUsageCallback,
   type TokenUsageCallback,
 } from './llm/openai-client';
+export {
+  type LLMGenerateJSONOptions,
+  type LLMJsonClient,
+  type LLMJsonSchema,
+} from './llm/types';
 export { parseXML, type XMLParseResult } from './llm/xml-parser';
 // Market Decision Engine
 export { MarketDecisionEngine } from './MarketDecisionEngine';
@@ -177,6 +196,26 @@ export {
   NPCPortfolioStrategy,
   type StrategyConfig,
 } from './npc/npc-portfolio-strategy';
+// NPC Portfolio Metrics (shared calculation utilities)
+export {
+  buildFallbackMetricsByPool,
+  type FallbackPerpRow,
+  type FallbackPositionRow,
+  getEffectiveLeverage,
+  getPositionExposure,
+  type PoolMetrics,
+} from './npc/portfolio-metrics';
+// NPC Trading Strategies (strategy assignment, bias formatting)
+export {
+  formatTradingStrategyBias,
+  getNpcTradingStrategy,
+  type NPCTradingStrategyKey,
+  TRADING_STRATEGIES,
+} from './npc/trading-strategies';
+export {
+  calculatePerpPositionMarketValue,
+  toNumber,
+} from './portfolio-valuation';
 export {
   type ParsedPostMetadata,
   type ParseResult,
@@ -199,6 +238,7 @@ export {
 export * from './prompts';
 // Question Manager
 export {
+  isEligibleActor,
   type QuestionCreationParams,
   QuestionManager,
 } from './QuestionManager';
@@ -245,6 +285,35 @@ export {
 } from './reputation';
 // Services (all exported from services/index.ts)
 export * from './services';
+// Narrative State Service (arc plans, phases, signal direction)
+export {
+  type DatabaseArcPlan,
+  getArcPlan,
+  getPhaseForDay as getArcPhaseForDay,
+  getSignalDirection,
+} from './services/narrative-state-service';
+export { sharedChatContextService } from './services/shared-chat-context-service';
+// Tier Configuration
+export {
+  ALL_TIERS,
+  getEffectiveTierConfig,
+  getHigherTier,
+  getLowerTier,
+  getNpcFocusWeights,
+  getTierConfig,
+  getTierForEngagementScore,
+  getTierForEngagementScoreWithNpc,
+  getTierGroupName,
+  getTierMessageGuidance,
+  getTierSuffix,
+  getTotalNpcCapacity,
+  isEligibleForPromotion,
+  isValidTier,
+  shouldDemote,
+  TIER_CONFIG,
+  TIER_MESSAGE_GUIDANCE,
+  type TierConfig,
+} from './services/tier-config';
 // Storage Bridge (database-agnostic storage abstraction)
 export {
   db,
@@ -360,6 +429,12 @@ export {
   calculateEstimatedCost,
   TOKEN_COST_PER_MILLION,
 } from './types/token-stats';
+// Utils - Context Building (comprehensive NPC context for posting/feed)
+export {
+  buildComprehensiveNPCContext,
+  type ComprehensiveNPCContext,
+  formatComprehensiveContext,
+} from './utils/context-builder';
 // Utils - Entropy (secure random, weighted picks, cooldowns)
 export {
   biasedRandomCount,
@@ -388,6 +463,21 @@ export {
   sampleRandom,
   shuffleArray,
 } from './utils/randomization';
+// Utils - Shared Character/Feed Context (entropy, phase, time-of-day)
+export {
+  buildCharacterFeedContext,
+  buildPhaseContext,
+  formatCharacterInfoWithEntropy,
+  getPhaseForDay,
+} from './utils/shared-utils';
+// Utils - Trading Dashboard Formatting (shared NPC dashboard + market table)
+export {
+  calculatePortfolioExposure,
+  formatMarketDataTable,
+  formatNPCsDashboardList,
+  formatSingleNPCDashboard,
+  mapPersonalityToArchetype,
+} from './utils/trading-dashboard-format';
 // World Facts Service
 export {
   type WorldFactsContext,

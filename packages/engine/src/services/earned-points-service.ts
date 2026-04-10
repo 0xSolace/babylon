@@ -131,7 +131,7 @@ export class EarnedPointsService {
         userId,
         lifetimePnL,
         earnedPoints: newEarnedPoints,
-        totalPoints: newReputationPoints,
+        reputationPoints: newReputationPoints,
       },
       'EarnedPointsService'
     );

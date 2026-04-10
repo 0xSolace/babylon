@@ -1,44 +1,44 @@
 /**
- * Points Leaderboard API
+ * Leaderboard API
  *
- * @description
- * Returns platform-wide leaderboard ranking users by reputation points,
- * earned points, or referral points. Provides paginated results with
- * comprehensive user statistics and rankings.
+ * Supports two ranking axes:
+ * - **metric**
+ *   - `reputation`: general leaderboard based on reputation points
+ *   - `trading`: trading leaderboard based on realized return
+ *     (`lifetimePnL / max(capitalBase, 1000)`) with lifetime P&L included as context
+ * - **type**
+ *   - `wallet`: per-wallet ranking (users and agents as individuals)
+ *   - `team`: user + their agents combined
  *
- * **Leaderboard Types:**
- * - **all:** Total reputation points (default)
- * - **earned:** Points earned through activity
- * - **referral:** Points earned from referrals
- *
- * **Features:**
- * - Configurable minimum points threshold
- * - Pagination support
- * - Multiple sorting categories
- * - User statistics and metadata
- * - Real-time rankings
- *
- * **User Stats Include:**
- * - Total points and breakdown
- * - Profile information
- * - Activity metrics
- * - Rank position
+ * Supports optional `userId` param to return the requesting user's
+ * rank/position alongside the page data. Leaderboard pages are cached
+ * in Redis (shared); user positions are always computed fresh.
  *
  * @openapi
  * /api/leaderboard:
  *   get:
  *     tags:
  *       - Leaderboard
- *     summary: Get points leaderboard
- *     description: Returns paginated leaderboard ranking users by reputation points
+ *     summary: Get leaderboard by metric and scope
  *     parameters:
+ *       - in: query
+ *         name: metric
+ *         schema:
+ *           type: string
+ *           enum: [reputation, trading]
+ *           default: reputation
+ *       - in: query
+ *         name: type
+ *         schema:
+ *           type: string
+ *           enum: [wallet, team]
+ *           default: wallet
  *       - in: query
  *         name: page
  *         schema:
  *           type: integer
  *           minimum: 1
  *           default: 1
- *         description: Page number
  *       - in: query
  *         name: pageSize
  *         schema:
@@ -46,157 +46,170 @@
  *           minimum: 1
  *           maximum: 100
  *           default: 100
- *         description: Results per page
  *       - in: query
- *         name: minPoints
- *         schema:
- *           type: integer
- *           minimum: 0
- *           default: 500
- *         description: Minimum points threshold
- *       - in: query
- *         name: pointsType
+ *         name: userId
  *         schema:
  *           type: string
- *           enum: [all, earned, referral]
- *           default: all
- *         description: Points category to rank by
- *     responses:
- *       200:
- *         description: Leaderboard data
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 leaderboard:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       rank:
- *                         type: integer
- *                       id:
- *                         type: string
- *                       username:
- *                         type: string
- *                       displayName:
- *                         type: string
- *                       points:
- *                         type: number
- *                       profileImageUrl:
- *                         type: string
- *                 pagination:
- *                   type: object
- *                   properties:
- *                     page:
- *                       type: integer
- *                     pageSize:
- *                       type: integer
- *                     totalCount:
- *                       type: integer
- *                     totalPages:
- *                       type: integer
- *                 minPoints:
- *                   type: integer
- *                 pointsCategory:
- *                   type: string
- *
- * @example
- * ```typescript
- * // Get top 50 users by reputation
- * const response = await fetch('/api/leaderboard?page=1&pageSize=50');
- * const { leaderboard, pagination } = await response.json();
- *
- * // Get referral leaders
- * const referralLeaders = await fetch('/api/leaderboard?pointsType=referral&minPoints=1000');
- *
- * // Display leaderboard
- * leaderboard.forEach(user => {
- *   console.log(`#${user.rank}: ${user.displayName} - ${user.points} points`);
- * });
- * ```
- *
- * @see {@link /lib/services/points-service} Points calculation
- * @see {@link /src/app/leaderboard/page.tsx} Leaderboard UI
+ *         description: Optional user ID to include their rank in the response
  */
 
 import {
+  findUserByIdentifier,
   getCache,
-  PointsService,
+  type LeaderboardPosition,
+  type LeaderboardResult,
+  optionalAuth,
+  ReputationService,
   setCache,
   successResponse,
+  TradingLeaderboardService,
   withErrorHandling,
 } from '@babylon/api';
-import { LeaderboardQuerySchema, logger } from '@babylon/shared';
+import { and, db, eq, follows, inArray } from '@babylon/db';
+import { type LeaderboardMetric, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+import { parseLeaderboardQuery } from './query';
 
 const CACHE_KEY_NAMESPACE = 'leaderboard';
-// Cache for 2 minutes - balances freshness with performance
-const CACHE_TTL_MS = Number(process.env.LEADERBOARD_CACHE_MS) || 120_000;
+const CACHE_TTL_MS = (() => {
+  const raw = process.env.LEADERBOARD_CACHE_MS;
+  if (raw === undefined) return 120_000;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : 120_000;
+})();
 const CACHE_TTL_SECONDS = Math.floor(CACHE_TTL_MS / 1000);
 const STALE_SECONDS = CACHE_TTL_SECONDS * 3;
 
-interface LeaderboardResponse {
-  leaderboard: Awaited<
-    ReturnType<typeof PointsService.getLeaderboard>
-  >['users'];
-  pagination: {
-    page: number;
-    pageSize: number;
-    totalCount: number;
-    totalPages: number;
-  };
-  minPoints: number;
-  pointsCategory: string;
-}
+type CachedLeaderboardEntry = {
+  data: LeaderboardResult;
+  generatedAt: string;
+};
 
-/**
- * GET /api/leaderboard
- * Get leaderboard with pagination and filtering
- * Query params:
- *  - page: number (default 1)
- *  - pageSize: number (default 100, max 100)
- *  - minPoints: number (default 500)
- */
+type LeaderboardService = {
+  getWalletLeaderboard: (
+    page?: number,
+    pageSize?: number
+  ) => Promise<LeaderboardResult>;
+  getTeamLeaderboard: (
+    page?: number,
+    pageSize?: number
+  ) => Promise<LeaderboardResult>;
+  getUserPosition: (
+    userId: string,
+    leaderboardType: LeaderboardResult['leaderboardType'],
+    pageSize?: number
+  ) => Promise<LeaderboardPosition | null>;
+};
+
+const LEADERBOARD_SERVICES: Record<LeaderboardMetric, LeaderboardService> = {
+  reputation: ReputationService,
+  trading: TradingLeaderboardService,
+};
+
 export const GET = withErrorHandling(async (request: NextRequest) => {
+  const authUser = await optionalAuth(request);
   const { searchParams } = new URL(request.url);
+  const { page, pageSize, metric, type, userId } =
+    parseLeaderboardQuery(searchParams);
+  const leaderboardMetric = metric ?? 'reputation';
+  const leaderboardType = type ?? 'wallet';
+  const leaderboardService = LEADERBOARD_SERVICES[leaderboardMetric];
+  let effectiveUserId = authUser?.dbUserId ?? authUser?.userId;
 
-  // Parse and validate query parameters
-  const queryParams = Object.fromEntries(searchParams.entries());
-  const validationResult = LeaderboardQuerySchema.safeParse(queryParams);
-
-  if (!validationResult.success) {
-    // Throw ZodError so error handler can catch it and return 400
-    throw validationResult.error;
+  if (userId) {
+    const resolvedUser = await findUserByIdentifier(userId, { id: true });
+    effectiveUserId = resolvedUser?.id ?? userId;
   }
 
-  const { page, pageSize, minPoints, pointsType } = validationResult.data;
+  const cacheKey = `${leaderboardMetric}-${leaderboardType}-${page}-${pageSize}`;
 
-  const pointsCategory = (pointsType ?? 'all') as 'all' | 'earned' | 'referral';
+  let leaderboardData: LeaderboardResult | null = null;
+  let generatedAt: string = new Date().toISOString();
+  let cacheHit = false;
 
-  // Cache key includes all query parameters
-  const cacheKey = `${pointsCategory}-${page}-${pageSize}-${minPoints}`;
-
-  // Check cache first
   if (CACHE_TTL_MS > 0) {
-    const cached = await getCache<LeaderboardResponse>(cacheKey, {
+    const cached = await getCache<CachedLeaderboardEntry>(cacheKey, {
       namespace: CACHE_KEY_NAMESPACE,
     });
-    if (cached) {
-      return successResponse(cached, 200, {
-        'x-cache': 'leaderboard-hit',
-        'Cache-Control': `public, s-maxage=${CACHE_TTL_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
-        Vary: 'Accept-Encoding',
-      });
+    if (cached?.data) {
+      leaderboardData = cached.data;
+      generatedAt = cached.generatedAt;
+      cacheHit = true;
     }
   }
 
-  const leaderboard = await PointsService.getLeaderboard(
-    page,
-    pageSize,
-    minPoints,
-    pointsCategory
+  if (!leaderboardData) {
+    leaderboardData =
+      leaderboardType === 'team'
+        ? await leaderboardService.getTeamLeaderboard(page, pageSize)
+        : await leaderboardService.getWalletLeaderboard(page, pageSize);
+    generatedAt = new Date().toISOString();
+
+    if (CACHE_TTL_MS > 0) {
+      await setCache(
+        cacheKey,
+        { data: leaderboardData, generatedAt } satisfies CachedLeaderboardEntry,
+        {
+          namespace: CACHE_KEY_NAMESPACE,
+          ttl: CACHE_TTL_SECONDS,
+        }
+      );
+    }
+  }
+
+  let currentUser: LeaderboardPosition | null = null;
+  if (effectiveUserId) {
+    try {
+      currentUser = await leaderboardService.getUserPosition(
+        effectiveUserId,
+        leaderboardType,
+        pageSize
+      );
+    } catch (error) {
+      logger.warn(
+        'Failed to compute leaderboard currentUser; returning null',
+        {
+          effectiveUserId,
+          leaderboardMetric,
+          leaderboardType,
+          pageSize,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        'GET /api/leaderboard'
+      );
+    }
+  }
+
+  const authUserId = authUser?.dbUserId ?? authUser?.userId;
+  const canResolveFollowingUserIds =
+    authUserId !== undefined && (!userId || userId === authUserId);
+  let followingUserIdsResolved = false;
+  let followingUserIds: string[] = [];
+
+  if (canResolveFollowingUserIds) {
+    const leaderboardUserIds = leaderboardData.users
+      .map((entry) => entry.id)
+      .filter((id) => id !== authUserId);
+
+    if (leaderboardUserIds.length > 0) {
+      const followedUsers = await db
+        .select({ followingId: follows.followingId })
+        .from(follows)
+        .where(
+          and(
+            eq(follows.followerId, authUserId),
+            inArray(follows.followingId, leaderboardUserIds)
+          )
+        );
+
+      followingUserIds = followedUsers.map((follow) => follow.followingId);
+    }
+
+    followingUserIdsResolved = true;
+  }
+
+  const isPersonalizedResponse = Boolean(
+    effectiveUserId || followingUserIdsResolved
   );
 
   logger.info(
@@ -204,36 +217,38 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     {
       page,
       pageSize,
-      minPoints,
-      pointsCategory,
-      totalCount: leaderboard.totalCount,
+      leaderboardMetric,
+      leaderboardType,
+      totalCount: leaderboardData.totalCount,
+      cacheHit,
+      hasUserId: !!effectiveUserId,
     },
     'GET /api/leaderboard'
   );
 
-  const responseBody: LeaderboardResponse = {
-    leaderboard: leaderboard.users,
-    pagination: {
-      page: leaderboard.page,
-      pageSize: leaderboard.pageSize,
-      totalCount: leaderboard.totalCount,
-      totalPages: leaderboard.totalPages,
+  return successResponse(
+    {
+      leaderboard: leaderboardData.users,
+      pagination: {
+        page: leaderboardData.page,
+        pageSize: leaderboardData.pageSize,
+        totalCount: leaderboardData.totalCount,
+        totalPages: leaderboardData.totalPages,
+      },
+      leaderboardType,
+      leaderboardMetric: leaderboardData.leaderboardMetric,
+      currentUser,
+      followingUserIds,
+      followingUserIdsResolved,
+      generatedAt,
     },
-    minPoints: pointsCategory === 'all' ? minPoints : 0,
-    pointsCategory: leaderboard.pointsCategory,
-  };
-
-  // Store in cache
-  if (CACHE_TTL_MS > 0) {
-    await setCache(cacheKey, responseBody, {
-      namespace: CACHE_KEY_NAMESPACE,
-      ttl: CACHE_TTL_SECONDS,
-    });
-  }
-
-  return successResponse(responseBody, 200, {
-    'x-cache': 'leaderboard-miss',
-    'Cache-Control': `public, s-maxage=${CACHE_TTL_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
-    Vary: 'Accept-Encoding',
-  });
+    200,
+    {
+      'x-cache': cacheHit ? 'leaderboard-hit' : 'leaderboard-miss',
+      'Cache-Control': isPersonalizedResponse
+        ? 'private, no-store'
+        : `public, s-maxage=${CACHE_TTL_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
+      Vary: 'Accept-Encoding',
+    }
+  );
 });

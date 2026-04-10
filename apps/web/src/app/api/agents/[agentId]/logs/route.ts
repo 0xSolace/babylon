@@ -105,11 +105,12 @@
  */
 
 import { agentService } from '@babylon/agents';
-import { authenticateUser } from '@babylon/api';
+import { authenticateUser, withErrorHandling } from '@babylon/api';
+import { toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
-export async function GET(
+export const GET = withErrorHandling(async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ agentId: string }> }
 ) {
@@ -140,7 +141,7 @@ export async function GET(
       completion: log.completion,
       thinking: log.thinking,
       metadata: log.metadata,
-      createdAt: log.createdAt.toISOString(),
+      createdAt: toISO(log.createdAt),
     })),
   });
-}
+});

@@ -5,7 +5,7 @@
  * @access Authenticated
  *
  * @description
- * Creates an x402 payment request for purchasing points. Returns payment
+ * Creates an x402 payment request for funding trading balance. Returns payment
  * request details for on-chain completion. Uses X402 escrow system.
  *
  * @openapi
@@ -13,8 +13,8 @@
  *   post:
  *     tags:
  *       - Points
- *     summary: Create payment request for points
- *     description: Creates x402 payment request for points purchase
+ *     summary: Create payment request for trading balance funding
+ *     description: Creates x402 payment request for trading balance funding
  *     security:
  *       - PrivyAuth: []
  *     requestBody:
@@ -64,18 +64,12 @@
  * ```
  */
 
-import { X402Manager } from '@babylon/a2a';
-import { authenticate } from '@babylon/api';
+import { authenticate, withErrorHandling } from '@babylon/api';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import { getPointsPurchaseX402Manager } from '@/lib/points-purchase-x402';
 import { trackServerEvent } from '@/lib/posthog/server';
-
-// Initialize x402 manager (you'll need to configure RPC URL)
-const x402Manager = new X402Manager({
-  rpcUrl: process.env.NEXT_PUBLIC_RPC_URL || 'https://sepolia.base.org',
-  paymentTimeout: 15 * 60 * 1000, // 15 minutes
-});
 
 // Payment receiver address (configure this in your environment)
 const PAYMENT_RECEIVER =
@@ -88,45 +82,52 @@ interface CreatePaymentBody {
   fromAddress: string; // User's wallet address
 }
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandling(async function POST(req: NextRequest) {
   const authUser = await authenticate(req);
   const userId = authUser.dbUserId!;
 
   const body: CreatePaymentBody = await req.json();
   const { amountUSD, fromAddress } = body;
 
-  const pointsAmount = Math.floor(amountUSD * 100);
+  const balanceUnits = Math.floor(amountUSD * 100);
 
   const ethEquivalent = amountUSD * 0.001;
   const amountInWei = (ethEquivalent * 1_000_000_000_000_000_000).toString();
 
+  const x402Manager = await getPointsPurchaseX402Manager();
   const paymentRequest = await x402Manager.createPaymentRequest(
     fromAddress,
     PAYMENT_RECEIVER,
     amountInWei,
-    'points_purchase',
+    'trading_balance_purchase',
     {
       userId,
       amountUSD,
-      pointsAmount,
+      balanceUnits,
     }
   );
 
   logger.info(
-    `Created payment request for ${pointsAmount} points ($${amountUSD})`,
+    `Created payment request for ${balanceUnits} balance units ($${amountUSD})`,
     {
       userId,
       requestId: paymentRequest.requestId,
       amountUSD,
-      pointsAmount,
+      balanceUnits,
     },
-    'PointsPurchase'
+    'TradingBalanceFunding'
   );
 
-  trackServerEvent(userId, 'points_purchase_initiated', {
+  void trackServerEvent(userId, 'trading_balance_purchase_initiated', {
     amountUSD,
-    pointsAmount,
+    balanceUnits,
     requestId: paymentRequest.requestId,
+  }).catch((err) => {
+    logger.warn(
+      'Failed to track trading_balance_purchase_initiated',
+      { error: err },
+      'TradingBalanceFunding'
+    );
   });
 
   return NextResponse.json({
@@ -137,8 +138,8 @@ export async function POST(req: NextRequest) {
       from: paymentRequest.from,
       to: paymentRequest.to,
       expiresAt: paymentRequest.expiresAt,
-      pointsAmount,
+      balanceUnits,
       amountUSD,
     },
   });
-}
+});

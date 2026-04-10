@@ -1,8 +1,17 @@
-import { successResponse, withErrorHandling } from '@babylon/api';
+import {
+  addPublicReadHeaders,
+  publicRateLimit,
+  successResponse,
+  withErrorHandling,
+} from '@babylon/api';
+import {
+  getNftTokenOwnersFromIndexer,
+  getOwnerUsersByWalletAddresses,
+  NftIndexerUnavailableError,
+} from '@babylon/api/services/nft-indexer-service';
 import {
   and,
   asc,
-  count,
   db,
   desc,
   eq,
@@ -13,6 +22,8 @@ import {
   or,
   users,
 } from '@babylon/db';
+import { logger, toISOOrNull } from '@babylon/shared';
+import type { SQL } from 'drizzle-orm';
 import type { NextRequest } from 'next/server';
 import type { NftGalleryResponse, NftSummary } from '@/types/nft';
 
@@ -20,6 +31,9 @@ const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
+  const { error, rateLimitInfo } = await publicRateLimit(request);
+  if (error) return error;
+
   const { searchParams } = new URL(request.url);
 
   const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10));
@@ -37,7 +51,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const offset = (page - 1) * limit;
 
   // Build WHERE conditions
-  const conditions: ReturnType<typeof eq>[] = [];
+  const conditions: SQL[] = [];
 
   if (searchQuery) {
     const tokenIdSearch = parseInt(searchQuery, 10);
@@ -53,24 +67,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     }
   }
 
-  // Get total count (with search conditions)
-  const [totalResult] = await db
-    .select({ count: count() })
-    .from(nftCollection)
-    .where(conditions.length > 0 ? and(...conditions) : undefined);
-
-  const totalNfts = totalResult?.count ?? 0;
-
-  // Get claimed count (with same search conditions)
-  const [claimedCountResult] = await db
-    .select({ count: count() })
-    .from(nftCollection)
-    .innerJoin(nftOwnership, eq(nftCollection.tokenId, nftOwnership.tokenId))
-    .where(conditions.length > 0 ? and(...conditions) : undefined);
-
-  const claimedCount = claimedCountResult?.count ?? 0;
-  const unclaimedCount = totalNfts - claimedCount;
-
   // Build ORDER BY clause
   let orderByClause;
   const orderFn = order === 'desc' ? desc : asc;
@@ -85,8 +81,114 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       break;
   }
 
-  // Build query based on claimed filter
-  // For unclaimed filter, add isNull condition; for claimed, use inner join
+  // Prefer indexer-based ownership (secondary transfers included). Fall back to DB
+  // ownership when the indexer is unavailable or not configured (local tests/dev).
+  try {
+    const allNfts = await db
+      .select({
+        tokenId: nftCollection.tokenId,
+        name: nftCollection.name,
+        thumbnailUrl: nftCollection.thumbnailUrl,
+        imageUrl: nftCollection.imageUrl,
+      })
+      .from(nftCollection)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(orderByClause);
+
+    const allTokenIds = allNfts.map((n) => n.tokenId);
+    const ownersByTokenId = await getNftTokenOwnersFromIndexer(allTokenIds);
+    const ownerAddresses = Array.from(ownersByTokenId.values()).map(
+      (o) => o.ownerAddress
+    );
+    const ownerUsersByAddress =
+      await getOwnerUsersByWalletAddresses(ownerAddresses);
+
+    const totalNfts = allNfts.length;
+    const claimedCount = ownersByTokenId.size;
+    const unclaimedCount = totalNfts - claimedCount;
+
+    const filtered =
+      claimedFilter === 'true'
+        ? allNfts.filter((n) => ownersByTokenId.has(n.tokenId))
+        : claimedFilter === 'false'
+          ? allNfts.filter((n) => !ownersByTokenId.has(n.tokenId))
+          : allNfts;
+
+    const paged = filtered.slice(offset, offset + limit);
+
+    const nfts: NftSummary[] = paged.map((nft) => {
+      const owner = ownersByTokenId.get(nft.tokenId);
+      const user = owner ? ownerUsersByAddress.get(owner.ownerAddress) : null;
+
+      return {
+        tokenId: nft.tokenId,
+        name: nft.name,
+        thumbnailUrl: nft.thumbnailUrl ?? nft.imageUrl,
+        imageUrl: nft.imageUrl,
+        owner: owner
+          ? {
+              walletAddress: owner.ownerAddress,
+              user: user
+                ? {
+                    id: user.id,
+                    username: user.username,
+                    displayName: user.displayName,
+                    profileImageUrl: user.profileImageUrl,
+                  }
+                : null,
+              acquiredAt: owner.acquiredAt,
+              txHash: null,
+            }
+          : null,
+      };
+    });
+
+    const filteredTotal =
+      claimedFilter === 'true'
+        ? claimedCount
+        : claimedFilter === 'false'
+          ? unclaimedCount
+          : totalNfts;
+
+    const res = successResponse(
+      {
+        success: true,
+        data: {
+          nfts,
+          pagination: {
+            page,
+            limit,
+            total: filteredTotal,
+            totalPages: Math.ceil(filteredTotal / limit),
+          },
+          stats: { totalNfts, claimedCount, unclaimedCount },
+          filters: { traits: [] },
+        },
+      } satisfies NftGalleryResponse,
+      200,
+      {
+        'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60',
+      }
+    );
+    if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
+    return res;
+  } catch (error) {
+    if (
+      error instanceof NftIndexerUnavailableError ||
+      (error instanceof Error && error.name === 'ValidationError')
+    ) {
+      // Fall back to DB ownership for local/testing/degraded mode.
+      logger.warn(
+        'NFT indexer unavailable for collection, falling back to DB ownership',
+        { error: error instanceof Error ? error.message : error },
+        'GET /api/nft/collection'
+      );
+    } else {
+      throw error;
+    }
+  }
+
+  // Degraded mode: DB-based ownership (mint-only).
   const baseSelect = {
     tokenId: nftCollection.tokenId,
     name: nftCollection.name,
@@ -102,9 +204,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   };
 
   let nftsResult;
-
   if (claimedFilter === 'true') {
-    // Only claimed NFTs - use inner join to filter
     nftsResult = await db
       .select(baseSelect)
       .from(nftCollection)
@@ -115,7 +215,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       .limit(limit)
       .offset(offset);
   } else if (claimedFilter === 'false') {
-    // Only unclaimed NFTs - add isNull condition
     nftsResult = await db
       .select(baseSelect)
       .from(nftCollection)
@@ -126,7 +225,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       .limit(limit)
       .offset(offset);
   } else {
-    // All NFTs
     nftsResult = await db
       .select(baseSelect)
       .from(nftCollection)
@@ -138,7 +236,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       .offset(offset);
   }
 
-  // Transform results to response format
   const nfts: NftSummary[] = nftsResult.map((nft) => ({
     tokenId: nft.tokenId,
     name: nft.name,
@@ -155,13 +252,28 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
                 profileImageUrl: nft.ownerProfileImageUrl,
               }
             : null,
-          acquiredAt: nft.acquiredAt?.toISOString() ?? new Date().toISOString(),
+          acquiredAt: toISOOrNull(nft.acquiredAt) ?? new Date().toISOString(),
           txHash: nft.txHash,
         }
       : null,
   }));
 
-  // Calculate total for current filter
+  // Counts in degraded mode (DB-based ownership).
+  const totalNfts = (
+    await db
+      .select({ tokenId: nftCollection.tokenId })
+      .from(nftCollection)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+  ).length;
+  const claimedCount = (
+    await db
+      .select({ tokenId: nftOwnership.tokenId })
+      .from(nftOwnership)
+      .innerJoin(nftCollection, eq(nftCollection.tokenId, nftOwnership.tokenId))
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+  ).length;
+  const unclaimedCount = totalNfts - claimedCount;
+
   const filteredTotal =
     claimedFilter === 'true'
       ? claimedCount
@@ -169,18 +281,26 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         ? unclaimedCount
         : totalNfts;
 
-  return successResponse({
-    success: true,
-    data: {
-      nfts,
-      pagination: {
-        page,
-        limit,
-        total: filteredTotal,
-        totalPages: Math.ceil(filteredTotal / limit),
+  const res = successResponse(
+    {
+      success: true,
+      data: {
+        nfts,
+        pagination: {
+          page,
+          limit,
+          total: filteredTotal,
+          totalPages: Math.ceil(filteredTotal / limit),
+        },
+        stats: { totalNfts, claimedCount, unclaimedCount },
+        filters: { traits: [] },
       },
-      stats: { totalNfts, claimedCount, unclaimedCount },
-      filters: { traits: [] },
-    },
-  } satisfies NftGalleryResponse);
+    } satisfies NftGalleryResponse,
+    200,
+    {
+      'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60',
+    }
+  );
+  if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
+  return res;
 });

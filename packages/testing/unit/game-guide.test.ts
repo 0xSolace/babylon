@@ -1,53 +1,7 @@
 // Game Guide - Unit/Specification Tests
 
 import { describe, expect, test } from 'bun:test';
-
-// Must match GAME_GUIDE_SLIDES in apps/web/src/components/onboarding/GameGuideModal.tsx
-const GAME_GUIDE_SLIDES = [
-  {
-    title: 'Welcome to Babylon',
-    points: [
-      'This is the world: humans, NPCs, and agents live here with you.',
-      "You don't play alone: you operate with a team of agents that you direct.",
-      "What's unfolding matters: narratives emerge here first, and markets react to them.",
-      'Objective: turn better information + faster execution into more points.',
-    ],
-  },
-  {
-    title: 'The Agents (your team)',
-    points: [
-      'Why agents exist: the world is too dense to track manually — agents can consume and summarize continuously.',
-      'How you use them: you prompt agents with goals (what to watch, what to analyze, how to act).',
-      'Agent types: Scout (monitors the feed), Analyst (turns signals into a thesis), Trader (executes entries/exits).',
-      'The game loop: prompt → gather intel → analyze → trade → learn → refine prompts.',
-    ],
-  },
-  {
-    title: 'Intel Source #1: The Feed',
-    points: [
-      'What it is: the main feed where agents, humans, and NPCs post — narratives start here.',
-      "Why it matters: markets pull signal from what's happening in Babylon.",
-      'How agents use it: track specific NPCs/topics, surface changes in narrative and sentiment, summarize "what changed" and why it matters.',
-    ],
-  },
-  {
-    title: 'Intel Source #2: DMs + NPC Group Chats',
-    points: [
-      'What it is: private channels where NPCs and groups share context, timing, and hints.',
-      'How access works: with the right prompting, your agents can engage NPCs and get pulled into the right rooms over time.',
-      'What to prompt for: which NPCs to approach, the exact questions to ask, what to extract from chats (signals, catalysts, timing).',
-    ],
-  },
-  {
-    title: 'Capitalize: Trade + Improve',
-    points: [
-      'How you capitalize: trade on the information your agents collect via prediction markets and perps.',
-      'Agents help you act faster and more consistently than manual trading.',
-      'What to prompt next: "What are the top 3 tradable narratives?", "What\'s the entry, exit, and invalidation?", "Execute the best one with tight risk."',
-      'Get started: Go to Agents → Create Agent, define its purpose, fund it, activate it, then iterate.',
-    ],
-  },
-] as const;
+import { GAME_GUIDE_SLIDES } from '../../../apps/web/src/components/onboarding/game-guide-slides';
 
 describe('Game Guide - Slide Content', () => {
   test('should have exactly 5 slides', () => {
@@ -61,24 +15,10 @@ describe('Game Guide - Slide Content', () => {
     }
   });
 
-  test('each slide should have at least 3 points', () => {
+  test('each slide should have a non-empty description', () => {
     for (const slide of GAME_GUIDE_SLIDES) {
-      expect(slide.points.length).toBeGreaterThanOrEqual(3);
-    }
-  });
-
-  test('no slide should have more than 5 points', () => {
-    for (const slide of GAME_GUIDE_SLIDES) {
-      expect(slide.points.length).toBeLessThanOrEqual(5);
-    }
-  });
-
-  test('all points should be non-empty strings', () => {
-    for (const slide of GAME_GUIDE_SLIDES) {
-      for (const point of slide.points) {
-        expect(typeof point).toBe('string');
-        expect(point.length).toBeGreaterThan(10); // Meaningful content
-      }
+      expect(slide.description).toBeDefined();
+      expect(slide.description.length).toBeGreaterThan(10);
     }
   });
 
@@ -95,9 +35,11 @@ describe('Game Guide - Slide Content', () => {
   test('last slide should be the CTA slide', () => {
     const lastSlide = GAME_GUIDE_SLIDES[GAME_GUIDE_SLIDES.length - 1]!;
     expect(lastSlide.title).toContain('Trade');
-    // Should contain call to action
-    const allText = lastSlide.points.join(' ');
-    expect(allText).toContain('Get started');
+    expect('ctas' in lastSlide).toBe(true);
+    if (!('ctas' in lastSlide) || !lastSlide.ctas) {
+      throw new Error('Expected last slide to include CTAs');
+    }
+    expect(lastSlide.ctas.length).toBeGreaterThanOrEqual(1);
   });
 });
 
@@ -238,7 +180,6 @@ describe('Game Guide - Display Logic', () => {
     isActor: boolean;
     gameGuideCompletedAt: string | null;
     needsOnboarding: boolean;
-    needsOnchain: boolean;
   }
 
   function shouldShowGuide(state: UserState): boolean {
@@ -247,8 +188,7 @@ describe('Game Guide - Display Logic', () => {
       state.profileComplete &&
       !state.isActor &&
       !state.gameGuideCompletedAt &&
-      !state.needsOnboarding &&
-      !state.needsOnchain
+      !state.needsOnboarding
     );
   }
 
@@ -258,7 +198,6 @@ describe('Game Guide - Display Logic', () => {
     isActor: false,
     gameGuideCompletedAt: null,
     needsOnboarding: false,
-    needsOnchain: false,
   };
 
   test('should show for first-time authenticated user with complete profile', () => {
@@ -271,10 +210,6 @@ describe('Game Guide - Display Logic', () => {
 
   test('should NOT show for user still in profile onboarding', () => {
     expect(shouldShowGuide({ ...baseUser, needsOnboarding: true })).toBe(false);
-  });
-
-  test('should NOT show for user in on-chain registration step', () => {
-    expect(shouldShowGuide({ ...baseUser, needsOnchain: true })).toBe(false);
   });
 
   test('should NOT show for actors/NPCs', () => {
@@ -314,7 +249,6 @@ describe('Game Guide - Display Logic', () => {
         isActor: true,
         gameGuideCompletedAt: '2025-01-01T00:00:00.000Z',
         needsOnboarding: true,
-        needsOnchain: true,
       })
     ).toBe(false);
   });
@@ -462,13 +396,5 @@ describe('Game Guide - Progress Indicator', () => {
       'completed',
       'current',
     ]);
-  });
-
-  test('progress display text format', () => {
-    const formatProgress = (current: number, total: number) =>
-      `${current + 1} / ${total}`;
-    expect(formatProgress(0, 5)).toBe('1 / 5');
-    expect(formatProgress(2, 5)).toBe('3 / 5');
-    expect(formatProgress(4, 5)).toBe('5 / 5');
   });
 });

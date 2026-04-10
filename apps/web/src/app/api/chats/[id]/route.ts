@@ -54,20 +54,26 @@
 import {
   AuthorizationError,
   authenticate,
+  BusinessLogicError,
   NotFoundError,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
+import { requireNftChatAccess } from '@babylon/api/services/nft-chat-gating-service';
 import {
   and,
+  asc,
   asSystem,
   asUser,
   chatParticipants,
   chats,
+  count,
   desc,
   eq,
+  gt,
   inArray,
   lt,
+  messageReactions,
   messages,
   users,
 } from '@babylon/db';
@@ -79,6 +85,7 @@ import {
   logger,
 } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+import { CHAT_PAGE_SIZE } from '@/lib/constants';
 
 /**
  * GET /api/chats/[id]
@@ -97,7 +104,8 @@ export const GET = withErrorHandling(
 
     const all = searchParams.get('all');
     const debug = searchParams.get('debug');
-    const cursor = searchParams.get('cursor'); // Cursor for pagination (message ID)
+    const cursor = searchParams.get('cursor'); // Cursor for pagination (message ID — loads OLDER messages)
+    const after = searchParams.get('after'); // ISO timestamp — loads NEWER messages since this time
     const limitParam = searchParams.get('limit');
 
     if (all) query.all = all;
@@ -106,7 +114,7 @@ export const GET = withErrorHandling(
     const validatedQuery = ChatQuerySchema.parse(query);
 
     // Parse pagination parameters
-    const limit = limitParam ? Number.parseInt(limitParam, 10) : 50;
+    const limit = limitParam ? Number.parseInt(limitParam, 10) : CHAT_PAGE_SIZE;
     const effectiveLimit = Math.min(Math.max(limit, 1), 100); // Between 1 and 100
 
     // Check for debug mode (localhost access to game chats)
@@ -169,6 +177,8 @@ export const GET = withErrorHandling(
           'read'
         );
       }
+
+      await requireNftChatAccess(authUser, chatId);
     }
 
     // Get chat with messages
@@ -181,10 +191,34 @@ export const GET = withErrorHandling(
         .from(chatParticipants)
         .where(eq(chatParticipants.chatId, chatId));
 
-      // Build message query with cursor-based pagination
+      // Build message query — three modes:
+      // 1. `after` (ISO timestamp): fetch messages NEWER than this time (ASC order, for sync)
+      // 2. `cursor` (message ID): fetch messages OLDER than this cursor (DESC order, for load-more)
+      // 3. Neither: fetch latest messages (DESC order, initial load)
       let messagesList;
-      if (cursor) {
-        // Get the cursor message to find its createdAt
+      if (after) {
+        // Incremental sync: only messages after the given timestamp
+        const afterDate = new Date(after);
+        if (Number.isNaN(afterDate.getTime())) {
+          throw new BusinessLogicError(
+            'Invalid after timestamp',
+            'INVALID_AFTER_TIMESTAMP'
+          );
+        } else {
+          messagesList = await db
+            .select()
+            .from(messages)
+            .where(
+              and(
+                eq(messages.chatId, chatId),
+                gt(messages.createdAt, afterDate)
+              )
+            )
+            .orderBy(asc(messages.createdAt))
+            .limit(effectiveLimit);
+        }
+      } else if (cursor) {
+        // Load older messages: get cursor's timestamp, then fetch before it
         const [cursorMessage] = await db
           .select({ createdAt: messages.createdAt })
           .from(messages)
@@ -212,6 +246,7 @@ export const GET = withErrorHandling(
             .limit(effectiveLimit + 1);
         }
       } else {
+        // Initial load: latest messages
         messagesList = await db
           .select()
           .from(messages)
@@ -340,14 +375,112 @@ export const GET = withErrorHandling(
       }
     }
 
-    // Check if there are more messages
-    const hasMore = fullChat.messages.length > effectiveLimit;
-    const messagesList = hasMore
-      ? fullChat.messages.slice(0, effectiveLimit)
-      : fullChat.messages;
+    // Check if there are more messages.
+    // For `after` queries: if we got exactly `limit` rows, there may be more
+    // beyond this page. Signal hasMore so the client can paginate.
+    // For cursor/initial queries: the +1 overfetch trick detects more pages.
+    const isAfterQuery = !!after;
+    const hasMore = isAfterQuery
+      ? fullChat.messages.length >= effectiveLimit
+      : fullChat.messages.length > effectiveLimit;
+    const messagesList = isAfterQuery
+      ? fullChat.messages
+      : hasMore
+        ? fullChat.messages.slice(0, effectiveLimit)
+        : fullChat.messages;
 
-    // Reverse to get chronological order (oldest first)
-    const messagesInOrder = [...messagesList].reverse();
+    // For cursor/initial queries: reverse from DESC to chronological order.
+    // For after queries: already in ASC order from the query.
+    const messagesInOrder = isAfterQuery
+      ? messagesList
+      : [...messagesList].reverse();
+
+    // Message reactions summary (counts + reactedByMe)
+    const messageIds = messagesInOrder.map((m) => m.id);
+    const reactionsByMessageId = new Map<
+      string,
+      { emoji: string; count: number; reactedByMe: boolean }[]
+    >();
+    if (messageIds.length > 0) {
+      const [counts, mine] = await Promise.all([
+        asSystem(async (db) => {
+          return await db
+            .select({
+              messageId: messageReactions.messageId,
+              emoji: messageReactions.emoji,
+              count: count(),
+            })
+            .from(messageReactions)
+            .where(inArray(messageReactions.messageId, messageIds))
+            .groupBy(messageReactions.messageId, messageReactions.emoji);
+        }, 'get-message-reaction-counts'),
+        authUser
+          ? asSystem(async (db) => {
+              return await db
+                .select({
+                  messageId: messageReactions.messageId,
+                  emoji: messageReactions.emoji,
+                })
+                .from(messageReactions)
+                .where(
+                  and(
+                    inArray(messageReactions.messageId, messageIds),
+                    eq(messageReactions.userId, authUser!.userId)
+                  )
+                );
+            }, 'get-message-reactions-mine')
+          : Promise.resolve([]),
+      ]);
+
+      const mineSet = new Set(mine.map((r) => `${r.messageId}:${r.emoji}`));
+      for (const row of counts) {
+        const arr = reactionsByMessageId.get(row.messageId) ?? [];
+        arr.push({
+          emoji: row.emoji,
+          count: Number(row.count ?? 0),
+          reactedByMe: mineSet.has(`${row.messageId}:${row.emoji}`),
+        });
+        reactionsByMessageId.set(row.messageId, arr);
+      }
+    }
+
+    // Resolve replied-to messages in batch
+    const replyToIds = [
+      ...new Set(
+        messagesInOrder
+          .map((m) => m.replyToMessageId)
+          .filter((id): id is string => !!id)
+      ),
+    ];
+    const replyToMessagesMap = new Map<
+      string,
+      { id: string; content: string; senderId: string; senderName?: string }
+    >();
+    if (replyToIds.length > 0) {
+      const replyMessages = await asSystem(async (db) => {
+        return await db
+          .select({
+            id: messages.id,
+            content: messages.content,
+            senderId: messages.senderId,
+          })
+          .from(messages)
+          .where(
+            and(inArray(messages.id, replyToIds), eq(messages.chatId, chatId))
+          );
+      }, 'get-reply-to-messages');
+
+      for (const rm of replyMessages) {
+        const sender = usersMap.get(rm.senderId);
+        const actor = actorsMap.get(rm.senderId);
+        replyToMessagesMap.set(rm.id, {
+          id: rm.id,
+          content: rm.content.slice(0, 200),
+          senderId: rm.senderId,
+          senderName: sender?.displayName || actor?.name || undefined,
+        });
+      }
+    }
 
     // Get the cursor for the next page (oldest message ID in this batch)
     const nextCursor = hasMore
@@ -408,6 +541,12 @@ export const GET = withErrorHandling(
         senderId: msg.senderId,
         type: msg.type,
         createdAt: msg.createdAt,
+        metadata: msg.metadata,
+        reactions: reactionsByMessageId.get(msg.id) ?? [],
+        replyToMessageId: msg.replyToMessageId ?? null,
+        replyToMessage: msg.replyToMessageId
+          ? (replyToMessagesMap.get(msg.replyToMessageId) ?? null)
+          : null,
       })),
       participants: participantsInfo,
       pagination: {

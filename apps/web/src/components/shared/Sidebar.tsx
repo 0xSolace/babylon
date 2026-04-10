@@ -1,32 +1,40 @@
 'use client';
 
-import { cn, getReferralUrl } from '@babylon/shared';
+import {
+  cn,
+  extractErrorMessage,
+  getReferralUrl,
+  logger,
+} from '@babylon/shared';
 import {
   Bell,
   Bot,
   Check,
+  ChevronsRight,
   Copy,
-  Gift,
-  Home,
   LogOut,
   MessageCircle,
   Shield,
   TrendingUp,
   Trophy,
   User,
-  Users,
+  Wallet,
 } from 'lucide-react';
-import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { LoginButton } from '@/components/auth/LoginButton';
 import { UserMenu } from '@/components/auth/UserMenu';
+import { GameFeedbackModal } from '@/components/feedback/GameFeedbackModal';
 import { Avatar } from '@/components/shared/Avatar';
-import { Separator } from '@/components/shared/Separator';
+import { BabylonIcon } from '@/components/shared/icons/BabylonIcon';
+import { BabylonFullLogo } from '@/components/shared/icons/BabylonLogo';
+import { HouseIcon } from '@/components/shared/icons/HouseIcon';
 import { useAuth } from '@/hooks/useAuth';
+import { usePostHog } from '@/hooks/usePostHog';
 import { useUnreadMessages } from '@/hooks/useUnreadMessages';
-import { getAuthToken } from '@/lib/auth';
+import { useUnreadNotifications } from '@/hooks/useUnreadNotifications';
+import { getUserDisplayName } from '@/lib/user-display';
 
 /**
  * Main sidebar content component with navigation and user menu.
@@ -38,13 +46,63 @@ import { getAuthToken } from '@/lib/auth';
  * @returns Sidebar content element
  */
 function SidebarContent() {
+  const [collapsed, setCollapsed] = useState(false);
   const [showMdMenu, setShowMdMenu] = useState(false);
   const [copiedReferral, setCopiedReferral] = useState(false);
-  const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
+  const asideRef = useRef<HTMLElement>(null);
   const mdMenuRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
-  const { ready, authenticated, user, logout } = useAuth();
+  const { ready, authenticated, user, logout, login, refresh } = useAuth();
+  const { trackNavigation } = usePostHog();
   const { totalUnread: unreadMessages } = useUnreadMessages();
+  const { unreadCount: unreadNotifications } = useUnreadNotifications();
+
+  // Portfolio data for points display above user menu
+  const [livePortfolio, setLivePortfolio] = useState<{
+    reputationPoints: number;
+    wallet: number;
+  } | null>(null);
+
+  const fetchPortfolio = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const res = await fetch(
+        `/api/users/${encodeURIComponent(user.id)}/portfolio-breakdown`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setLivePortfolio({
+          reputationPoints: data.reputationPoints ?? 0,
+          wallet: data.wallet ?? 0,
+        });
+      }
+    } catch {
+      // Silently fail — will show fallback values
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    fetchPortfolio();
+  }, [fetchPortfolio]);
+
+  // Listen for rewards-updated events to refresh points
+  useEffect(() => {
+    const handleRewardsUpdated = () => {
+      void fetchPortfolio();
+      void refresh().catch((error) => {
+        logger.warn(
+          'Failed to refresh auth state after rewards update',
+          { error: extractErrorMessage(error) },
+          'Sidebar'
+        );
+      });
+    };
+    window.addEventListener('rewards-updated', handleRewardsUpdated);
+    return () => {
+      window.removeEventListener('rewards-updated', handleRewardsUpdated);
+    };
+  }, [fetchPortfolio, refresh]);
 
   // Hide sidebar when WAITLIST_MODE is enabled on home page
   const isWaitlistMode = process.env.NEXT_PUBLIC_WAITLIST_MODE === 'true';
@@ -74,41 +132,26 @@ function SidebarContent() {
     return undefined;
   }, [showMdMenu]);
 
-  // Poll for unread notifications
+  // Adjust sidebar height to account for any shell content above it so the
+  // user profile bar at the bottom is always visible.
   useEffect(() => {
-    if (!authenticated || !user) {
-      setUnreadNotifications(0);
-      return;
-    }
-
-    const fetchUnreadCount = async () => {
-      const token = getAuthToken();
-
-      if (!token) {
-        return;
-      }
-
-      const response = await fetch(
-        '/api/notifications?unreadOnly=true&limit=1',
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        setUnreadNotifications(data.unreadCount || 0);
-      }
+    let rafId: number;
+    const updateHeight = () => {
+      rafId = requestAnimationFrame(() => {
+        if (!asideRef.current) return;
+        const top = Math.max(0, asideRef.current.getBoundingClientRect().top);
+        asideRef.current.style.height = `calc(100vh - ${top}px)`;
+      });
     };
-
-    fetchUnreadCount();
-
-    // Refresh every 1 minute
-    const interval = setInterval(fetchUnreadCount, 60000); // 60 seconds = 1 minute
-    return () => clearInterval(interval);
-  }, [authenticated, user]);
+    updateHeight();
+    window.addEventListener('scroll', updateHeight, { passive: true });
+    window.addEventListener('resize', updateHeight, { passive: true });
+    return () => {
+      cancelAnimationFrame(rafId);
+      window.removeEventListener('scroll', updateHeight);
+      window.removeEventListener('resize', updateHeight);
+    };
+  }, []);
 
   const copyReferralCode = async () => {
     if (!user?.referralCode) return;
@@ -128,67 +171,59 @@ function SidebarContent() {
     {
       name: 'Home',
       href: '/feed',
-      icon: Home,
-      color: '#0066FF',
+      icon: HouseIcon,
       active: pathname === '/feed' || pathname === '/',
     },
     {
-      name: 'Notifications',
-      href: '/notifications',
-      icon: Bell,
-      color: '#0066FF',
-      active: pathname === '/notifications',
-    },
-    {
-      name: 'Leaderboard',
-      href: '/leaderboard',
-      icon: Trophy,
-      color: '#0066FF',
-      active: pathname === '/leaderboard',
+      name: 'Agents',
+      href: '/agents/team',
+      icon: Bot,
+      active: pathname === '/agents' || pathname.startsWith('/agents/'),
+      requiresAuth: true,
     },
     {
       name: 'Markets',
       href: '/markets',
       icon: TrendingUp,
-      color: '#0066FF',
-      active: pathname === '/markets',
+      active:
+        pathname.startsWith('/markets') ||
+        pathname === '/markets' ||
+        pathname.startsWith('/markets/perps/') ||
+        pathname.startsWith('/markets/predictions/'),
     },
     {
       name: 'Chats',
       href: '/chats',
       icon: MessageCircle,
-      color: '#0066FF',
       active: pathname === '/chats',
+      requiresAuth: true,
     },
     {
-      name: 'Agents',
-      href: '/agents',
-      icon: Bot,
-      color: '#0066FF',
-      active:
-        pathname === '/agents' ||
-        (pathname.startsWith('/agents/') && pathname !== '/agents/team'),
+      name: 'Wallet',
+      href: '/wallet',
+      icon: Wallet,
+      active: pathname === '/wallet',
+      requiresAuth: true,
     },
     {
-      name: 'Command Center',
-      href: '/agents/team',
-      icon: Users,
-      color: '#0066FF',
-      active: pathname === '/agents/team',
+      name: 'Points',
+      href: '/leaderboard',
+      icon: Trophy,
+      active: pathname === '/leaderboard' || pathname === '/rewards',
     },
     {
-      name: 'Rewards',
-      href: '/rewards',
-      icon: Gift,
-      color: '#a855f7',
-      active: pathname === '/rewards',
+      name: 'Notifications',
+      href: '/notifications',
+      icon: Bell,
+      active: pathname === '/notifications',
+      requiresAuth: true,
     },
     {
       name: 'Profile',
       href: '/profile',
       icon: User,
-      color: '#0066FF',
-      active: pathname === '/profile',
+      active: pathname === '/profile' || pathname.startsWith('/u/'),
+      requiresAuth: true,
     },
     // Admin link (only shown for admins)
     ...(isAdmin
@@ -197,7 +232,6 @@ function SidebarContent() {
             name: 'Admin',
             href: '/admin',
             icon: Shield,
-            color: '#f97316',
             active: pathname === '/admin',
           },
         ]
@@ -208,94 +242,68 @@ function SidebarContent() {
     <>
       {/* Responsive sidebar: icons only on tablet (md), icons + names on desktop (lg+) */}
       <aside
+        ref={asideRef}
         className={cn(
           'sticky top-0 isolate z-40 hidden h-screen md:flex md:flex-col',
           'bg-sidebar',
           'transition-all duration-300',
-          'md:w-20 lg:w-64'
+          'md:w-20',
+          'mx-2',
+          !collapsed && 'lg:w-48'
         )}
       >
-        {/* Header - Logo */}
-        <div className="flex items-center justify-center p-6 lg:justify-start">
-          <Link
-            href="/feed"
-            className="transition-transform duration-300 hover:scale-105"
-          >
-            {/* Icon-only logo for md (tablet) */}
-            <Image
-              src="/assets/logos/logo.svg"
-              alt="Babylon Logo"
-              width={32}
-              height={32}
-              className="h-8 w-8 lg:hidden"
+        {/* Header - Logo & Collapse Toggle */}
+        <div
+          className={cn(
+            'flex items-center justify-center p-6',
+            !collapsed && 'lg:justify-start lg:px-4'
+          )}
+        >
+          <Link href="/feed" aria-label="Babylon home">
+            {/* Icon-only logo for md (tablet) or collapsed */}
+            <BabylonIcon
+              className={cn(
+                'h-8 w-8 text-sidebar-primary',
+                !collapsed && 'lg:hidden'
+              )}
             />
-            {/* Full logo with text for lg+ (desktop) */}
-            <Image
-              src="/assets/logos/logo_full.svg"
-              alt="Babylon"
-              width={160}
-              height={38}
-              className="hidden h-8 w-auto lg:block"
-              loading="eager"
-            />
+            {/* Full logo with text for lg+ (desktop) when expanded */}
+            {!collapsed && (
+              <BabylonFullLogo className="hidden h-8 w-auto text-sidebar-primary lg:block" />
+            )}
           </Link>
         </div>
+        {/* Expand toggle - only visible on lg+ when collapsed, styled like nav items */}
+        {collapsed && (
+          <button
+            type="button"
+            onClick={() => setCollapsed(false)}
+            className="hidden w-full items-center justify-center px-4 py-3 text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-black lg:flex dark:hover:text-white"
+            aria-label="Expand sidebar"
+          >
+            <ChevronsRight className="h-6 w-6" />
+          </button>
+        )}
 
-        {/* Navigation */}
-        <nav className="pointer-events-auto relative z-20 flex-1">
+        {/* Navigation - scrollable when screen is short */}
+        <nav className="pointer-events-auto relative z-20 flex-1 overflow-y-auto">
           {navItems.map((item) => {
             const Icon = item.icon;
             const hasNotificationBadge =
-              (item.name === 'Notifications' && unreadNotifications > 0) ||
-              (item.name === 'Chats' && unreadMessages > 0);
-            return (
-              <Link
-                key={item.name}
-                href={item.href}
-                prefetch={true}
-                className={cn(
-                  'group pointer-events-auto relative z-10 flex items-center px-4 py-3',
-                  'transition-colors duration-200',
-                  'md:justify-center lg:justify-start',
-                  !item.active && 'bg-transparent hover:bg-sidebar-accent'
-                )}
-                title={item.name}
-                style={{
-                  backgroundColor: item.active ? item.color : undefined,
-                }}
-                onMouseEnter={(e) => {
-                  if (!item.active) {
-                    e.currentTarget.style.backgroundColor = item.color;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!item.active) {
-                    e.currentTarget.style.backgroundColor = '';
-                  }
-                }}
-              >
+              (Icon === Bell && unreadNotifications > 0) ||
+              (Icon === MessageCircle && unreadMessages > 0);
+
+            const navContent = (
+              <>
                 {/* Icon with notification indicator */}
-                <div className="relative lg:mr-3">
+                <div className={cn('relative', !collapsed && 'lg:mr-3')}>
                   <Icon
                     className={cn(
                       'h-6 w-6 flex-shrink-0',
-                      'transition-all duration-300',
-                      'group-hover:scale-110',
-                      !item.active && 'text-sidebar-foreground'
+                      item.active
+                        ? 'text-sidebar-primary'
+                        : 'text-sidebar-foreground'
                     )}
-                    style={{
-                      color: item.active ? '#e4e4e4' : undefined,
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!item.active) {
-                        e.currentTarget.style.color = '#e4e4e4';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!item.active) {
-                        e.currentTarget.style.color = '';
-                      }
-                    }}
                   />
                   {hasNotificationBadge && (
                     <span className="-top-1 -right-1 absolute h-2 w-2 rounded-full bg-blue-500 ring-2 ring-sidebar" />
@@ -305,38 +313,64 @@ function SidebarContent() {
                 {/* Label - hidden on tablet (md), shown on desktop (lg+) */}
                 <span
                   className={cn(
-                    'hidden lg:block',
+                    'hidden',
+                    !collapsed && 'lg:block',
                     'text-lg transition-colors duration-300',
-                    item.active ? 'font-semibold' : 'text-sidebar-foreground'
+                    item.active
+                      ? 'font-semibold text-black dark:text-white'
+                      : 'text-sidebar-foreground group-hover:text-black dark:group-hover:text-white'
                   )}
-                  style={{
-                    color: item.active ? '#e4e4e4' : undefined,
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!item.active) {
-                      e.currentTarget.style.color = '#e4e4e4';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!item.active) {
-                      e.currentTarget.style.color = '';
-                    }
-                  }}
                 >
                   {item.name}
                 </span>
+              </>
+            );
+
+            const sharedClassName = cn(
+              'group pointer-events-auto relative z-10 flex items-center px-4 py-3',
+              'transition-colors duration-200',
+              'md:justify-center',
+              !collapsed && 'lg:justify-start',
+              'bg-transparent hover:bg-sidebar-accent'
+            );
+
+            if (item.requiresAuth && !authenticated) {
+              return (
+                <button
+                  key={item.name}
+                  type="button"
+                  onClick={login}
+                  className={cn(sharedClassName, 'w-full')}
+                  title={item.name}
+                  {...(item.name === 'Agents'
+                    ? { 'data-tour': 'sidebar-agents' }
+                    : {})}
+                >
+                  {navContent}
+                </button>
+              );
+            }
+
+            return (
+              <Link
+                key={item.name}
+                href={item.href}
+                prefetch={true}
+                className={sharedClassName}
+                title={item.name}
+                onClick={() => trackNavigation(item.href, 'sidebar')}
+                {...(item.name === 'Agents'
+                  ? { 'data-tour': 'sidebar-agents' }
+                  : {})}
+              >
+                {navContent}
               </Link>
             );
           })}
         </nav>
 
-        {/* Separator - only shown on desktop */}
-        <div className="hidden px-4 py-2 lg:block">
-          <Separator />
-        </div>
-
         {/* Bottom Section - Authentication (Desktop lg+) */}
-        <div className="hidden p-4 lg:block">
+        <div className={cn('hidden', !collapsed && 'lg:block')}>
           {!ready ? (
             // Skeleton loader while authentication is initializing
             <div className="flex animate-pulse items-center gap-3 p-3">
@@ -347,7 +381,32 @@ function SidebarContent() {
               </div>
             </div>
           ) : authenticated ? (
-            <UserMenu />
+            <>
+              {/* Points Display - always visible above user menu */}
+              <div className="border-sidebar-accent border-t px-4 py-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground text-sm">
+                    Total Points
+                  </span>
+                  <span className="font-semibold text-sidebar-foreground">
+                    {(
+                      livePortfolio?.reputationPoints ??
+                      user?.reputationPoints ??
+                      0
+                    ).toLocaleString()}
+                  </span>
+                </div>
+                <div className="mt-1 flex items-center justify-between">
+                  <span className="text-muted-foreground text-xs">
+                    Trading Balance
+                  </span>
+                  <span className="text-sidebar-foreground text-sm">
+                    {(livePortfolio?.wallet ?? 0).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+              <UserMenu />
+            </>
           ) : (
             <LoginButton />
           )}
@@ -355,48 +414,45 @@ function SidebarContent() {
 
         {/* Bottom Section - User Icon (Tablet md) */}
         {authenticated && user && (
-          <div className="relative md:block lg:hidden" ref={mdMenuRef}>
-            <div className="flex justify-center p-4">
-              <button
-                onClick={() => setShowMdMenu(!showMdMenu)}
-                className="transition-opacity hover:opacity-80"
-                aria-label="Open user menu"
-              >
-                <Avatar
-                  id={user.id}
-                  name={user.displayName || user.email || 'User'}
-                  type="user"
-                  size="md"
-                  src={user.profileImageUrl || undefined}
-                  imageUrl={user.profileImageUrl || undefined}
-                />
-              </button>
-            </div>
+          <div
+            className={cn('relative md:block', !collapsed && 'lg:hidden')}
+            ref={mdMenuRef}
+          >
+            {/* User avatar button - styled like nav items */}
+            <button
+              onClick={() => setShowMdMenu(!showMdMenu)}
+              className="flex w-full items-center justify-center px-4 py-3 transition-colors duration-200 hover:bg-sidebar-accent"
+              aria-label="Open user menu"
+            >
+              <Avatar
+                id={user.id}
+                name={getUserDisplayName(user, 'User')}
+                type="user"
+                size="sm"
+                src={user.profileImageUrl || undefined}
+                imageUrl={user.profileImageUrl || undefined}
+              />
+            </button>
 
-            {/* Dropdown Menu - Icon Only */}
+            {/* Dropdown Menu - styled like nav items */}
             {showMdMenu && (
-              <div className="-translate-x-1/2 absolute bottom-full left-1/2 z-50 mb-2 w-auto overflow-hidden rounded-lg border border-border bg-sidebar shadow-lg">
+              <div className="absolute bottom-full left-0 z-50 mb-2 w-full overflow-hidden bg-sidebar shadow-lg">
                 {/* Referral Code */}
                 {user.referralCode && (
                   <button
                     onClick={copyReferralCode}
-                    className="flex w-full items-center justify-center p-3 transition-colors hover:bg-sidebar-accent"
+                    className="flex w-full items-center justify-center px-4 py-3 transition-colors duration-200 hover:bg-sidebar-accent"
                     title={copiedReferral ? 'Copied!' : 'Copy Referral Link'}
                     aria-label={
                       copiedReferral ? 'Copied!' : 'Copy Referral Link'
                     }
                   >
                     {copiedReferral ? (
-                      <Check className="h-5 w-5 flex-shrink-0 text-green-500" />
+                      <Check className="h-6 w-6 flex-shrink-0 text-green-500" />
                     ) : (
-                      <Copy className="h-5 w-5 flex-shrink-0 text-sidebar-foreground" />
+                      <Copy className="h-6 w-6 flex-shrink-0 text-sidebar-foreground" />
                     )}
                   </button>
-                )}
-
-                {/* Separator */}
-                {user.referralCode && (
-                  <div className="border-border border-t" />
                 )}
 
                 {/* Logout */}
@@ -405,16 +461,21 @@ function SidebarContent() {
                     setShowMdMenu(false);
                     logout();
                   }}
-                  className="flex w-full items-center justify-center p-3 text-destructive transition-colors hover:bg-destructive/10"
+                  className="flex w-full items-center justify-center px-4 py-3 text-destructive transition-colors duration-200 hover:bg-sidebar-accent"
                   title="Logout"
                   aria-label="Logout"
                 >
-                  <LogOut className="h-5 w-5 flex-shrink-0" />
+                  <LogOut className="h-6 w-6 flex-shrink-0" />
                 </button>
               </div>
             )}
           </div>
         )}
+
+        <GameFeedbackModal
+          isOpen={feedbackModalOpen}
+          onClose={() => setFeedbackModalOpen(false)}
+        />
       </aside>
     </>
   );

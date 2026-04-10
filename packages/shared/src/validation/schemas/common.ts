@@ -136,6 +136,30 @@ export const URLSchema = z.string().url({
 });
 
 /**
+ * Public asset path OR http(s) URL schema.
+ *
+ * Used for user-facing images where we support preset local assets (e.g. /assets/*)
+ * as well as uploaded assets (e.g. /uploads/*) and remote URLs.
+ */
+export const AssetOrUrlSchema = z.string().refine(
+  (val) => {
+    const value = val.trim();
+    if (value.length === 0) return true;
+    if (value.startsWith('/assets/') || value.startsWith('/uploads/')) {
+      return true;
+    }
+
+    try {
+      const parsed = new URL(value);
+      return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  },
+  { message: 'Invalid URL format' }
+);
+
+/**
  * Phone number validation (basic international format)
  */
 export const PhoneNumberSchema = z
@@ -394,28 +418,29 @@ export function createBatchSchema<T extends z.ZodType>(
 /**
  * Leaderboard query parameters schema
  */
+export const LEADERBOARD_METRICS = ['reputation', 'trading'] as const;
+export type LeaderboardMetric = (typeof LEADERBOARD_METRICS)[number];
+
+export const LEADERBOARD_SCOPES = ['wallet', 'team'] as const;
+export type LeaderboardScope = (typeof LEADERBOARD_SCOPES)[number];
+
+// Canonical leaderboard contract:
+// - metric selects the ranking metric (`reputation` or `trading`)
+// - type selects the aggregation scope (`wallet` or `team`)
 export const LeaderboardQuerySchema = z.object({
   page: z.coerce
     .number()
     .int()
     .min(0)
     .default(1)
-    .transform((val) => Math.max(1, val)), // Clamp to min 1, default 1
+    .transform((val) => Math.max(1, val)),
   pageSize: z.coerce
     .number()
     .int()
     .nonnegative()
     .default(100)
-    .transform((val) => Math.max(1, Math.min(val, 100))), // Clamp to min 1, max 100
-  minPoints: z.coerce.number().nonnegative().default(500), // Show all with >500 reputation
-  pointsType: z
-    .string()
-    .optional()
-    .transform((val) => {
-      // Default to 'all' if invalid, undefined, or empty
-      if (!val || !['all', 'earned', 'referral'].includes(val)) {
-        return undefined; // Will be handled as 'all' in route handler (pointsType ?? 'all')
-      }
-      return val as 'all' | 'earned' | 'referral';
-    }),
+    .transform((val) => Math.max(1, Math.min(val, 100))),
+  metric: z.enum(LEADERBOARD_METRICS).optional().default('reputation'),
+  type: z.enum(LEADERBOARD_SCOPES).optional().default('wallet'),
+  userId: z.string().optional(),
 });

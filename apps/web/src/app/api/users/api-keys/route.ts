@@ -14,7 +14,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { asUser, generateSnowflakeId, userApiKeys } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { logger, toISO, toISOOrNull } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 
@@ -45,9 +45,9 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       id: key.id,
       name: key.name,
       maskedKey: `bab_live_****${last4}`,
-      createdAt: key.createdAt.toISOString(),
-      lastUsedAt: key.lastUsedAt?.toISOString() || null,
-      expiresAt: key.expiresAt?.toISOString() || null,
+      createdAt: toISO(key.createdAt),
+      lastUsedAt: toISOOrNull(key.lastUsedAt),
+      expiresAt: toISOOrNull(key.expiresAt),
     };
   });
 
@@ -103,7 +103,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     id: createdKey[0].id,
     apiKey, // Only returned on creation, never again!
     name: createdKey[0].name,
-    createdAt: createdKey[0].createdAt.toISOString(),
+    createdAt: toISO(createdKey[0].createdAt),
     message:
       'API key created successfully. Save this key - it will not be shown again.',
   });

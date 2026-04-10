@@ -78,12 +78,16 @@
 import { optionalAuth, successResponse, withErrorHandling } from '@babylon/api';
 import {
   actorState,
+  and,
   asPublic,
   asUser,
   count,
   eq,
+  gte,
   posts,
+  sql,
   sum,
+  userActivityLogs,
   users,
 } from '@babylon/db';
 import { StaticDataRegistry } from '@babylon/engine';
@@ -109,6 +113,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   StatsQuerySchema.parse(queryParams);
 
   const authUser = await optionalAuth(request).catch(() => null);
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
   const queryStats = async (
     db: Parameters<Parameters<typeof asUser>[1]>[0]
@@ -119,7 +124,18 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       userPointsResult,
       actorPointsResult,
     ] = await Promise.all([
-      db.select({ count: count() }).from(users).where(eq(users.isActor, false)),
+      db
+        .select({
+          count: sql<number>`COUNT(DISTINCT ${userActivityLogs.userId})::int`,
+        })
+        .from(userActivityLogs)
+        .innerJoin(users, eq(users.id, userActivityLogs.userId))
+        .where(
+          and(
+            eq(users.isActor, false),
+            gte(userActivityLogs.activityDate, sevenDaysAgo)
+          )
+        ),
       db.select({ count: count() }).from(posts),
       db
         .select({ total: sum(users.virtualBalance) })
@@ -143,7 +159,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   const totalPoints =
     Number(statsResult.userPoints) + Number(statsResult.actorPoints);
-  const pointsInCirculation = formatPoints(BigInt(totalPoints));
+  const pointsInCirculation = formatPoints(totalPoints);
 
   const finalStats: BabylonStats = {
     activePlayers: statsResult.activePlayers,
@@ -164,8 +180,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   });
 });
 
-function formatPoints(points: bigint): string {
-  const num = Number(points);
+function formatPoints(points: number): string {
+  const num = Number.isFinite(points) ? Math.max(0, Math.round(points)) : 0;
 
   if (num >= 1_000_000) {
     return `${(num / 1_000_000).toFixed(1)}M pts`;

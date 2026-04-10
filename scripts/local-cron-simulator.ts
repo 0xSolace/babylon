@@ -15,6 +15,7 @@
 const CRON_INTERVAL = 60000; // 60 seconds
 const GAME_TICK_URL = 'http://localhost:3000/api/cron/game-tick';
 const AGENT_TICK_URL = 'http://localhost:3000/api/cron/agent-tick';
+const NPC_TICK_URL = 'http://localhost:3000/api/cron/npc-tick';
 
 let intervalId: NodeJS.Timeout | null = null;
 let tickCount = 0;
@@ -50,19 +51,32 @@ async function executeGameTick() {
       console.error('   Start it first: bun run dev', undefined, 'LocalCron');
       process.exit(1);
     }
-    throw error;
+    return null;
   });
 
-  const data = await response.json();
+  if (!response) return;
 
   if (!response.ok) {
+    const text = await response.text().catch(() => '');
     console.error(
       `Game tick #${tickCount} failed (HTTP ${response.status})`,
-      data,
+      { body: text.slice(0, 200) },
       'LocalCron'
     );
     return;
   }
+
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    console.warn(
+      `Game tick #${tickCount} returned non-JSON (${response.status})`,
+      undefined,
+      'LocalCron'
+    );
+    return;
+  }
+
+  const data = await response.json().catch(() => ({}));
 
   if (data.skipped) {
     console.warn(
@@ -156,10 +170,62 @@ async function executeAgentTick() {
   );
 }
 
+async function executeNpcTick() {
+  console.info(
+    `👤 Triggering NPC tick #${tickCount}...`,
+    undefined,
+    'LocalCron'
+  );
+
+  const response = await fetch(NPC_TICK_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.CRON_SECRET || 'development'}`,
+      'Content-Type': 'application/json',
+    },
+  }).catch((error: Error) => {
+    console.error(
+      `NPC tick #${tickCount} error: ${error.message}`,
+      { error },
+      'LocalCron'
+    );
+    return null;
+  });
+
+  if (!response) return;
+
+  const contentType = response.headers.get('content-type') || '';
+  if (!response.ok) {
+    const text = await response.text();
+    console.error(
+      `NPC tick #${tickCount} failed (HTTP ${response.status})`,
+      { body: text.slice(0, 500) },
+      'LocalCron'
+    );
+    return;
+  }
+
+  if (contentType.includes('application/json')) {
+    const data = await response.json();
+    console.info(
+      `✅ NPC tick #${tickCount} completed`,
+      {
+        postsCreated: data.postsCreated || 0,
+        npcsProcessed: data.npcsProcessed || 0,
+      },
+      'LocalCron'
+    );
+  }
+}
+
 async function executeTick() {
   await executeGameTick();
   await executeAgentTick();
+  await executeNpcTick();
 }
+
+/** First /api/health request can take a long time while Turbopack compiles (slow disks see 10s+). */
+const HEALTH_CHECK_TIMEOUT_MS = 60_000;
 
 async function waitForServer(
   maxAttempts = 60,
@@ -175,7 +241,7 @@ async function waitForServer(
     try {
       const response = await fetch('http://localhost:3000/api/health', {
         method: 'GET',
-        signal: AbortSignal.timeout(1000),
+        signal: AbortSignal.timeout(HEALTH_CHECK_TIMEOUT_MS),
       });
 
       if (response.ok) {
@@ -186,8 +252,16 @@ async function waitForServer(
         );
         return true;
       }
+
+      if (attempt < maxAttempts) {
+        console.info(
+          `Attempt ${attempt}/${maxAttempts}: health returned HTTP ${response.status}, waiting ${delayMs}ms...`,
+          undefined,
+          'LocalCron'
+        );
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
     } catch (_error) {
-      // Server not ready yet, continue waiting
       if (attempt < maxAttempts) {
         console.info(
           `Attempt ${attempt}/${maxAttempts}: Server not ready, waiting ${delayMs}ms...`,

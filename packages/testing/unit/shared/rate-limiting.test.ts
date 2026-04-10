@@ -4,6 +4,7 @@
  */
 
 import { beforeEach, describe, expect, it } from 'bun:test';
+
 import {
   checkDuplicate,
   checkRateLimit,
@@ -13,17 +14,19 @@ import {
   getDuplicateStats,
   getRateLimitStatus,
   RATE_LIMIT_CONFIGS,
-} from '@babylon/api';
+} from '@babylon/engine';
 
 describe('Rate Limiting (Shared)', () => {
-  beforeEach(() => {
-    clearAllRateLimits();
-    clearAllDuplicates();
+  beforeEach(async () => {
+    await clearAllRateLimits();
+    await clearAllDuplicates();
   });
 
   describe('User Rate Limiter', () => {
+    const uid = (n: number) => `rate-limiting-test-user-${n}`;
+
     it('should allow requests within rate limit', () => {
-      const userId = 'shared-test-user-1';
+      const userId = uid(1);
       const config = RATE_LIMIT_CONFIGS.CREATE_POST;
 
       const result1 = checkRateLimit(userId, config);
@@ -36,37 +39,33 @@ describe('Rate Limiting (Shared)', () => {
     });
 
     it('should block requests exceeding rate limit', () => {
-      const userId = 'shared-test-user-2';
+      const userId = uid(2);
       const config = RATE_LIMIT_CONFIGS.CREATE_POST;
 
-      // Use up all 3 requests
       checkRateLimit(userId, config);
       checkRateLimit(userId, config);
       checkRateLimit(userId, config);
 
-      // Fourth request should be blocked
       const result = checkRateLimit(userId, config);
       expect(result.allowed).toBe(false);
       expect(result.retryAfter).toBeGreaterThan(0);
     });
 
     it('should track rate limits separately for different users', () => {
-      const user1 = 'shared-test-user-3';
-      const user2 = 'shared-test-user-4';
+      const user1 = uid(3);
+      const user2 = uid(4);
       const config = RATE_LIMIT_CONFIGS.CREATE_POST;
 
-      // User 1 uses 2 requests
       checkRateLimit(user1, config);
       checkRateLimit(user1, config);
 
-      // User 2 should have full quota
       const result = checkRateLimit(user2, config);
       expect(result.allowed).toBe(true);
       expect(result.remaining).toBe(2);
     });
 
     it('should provide accurate rate limit status', async () => {
-      const userId = 'shared-test-user-5';
+      const userId = uid(5);
       const config = RATE_LIMIT_CONFIGS.CREATE_POST;
 
       checkRateLimit(userId, config);
@@ -117,7 +116,7 @@ describe('Rate Limiting (Shared)', () => {
     it('should normalize content for duplicate detection', () => {
       const userId = 'shared-test-user-8';
       const content1 = 'Same Content';
-      const content2 = '  same content  '; // Different case and whitespace
+      const content2 = '  same content  ';
 
       checkDuplicate(userId, content1, DUPLICATE_DETECTION_CONFIGS.POST);
       const result = checkDuplicate(

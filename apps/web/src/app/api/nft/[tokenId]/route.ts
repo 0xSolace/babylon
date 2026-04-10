@@ -11,10 +11,17 @@
  */
 
 import {
+  addPublicReadHeaders,
   NotFoundError,
+  publicRateLimit,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
+import {
+  getNftTokenOwnersFromIndexer,
+  getOwnerUsersByWalletAddresses,
+  NftIndexerUnavailableError,
+} from '@babylon/api/services/nft-indexer-service';
 import {
   db,
   eq,
@@ -23,7 +30,7 @@ import {
   nftOwnership,
   users,
 } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import type { NftDetail, NftDetailResponse } from '@/types/nft';
 
@@ -32,7 +39,10 @@ interface RouteParams {
 }
 
 export const GET = withErrorHandling(
-  async (_request: NextRequest, context: RouteParams) => {
+  async (request: NextRequest, context: RouteParams) => {
+    const { error, rateLimitInfo } = await publicRateLimit(request);
+    if (error) return error;
+
     const { tokenId: tokenIdParam } = await context.params;
     const tokenId = parseInt(tokenIdParam, 10);
 
@@ -66,21 +76,73 @@ export const GET = withErrorHandling(
       throw new NotFoundError(`NFT with token ID ${tokenId} not found`);
     }
 
-    // Get current ownership
-    const [ownership] = await db
-      .select({
-        ownerAddress: nftOwnership.ownerAddress,
-        userId: nftOwnership.userId,
-        acquiredAt: nftOwnership.acquiredAt,
-        txHash: nftOwnership.txHash,
-        username: users.username,
-        displayName: users.displayName,
-        profileImageUrl: users.profileImageUrl,
-      })
-      .from(nftOwnership)
-      .leftJoin(users, eq(nftOwnership.userId, users.id))
-      .where(eq(nftOwnership.tokenId, tokenId))
-      .limit(1);
+    // Get current ownership (prefer indexer, fallback to DB ownership)
+    let ownership: {
+      ownerAddress: string;
+      user: {
+        id: string;
+        username: string | null;
+        displayName: string | null;
+        profileImageUrl: string | null;
+      } | null;
+      acquiredAt: string;
+      txHash: string | null;
+    } | null = null;
+
+    try {
+      const owners = await getNftTokenOwnersFromIndexer([tokenId]);
+      const owner = owners.get(tokenId) ?? null;
+      if (owner) {
+        const ownerUsers = await getOwnerUsersByWalletAddresses([
+          owner.ownerAddress,
+        ]);
+        const user = ownerUsers.get(owner.ownerAddress) ?? null;
+        ownership = {
+          ownerAddress: owner.ownerAddress,
+          user,
+          acquiredAt: owner.acquiredAt,
+          txHash: null,
+        };
+      }
+    } catch (error) {
+      if (
+        !(error instanceof NftIndexerUnavailableError) &&
+        !(error instanceof Error && error.name === 'ValidationError')
+      ) {
+        throw error;
+      }
+
+      const [dbOwnership] = await db
+        .select({
+          ownerAddress: nftOwnership.ownerAddress,
+          userId: nftOwnership.userId,
+          acquiredAt: nftOwnership.acquiredAt,
+          txHash: nftOwnership.txHash,
+          username: users.username,
+          displayName: users.displayName,
+          profileImageUrl: users.profileImageUrl,
+        })
+        .from(nftOwnership)
+        .leftJoin(users, eq(nftOwnership.userId, users.id))
+        .where(eq(nftOwnership.tokenId, tokenId))
+        .limit(1);
+
+      ownership = dbOwnership
+        ? {
+            ownerAddress: dbOwnership.ownerAddress,
+            user: dbOwnership.userId
+              ? {
+                  id: dbOwnership.userId,
+                  username: dbOwnership.username,
+                  displayName: dbOwnership.displayName,
+                  profileImageUrl: dbOwnership.profileImageUrl,
+                }
+              : null,
+            acquiredAt: toISO(dbOwnership.acquiredAt),
+            txHash: dbOwnership.txHash,
+          }
+        : null;
+    }
 
     // Get original claim info
     const [claim] = await db
@@ -120,21 +182,14 @@ export const GET = withErrorHandling(
       currentOwner: ownership
         ? {
             walletAddress: ownership.ownerAddress,
-            user: ownership.userId
-              ? {
-                  id: ownership.userId,
-                  username: ownership.username,
-                  displayName: ownership.displayName,
-                  profileImageUrl: ownership.profileImageUrl,
-                }
-              : null,
-            acquiredAt: ownership.acquiredAt.toISOString(),
+            user: ownership.user,
+            acquiredAt: ownership.acquiredAt,
             txHash: ownership.txHash,
           }
         : null,
       originalClaim: claim
         ? {
-            claimedAt: claim.claimedAt.toISOString(),
+            claimedAt: toISO(claim.claimedAt),
             claimerAddress: claim.claimerAddress,
             claimerUserId: claim.claimerUserId,
             snapshotRank: claim.snapshotRank,
@@ -159,6 +214,8 @@ export const GET = withErrorHandling(
       'GET /api/nft/[tokenId]'
     );
 
-    return successResponse(response);
+    const res = successResponse(response);
+    if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
+    return res;
   }
 );

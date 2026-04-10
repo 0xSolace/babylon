@@ -87,6 +87,36 @@ export const AwardPointsSchema = z.object({
 });
 
 /**
+ * Trading balance funding schema
+ */
+export const FundTradingBalanceSchema = z.object({
+  userId: UserIdSchema,
+  amount: z.number().int().positive().max(1000000),
+  reason: z.enum([
+    'admin_adjustment',
+    'welcome_bonus',
+    'manual_correction',
+    'promotional_credit',
+  ]),
+  description: z.string().max(500).optional(),
+});
+
+/**
+ * Trading balance peer transfer schema
+ */
+export const TransferTradingBalanceSchema = z.object({
+  recipientUserId: UserIdSchema,
+  amount: z
+    .number()
+    .positive()
+    .max(1000000)
+    .refine((value) => Number(value.toFixed(2)) === value, {
+      message: 'Amount must have at most 2 decimal places',
+    }),
+  description: z.string().trim().max(500).optional(),
+});
+
+/**
  * Referral query schema
  */
 export const ReferralQuerySchema = z.object({

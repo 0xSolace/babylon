@@ -40,8 +40,9 @@
  * ```
  */
 
+import { withErrorHandling } from '@babylon/api';
 import { db } from '@babylon/db';
-import { calculatePortfolioPnL } from '@babylon/engine';
+import { calculatePortfolioBreakdown } from '@babylon/engine';
 import { ImageResponse } from 'next/og';
 import type { NextRequest } from 'next/server';
 
@@ -53,7 +54,7 @@ export const dynamic = 'force-dynamic';
 // Cache for 1 hour, revalidate in background
 export const revalidate = 3600;
 
-export async function GET(
+export const GET = withErrorHandling(async function GET(
   _request: NextRequest,
   context: { params: Promise<{ userId: string }> }
 ) {
@@ -68,13 +69,13 @@ export async function GET(
         profileImageUrl: true,
       },
     }),
-    calculatePortfolioPnL(userId),
+    calculatePortfolioBreakdown(userId),
   ]);
 
   const displayName = user?.displayName || user?.username || 'Babylon User';
   const totalPnL = pnlData?.totalPnL || 0;
-  const accountEquity = pnlData?.accountEquity || 0;
-  const availableBalance = pnlData?.availableBalance || 0;
+  const totalAssets = pnlData?.totalAssets || 0;
+  const availableBalance = pnlData?.available || 0;
   const pnlSign = totalPnL >= 0 ? '+' : '';
   const pnlColor = totalPnL >= 0 ? '#10B981' : '#EF4444';
 
@@ -219,7 +220,7 @@ export async function GET(
                 display: 'flex',
               }}
             >
-              Total Points
+              Total Assets
             </div>
             <div
               style={{
@@ -229,7 +230,7 @@ export async function GET(
                 display: 'flex',
               }}
             >
-              ${accountEquity.toFixed(2)}
+              ${totalAssets.toFixed(2)}
             </div>
           </div>
 
@@ -253,7 +254,7 @@ export async function GET(
                 display: 'flex',
               }}
             >
-              Available
+              Trading Balance
             </div>
             <div
               style={{
@@ -286,4 +287,4 @@ export async function GET(
       height: 630,
     }
   );
-}
+});

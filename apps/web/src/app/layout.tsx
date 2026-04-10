@@ -1,22 +1,20 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
-// Vercel Analytics
 import { Analytics } from '@vercel/analytics/react';
 import { SpeedInsights } from '@vercel/speed-insights/next';
+import { headers } from 'next/headers';
 import { Suspense } from 'react';
-// Game tick runs via cron (production) or local-cron-simulator (development)
-// No initialization needed in layout - tick runs independently
 import { Toaster } from 'sonner';
+import { AchievementToastListener } from '@/components/achievements';
 import { FeedAuthBanner } from '@/components/auth/FeedAuthBanner';
 import { GlobalLoginModal } from '@/components/auth/GlobalLoginModal';
-import { FeedbackButton } from '@/components/feedback/FeedbackButton';
-import { NftPromoBanner } from '@/components/nft';
 import { Providers } from '@/components/providers/Providers';
 import { BottomNav } from '@/components/shared/BottomNav';
 import { MobileHeader } from '@/components/shared/MobileHeader';
 import { Sidebar } from '@/components/shared/Sidebar';
-import { WaitlistWrapper } from '@/components/shared/WaitlistWrapper';
+
+export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title: 'Babylon',
@@ -26,7 +24,12 @@ export const metadata: Metadata = {
   icons: {
     icon: [{ url: '/favicon.svg', type: 'image/svg+xml' }],
     shortcut: '/favicon.svg',
-    apple: '/favicon.svg',
+    apple: '/icons/icon-192.png',
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'Babylon',
   },
   openGraph: {
     title: 'Babylon',
@@ -85,16 +88,14 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  // Read WAITLIST_MODE from server-side environment (set on Vercel)
-  // Fallback to NEXT_PUBLIC_WAITLIST_MODE for compatibility
-  const waitlistMode =
-    (process.env.WAITLIST_MODE ?? process.env.NEXT_PUBLIC_WAITLIST_MODE) ===
-    'true';
+  const requestHeaders = await headers();
+  const isMinimalLayout = requestHeaders.get('x-minimal-layout') === '1';
+  const hideAppChrome = requestHeaders.get('x-hide-app-chrome') === '1';
 
   return (
     <html lang="en" suppressHydrationWarning className="overscroll-none">
@@ -102,48 +103,66 @@ export default function RootLayout({
         className="overscroll-none bg-background font-sans antialiased"
         suppressHydrationWarning
       >
-        <Providers>
-          <Toaster position="top-center" richColors />
-          <Suspense fallback={null}>
-            <GlobalLoginModal />
-          </Suspense>
+        <Providers minimalChrome={isMinimalLayout}>
+          <Toaster
+            position="top-center"
+            richColors
+            duration={8000}
+            closeButton
+            expand={false}
+            visibleToasts={2}
+          />
+          <div className="app-shell-root">
+            {!isMinimalLayout && (
+              <>
+                <AchievementToastListener />
+                <Suspense fallback={null}>
+                  <GlobalLoginModal />
+                </Suspense>
+                {/* <Suspense fallback={null}>
+                  <NftPromoBanner />
+                </Suspense> */}
+              </>
+            )}
 
-          <WaitlistWrapper waitlistMode={waitlistMode}>
-            {/* NFT Collection Promo Banner - at the very top */}
-            <Suspense fallback={null}>
-              <NftPromoBanner />
-            </Suspense>
+            {isMinimalLayout ? (
+              children
+            ) : hideAppChrome ? (
+              <>
+                <div className="min-h-dvh min-w-0 bg-background">
+                  {children}
+                </div>
+                <Suspense fallback={null}>
+                  <FeedAuthBanner />
+                </Suspense>
+              </>
+            ) : (
+              <>
+                <Suspense fallback={null}>
+                  <MobileHeader />
+                </Suspense>
 
-            {/* Mobile Header - Fixed, not affected by pull-to-refresh */}
-            <Suspense fallback={null}>
-              <MobileHeader />
-            </Suspense>
+                <div className="mark mx-auto flex min-h-dvh max-w-7xl bg-sidebar md:min-h-screen">
+                  {/* Desktop Sidebar - Sticky, not affected by pull-to-refresh */}
+                  <Suspense fallback={null}>
+                    <Sidebar />
+                  </Suspense>
 
-            <div className="mx-auto flex min-h-screen max-w-screen-xl bg-sidebar">
-              {/* Desktop Sidebar - Sticky, not affected by pull-to-refresh */}
-              <Suspense fallback={null}>
-                <Sidebar />
-              </Suspense>
+                  <main className="min-h-dvh min-w-0 flex-1 bg-background pb-[--bottom-nav-height] md:min-h-screen md:pb-0">
+                    {children}
+                  </main>
 
-              {/* Main Content Area - Scrollable content with pull-to-refresh */}
-              <main className="min-h-screen min-w-0 flex-1 bg-background pt-14 pb-14 md:pt-0 md:pb-0">
-                {children}
-              </main>
+                  <Suspense fallback={null}>
+                    <BottomNav />
+                  </Suspense>
+                </div>
 
-              {/* Mobile Bottom Navigation - Fixed, not affected by pull-to-refresh */}
-              <Suspense fallback={null}>
-                <BottomNav />
-              </Suspense>
-            </div>
-
-            {/* Auth Banner - shows on all pages when not authenticated */}
-            <Suspense fallback={null}>
-              <FeedAuthBanner />
-            </Suspense>
-
-            {/* Floating Feedback Button - shows on all pages when authenticated */}
-            <FeedbackButton />
-          </WaitlistWrapper>
+                <Suspense fallback={null}>
+                  <FeedAuthBanner />
+                </Suspense>
+              </>
+            )}
+          </div>
         </Providers>
         <Analytics />
         <SpeedInsights />

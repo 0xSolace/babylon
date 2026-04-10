@@ -14,6 +14,7 @@ import { isSimulationMode } from './storage-bridge';
 import type { TrendingTopicsEngine } from './TrendingTopicsEngine';
 import type { TradingDecision } from './types/market-decisions';
 import type { Actor, ActorTier, FeedPost } from './types/shared';
+import { formatError } from './utils/error-utils';
 
 /**
  * Interface for market decision engines used by GameLoop.
@@ -55,17 +56,27 @@ export interface SimulationTickResult {
  *
  * Used by both live game ticks (cron jobs) and game simulation (full game generation).
  */
+export interface GameLoopServices {
+  tradeExecutionService?: TradeExecutionService;
+  perpMarketService?: PerpMarketService;
+}
+
 export class GameLoop {
   private trendingTopics?: TrendingTopicsEngine;
   private recentPosts: FeedPost[] = [];
   private tickCount = 0;
 
+  private injectedServices?: GameLoopServices;
+
   constructor(
     private world: GameWorld,
     private feed: FeedGenerator,
     private marketDecisions: MarketDecisionEnginePort,
-    private relationships: RelationshipEvolutionEngine
-  ) {}
+    private relationships: RelationshipEvolutionEngine,
+    services?: GameLoopServices
+  ) {
+    this.injectedServices = services;
+  }
 
   /**
    * Set the trending topics engine for trend-aware feed generation
@@ -118,7 +129,9 @@ export class GameLoop {
 
     if (decisions.length > 0) {
       try {
-        const executionService = new TradeExecutionService();
+        const executionService =
+          this.injectedServices?.tradeExecutionService ??
+          new TradeExecutionService();
         const executionResult =
           await executionService.executeDecisionBatch(decisions);
         tradeCount = executionResult.successfulTrades;
@@ -134,9 +147,7 @@ export class GameLoop {
         );
       } catch (e) {
         logger.warn(
-          `Trade execution batch failed: ${
-            e instanceof Error ? e.message : String(e)
-          }`,
+          `Trade execution batch failed: ${formatError(e)}`,
           undefined,
           'GameLoop'
         );
@@ -174,16 +185,18 @@ export class GameLoop {
       getBalance: (userId) => WalletService.getBalance(userId),
     };
 
-    const perpService = new PerpMarketService({
-      db: new PerpDbAdapter(),
-      wallet: walletAdapter,
-      fees: {
-        tradingFeeRate: FEE_CONFIG.TRADING_FEE_RATE,
-        platformShare: FEE_CONFIG.PLATFORM_SHARE,
-        referrerShare: FEE_CONFIG.REFERRER_SHARE,
-        minFeeAmount: FEE_CONFIG.MIN_FEE_AMOUNT,
-      },
-    });
+    const perpService =
+      this.injectedServices?.perpMarketService ??
+      new PerpMarketService({
+        db: new PerpDbAdapter(),
+        wallet: walletAdapter,
+        fees: {
+          tradingFeeRate: FEE_CONFIG.TRADING_FEE_RATE,
+          platformShare: FEE_CONFIG.PLATFORM_SHARE,
+          referrerShare: FEE_CONFIG.REFERRER_SHARE,
+          minFeeAmount: FEE_CONFIG.MIN_FEE_AMOUNT,
+        },
+      });
 
     let marketState;
     // Simulation Mode Bypass - uses centralized constants from config/simulation.ts
@@ -236,9 +249,7 @@ export class GameLoop {
       );
     } catch (e) {
       logger.warn(
-        `Failed to generate world events: ${
-          e instanceof Error ? e.message : String(e)
-        }`,
+        `Failed to generate world events: ${formatError(e)}`,
         { day, hour },
         'GameLoop'
       );
@@ -308,9 +319,7 @@ export class GameLoop {
         await this.relationships.analyzeAndUpdateRelationships();
       } catch (e) {
         logger.warn(
-          `Failed to analyze relationships: ${
-            e instanceof Error ? e.message : String(e)
-          }`,
+          `Failed to analyze relationships: ${formatError(e)}`,
           undefined,
           'GameLoop'
         );

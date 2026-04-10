@@ -437,6 +437,30 @@ function buildOrderBy<TTable extends PgTable>(
 }
 
 /**
+ * Build Drizzle select fields from a boolean select input.
+ *
+ * This is especially important for forward/backward DB compatibility: when callers
+ * specify a `select`, we should only query the requested columns instead of
+ * selecting the whole row.
+ */
+function buildSelectFields<TTable extends PgTable>(
+  table: TTable,
+  select: SelectInput | undefined
+): Record<string, PgColumn> | undefined {
+  if (!select) return undefined;
+
+  const tableConfig = getTableConfig(table);
+  const fields: Record<string, PgColumn> = {};
+  for (const [key, enabled] of Object.entries(select)) {
+    if (!enabled) continue;
+    const column = findColumnByName(tableConfig, key);
+    if (column) fields[key] = column;
+  }
+
+  return Object.keys(fields).length > 0 ? fields : undefined;
+}
+
+/**
  * Type representing all valid database value types including JSON columns.
  *
  * JSONB columns with custom types (e.g., NpcMemory[], PriceModifier[]) use .$type<T>()
@@ -539,6 +563,7 @@ export class TableRepository<
    */
   async findUnique(options: FindOptions<TSelect>): Promise<TSelect | null> {
     const whereClause = buildWhereClause(this.table, options.where);
+    const selectFields = buildSelectFields(this.table, options.select);
 
     // Use Drizzle's query API for relations if include is specified
     const relationalBuilder = getRelationalQueryBuilder(
@@ -554,8 +579,10 @@ export class TableRepository<
     }
 
     // Use Drizzle's typed query builder - helper ensures type safety
-    const results = await this.drizzle
-      .select()
+    const baseSelect = selectFields
+      ? this.drizzle.select(selectFields as SelectedFields)
+      : this.drizzle.select();
+    const results = await baseSelect
       .from(asDrizzleTable(this.table))
       .where(whereClause)
       .limit(1);
@@ -580,6 +607,7 @@ export class TableRepository<
   async findFirst(options: FindOptions<TSelect> = {}): Promise<TSelect | null> {
     const whereClause = buildWhereClause(this.table, options.where);
     const orderByClause = buildOrderBy(this.table, options.orderBy);
+    const selectFields = buildSelectFields(this.table, options.select);
 
     // Use Drizzle's query API for relations if include is specified
     const relationalBuilder = getRelationalQueryBuilder(
@@ -597,10 +625,10 @@ export class TableRepository<
 
     // Use Drizzle's typed query builder with $dynamic() for conditional chaining
     // Helper ensures type safety
-    let query = this.drizzle
-      .select()
-      .from(asDrizzleTable(this.table))
-      .$dynamic();
+    const baseSelect = selectFields
+      ? this.drizzle.select(selectFields as SelectedFields)
+      : this.drizzle.select();
+    let query = baseSelect.from(asDrizzleTable(this.table)).$dynamic();
     if (whereClause) query = query.where(whereClause);
     if (orderByClause.length > 0) query = query.orderBy(...orderByClause);
     if (options.skip) query = query.offset(options.skip);
@@ -626,6 +654,7 @@ export class TableRepository<
   async findMany(options: FindOptions<TSelect> = {}): Promise<TSelect[]> {
     const whereClause = buildWhereClause(this.table, options.where);
     const orderByClause = buildOrderBy(this.table, options.orderBy);
+    const selectFields = buildSelectFields(this.table, options.select);
 
     // Use Drizzle's query API for relations if include is specified
     const relationalBuilder = getRelationalQueryBuilder(
@@ -645,10 +674,10 @@ export class TableRepository<
 
     // Use Drizzle's typed query builder with $dynamic() for conditional chaining
     // Helper ensures type safety
-    let query = this.drizzle
-      .select()
-      .from(asDrizzleTable(this.table))
-      .$dynamic();
+    const baseSelect = selectFields
+      ? this.drizzle.select(selectFields as SelectedFields)
+      : this.drizzle.select();
+    let query = baseSelect.from(asDrizzleTable(this.table)).$dynamic();
     if (whereClause) query = query.where(whereClause);
     if (orderByClause.length > 0) query = query.orderBy(...orderByClause);
     if (options.take) query = query.limit(options.take);
@@ -1469,16 +1498,6 @@ export interface DrizzleClient {
     InferSelect<typeof schema.rewardJudgments>,
     InferInsert<typeof schema.rewardJudgments>
   >;
-  oracleCommitment: TableRepository<
-    typeof schema.oracleCommitments,
-    InferSelect<typeof schema.oracleCommitments>,
-    InferInsert<typeof schema.oracleCommitments>
-  >;
-  oracleTransaction: TableRepository<
-    typeof schema.oracleTransactions,
-    InferSelect<typeof schema.oracleTransactions>,
-    InferInsert<typeof schema.oracleTransactions>
-  >;
   realtimeOutbox: TableRepository<
     typeof schema.realtimeOutboxes,
     InferSelect<typeof schema.realtimeOutboxes>,
@@ -1513,6 +1532,11 @@ export interface DrizzleClient {
     typeof schema.worldFacts,
     InferSelect<typeof schema.worldFacts>,
     InferInsert<typeof schema.worldFacts>
+  >;
+  dailyTopic: TableRepository<
+    typeof schema.dailyTopics,
+    InferSelect<typeof schema.dailyTopics>,
+    InferInsert<typeof schema.dailyTopics>
   >;
   rssFeedSource: TableRepository<
     typeof schema.rssFeedSources,
@@ -1615,11 +1639,26 @@ export function createDrizzleClient(drizzle: SchemaDatabase): DrizzleClient {
       postgresClient: PostgresClient | undefined;
       drizzleDb: SchemaDatabase | undefined;
       db: DrizzleClient | undefined;
+      readReplicaClient: PostgresClient | undefined;
+      readReplicaDrizzle: SchemaDatabase | undefined;
+      readReplicaDb: DrizzleClient | undefined;
+      primaryDbVersion: number | undefined;
+      readReplicaDbVersion: number | undefined;
     };
+
+    if (globalForDb.readReplicaClient) {
+      await globalForDb.readReplicaClient.end();
+      globalForDb.readReplicaClient = undefined;
+      globalForDb.readReplicaDbVersion =
+        (globalForDb.readReplicaDbVersion ?? 0) + 1;
+    }
+    globalForDb.readReplicaDrizzle = undefined;
+    globalForDb.readReplicaDb = undefined;
 
     if (globalForDb.postgresClient) {
       await globalForDb.postgresClient.end();
       globalForDb.postgresClient = undefined;
+      globalForDb.primaryDbVersion = (globalForDb.primaryDbVersion ?? 0) + 1;
     }
 
     globalForDb.drizzleDb = undefined;
@@ -1869,16 +1908,6 @@ export function createDrizzleClient(drizzle: SchemaDatabase): DrizzleClient {
       schema.rewardJudgments,
       'rewardJudgments'
     ),
-    oracleCommitment: new TableRepository(
-      drizzle,
-      schema.oracleCommitments,
-      'oracleCommitments'
-    ),
-    oracleTransaction: new TableRepository(
-      drizzle,
-      schema.oracleTransactions,
-      'oracleTransactions'
-    ),
     realtimeOutbox: new TableRepository(
       drizzle,
       schema.realtimeOutboxes,
@@ -1894,6 +1923,7 @@ export function createDrizzleClient(drizzle: SchemaDatabase): DrizzleClient {
     ),
     worldEvent: new TableRepository(drizzle, schema.worldEvents, 'worldEvents'),
     worldFact: new TableRepository(drizzle, schema.worldFacts, 'worldFacts'),
+    dailyTopic: new TableRepository(drizzle, schema.dailyTopics, 'dailyTopics'),
     rssFeedSource: new TableRepository(
       drizzle,
       schema.rssFeedSources,

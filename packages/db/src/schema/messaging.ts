@@ -1,21 +1,40 @@
-import { relations } from 'drizzle-orm';
+import type { MessageMetadata, NotificationData } from '@babylon/shared';
+import { relations, sql } from 'drizzle-orm';
 import {
   boolean,
   doublePrecision,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   text,
   timestamp,
   unique,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
 
 // Enum for group types
-export const groupTypeEnum = pgEnum('group_type', ['user', 'npc', 'agent']);
+// - 'user': User-created groups
+// - 'npc': NPC-managed groups (tiered alpha groups)
+// - 'agent': Agent-created groups
+// - 'team': User's Agents (team chat with their agents)
+export const groupTypeEnum = pgEnum('group_type', [
+  'user',
+  'npc',
+  'agent',
+  'team',
+]);
 
 // Enum for message types
-export const messageTypeEnum = pgEnum('message_type', ['user', 'system']);
+// - 'user': Regular user messages
+// - 'system': System-generated messages (announcements, etc.)
+// - 'coordinator': Coordinator assistant messages in team chat
+export const messageTypeEnum = pgEnum('message_type', [
+  'user',
+  'system',
+  'coordinator',
+]);
 
 // Chat
 export const chats = pgTable(
@@ -88,11 +107,54 @@ export const messages = pgTable(
     content: text('content').notNull(),
     type: messageTypeEnum('type').notNull().default('user'),
     createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
+    // Target IDs for team chat message routing
+    // - For user messages: IDs of @mentioned agents, or ['coordinator'] if no mentions
+    // - For agent/coordinator responses: null (they don't target anyone)
+    // - For non-team-chat messages: null
+    targetIds: text('targetIds').array(),
+    // Metadata for action tags (displayed as clickable buttons on messages)
+    // Contains tags from actions like CHECK_PERPS, CHECK_PREDICTIONS, etc.
+    metadata: jsonb('metadata').$type<MessageMetadata>(),
+    // Reply-to-message: references another message in the same chat (Telegram/Discord-style replies)
+    // Nullable — most messages are not replies. No FK constraint so deleted messages don't break replies.
+    replyToMessageId: text('replyToMessageId'),
   },
   (table) => [
     index('Message_chatId_createdAt_idx').on(table.chatId, table.createdAt),
+    index('Message_senderId_createdAt_idx').on(table.senderId, table.createdAt),
     index('Message_senderId_idx').on(table.senderId),
     index('Message_type_idx').on(table.type),
+    // GIN index for efficient array containment queries (@>, <@, &&)
+    // Must match the migration (0030_add_message_target_ids.sql)
+    index('Message_targetIds_idx').using('gin', table.targetIds),
+    index('Message_replyToMessageId_idx').on(table.replyToMessageId),
+  ]
+);
+
+// MessageReaction - emoji reactions on chat messages
+export const messageReactions = pgTable(
+  'MessageReaction',
+  {
+    id: text('id').primaryKey(),
+    chatId: text('chatId').notNull(),
+    messageId: text('messageId').notNull(),
+    userId: text('userId').notNull(),
+    emoji: text('emoji').notNull(),
+    createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique('MessageReaction_messageId_userId_emoji_key').on(
+      table.messageId,
+      table.userId,
+      table.emoji
+    ),
+    index('MessageReaction_messageId_idx').on(table.messageId),
+    index('MessageReaction_chatId_idx').on(table.chatId),
+    index('MessageReaction_userId_idx').on(table.userId),
+    index('MessageReaction_chatId_messageId_idx').on(
+      table.chatId,
+      table.messageId
+    ),
   ]
 );
 
@@ -124,12 +186,14 @@ export const notifications = pgTable(
   {
     id: text('id').primaryKey(),
     userId: text('userId').notNull(),
+    dedupeKey: text('dedupeKey'),
     type: text('type').notNull(),
     actorId: text('actorId'),
     postId: text('postId'),
     commentId: text('commentId'),
     chatId: text('chatId'),
     message: text('message').notNull(),
+    data: jsonb('data').$type<NotificationData>(),
     read: boolean('read').notNull().default(false),
     createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
     title: text('title').notNull(),
@@ -138,11 +202,20 @@ export const notifications = pgTable(
   },
   (table) => [
     index('Notification_chatId_idx').on(table.chatId),
+    uniqueIndex('Notification_dedupeKey_unique')
+      .on(table.dedupeKey)
+      .where(sql`${table.dedupeKey} IS NOT NULL`),
     index('Notification_groupId_idx').on(table.groupId),
     index('Notification_inviteId_idx').on(table.inviteId),
     index('Notification_read_idx').on(table.read),
     index('Notification_userId_createdAt_idx').on(
       table.userId,
+      table.createdAt
+    ),
+    index('Notification_userId_type_actorId_createdAt_idx').on(
+      table.userId,
+      table.type,
+      table.actorId,
       table.createdAt
     ),
     index('Notification_userId_read_createdAt_idx').on(
@@ -188,15 +261,26 @@ export const groups = pgTable(
     tier: integer('tier'), // 1 = Inner Circle, 2 = Community, 3 = Followers (null for user/agent groups)
     maxMembers: integer('maxMembers'), // Tier-specific member limit (null uses default)
     parentGroupId: text('parentGroupId'), // Links tier groups to same NPC's group family
+    // Team chat active conversation (team groups only)
+    activeChatId: text('activeChatId'), // Currently active Chat for team groups (null for other types)
   },
   (table) => [
     index('Group_type_idx').on(table.type),
     index('Group_ownerId_idx').on(table.ownerId),
+    index('Group_createdById_createdAt_idx').on(
+      table.createdById,
+      table.createdAt
+    ),
     index('Group_createdById_idx').on(table.createdById),
     index('Group_createdAt_idx').on(table.createdAt),
     index('Group_tier_idx').on(table.tier),
     index('Group_ownerId_tier_idx').on(table.ownerId, table.tier),
     index('Group_parentGroupId_idx').on(table.parentGroupId),
+    // Ensure only ONE team group (Agents) per owner
+    // This prevents race conditions from creating duplicate team chats
+    uniqueIndex('Group_team_ownerId_unique')
+      .on(table.ownerId)
+      .where(sql`${table.type} = 'team'`),
   ]
 );
 
@@ -232,12 +316,18 @@ export const groupMembers = pgTable(
     promotedAt: timestamp('promotedAt', { mode: 'date' }),
     demotedAt: timestamp('demotedAt', { mode: 'date' }),
     previousTier: integer('previousTier'),
+    // Grandfathering tracking (for threshold migration)
+    // Members marked as grandfathered retain their membership even if they
+    // no longer meet the current engagement thresholds (but cannot be promoted)
+    isGrandfathered: boolean('isGrandfathered').notNull().default(false),
+    grandfatheredAt: timestamp('grandfatheredAt', { mode: 'date' }),
   },
   (table) => [
     // Full unique constraint on (groupId, userId) required for onConflictDoUpdate upserts
     // Note: This replaced the partial index approach - we now use isActive flag for soft deletes
     unique('GroupMember_groupId_userId_key').on(table.groupId, table.userId),
     index('GroupMember_groupId_idx').on(table.groupId),
+    index('GroupMember_userId_joinedAt_idx').on(table.userId, table.joinedAt),
     index('GroupMember_userId_idx').on(table.userId),
     index('GroupMember_groupId_isActive_idx').on(table.groupId, table.isActive),
     index('GroupMember_userId_isActive_idx').on(table.userId, table.isActive),
@@ -251,11 +341,17 @@ export const groupMembers = pgTable(
       table.tier
     ),
     index('GroupMember_isActive_tier_idx').on(table.isActive, table.tier),
+    // Index for grandfathering queries
+    index('GroupMember_isGrandfathered_idx').on(table.isGrandfathered),
   ]
 );
 
 /**
  * GroupInvite - invite system
+ *
+ * Tracks invitations to groups with invite decay mechanism.
+ * Users who repeatedly decline invites have increasing cooldowns
+ * before they can be invited again (exponential backoff).
  */
 export const groupInvites = pgTable(
   'GroupInvite',
@@ -269,6 +365,14 @@ export const groupInvites = pgTable(
     message: text('message'),
     invitedAt: timestamp('invitedAt', { mode: 'date' }).notNull().defaultNow(),
     respondedAt: timestamp('respondedAt', { mode: 'date' }),
+    // Invite decay tracking (for users who repeatedly decline)
+    // declineCount: Number of times this user has declined invites from this group
+    // Cooldown formula: baseCooldownHours * 2^(declineCount-1), capped at maxCooldownHours
+    declineCount: integer('declineCount').notNull().default(0),
+    // When the user last declined an invite (used for decay reset calculation)
+    lastDeclinedAt: timestamp('lastDeclinedAt', { mode: 'date' }),
+    // When the user becomes eligible for the next invite (computed on decline)
+    nextEligibleAt: timestamp('nextEligibleAt', { mode: 'date' }),
   },
   (table) => [
     unique('GroupInvite_groupId_invitedUserId_key').on(
@@ -281,39 +385,14 @@ export const groupInvites = pgTable(
       table.status
     ),
     index('GroupInvite_status_idx').on(table.status),
-  ]
-);
-
-// ============================================================================
-// USER AGENT TEAM CHAT (Command Center)
-// ============================================================================
-
-/**
- * UserAgentTeamChat - Links users to their agent "Command Center"
- *
- * Each user has exactly ONE team chat containing all their agents.
- * The team chat is auto-created when the user creates their first agent.
- * Agents are automatically added/removed as they are created/deleted.
- *
- * Relationship:
- * - userId is UNIQUE (one team chat per user)
- * - groupId links to Group (type='agent')
- * - chatId links to Chat (quick access, denormalized for performance)
- */
-export const userAgentTeamChats = pgTable(
-  'UserAgentTeamChat',
-  {
-    id: text('id').primaryKey(),
-    userId: text('userId').notNull().unique(), // Human user who owns the agents
-    groupId: text('groupId').notNull().unique(), // Links to Group (1:1)
-    chatId: text('chatId').notNull().unique(), // Links to Chat (1:1)
-    createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
-    updatedAt: timestamp('updatedAt', { mode: 'date' }).notNull(),
-  },
-  (table) => [
-    // userId, groupId, chatId already have unique indexes from .unique() constraints
-    index('UserAgentTeamChat_groupId_idx').on(table.groupId),
-    index('UserAgentTeamChat_chatId_idx').on(table.chatId),
+    // Index for invite decay queries
+    index('GroupInvite_invitedUserId_status_declineCount_idx').on(
+      table.invitedUserId,
+      table.status,
+      table.declineCount
+    ),
+    // Index for next eligible date filtering
+    index('GroupInvite_nextEligibleAt_idx').on(table.nextEligibleAt),
   ]
 );
 
@@ -321,23 +400,10 @@ export const userAgentTeamChats = pgTable(
 // RELATIONS
 // ============================================================================
 
-export const userAgentTeamChatsRelations = relations(
-  userAgentTeamChats,
-  ({ one }) => ({
-    group: one(groups, {
-      fields: [userAgentTeamChats.groupId],
-      references: [groups.id],
-    }),
-    chat: one(chats, {
-      fields: [userAgentTeamChats.chatId],
-      references: [chats.id],
-    }),
-  })
-);
-
 export const chatsRelations = relations(chats, ({ one, many }) => ({
   ChatParticipant: many(chatParticipants),
   Message: many(messages),
+  MessageReaction: many(messageReactions),
   group: one(groups, {
     fields: [chats.groupId],
     references: [groups.id],
@@ -354,12 +420,27 @@ export const chatParticipantsRelations = relations(
   })
 );
 
-export const messagesRelations = relations(messages, ({ one }) => ({
+export const messagesRelations = relations(messages, ({ one, many }) => ({
   chat: one(chats, {
     fields: [messages.chatId],
     references: [chats.id],
   }),
+  MessageReaction: many(messageReactions),
 }));
+
+export const messageReactionsRelations = relations(
+  messageReactions,
+  ({ one }) => ({
+    chat: one(chats, {
+      fields: [messageReactions.chatId],
+      references: [chats.id],
+    }),
+    message: one(messages, {
+      fields: [messageReactions.messageId],
+      references: [messages.id],
+    }),
+  })
+);
 
 export const groupsRelations = relations(groups, ({ many }) => ({
   chats: many(chats),
@@ -391,6 +472,8 @@ export type ChatParticipant = typeof chatParticipants.$inferSelect;
 export type NewChatParticipant = typeof chatParticipants.$inferInsert;
 export type Message = typeof messages.$inferSelect;
 export type NewMessage = typeof messages.$inferInsert;
+export type MessageReaction = typeof messageReactions.$inferSelect;
+export type NewMessageReaction = typeof messageReactions.$inferInsert;
 export type DMAcceptance = typeof dmAcceptances.$inferSelect;
 export type NewDMAcceptance = typeof dmAcceptances.$inferInsert;
 export type Notification = typeof notifications.$inferSelect;
@@ -404,13 +487,20 @@ export type NewGroupMember = typeof groupMembers.$inferInsert;
 export type GroupInvite = typeof groupInvites.$inferSelect;
 export type NewGroupInvite = typeof groupInvites.$inferInsert;
 
-// User agent team chat types
-export type UserAgentTeamChat = typeof userAgentTeamChats.$inferSelect;
-export type NewUserAgentTeamChat = typeof userAgentTeamChats.$inferInsert;
-
 // Type enums (for type safety)
-export type GroupType = 'user' | 'npc' | 'agent';
+export type GroupType = 'user' | 'npc' | 'agent' | 'team';
 export type GroupMemberRole = 'owner' | 'admin' | 'member';
 export type GroupInviteStatus = 'pending' | 'accepted' | 'declined';
-export type MessageType = 'user' | 'system';
+// MessageType is exported from @babylon/shared - use that canonical definition
+export type { MessageType } from '@babylon/shared';
 // TierLevel is exported from @babylon/shared - use that canonical definition
+
+// Alpha group enhancement types (for grandfathering and invite decay)
+export type GroupMemberGrandfatherFields = Pick<
+  GroupMember,
+  'isGrandfathered' | 'grandfatheredAt'
+>;
+export type GroupInviteDecayFields = Pick<
+  GroupInvite,
+  'declineCount' | 'lastDeclinedAt' | 'nextEligibleAt'
+>;

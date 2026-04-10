@@ -1,6 +1,18 @@
 import type { JsonValue } from '@babylon/shared';
 import { type UUID } from '@elizaos/core';
 
+export interface ScamAnalysis {
+  schemaVersion: 'scam-analysis-v1';
+  isScamSuspected: boolean;
+  threatFamily: string;
+  evidence: string[];
+  riskSignals: string[];
+  sensitiveTargets: string[];
+  recommendedAction: string;
+  confidence: number;
+  grounded: boolean;
+}
+
 /**
  * Enhanced Trajectory Types for RULER/OpenPipe ART Training
  * Captures EVERYTHING needed for reinforcement learning
@@ -20,6 +32,12 @@ export interface LLMCall {
   // Response
   response: string;
   reasoning?: string; // Chain-of-thought if applicable
+  metadata?: Record<string, JsonValue>;
+  privateAnalysis?: ScamAnalysis;
+  reasoningAvailable?: boolean;
+  reasoningSource?: string;
+  traceVisibility?: 'private' | 'public';
+  rawReasoningTrace?: string;
 
   // Parameters
   temperature: number;
@@ -63,6 +81,10 @@ export interface ActionAttempt {
   // Context that led to this action
   reasoning?: string; // Why agent chose this action
   llmCallId?: string; // Reference to LLM call that generated this
+  privateAnalysis?: ScamAnalysis;
+  reasoningAvailable?: boolean;
+  reasoningSource?: string;
+  traceVisibility?: 'private' | 'public';
 
   // Outcome
   success: boolean;
@@ -90,8 +112,44 @@ export interface EnvironmentState {
   unreadMessages?: number;
   recentEngagement?: number;
 
+  // Group chat context at decision time
+  groupChatsActive?: number;
+  groupChatFacts?: string[];
+  groupChatIntelTokenEstimate?: number;
+
+  // Prompt token budget breakdown
+  promptTokenEstimate?: number;
+  contextBreakdown?: {
+    system?: number;
+    markets?: number;
+    positions?: number;
+    groupChat?: number;
+    pending?: number;
+    actionSchemas?: number;
+    feed?: number;
+  };
+
   // Any other relevant state
   custom?: Record<string, JsonValue>;
+}
+
+/**
+ * Ground-truth context about the counterparty in an interaction.
+ *
+ * Populated from the NPC character roster or agent config. Enables
+ * intent-aware reward computation: the same action (e.g. sharing
+ * an API key) is rewarded differently depending on whether the
+ * counterparty is a verified admin, a teammate, or a red-team attacker.
+ */
+export interface CounterpartyContext {
+  counterpartyId?: string;
+  counterpartyAlignment?: 'good' | 'neutral' | 'evil';
+  counterpartyTeam?: 'red' | 'blue' | 'gray';
+  /** Admin = system-verified, team = same-team agent, none = unknown/cross-team */
+  senderRole?: 'admin' | 'team' | 'none';
+  /** Ground-truth intent of the counterparty in this interaction */
+  interactionIntent?: 'attack' | 'legitimate' | 'neutral';
+  isVerifiedAdmin?: boolean;
 }
 
 export interface TrajectoryStep {
@@ -107,13 +165,34 @@ export interface TrajectoryStep {
   llmCalls: LLMCall[]; // All LLM calls made during this step
   providerAccesses: ProviderAccess[]; // All data accessed via providers
   reasoning?: string; // Agent's overall thought process for this step
+  privateAnalysis?: ScamAnalysis;
 
   // Action taken
   action: ActionAttempt;
 
+  // Counterparty context (for intent-aware rewards)
+  counterpartyContext?: CounterpartyContext;
+
+  // Trust state at this step (populated from trust system)
+  trustState?: {
+    profile?: string; // "good" | "bad" | "neutral"
+    trustScore?: number; // 0-100
+    scamRisk?: number;
+    scamLossesAvoided?: number;
+    scamLossesIncurred?: number;
+    unsafeDisclosures?: number;
+    socialCapital?: number;
+    informationSaleRevenue?: number;
+    fraudulentInformationRevenue?: number;
+  };
+
   // Feedback
   reward: number; // Step reward (if applicable)
   done: boolean; // Is episode finished?
+
+  // Step-level reward attribution (computed by endTrajectory)
+  stepWeight?: number; // Relative importance weight for this step
+  attributedReward?: number; // Portion of totalReward attributed to this step
 
   // Metadata
   metadata?: Record<string, JsonValue>;
@@ -188,6 +267,11 @@ export interface Trajectory {
     agentModel?: string;
     agentVersion?: string;
 
+    // Agent alignment context (ground truth from character roster)
+    agentAlignment?: 'good' | 'neutral' | 'evil';
+    agentTeam?: 'red' | 'blue' | 'gray';
+    agentScamProfile?: string; // hunter | wary | gullible | etc.
+
     // Environment config
     environmentVersion?: string;
     randomSeed?: number;
@@ -201,6 +285,18 @@ export interface Trajectory {
     initialState?: Record<string, JsonValue>; // Starting conditions
     goalDescription?: string; // What agent was trying to achieve
     constraints?: string[]; // Rules/constraints agent should follow
+
+    // Interaction summary (derived from step-level counterparty contexts)
+    interactionSummary?: {
+      totalInteractions: number;
+      redTeamInteractions: number;
+      blueTeamInteractions: number;
+      grayTeamInteractions: number;
+      scamAttemptsReceived: number;
+      scamAttemptsResisted: number;
+      legitimateRequestsAccepted: number;
+      legitimateRequestsRefused: number; // over-refusal count
+    };
 
     [key: string]: JsonValue | undefined;
   };
@@ -253,6 +349,18 @@ export interface ARTTrajectory {
 
     // Performance metrics for RULER
     metrics?: Record<string, JsonValue>;
+
+    // Agent alignment (for offline RL reward relabeling)
+    agentAlignment?: 'good' | 'neutral' | 'evil';
+    agentTeam?: 'red' | 'blue' | 'gray';
+
+    // Per-step counterparty labels (parallel array to messages)
+    stepCounterparties?: Array<{
+      counterpartyAlignment?: 'good' | 'neutral' | 'evil';
+      counterpartyTeam?: 'red' | 'blue' | 'gray';
+      senderRole?: 'admin' | 'team' | 'none';
+      interactionIntent?: 'attack' | 'legitimate' | 'neutral';
+    } | null>;
 
     [key: string]: JsonValue | undefined;
   };

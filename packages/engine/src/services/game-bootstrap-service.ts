@@ -5,6 +5,7 @@
  * Replaces the need for manual seeding scripts.
  */
 
+import { getSyntheticPerpQuoteState } from '@babylon/core/markets/perps';
 import {
   actorState,
   db,
@@ -21,6 +22,7 @@ import {
 } from '@babylon/db';
 import type { ActorTier } from '@babylon/shared';
 import { logger } from '@babylon/shared';
+import { DEFAULT_RSS_SOURCES } from '../config/rss-sources';
 import { CapitalAllocationService } from './capital-allocation-service';
 import { StaticDataRegistry } from './static-data-registry';
 
@@ -39,55 +41,6 @@ const MAX_TOP_UP_AMOUNT = 100000;
 const FUNDING_INTERVAL_HOURS = 8;
 /** Funding interval in milliseconds */
 const FUNDING_INTERVAL_MS = FUNDING_INTERVAL_HOURS * 60 * 60 * 1000;
-
-// RSS Feed sources for news generation
-const RSS_FEEDS = [
-  {
-    name: 'New York Times - Technology',
-    feedUrl: 'https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml',
-    category: 'tech',
-  },
-  {
-    name: 'New York Times - Business',
-    feedUrl: 'https://rss.nytimes.com/services/xml/rss/nyt/Business.xml',
-    category: 'business',
-  },
-  {
-    name: 'TechCrunch',
-    feedUrl: 'https://techcrunch.com/feed/',
-    category: 'tech',
-  },
-  {
-    name: 'Ars Technica',
-    feedUrl: 'https://feeds.arstechnica.com/arstechnica/index',
-    category: 'tech',
-  },
-  {
-    name: 'The Verge',
-    feedUrl: 'https://www.theverge.com/rss/index.xml',
-    category: 'tech',
-  },
-  {
-    name: 'Wired',
-    feedUrl: 'https://www.wired.com/feed/rss',
-    category: 'tech',
-  },
-  {
-    name: 'CoinDesk',
-    feedUrl: 'https://www.coindesk.com/arc/outboundfeeds/rss/',
-    category: 'crypto',
-  },
-  {
-    name: 'Cointelegraph',
-    feedUrl: 'https://cointelegraph.com/rss',
-    category: 'crypto',
-  },
-  {
-    name: 'BBC - Technology',
-    feedUrl: 'https://feeds.bbci.co.uk/news/technology/rss.xml',
-    category: 'tech',
-  },
-];
 
 export interface GameBootstrapResult {
   actorsCreated: number;
@@ -345,16 +298,28 @@ export class GameBootstrapService {
     name: string;
     initialPrice: number | null;
   }): Promise<void> {
+    // Try real-world price first, fall back to static initialPrice
+    let effectivePrice = org.initialPrice;
+    try {
+      const { realPriceService } = await import('./real-price-service');
+      const realPrice = realPriceService.getBasePriceForOrg(org.id);
+      if (realPrice != null) {
+        effectivePrice = realPrice;
+      }
+    } catch {
+      // Real price service not available — use static price
+    }
+
     await db.insert(organizationState).values({
       id: org.id,
-      currentPrice: org.initialPrice,
-      basePrice: org.initialPrice ?? 100.0,
+      currentPrice: effectivePrice,
+      basePrice: effectivePrice ?? 100.0,
       updatedAt: new Date(),
     });
 
     logger.debug(
       `Seeded organization state ${org.name}`,
-      { orgId: org.id },
+      { orgId: org.id, price: effectivePrice },
       'GameBootstrapService'
     );
   }
@@ -412,12 +377,11 @@ export class GameBootstrapService {
       if (currentBalance < minimumBalance) {
         const deficit = minimumBalance - currentBalance;
         const topUpAmount = Math.min(deficit, MAX_TOP_UP_AMOUNT);
-        const newBalance = currentBalance + topUpAmount;
 
         await db
           .update(actorState)
           .set({
-            tradingBalance: newBalance.toString(),
+            tradingBalance: sql`${actorState.tradingBalance} + ${topUpAmount}`,
             updatedAt: new Date(),
           })
           .where(eq(actorState.id, state.id));
@@ -426,7 +390,7 @@ export class GameBootstrapService {
         totalTopUp += topUpAmount;
 
         logger.debug(
-          `Topped up ${staticActor?.name ?? state.id}: $${currentBalance} → $${newBalance}`,
+          `Topped up ${staticActor?.name ?? state.id}: $${currentBalance} → +$${topUpAmount}`,
           { actorId: state.id, topUpAmount },
           'GameBootstrapService'
         );
@@ -587,10 +551,11 @@ export class GameBootstrapService {
     return false;
   }
 
+  /** Seeds rssFeedSources from DEFAULT_RSS_SOURCES (config). WHY config: single place to add/edit feed URLs; runtime enable/disable remains in DB. */
   private static async ensureRSSFeeds(): Promise<number> {
     let created = 0;
 
-    for (const feed of RSS_FEEDS) {
+    for (const feed of DEFAULT_RSS_SOURCES) {
       const existing = await db
         .select({ id: rssFeedSources.id })
         .from(rssFeedSources)
@@ -647,6 +612,29 @@ export class GameBootstrapService {
 
       // Use current price from state, or initial price, or default
       const currentPrice = priceMap.get(org.id) ?? org.initialPrice ?? 100;
+      const initialQuote = getSyntheticPerpQuoteState({
+        ticker: org.ticker,
+        organizationId: org.id,
+        name: org.name,
+        currentPrice,
+        price24hAgo: currentPrice,
+        change24h: 0,
+        changePercent24h: 0,
+        high24h: currentPrice,
+        low24h: currentPrice,
+        volume24h: 0,
+        openInterest: 0,
+        fundingRate: {
+          ticker: org.ticker,
+          rate: 0.01,
+          nextFundingTime,
+          predictedRate: 0.01,
+        },
+        maxLeverage: 100,
+        minOrderSize: 10,
+        markPrice: currentPrice,
+        indexPrice: currentPrice,
+      });
 
       await db.insert(perpMarketSnapshots).values({
         ticker: org.ticker,
@@ -670,6 +658,13 @@ export class GameBootstrapService {
         },
         maxLeverage: 100,
         minOrderSize: 10,
+        bidPrice: initialQuote.bidPrice,
+        askPrice: initialQuote.askPrice,
+        spreadBps: initialQuote.spreadBps,
+        bidDepth: initialQuote.bidDepth,
+        askDepth: initialQuote.askDepth,
+        liquidityRegime: initialQuote.liquidityRegime,
+        quoteUpdatedAt: now,
         markPrice: currentPrice,
         indexPrice: currentPrice,
         createdAt: now,

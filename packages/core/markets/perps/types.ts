@@ -4,15 +4,31 @@ import type {
   ClockPort,
   FeeConfig,
   FeeProcessor,
+  TradingFeeOutboxPort,
   WalletPort,
 } from '../shared/common';
+
+export type { WalletPort } from '../shared/common';
 
 export type PerpSide = 'long' | 'short';
 
 export interface PerpMarketRecord {
   ticker: string;
   organizationId: string;
+  /** Display name; prefer Organization.name when joined from DB. */
   name?: string;
+  /** Company logo from Organization.imageUrl when available. */
+  imageUrl?: string | null;
+  /**
+   * Canonical public market price for the instrument.
+   *
+   * Convention:
+   * - this is the live public mid/spot price for the market
+   * - quote state is derived around it
+   * - execution price may differ from it based on side/size
+   * - it is not the internal fair value (`latentPrice`)
+   * - it is not the liquidation/reference mark price
+   */
   currentPrice: number;
   /** Price from 24 hours ago (for accurate change calculation) */
   price24hAgo?: number;
@@ -30,6 +46,13 @@ export interface PerpMarketRecord {
   };
   maxLeverage: number;
   minOrderSize: number;
+  bidPrice?: number;
+  askPrice?: number;
+  spreadBps?: number;
+  bidDepth?: number;
+  askDepth?: number;
+  liquidityRegime?: 'thin' | 'balanced' | 'deep';
+  quoteUpdatedAt?: Date;
   markPrice?: number;
   indexPrice?: number;
 }
@@ -55,7 +78,12 @@ export interface PerpPositionRecord {
 }
 
 export interface PerpDbPort {
-  listMarkets(): Promise<PerpMarketRecord[]>;
+  listMarkets(options?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<PerpMarketRecord[]>;
+  /** Row count for pagination (full snapshot table). */
+  countMarkets(): Promise<number>;
   listOpenPositions(): Promise<PerpPositionRecord[]>;
   getPositionById(id: string): Promise<PerpPositionRecord | null>;
   /** Get all open positions for a user */
@@ -116,6 +144,13 @@ export interface PerpDbPort {
         | 'volume24h'
         | 'openInterest'
         | 'fundingRate'
+        | 'bidPrice'
+        | 'askPrice'
+        | 'spreadBps'
+        | 'bidDepth'
+        | 'askDepth'
+        | 'liquidityRegime'
+        | 'quoteUpdatedAt'
         | 'markPrice'
         | 'indexPrice'
       >
@@ -174,6 +209,76 @@ export interface PerpTradeResult {
   previousEntryPrice?: number;
 }
 
+export interface PerpOpenExecutionPreview {
+  previewType?: 'open' | 'add' | 'reduce' | 'close' | 'flip';
+  isRebalance?: boolean;
+  rebalanceType?: 'add' | 'reduce' | 'close' | 'flip';
+  ticker: string;
+  side: PerpSide;
+  size: number;
+  leverage: number;
+  /**
+   * Canonical public market price.
+   * See PerpMarketRecord.currentPrice for the contract of this field.
+   */
+  currentPrice: number;
+  markPrice?: number;
+  indexPrice?: number;
+  quotedPrice: number;
+  executionPrice: number;
+  quoteImpactPrice: number;
+  quoteImpactBps: number;
+  totalSlippageBps: number;
+  bidPrice: number;
+  askPrice: number;
+  spreadBps: number;
+  bidDepth: number;
+  askDepth: number;
+  liquidityRegime: 'thin' | 'balanced' | 'deep';
+  marginRequired: number;
+  estimatedFee: number;
+  totalRequired: number;
+  resultingSize?: number;
+  resultingSide?: PerpSide | null;
+  estimatedClosePrice?: number;
+  estimatedCloseSettlement?: number;
+  liquidationPrice: number;
+  liquidationDistancePercent: number;
+}
+
+/**
+ * Port for applying post-trade price impact and retrieving the resulting price.
+ *
+ * When provided, the service will:
+ * 1. Apply price impact after opening/adding/flipping a position
+ * 2. Update the position's entry price to the post-impact price
+ *
+ * This prevents the "self-impact profit exploit" where a user profits from
+ * the price movement caused by their own trade.
+ */
+export interface PriceImpactPort {
+  /**
+   * Apply price impact for a ticker and return the new market price.
+   * Returns undefined if no impact was applied or the price didn't change.
+   */
+  applyAndGetPrice(ticker: string): Promise<number | undefined>;
+
+  /**
+   * Get the base/initial price for a ticker.
+   *
+   * Used for **symmetric** slippage clamping so that the max impact is
+   * identical on both the open and close legs of a trade.  Without this,
+   * percentage-based clamping (10% of currentPrice) is asymmetric and
+   * creates a small arbitrage on round-trips.
+   */
+  getBasePrice?(ticker: string): Promise<number | undefined>;
+}
+
+/** Lightweight observability port for domain-level counters (Datadog, Grafana, etc.) */
+export interface MetricsPort {
+  increment(name: string, value: number, tags?: Record<string, string>): void;
+}
+
 // Service deps bundle (optional helper)
 export interface PerpServiceDeps {
   db: PerpDbPort;
@@ -183,4 +288,10 @@ export interface PerpServiceDeps {
   clock?: ClockPort;
   fees: FeeConfig;
   feeProcessor?: FeeProcessor;
+  /** When set, failed fee processing (after retries) is persisted for cron/worker drain */
+  tradingFeeOutbox?: TradingFeeOutboxPort;
+  /** Optional price impact port to prevent self-impact exploits */
+  priceImpact?: PriceImpactPort;
+  /** Optional metrics port for operational counters */
+  metrics?: MetricsPort;
 }

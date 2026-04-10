@@ -29,11 +29,15 @@ import {
   ROLE_PERMISSIONS,
   users,
 } from '@babylon/db';
-import { checkForAdminEmail, logger } from '@babylon/shared';
+import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import type { AuthenticatedUser } from './auth-middleware';
-import { authenticate, getPrivyClient } from './auth-middleware';
-import { getDevAdminUser, isValidDevAdminToken } from './dev-credentials';
+import { authenticate } from './auth-middleware';
+import {
+  DEV_ADMIN_TOKEN_COOKIE_NAME,
+  getDevAdminUser,
+  isValidDevAdminToken,
+} from './dev-credentials';
 import { AuthorizationError } from './errors';
 
 const isDevelopment = process.env.NODE_ENV !== 'production';
@@ -54,7 +58,7 @@ export interface AuthenticatedAdminUser extends AuthenticatedUser {
  */
 export async function getAdminRole(
   userId: string,
-  privyId?: string
+  _privyId?: string
 ): Promise<{ role: AdminRoleType | null; permissions: AdminPermission[] }> {
   // Check the adminRoles table first - only non-revoked roles
   const [adminRole] = await db
@@ -77,7 +81,7 @@ export async function getAdminRole(
   const [user] = await db
     .select({
       isAdmin: users.isAdmin,
-      privyId: users.privyId,
+      email: users.email,
     })
     .from(users)
     .where(eq(users.id, userId))
@@ -85,34 +89,20 @@ export async function getAdminRole(
 
   // Backward compatibility: Check isAdmin flag for legacy admins
   if (user?.isAdmin) {
-    return { role: 'SUPER_ADMIN', permissions: ROLE_PERMISSIONS.SUPER_ADMIN };
+    return { role: 'ADMIN', permissions: ROLE_PERMISSIONS.ADMIN };
   }
 
-  // Check admin email domain - fetch verified email directly from Privy for security
-  // This ensures we're using Privy's verified email, not a potentially tampered database value
-  // Check ALL linked emails, not just the primary one (handles users who linked admin email later)
+  // Check admin email domain using the DB email (Steward verifies email ownership)
   const adminDomain = process.env.ADMIN_EMAIL_DOMAIN?.trim();
-  const effectivePrivyId = privyId ?? user?.privyId;
-
-  if (adminDomain && effectivePrivyId) {
-    const privyClient = getPrivyClient();
-    const privyUser = await privyClient.getUser(effectivePrivyId);
-
-    // Check all verified emails including linkedAccounts
-    const { adminEmail, allVerifiedEmails } = checkForAdminEmail(privyUser);
-
-    if (adminEmail) {
+  if (adminDomain && user?.email) {
+    const emailDomain = user.email.split('@')[1]?.toLowerCase();
+    if (emailDomain && emailDomain === adminDomain.toLowerCase()) {
       logger.info(
-        'Auto-promoting user to SUPER_ADMIN via verified Privy email domain',
-        {
-          userId,
-          emailDomain: adminEmail.split('@')[1] ?? null,
-          emailCount: allVerifiedEmails.length,
-          privyId: effectivePrivyId,
-        },
+        'Auto-promoting user to ADMIN via verified email domain',
+        { userId, emailDomain },
         'getAdminRole'
       );
-      return { role: 'SUPER_ADMIN', permissions: ROLE_PERMISSIONS.SUPER_ADMIN };
+      return { role: 'ADMIN', permissions: ROLE_PERMISSIONS.ADMIN };
     }
   }
 
@@ -133,9 +123,46 @@ export async function getAdminRole(
 export async function requireAdmin(
   request: NextRequest
 ): Promise<AuthenticatedAdminUser> {
+  // In CI, accept a static test token for integration tests.
+  // The token is only checked when CI=true (never in production deployments).
+  // We provision a real DB-backed user so FK-dependent admin write paths
+  // (whitelist grantedBy, role grants, etc.) don't 500.
+  const ciAdminToken = process.env.CI_ADMIN_TOKEN;
+  if (ciAdminToken && process.env.CI === 'true') {
+    const headerToken = request.headers.get('x-dev-admin-token');
+    if (headerToken && headerToken === ciAdminToken) {
+      const ciUserId = 'ci-admin-user';
+      const ciWallet = '0xCI00000000000000000000000000000000000001';
+
+      // Upsert a real user row so FK constraints are satisfied
+      await db
+        .insert(users)
+        .values({
+          id: ciUserId,
+          walletAddress: ciWallet,
+          isAdmin: true,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: users.id,
+          set: { isAdmin: true, updatedAt: new Date() },
+        });
+
+      return {
+        userId: ciUserId,
+        dbUserId: ciUserId,
+        walletAddress: ciWallet,
+        role: 'SUPER_ADMIN',
+        permissions: ROLE_PERMISSIONS.SUPER_ADMIN,
+      };
+    }
+  }
+
   // In development, check for dev admin token first
   if (isDevelopment) {
-    const devAdminToken = request.headers.get('x-dev-admin-token');
+    const devAdminToken =
+      request.headers.get('x-dev-admin-token') ??
+      request.cookies.get(DEV_ADMIN_TOKEN_COOKIE_NAME)?.value;
     if (devAdminToken && isValidDevAdminToken(devAdminToken)) {
       const devUser = getDevAdminUser();
       if (devUser) {
@@ -377,8 +404,8 @@ export async function getAllAdmins(): Promise<
       username: legacy.username,
       displayName: legacy.displayName,
       profileImageUrl: legacy.profileImageUrl,
-      role: 'SUPER_ADMIN',
-      permissions: ROLE_PERMISSIONS.SUPER_ADMIN,
+      role: 'ADMIN',
+      permissions: ROLE_PERMISSIONS.ADMIN,
       grantedAt: legacy.createdAt,
       grantedBy: legacy.id, // Self-granted for legacy
     });

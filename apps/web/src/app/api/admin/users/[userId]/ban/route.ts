@@ -88,11 +88,9 @@
  * @see {@link /lib/reputation/erc8004-sync} ERC-8004 sync
  */
 
-import { syncReputationToERC8004 } from '@babylon/agents';
-import { invalidateReputationCache } from '@babylon/agents/agent0/reputation/agent0-reputation-cache';
 import {
   BusinessLogicError,
-  distributePointsToReporters,
+  distributeReputationToReporters,
   getClientIp,
   logAdminAction,
   NotFoundError,
@@ -192,28 +190,14 @@ export const POST = withErrorHandling(
         bannedBy: true,
         isScammer: true,
         isCSAM: true,
-        agent0TokenId: true,
       },
     });
 
-    // Sync with ERC-8004 reputation system via Agent0
-    if (action === 'ban' && updatedUser.agent0TokenId) {
-      await syncReputationToERC8004(userId, {
-        reputationScore: 0, // Banned users get 0 reputation
-        isBanned: true,
-        isScammer: isScammer ?? false,
-        isCSAM: isCSAM ?? false,
-      });
-    }
-
-    // Invalidate reputation cache
     if (action === 'ban') {
-      await invalidateReputationCache(userId);
-
       // Distribute points to successful reporters if CSAM/scammer
       if ((isScammer ?? false) || (isCSAM ?? false)) {
         const reason = isCSAM ? 'csam' : 'scammer';
-        await distributePointsToReporters(userId, reason);
+        await distributeReputationToReporters(userId, reason);
       }
     }
 

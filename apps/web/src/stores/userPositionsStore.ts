@@ -21,6 +21,7 @@
  */
 
 import type { PerpPosition, UserPredictionPosition } from '@babylon/shared';
+import { toNumber } from '@babylon/shared';
 import { useCallback, useEffect, useRef } from 'react';
 import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
@@ -71,20 +72,6 @@ const DEFAULT_STATS: PerpStats = {
   totalFunding: 0,
 };
 
-/**
- * Helper to safely convert API values to numbers.
- */
-function toNumber(value: unknown, fallback = 0): number {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value === 'string') {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
-  }
-  return fallback;
-}
-
 type NumericLike = number | string | null | undefined;
 
 interface ApiPerpPositionPayload {
@@ -104,6 +91,10 @@ interface ApiPerpPositionPayload {
   openedAt: string;
   lastUpdated?: string;
   closedAt?: string | null;
+  // Agent position metadata
+  isAgentPosition?: boolean;
+  agentId?: string | null;
+  agentName?: string | null;
 }
 
 interface ApiPredictionPositionPayload {
@@ -120,6 +111,12 @@ interface ApiPredictionPositionPayload {
   currentProbability?: NumericLike;
   resolved?: boolean;
   resolution?: boolean | null;
+  status?: string;
+  createdAt?: string;
+  // Agent position metadata
+  isAgentPosition?: boolean;
+  agentId?: string | null;
+  agentName?: string | null;
 }
 
 /**
@@ -143,6 +140,10 @@ function normalizePerpPosition(raw: ApiPerpPositionPayload): PerpPosition {
     openedAt: raw.openedAt,
     lastUpdated: raw.lastUpdated ?? raw.openedAt,
     closedAt: raw.closedAt ?? null,
+    // Agent position metadata
+    isAgentPosition: raw.isAgentPosition ?? false,
+    agentId: raw.agentId ?? undefined,
+    agentName: raw.agentName ?? undefined,
   };
 }
 
@@ -172,6 +173,12 @@ function normalizePredictionPosition(
     currentProbability: toNumber(raw.currentProbability, currentPrice),
     resolved: raw.resolved ?? false,
     resolution: raw.resolution ?? null,
+    status: raw.status,
+    createdAt: raw.createdAt ?? undefined,
+    // Agent position metadata
+    isAgentPosition: raw.isAgentPosition ?? false,
+    agentId: raw.agentId ?? undefined,
+    agentName: raw.agentName ?? undefined,
   };
 }
 

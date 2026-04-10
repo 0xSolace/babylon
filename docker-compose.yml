@@ -38,6 +38,7 @@ services:
       -c statement_timeout=60000
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./scripts/docker/init-steward-db.sh:/docker-entrypoint-initdb.d/20-steward.sh
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U babylon"]
       interval: 10s
@@ -127,6 +128,48 @@ services:
       interval: 30s
       timeout: 20s
       retries: 3
+
+  steward:
+    # Steward auth service — multi-tenant auth provider (sibling repo at ../steward)
+    # Run bun run steward:init once after first boot to provision the babylon tenant.
+    build:
+      context: ../steward
+      dockerfile: Dockerfile
+    container_name: babylon-steward
+    restart: unless-stopped
+    ports:
+      - "3200:3200"
+    environment:
+      PORT: 3200
+      STEWARD_BIND_HOST: "0.0.0.0"
+      NODE_ENV: development
+      STEWARD_MASTER_PASSWORD: ${STEWARD_MASTER_PASSWORD:-dev-master-password-change-in-prod}
+      STEWARD_JWT_SECRET: ${STEWARD_JWT_SECRET:-dev-jwt-secret-change-in-prod}
+      # Steward's user.ts reads STEWARD_SESSION_SECRET; set to same value as STEWARD_JWT_SECRET
+      STEWARD_SESSION_SECRET: ${STEWARD_JWT_SECRET:-dev-jwt-secret-change-in-prod}
+      DATABASE_URL: "postgresql://babylon:babylon_dev_password@postgres:5432/steward"
+      STEWARD_PLATFORM_KEYS: ${STEWARD_PLATFORM_KEYS:-dev-platform-key}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-login@babylon.social}
+      APP_URL: ${STEWARD_APP_URL:-http://localhost:3000}
+      PASSKEY_RP_NAME: Babylon
+      PASSKEY_RP_ID: localhost
+      PASSKEY_ORIGIN: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
+      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
+      TWITTER_CLIENT_ID: ${TWITTER_CLIENT_ID:-}
+      TWITTER_CLIENT_SECRET: ${TWITTER_CLIENT_SECRET:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3200/health | grep -q ok || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 30s
 
 volumes:
   postgres_data:

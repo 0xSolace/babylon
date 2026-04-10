@@ -266,7 +266,7 @@ export const PredictionMarketTradeSchema = z.object({
   amount: z
     .number()
     .positive({ message: 'Amount must be positive' })
-    .min(1, { message: 'Minimum order size is ƀ1' }),
+    .min(1, { message: 'Minimum order size is $1' }),
 });
 
 /**
@@ -283,17 +283,29 @@ export const PredictionMarketSellSchema = z.object({
 /**
  * Perpetual position open schema
  */
-export const PerpOpenPositionSchema = z.object({
-  ticker: z.string().min(1, { message: 'Ticker is required' }),
-  side: z.enum(['long', 'short'], {
-    message: 'Side must be either "long" or "short"',
-  }),
-  size: z.number().positive({ message: 'Size must be positive' }),
-  leverage: z
-    .number()
-    .int({ message: 'Leverage must be an integer' })
-    .min(1, { message: 'Minimum leverage is 1x' })
-    .max(100, { message: 'Maximum leverage is 100x' }),
-  /** Max slippage tolerance (0-1, e.g., 0.01 = 1%). Rejects if spot/mark deviation exceeds this. */
-  maxSlippage: z.number().min(0).max(1).optional(),
-});
+export const PerpOpenPositionSchema = z
+  .object({
+    ticker: z.string().min(1, { message: 'Ticker is required' }),
+    side: z.enum(['long', 'short'], {
+      message: 'Side must be either "long" or "short"',
+    }),
+    size: z.number().positive({ message: 'Size must be positive' }),
+    leverage: z
+      .number()
+      .int({ message: 'Leverage must be an integer' })
+      .min(1, { message: 'Minimum leverage is 1x' })
+      .max(100, { message: 'Maximum leverage is 100x' }),
+    orderType: z.enum(['market', 'limit']).default('market'),
+    limitPrice: z.number().positive().optional(),
+    /** Max slippage tolerance (0-1, e.g., 0.01 = 1%). Rejects if spot/mark deviation exceeds this. */
+    maxSlippage: z.number().min(0).max(1).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.orderType === 'limit' && value.limitPrice === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'limitPrice is required for limit orders',
+        path: ['limitPrice'],
+      });
+    }
+  });

@@ -5,6 +5,11 @@
  */
 
 import {
+  PerpDbAdapter as CorePerpDbAdapter,
+  PerpQuoteStateService as CorePerpQuoteStateService,
+  isOpenPerpPositionStateValid,
+} from '@babylon/core/markets/perps';
+import {
   PredictionDbAdapter as CorePredictionDbAdapter,
   PredictionMarketService as CorePredictionMarketService,
 } from '@babylon/core/markets/prediction';
@@ -22,7 +27,6 @@ import {
   inArray,
   isNull,
   type JsonValue,
-  lte,
   markets as marketsSchema,
   organizationState,
   perpMarketSnapshots,
@@ -32,83 +36,75 @@ import {
   posts,
   postTags,
   questions as questionsSchema,
-  rssHeadlines,
+  sql,
   tags,
   tickTokenStats,
+  timeframedMarkets,
   trendingTags,
   widgetCaches,
-  worldEvents,
+  worldFacts,
 } from '@babylon/db';
 import {
   calculatePriceFromHoldings,
-  DIAMOND_ADDRESS,
   generateSnowflakeId,
-  getCurrentRpcUrl,
   logger,
   PERP_MARKET_CONFIG,
-  PREDICTION_MARKET_ABI,
-  REPUTATION_SYSTEM_BASE_SEPOLIA,
 } from '@babylon/shared';
-import { ArticleGenerator } from './ArticleGenerator';
+import {
+  endTrace,
+  getActiveTracer,
+  installLLMInterceptor,
+  startTrace,
+  uninstallLLMInterceptor,
+  writeTickTrace,
+} from './dag-trace';
 import { BabylonLLMClient } from './llm/openai-client';
-import { MarketDecisionEngine } from './MarketDecisionEngine';
-import { NPCInvestmentManager } from './npc/npc-investment-manager';
-import { generateWorldContext } from './prompts';
 import { QuestionManager } from './QuestionManager';
 import { RelationshipEvolutionEngine } from './RelationshipEvolutionEngine';
 // Services - using barrel exports from services/index.ts
 import {
-  ActorSocialActions,
   AlphaGroupInviteService,
-  articleRateLimiter,
   bootstrapGameIfNeeded,
   calculateTrendingIfNeeded,
   calculateTrendingTags,
-  characterMappingService,
   createArcState,
   createParodyHeadlineGenerator,
+  DistributedLockService,
+  dailyTopicService,
   FeeRedistributionService,
-  FollowingMechanics,
   generateArcPulseEventsIfNeeded,
-  generateArticleImageWithRetry,
   generateEvents,
-  generateOrgArticle,
-  generateOrgPost,
-  getOracleService,
-  getStorySeedService,
-  getTopicDiversityService,
-  getTrendingPromptContext,
   initFalClient,
   invalidateAfterPredictionTrade,
-  MarketContextService,
   NPCGroupDynamicsService,
-  npcSocialEngagementService,
   PriceUpdateService,
   processArcTick,
-  processNPCSocialEngagements,
   ReputationService,
   rssFeedService,
   StaticDataRegistry,
   syncReputationIfAvailable,
-  TokenStatsService,
-  TradeExecutionService,
   timeframeArcProcessor,
+  tokenStatsService,
   WalletService,
+  worldFactsGenerator,
 } from './services';
+import {
+  buildMarketSimulationProfile,
+  createInitialMarketSimulationState,
+  evolveGlobalMarketSimulationState,
+  type GlobalMarketSimulationState,
+  generateProfileDrivenMarketMove,
+  getDefaultGlobalMarketSimulationState,
+  type MarketSimulationState,
+} from './services/market-simulation-profiles';
+// Note: ActorSocialActions, FollowingMechanics, processNPCSocialEngagements,
+// npcSocialEngagementService moved to npc-tick
 import { broadcastToChannel } from './services/realtime-broadcaster';
 import type { TradingExecutionResult } from './types/market-decisions';
-import type {
-  ActorTier,
-  DayTimeline,
-  Organization,
-  Question,
-  SelectedActor,
-  WorldEvent,
-} from './types/shared';
 import { calculateEstimatedCost } from './types/token-stats';
 import { getGameDayNumber, toSafeDayNumber } from './utils/date-utils';
-import { deriveStrategyFromPersonality } from './utils/shared-utils';
-import { worldFactsService } from './world-facts-service';
+import { formatError } from './utils/error-utils';
+import { shuffleArray } from './utils/randomization';
 // Note: Event-market pipeline is called from within narrative-event-processor
 
 // Services that are still in the web app (Web3/Oracle specific - use dynamic imports)
@@ -148,15 +144,15 @@ export interface GameTickResult {
     usersKicked: number;
     messagesPosted: number;
   };
-  oracleCommits: number;
-  oracleReveals: number;
-  oracleErrors: number;
   worldFactsUpdated?: boolean;
   worldFactsStats?: {
     feedsFetched: number;
     newHeadlines: number;
     parodiesGenerated: number;
     headlinesCleaned: number;
+    dailyTopic?: string | null;
+    worldFactsGenerated: number;
+    worldFactsArchived: number;
   };
   relationshipsUpdated?: number;
   /** Number of markets with simulated price volatility applied */
@@ -178,7 +174,6 @@ export interface GameTickResult {
     marketsProcessed: number;
     transitionsOccurred: number;
     eventsGenerated: number;
-    subMarketsSpawned: number;
     errors: string[];
     eventTriggers: Array<{
       marketId: string;
@@ -199,23 +194,33 @@ export interface GameTickResult {
 
 /** Executes a complete game tick (content, markets, questions, system updates). */
 export async function executeGameTick(
-  skipContentGeneration = false
+  skipContentGeneration = false,
+  skip = new Set<string>()
 ): Promise<GameTickResult> {
+  const fastMode = process.env.BABYLON_TRUST_CORPUS_FAST_MODE === 'true';
   const timestamp = new Date();
   const startedAt = Date.now();
   const budgetMs = Number(process.env.GAME_TICK_BUDGET_MS || 180000); // 3 minutes default
   const deadline = startedAt + budgetMs;
 
-  // Reserve 60 seconds for critical operations (market decisions, widget updates)
-  const criticalOpsReserveMs = 60000;
-  const criticalOpsDeadline = startedAt + budgetMs - criticalOpsReserveMs;
-
   // Start token usage collection for this tick
-  const tokenStatsTickId = TokenStatsService.startTick(`tick-${startedAt}`);
+  const tokenStatsTickId = tokenStatsService.startTick(`tick-${startedAt}`);
+
+  // DAG trace: capture all inputs/outputs when enabled
+  const dagTraceEnabled = process.env.BABYLON_DAG_TRACE === 'true';
+  if (dagTraceEnabled) {
+    startTrace(`tick-${startedAt}`, 0);
+    installLLMInterceptor();
+  }
+  const tracer = dagTraceEnabled ? getActiveTracer() : null;
 
   logger.info(
     'Executing game tick',
-    { timestamp: timestamp.toISOString(), tokenStatsTickId },
+    {
+      timestamp: timestamp.toISOString(),
+      tokenStatsTickId,
+      ...(skip.size > 0 ? { skippedSubsystems: [...skip] } : {}),
+    },
     'GameTick'
   );
 
@@ -231,13 +236,21 @@ export async function executeGameTick(
     trendingCalculated: false,
     reputationSynced: false,
     alphaInvitesSent: 0,
-    oracleCommits: 0,
-    oracleReveals: 0,
-    oracleErrors: 0,
   };
 
+  if (skip.has('gameplay-fast-path')) {
+    logger.info(
+      'Gameplay fast path enabled - skipping remaining game tick work',
+      undefined,
+      'GameTick'
+    );
+    tokenStatsService.endTick();
+    return result;
+  }
+
   // Bootstrap game data if needed (actors, organizations, mappings, pools, etc.)
-  const bootstrapResult = await bootstrapGameIfNeeded();
+  tracer?.startNode('bootstrap', { fastMode });
+  const bootstrapResult = fastMode ? null : await bootstrapGameIfNeeded();
 
   // Initialize fal.ai for article image generation (non-blocking)
   initFalClient();
@@ -262,6 +275,12 @@ export async function executeGameTick(
     }
   }
 
+  tracer?.endNode('bootstrap', {
+    actorsCreated: bootstrapResult?.actorsCreated ?? 0,
+    organizationsCreated: bootstrapResult?.organizationsCreated ?? 0,
+    poolsCreated: bootstrapResult?.poolsCreated ?? 0,
+  });
+
   // Compute game-relative day numbers for new writes (forward-only)
   const [continuousGame] = await db
     .select({ startedAt: games.startedAt, id: games.id })
@@ -285,7 +304,11 @@ export async function executeGameTick(
   };
 
   // Bootstrap initial content if this is a fresh setup
-  await bootstrapContentIfNeeded(timestamp);
+  tracer?.startNode('bootstrap-content', { fastMode });
+  if (!fastMode) {
+    await bootstrapContentIfNeeded(timestamp);
+  }
+  tracer?.endNode('bootstrap-content', { skipped: fastMode });
 
   // Initialize LLM client for game tick operations
   // Priority: Groq > Claude > OpenAI
@@ -301,10 +324,22 @@ export async function executeGameTick(
   );
 
   // Get active questions from database
-  const activeQuestions = await db
-    .select()
-    .from(questionsSchema)
-    .where(eq(questionsSchema.status, 'active'));
+  tracer?.startNode('questions-load', { fastMode });
+  const activeQuestions = fastMode
+    ? []
+    : await db
+        .select()
+        .from(questionsSchema)
+        .where(eq(questionsSchema.status, 'active'));
+  if (fastMode) {
+    logger.info(
+      'Skipping active question load in fast mode',
+      undefined,
+      'GameTick'
+    );
+  }
+
+  tracer?.endNode('questions-load', { count: activeQuestions.length });
 
   logger.info(
     `Found ${activeQuestions.length} active questions`,
@@ -314,7 +349,11 @@ export async function executeGameTick(
 
   // Generate initial questions FIRST if this is the first tick
   let currentActiveQuestions = activeQuestions;
-  if (activeQuestions.length === 0 && Date.now() < deadline) {
+  tracer?.startNode('questions-init', {
+    activeCount: activeQuestions.length,
+    fastMode,
+  });
+  if (activeQuestions.length === 0 && Date.now() < deadline && !fastMode) {
     logger.info(
       'First tick detected - generating initial questions',
       {},
@@ -338,331 +377,59 @@ export async function executeGameTick(
       { count: questionsGenerated },
       'GameTick'
     );
-
-    // Publish commitments to blockchain oracle
-    if (questionsGenerated > 0 && currentActiveQuestions.length > 0) {
-      const oracleResult = await publishOracleCommitments(
-        currentActiveQuestions
-      );
-      result.oracleCommits += oracleResult.committed;
-      result.oracleErrors += oracleResult.errors;
-    }
   }
+  tracer?.endNode('questions-init', {
+    questionsCreated: result.questionsCreated,
+  });
 
-  const questionsToResolve = currentActiveQuestions.filter(
-    (q: { resolutionDate: Date | null }) => {
-      if (!q.resolutionDate) return false;
-      const resolutionDate = new Date(q.resolutionDate);
-      return resolutionDate <= timestamp;
-    }
-  );
+  // ==========================================================================
+  // QUESTION RESOLUTION - HANDLED BY markets-tick (DEDUPLICATION)
+  // ==========================================================================
+  // Question resolution (proof generation and payouts) is now
+  // exclusively handled by /api/cron/markets-tick to prevent race conditions
+  // and duplicate operations. This follows the single-responsibility principle:
+  //
+  // - game-tick: World simulation (events, question creation)
+  // - markets-tick: Market lifecycle (resolution, payouts)
+  //
+  // See: apps/web/src/app/api/cron/markets-tick/route.ts::resolveMarket()
+  // ==========================================================================
 
-  if (questionsToResolve.length > 0) {
-    logger.info(
-      `Resolving ${questionsToResolve.length} questions`,
-      { count: questionsToResolve.length },
-      'GameTick'
-    );
+  // ==========================================================================
+  // ORGANIZATION CONTENT - HANDLED BY organization-tick + article-tick (DEDUPLICATION)
+  // ==========================================================================
+  // Organization posts are handled by /api/cron/organization-tick
+  // Article generation is handled by /api/cron/article-tick
+  // NPC posts are handled by /api/cron/npc-tick
+  //
+  // game-tick now focuses ONLY on world events (below) which drive the narrative.
+  // ==========================================================================
 
-    // Load required data for proof generation using StaticDataRegistry (preferred over loadActorsData)
-    const staticActors = StaticDataRegistry.getAllActors();
-    // Map StaticActor to SelectedActor, ensuring required fields are present
-    const allActors: SelectedActor[] = staticActors
-      .filter((actor) => actor.tier !== null)
-      .map((actor) => ({
-        id: actor.id,
-        name: actor.name,
-        description: actor.description,
-        domain: actor.domain,
-        personality: actor.personality,
-        affiliations: actor.affiliations,
-        postStyle: actor.postStyle,
-        postExample: actor.postExample,
-        tier: actor.tier!,
-        role: actor.role ?? 'unknown',
-        initialLuck:
-          (actor.initialLuck as 'low' | 'medium' | 'high') ?? 'medium',
-        initialMood: actor.initialMood ?? 0,
-      }));
-    // Map StaticOrganization to Organization type
-    const organizations: Organization[] =
-      StaticDataRegistry.getAllOrganizations().map((o) => ({
-        id: o.id,
-        name: o.name,
-        ticker: o.ticker,
-        description: o.description,
-        type: o.type,
-        canBeInvolved: o.canBeInvolved,
-        initialPrice: o.initialPrice ?? undefined,
-      }));
-
-    // Get recent events for context
-    const recentDbEvents = await db
-      .select()
-      .from(worldEvents)
-      .where(
-        gte(
-          worldEvents.timestamp,
-          new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)
-        )
-      )
-      .orderBy(desc(worldEvents.timestamp));
-
-    // Type guards for WorldEvent fields
-    const isValidEventType = (type: string): type is WorldEvent['type'] => {
-      return [
-        'announcement',
-        'meeting',
-        'leak',
-        'development',
-        'scandal',
-        'rumor',
-        'deal',
-        'conflict',
-        'revelation',
-        'development:occurred',
-        'news:published',
-      ].includes(type);
-    };
-
-    const isValidVisibility = (
-      vis: string
-    ): vis is WorldEvent['visibility'] => {
-      return ['public', 'leaked', 'secret', 'private', 'group'].includes(vis);
-    };
-
-    const isValidPointsToward = (
-      pt: string | null | undefined
-    ): pt is WorldEvent['pointsToward'] => {
-      return pt === null || pt === undefined || pt === 'YES' || pt === 'NO';
-    };
-
-    // Convert to DayTimeline format for QuestionManager
-    const mappedEvents: WorldEvent[] = recentDbEvents
-      .filter(
-        (e) => isValidEventType(e.eventType) && isValidVisibility(e.visibility)
-      )
-      .map((e) => ({
-        id: e.id,
-        day: e.dayNumber || 0,
-        type: e.eventType as WorldEvent['type'],
-        description: e.description,
-        actors: e.actors as string[],
-        relatedQuestion: e.relatedQuestion || undefined,
-        pointsToward: isValidPointsToward(e.pointsToward)
-          ? e.pointsToward
-          : undefined,
-        visibility: e.visibility as WorldEvent['visibility'],
-      }));
-
-    const recentTimelines: DayTimeline[] = [
-      {
-        day: 0,
-        events: mappedEvents,
-        summary: 'Recent events context',
-        groupChats: {},
-        feedPosts: [],
-        luckChanges: [],
-        moodChanges: [],
-      },
-    ];
-
-    const questionManager = new QuestionManager(llmClient);
-    const questionsToReveal: Array<{ id: string; outcome: boolean }> = [];
-
-    // Resolve payouts
-    // Each question resolution is wrapped in try/catch to prevent partial failures
-    // from breaking the entire tick. Failed resolutions will be retried next tick.
-    for (const question of questionsToResolve) {
-      try {
-        const isApproved = question.resolutionReviewStatus === 'approved';
-        const isPendingManualReview =
-          question.requiresManualReview && !isApproved;
-        const hasStoredProof =
-          Boolean(question.resolutionProofUrl) &&
-          Boolean(question.resolutionDescription);
-
-        if (isPendingManualReview && hasStoredProof) {
-          logger.info(
-            'Skipping question resolution (pending manual review)',
-            {
-              questionId: question.id,
-              questionNumber: question.questionNumber,
-              confidence: question.resolutionConfidence ?? null,
-              reviewStatus: question.resolutionReviewStatus ?? 'pending',
-            },
-            'GameTick'
-          );
-          continue;
-        }
-
-        // Generate resolution proof content
-        // We cast question to Question type - database question fields are compatible
-        const questionForManager: Question = {
-          id: question.questionNumber,
-          text: question.text,
-          scenario: question.scenarioId || 1,
-          outcome: question.outcome,
-          rank: question.rank || 1,
-          status: 'active',
-        };
-
-        // Only generate proof if we don't have one stored
-        // Avoids regenerating existing proofs when only confidence is missing
-        const shouldGenerateProof = !hasStoredProof;
-
-        let generatedProof: Awaited<
-          ReturnType<QuestionManager['generateResolutionWithProof']>
-        > | null = null;
-
-        if (shouldGenerateProof) {
-          const proofResult = await questionManager.generateResolutionWithProof(
-            questionForManager,
-            allActors,
-            organizations,
-            recentTimelines
-          );
-
-          generatedProof = proofResult;
-
-          const reviewStatus = proofResult.requiresManualReview
-            ? 'pending'
-            : null;
-
-          // Save proof article (if any) and update question atomically.
-          await db.transaction(async (tx) => {
-            if (proofResult.proof?.type === 'article') {
-              await tx.insert(posts).values({
-                id: proofResult.proof.article.id,
-                type: 'article',
-                content: proofResult.proof.article.summary,
-                fullContent: proofResult.proof.article.content,
-                articleTitle: proofResult.proof.article.title,
-                authorId: proofResult.proof.article.authorOrgId,
-                gameId: 'continuous',
-                timestamp: new Date(),
-                category: proofResult.proof.article.category,
-                sentiment: proofResult.proof.article.sentiment,
-                slant: proofResult.proof.article.slant,
-                biasScore: proofResult.proof.article.biasScore,
-              });
-            }
-
-            await tx
-              .update(questionsSchema)
-              .set({
-                resolutionDescription: proofResult.description,
-                resolutionProofUrl: proofResult.proof?.url ?? null,
-                resolutionConfidence: proofResult.confidence,
-                requiresManualReview: proofResult.requiresManualReview,
-                resolutionReviewStatus: reviewStatus,
-                updatedAt: new Date(),
-              })
-              .where(eq(questionsSchema.id, question.id));
-          });
-
-          if (proofResult.proof?.type === 'article') {
-            logger.info(
-              `Generated resolution proof for Q${question.questionNumber}`,
-              {
-                proofUrl: proofResult.proof.url,
-                articleId: proofResult.proof.article.id,
-                confidence: proofResult.confidence,
-                requiresManualReview: proofResult.requiresManualReview,
-                confidenceSignals: proofResult.confidenceSignals,
-              },
-              'GameTick'
-            );
-          }
-        }
-
-        const requiresManualReview =
-          generatedProof?.requiresManualReview ?? question.requiresManualReview;
-        const reviewStatus =
-          generatedProof?.requiresManualReview === true
-            ? 'pending'
-            : question.resolutionReviewStatus;
-
-        // If low-confidence, queue for manual review instead of resolving now.
-        if (requiresManualReview && reviewStatus !== 'approved') {
-          logger.warn(
-            'Queued question for manual resolution review',
-            {
-              questionId: question.id,
-              questionNumber: question.questionNumber,
-              confidence:
-                generatedProof?.confidence ?? question.resolutionConfidence,
-              reviewStatus: reviewStatus ?? 'pending',
-            },
-            'GameTick'
-          );
-          continue;
-        }
-
-        // resolveQuestionPayouts has its own internal transaction for payout operations
-        // and updates question status to 'resolved' atomically
-        await resolveQuestionPayouts(question.questionNumber);
-        result.questionsResolved++;
-        questionsToReveal.push({ id: question.id, outcome: question.outcome });
-      } catch (error) {
-        // Log error but continue with other questions
-        // Failed question will remain in 'active' status and be retried next tick
-        logger.error(
-          `Question resolution failed - will retry next tick`,
-          {
-            questionId: question.id,
-            questionNumber: question.questionNumber,
-            error: error instanceof Error ? error.message : String(error),
-          },
-          'GameTick'
-        );
-      }
-    }
-
-    // Publish reveals to blockchain oracle
-    const oracleResult = await publishOracleReveals(questionsToReveal);
-    result.oracleReveals += oracleResult.revealed;
-    result.oracleErrors += oracleResult.errors;
-  }
-
-  // Organization content generation (media news articles) and world events
-  // NPC posts and replies are now handled by /api/cron/npc-tick
+  // Generate world events based on active questions (KEPT - game-tick owns world state)
   // Skip if buffer is sufficient (content generation handled by lookahead service)
-  if (!skipContentGeneration) {
-    if (Date.now() < criticalOpsDeadline) {
-      // Generate organization content only (news articles from media orgs)
-      const { posts, articles } = await generateOrganizationContent(
-        currentActiveQuestions.slice(0, 3),
-        timestamp,
-        llmClient,
-        criticalOpsDeadline,
-        dayNumberForTimestamp
-      );
-      result.postsCreated = posts;
-      result.articlesCreated = articles;
-    } else {
-      logger.warn(
-        'Skipping organization content generation – tick budget exceeded',
-        { budgetMs },
-        'GameTick'
-      );
-    }
-
+  tracer?.startNode('events', {
+    questionCount: currentActiveQuestions.length,
+    skipContentGeneration,
+    fastMode,
+  });
+  if (!skipContentGeneration && !fastMode) {
     // Generate world events based on active questions
+    // Pass llmClient to enable breaking article generation for high-impact events
+    // Shuffle active questions before slicing to rotate which questions get events
+    // (without shuffle, DB insertion order causes the same questions to always be selected)
+    const shuffledQuestions = shuffleArray(currentActiveQuestions).slice(0, 5);
     const eventsGenerated = await generateEvents(
-      currentActiveQuestions.slice(0, 3),
+      shuffledQuestions,
       timestamp,
-      dayNumberForTimestamp(timestamp)
+      dayNumberForTimestamp(timestamp),
+      llmClient
     );
     const pulseEventsGenerated = await generateArcPulseEventsIfNeeded(
-      currentActiveQuestions.slice(0, 3),
+      shuffledQuestions,
       timestamp,
       dayNumberForTimestamp(timestamp)
     );
     result.eventsCreated = eventsGenerated + pulseEventsGenerated;
-
-    // NPC posts and replies are now handled by /api/cron/npc-tick
-    // This removes the old generateMixedPosts and generateNPCRepliesFromPreviousTicks calls
   } else {
     logger.info(
       'Skipping content generation (buffer sufficient)',
@@ -670,10 +437,13 @@ export async function executeGameTick(
       'GameTick'
     );
   }
+  tracer?.endNode('events', { eventsCreated: result.eventsCreated });
 
+  // =========================================================================
   // CRITICAL PRIORITY: Generate and execute NPC trading decisions
   // This ALWAYS runs - uses the full deadline, not the critical ops deadline
   // Market decisions are essential for game economy and must always execute
+  // =========================================================================
   logger.info(
     'Starting critical market decision operations',
     {
@@ -682,351 +452,49 @@ export async function executeGameTick(
     'GameTick'
   );
 
-  const baselineResult =
-    await NPCInvestmentManager.executeBaselineInvestments(timestamp);
+  // ==========================================================================
+  // NPC TRADING — handled by MultiStepExecutor in npc-tick
+  // NPCs make trade + social decisions together in one unified pipeline.
+  // MarketDecisionEngine batch trading has been removed.
+  // ==========================================================================
+  tracer?.skipNode('market-baseline', 'unifiedNpcPipeline');
+  tracer?.skipNode('market-decisions', 'unifiedNpcPipeline');
+  tracer?.skipNode('trade-execution', 'unifiedNpcPipeline');
+  tracer?.skipNode('price-updates', 'unifiedNpcPipeline');
 
-  if (baselineResult) {
-    const baselineUpdates = await updateMarketPricesFromTrades(
-      timestamp,
-      baselineResult
-    );
-    result.marketsUpdated += baselineUpdates;
-  }
+  // ==========================================================================
+  // NPC SOCIAL ENGAGEMENT - HANDLED BY npc-tick (DEDUPLICATION)
+  // ==========================================================================
+  // NPC social engagement (likes, shares, comments) and social actions
+  // (DMs, group invites) are now exclusively handled by /api/cron/npc-tick.
+  //
+  // See: apps/web/src/app/api/cron/npc-tick/route.ts
+  // ==========================================================================
 
-  const contextService = new MarketContextService();
+  // ==========================================================================
+  // NPC FOLLOWING - HANDLED BY npc-tick (DEDUPLICATION)
+  // ==========================================================================
+  // NPC following (processProactiveFollowing, processUnfollowChecks) is now
+  // exclusively handled by /api/cron/npc-tick.
+  //
+  // See: apps/web/src/app/api/cron/npc-tick/route.ts
+  // ==========================================================================
 
-  // Create LLM client for market decisions
-  // Priority: Groq > Claude > OpenAI
-  const marketDecisionLLM = BabylonLLMClient.forGameTick();
-  const marketLLMStats = marketDecisionLLM.getStats();
-  logger.info(
-    `Using ${marketLLMStats.provider} for market decisions`,
-    { model: marketLLMStats.model },
-    'GameTick'
-  );
+  // ==========================================================================
+  // NPC PORTFOLIO REBALANCING — handled by MultiStepExecutor in npc-tick
+  // LLM reasoning naturally handles position management via TRADE actions.
+  // ==========================================================================
+  tracer?.skipNode('rebalancing', 'unifiedNpcPipeline');
 
-  // Configure decision engine with model and token limits from environment
-  // Use qwen/qwen3-32b on Groq for background trading operations
-  const modelName = process.env.MARKET_DECISION_MODEL || 'qwen/qwen3-32b';
-
-  // Model-aware output token limits:
-  // Input and output are SEPARATE limits on modern models
-  // - Kimi models: 260k INPUT + 16k OUTPUT (separate)
-  // - qwen3-32b: 130k INPUT + 32k OUTPUT (separate)
-  const isKimiModel = modelName.toLowerCase().includes('kimi');
-  const defaultMaxOutput = isKimiModel ? 16000 : 32000;
-  const maxOutputTokens = Number.parseInt(
-    process.env.MARKET_DECISION_MAX_OUTPUT_TOKENS ||
-      defaultMaxOutput.toString(),
-    10
-  );
-
-  const decisionEngine = new MarketDecisionEngine(
-    marketDecisionLLM,
-    contextService,
-    {
-      model: modelName,
-      maxOutputTokens,
-    }
-  );
-  const executionService = new TradeExecutionService();
-
-  const marketDecisions = await decisionEngine.generateBatchDecisions();
-
-  if (marketDecisions.length === 0) {
-    logger.info('No NPC market trades generated this tick', {}, 'GameTick');
-  } else {
-    const executionResult =
-      await executionService.executeDecisionBatch(marketDecisions);
-
-    logger.info(
-      `NPC Trading: ${executionResult.successfulTrades} trades executed`,
-      {
-        successful: executionResult.successfulTrades,
-        failed: executionResult.failedTrades,
-        holds: executionResult.holdDecisions,
-      },
-      'GameTick'
-    );
-
-    // Update prices based on NPC trades
-    const marketsUpdated = await updateMarketPricesFromTrades(
-      timestamp,
-      executionResult
-    );
-    result.marketsUpdated += marketsUpdated;
-  }
-
-  // =========================================================================
-  // NPC SOCIAL ENGAGEMENT (likes, shares, comments)
-  // Creates organic social activity to make the feed feel alive
-  // =========================================================================
-  if (Date.now() < deadline) {
-    try {
-      // Set LLM client for NPC comment generation
-      npcSocialEngagementService.setLLMClient(llmClient);
-
-      const socialEngagementResult = await processNPCSocialEngagements({
-        now: timestamp,
-        currentDay: dayNumberForTimestamp(timestamp) ?? undefined,
-      });
-      result.npcLikesCreated = socialEngagementResult.likesCreated;
-      result.npcSharesCreated = socialEngagementResult.sharesCreated;
-      result.npcCommentsCreated = socialEngagementResult.commentsCreated;
-
-      if (
-        socialEngagementResult.likesCreated > 0 ||
-        socialEngagementResult.sharesCreated > 0 ||
-        socialEngagementResult.commentsCreated > 0
-      ) {
-        logger.info(
-          'NPC social engagements processed',
-          {
-            likes: socialEngagementResult.likesCreated,
-            shares: socialEngagementResult.sharesCreated,
-            comments: socialEngagementResult.commentsCreated,
-            actors: socialEngagementResult.actorsEngaged,
-          },
-          'GameTick'
-        );
-      }
-    } catch (error) {
-      logger.error(
-        'NPC social engagement failed',
-        { error: error instanceof Error ? error.message : String(error) },
-        'GameTick'
-      );
-    }
-  }
-
-  // =========================================================================
-  // NPC SOCIAL ACTIONS (DMs, group invites based on interactions)
-  // =========================================================================
-  if (Date.now() < deadline) {
-    try {
-      const socialActions =
-        await ActorSocialActions.processRandomSocialActions();
-      result.npcSocialActionsProcessed = socialActions.length;
-
-      if (socialActions.length > 0) {
-        logger.info(
-          'NPC social actions processed',
-          {
-            total: socialActions.length,
-            invites: socialActions.filter((a) => a.type === 'group_chat_invite')
-              .length,
-            dms: socialActions.filter((a) => a.type === 'dm').length,
-          },
-          'GameTick'
-        );
-      }
-    } catch (error) {
-      logger.error(
-        'NPC social actions failed',
-        { error: error instanceof Error ? error.message : String(error) },
-        'GameTick'
-      );
-    }
-  }
-
-  // =========================================================================
-  // NPC FOLLOWING (proactive follows and unfollow checks)
-  // NPCs follow active players and unfollow inactive ones
-  // FollowingMechanics enforces its own time-slicing using the passed-in deadline
-  // =========================================================================
-  if (Date.now() < criticalOpsDeadline) {
-    // Process proactive following of active players
-    try {
-      const followResult =
-        await FollowingMechanics.processProactiveFollowing(criticalOpsDeadline);
-      result.npcFollowsCreated = followResult.followsCreated;
-
-      if (followResult.followsCreated > 0) {
-        logger.info(
-          'NPC proactive follows processed',
-          {
-            followsCreated: followResult.followsCreated,
-            playersConsidered: followResult.playersConsidered,
-          },
-          'GameTick'
-        );
-      }
-    } catch (error) {
-      logger.error(
-        'NPC proactive following failed',
-        {
-          error: error instanceof Error ? error.message : String(error),
-          stack: error instanceof Error ? error.stack : undefined,
-        },
-        'GameTick'
-      );
-    }
-
-    // Process unfollow checks (runs probabilistically) - separate try/catch so a failure doesn't hide follow progress
-    try {
-      const unfollowCount =
-        await FollowingMechanics.processUnfollowChecks(criticalOpsDeadline);
-      result.npcUnfollows = unfollowCount;
-    } catch (error) {
-      logger.error(
-        'NPC unfollow checks failed',
-        {
-          error: error instanceof Error ? error.message : String(error),
-          stack: error instanceof Error ? error.stack : undefined,
-        },
-        'GameTick'
-      );
-    }
-  }
-
-  // =========================================================================
-  // NPC PORTFOLIO REBALANCING
-  // Monitor NPC portfolios and execute rebalancing actions
-  // =========================================================================
-  if (Date.now() < deadline) {
-    try {
-      // Get all active NPC pools and monitor them
-      const activePools = await db
-        .select({ id: pools.id, npcActorId: pools.npcActorId })
-        .from(pools)
-        .where(eq(pools.isActive, true))
-        .limit(10); // Limit to prevent overwhelming the tick
-
-      let rebalanceActionsExecuted = 0;
-      // Cap on total rebalance actions per tick to prevent expensive ticks
-      const maxActionsPerTick = 20;
-
-      for (const pool of activePools) {
-        if (Date.now() >= deadline) break;
-        if (rebalanceActionsExecuted >= maxActionsPerTick) {
-          logger.debug(
-            'Rebalance action cap reached, stopping pool processing',
-            { maxActionsPerTick, poolsRemaining: activePools.length },
-            'GameTick'
-          );
-          break;
-        }
-
-        // Skip pools without an NPC actor ID
-        if (!pool.npcActorId) {
-          continue;
-        }
-
-        const poolStartTime = Date.now();
-        const actor = StaticDataRegistry.getActor(pool.npcActorId);
-
-        // Determine trading strategy from actor data
-        // Prefer explicit strategy property if available, otherwise derive from personality
-        let strategy: 'aggressive' | 'conservative' | 'balanced' = 'balanced';
-        if (actor) {
-          // Check for explicit strategy property first (preferred)
-          if ('strategy' in actor && typeof actor.strategy === 'string') {
-            const explicitStrategy = actor.strategy.toLowerCase();
-            if (
-              explicitStrategy === 'aggressive' ||
-              explicitStrategy === 'conservative' ||
-              explicitStrategy === 'balanced'
-            ) {
-              strategy = explicitStrategy;
-            }
-          } else {
-            // Use utility function to derive strategy from personality
-            strategy = deriveStrategyFromPersonality(actor.personality);
-          }
-        }
-
-        const rebalanceActions = await NPCInvestmentManager.monitorPortfolio(
-          pool.id,
-          pool.npcActorId,
-          strategy
-        );
-
-        let poolActionsExecuted = 0;
-        if (rebalanceActions.length > 0) {
-          // Execute rebalance actions through NPCInvestmentManager
-          for (const action of rebalanceActions) {
-            if (rebalanceActionsExecuted >= maxActionsPerTick) break;
-            try {
-              await NPCInvestmentManager.executeRebalanceAction(
-                pool.npcActorId,
-                pool.id,
-                action
-              );
-              rebalanceActionsExecuted++;
-              poolActionsExecuted++;
-            } catch (actionError) {
-              logger.warn(
-                'Failed to execute rebalance action',
-                {
-                  poolId: pool.id,
-                  action: action.type,
-                  error:
-                    actionError instanceof Error
-                      ? actionError.message
-                      : String(actionError),
-                },
-                'GameTick'
-              );
-            }
-          }
-        }
-
-        // Log per-pool timing for performance tuning
-        const poolDuration = Date.now() - poolStartTime;
-        if (poolDuration > 100 || poolActionsExecuted > 0) {
-          logger.debug(
-            'Pool rebalance processed',
-            {
-              poolId: pool.id,
-              durationMs: poolDuration,
-              actionsExecuted: poolActionsExecuted,
-            },
-            'GameTick'
-          );
-        }
-      }
-
-      result.npcRebalanceActionsExecuted = rebalanceActionsExecuted;
-
-      if (rebalanceActionsExecuted > 0) {
-        logger.info(
-          'NPC portfolio rebalancing completed',
-          { actionsExecuted: rebalanceActionsExecuted },
-          'GameTick'
-        );
-      }
-    } catch (error) {
-      logger.error(
-        'NPC portfolio rebalancing failed',
-        { error: error instanceof Error ? error.message : String(error) },
-        'GameTick'
-      );
-    }
-  }
-
-  // Generate articles AFTER market decisions (lower priority, but parallelized)
-  // Skip if buffer is sufficient (content generation handled by lookahead service)
-  if (!skipContentGeneration) {
-    if (Date.now() < deadline) {
-      const articlesGenerated = await generateArticles(
-        timestamp,
-        llmClient,
-        deadline,
-        dayNumberForTimestamp
-      );
-      result.articlesCreated += articlesGenerated; // Add to existing count from mixed posts
-    } else {
-      logger.warn(
-        'Skipping article generation – tick budget exceeded',
-        { budgetMs },
-        'GameTick'
-      );
-    }
-  }
+  // Article generation is now centralized in article-tick cron job.
+  // This prevents duplicate article generation and ensures proper rate limiting.
+  // Arc events still generate articles via generateArticlesForArcEvent() in narrative-event-processor.
+  // See: apps/web/src/app/api/cron/article-tick/route.ts
 
   const currentActiveCount =
     currentActiveQuestions.length - result.questionsResolved;
-  if (currentActiveCount < 10) {
+  tracer?.startNode('question-topup', { currentActiveCount, fastMode });
+  if (currentActiveCount < 10 && !fastMode) {
     const shouldForceGeneration = currentActiveCount <= 0;
     if (Date.now() < deadline || shouldForceGeneration) {
       if (shouldForceGeneration && Date.now() >= deadline) {
@@ -1055,11 +523,18 @@ export async function executeGameTick(
       );
     }
   }
+  tracer?.endNode('question-topup', {
+    questionsCreated: result.questionsCreated,
+  });
 
   // Process narrative arcs for active questions
   // Each question can have an arc that progresses through phases
   // Arc events now create world events and can trigger article generation
-  if (Date.now() < deadline) {
+  tracer?.startNode('narrative-arcs', {
+    withinDeadline: Date.now() < deadline,
+    fastMode,
+  });
+  if (Date.now() < deadline && !fastMode) {
     const narrativeStats = await processNarrativeArcs(
       currentActiveQuestions,
       dayNumberForTimestamp(timestamp) ?? 1,
@@ -1070,10 +545,14 @@ export async function executeGameTick(
       logger.info('Narrative arcs processed', narrativeStats, 'GameTick');
     }
   }
+  tracer?.endNode('narrative-arcs', { ...(result.narrativeArcs ?? {}) });
 
   // Process timeframed markets (multi-timeframe arcs: flash, intraday, daily, etc.)
   // These use timestamp-based progression rather than day-based
-  if (Date.now() < deadline) {
+  tracer?.startNode('timeframed-markets', {
+    withinDeadline: Date.now() < deadline,
+  });
+  if (Date.now() < deadline && !fastMode) {
     const timeframeStats = await timeframeArcProcessor.processTick(timestamp);
     result.timeframedMarkets = timeframeStats;
     if (timeframeStats.marketsProcessed > 0) {
@@ -1083,14 +562,27 @@ export async function executeGameTick(
           processed: timeframeStats.marketsProcessed,
           transitions: timeframeStats.transitionsOccurred,
           events: timeframeStats.eventsGenerated,
-          spawns: timeframeStats.subMarketsSpawned,
         },
         'GameTick'
       );
     }
   }
+  tracer?.endNode('timeframed-markets', {
+    ...(result.timeframedMarkets ?? {}),
+  });
+
+  // =========================================================================
+  // PREDICTION MARKET PRICES
+  // Prediction market prices are driven ONLY by NPC trading (via npc-tick).
+  // No system-level Auto-AMM — prices emerge organically from NPC decisions.
+  // =========================================================================
+  tracer?.skipNode(
+    'prediction-auto-amm',
+    'Disabled: prices driven only by NPC trading'
+  );
 
   // Calculate and update currentDay based on game start time
+  tracer?.startNode('game-state-update', {});
   const currentDay = dayNumberForTimestamp(timestamp);
 
   // Log day calculation for diagnostics
@@ -1118,73 +610,125 @@ export async function executeGameTick(
       currentDay: currentDay ?? 1,
     })
     .where(eq(games.isContinuous, true));
+  tracer?.endNode('game-state-update', { currentDay });
 
-  const cachesUpdated = await updateWidgetCaches();
+  tracer?.startNode('widget-caches', { fastMode });
+  const cachesUpdated = fastMode ? 0 : await updateWidgetCaches();
   result.widgetCachesUpdated = cachesUpdated;
+  tracer?.endNode('widget-caches', { cachesUpdated });
 
   // Calculate trending tags if needed (checks 30-minute interval internally)
   // Force calculation on first tick if we just generated baseline posts
+  tracer?.startNode('trending-tags', { fastMode });
   const forceCalculation =
     result.postsCreated > 0 && result.articlesCreated > 0;
-  const trendingCalculated = forceCalculation
-    ? await forceTrendingCalculation()
-    : await calculateTrendingIfNeeded();
+  const trendingCalculated = fastMode
+    ? false
+    : forceCalculation
+      ? await forceTrendingCalculation()
+      : await calculateTrendingIfNeeded();
   result.trendingCalculated = trendingCalculated;
+  tracer?.endNode('trending-tags', { trendingCalculated });
   if (trendingCalculated) {
     logger.info('Trending tags recalculated', {}, 'GameTick');
   }
 
   // Sync reputation to ERC-8004 if service is available
   // Service is provided by agents package via setReputationSyncService()
-  const syncResult = await syncReputationIfAvailable({
-    limit: 10, // Small batch during game tick
-    offset: 0,
-    forceRecalculate: false,
-    prioritizeNew: true, // Prioritize new accounts
-  });
-  if (syncResult) {
-    result.reputationSynced = syncResult.synced > 0;
-    if (syncResult.synced > 0) {
-      result.reputationSyncStats = {
-        total: syncResult.total,
-        successful: syncResult.synced,
-        failed: syncResult.failed,
-      };
-      logger.info(
-        'Reputation sync completed during game tick',
-        result.reputationSyncStats,
+  tracer?.startNode('reputation-sync', { fastMode });
+  if (!fastMode) {
+    const syncResult = await syncReputationIfAvailable({
+      limit: 10, // Small batch during game tick
+      offset: 0,
+      forceRecalculate: false,
+      prioritizeNew: true, // Prioritize new accounts
+    });
+    if (syncResult) {
+      result.reputationSynced = syncResult.synced > 0;
+      if (syncResult.synced > 0) {
+        result.reputationSyncStats = {
+          total: syncResult.total,
+          successful: syncResult.synced,
+          failed: syncResult.failed,
+        };
+        logger.info(
+          'Reputation sync completed during game tick',
+          result.reputationSyncStats,
+          'GameTick'
+        );
+      }
+    }
+  }
+  tracer?.endNode('reputation-sync', { synced: result.reputationSynced });
+
+  // ==========================================================================
+  // WORLD FACTS - process RSS + parodies inline if no cron is running
+  // ==========================================================================
+  if (!fastMode) {
+    try {
+      const feedResult = await rssFeedService.fetchAllFeeds();
+      if (feedResult.stored > 0) {
+        const untransformed =
+          await rssFeedService.getUntransformedHeadlines(10);
+        if (untransformed.length > 0) {
+          const { createParodyHeadlineGenerator } = await import(
+            './services/parody-headline-generator'
+          );
+          const gen = createParodyHeadlineGenerator();
+          const parodies = await gen.processHeadlines(untransformed);
+          if (parodies.length > 0) {
+            logger.info(
+              `Processed ${parodies.length} parody headlines`,
+              undefined,
+              'GameTick'
+            );
+          }
+        }
+      }
+    } catch (rssError) {
+      logger.warn(
+        'RSS/parody processing failed, continuing',
+        { error: formatError(rssError) },
         'GameTick'
       );
     }
   }
 
-  // Update world facts if needed (checks 24-hour interval internally)
-  const worldFactsResult = await updateWorldFactsIfNeeded();
-  result.worldFactsUpdated = worldFactsResult.updated;
-  if (worldFactsResult.updated && worldFactsResult.stats) {
-    result.worldFactsStats = worldFactsResult.stats;
-    logger.info(
-      'World facts update completed',
-      worldFactsResult.stats,
-      'GameTick'
-    );
-  }
-
   // Process alpha group invites (small chance for highly engaged users)
-  const invites = await AlphaGroupInviteService.processTickInvites();
-  result.alphaInvitesSent = invites.length;
-  if (invites.length > 0) {
+  tracer?.startNode('alpha-invites', {});
+  const skipAlphaInvites =
+    process.env.BABYLON_SKIP_ALPHA_GROUP_INVITES === 'true' ||
+    process.env.BABYLON_TRUST_CORPUS_FAST_MODE === 'true';
+  if (skipAlphaInvites || fastMode) {
     logger.info(
-      'Alpha group invites sent',
-      { count: invites.length, invites },
+      'Skipping alpha group invites for this tick',
+      {
+        reason:
+          'BABYLON_SKIP_ALPHA_GROUP_INVITES/BABYLON_TRUST_CORPUS_FAST_MODE',
+      },
       'GameTick'
     );
+  } else {
+    const invites = await AlphaGroupInviteService.processTickInvites();
+    result.alphaInvitesSent = invites.length;
+    if (invites.length > 0) {
+      logger.info(
+        'Alpha group invites sent',
+        { count: invites.length, invites },
+        'GameTick'
+      );
+    }
   }
+  tracer?.endNode('alpha-invites', { invitesSent: result.alphaInvitesSent });
 
   // Evolve NPC relationships based on recent interactions (every 10 ticks to save compute)
   const shouldEvolveRelationships =
     Math.floor(timestamp.getTime() / 60000) % 10 === 0;
-  if (shouldEvolveRelationships && Date.now() < deadline) {
+  tracer?.startNode('relationships', {
+    shouldEvolve: shouldEvolveRelationships,
+    fastMode,
+  });
+  if (shouldEvolveRelationships && Date.now() < deadline && !fastMode) {
     logger.info('Evolving NPC relationships...', undefined, 'GameTick');
     const relationshipEngine = new RelationshipEvolutionEngine(llmClient);
     const relationshipsUpdated =
@@ -1212,41 +756,64 @@ export async function executeGameTick(
       );
     }
   }
+  tracer?.endNode('relationships', {
+    updated: result.relationshipsUpdated ?? 0,
+  });
 
   // Process NPC group dynamics (form, join, leave, post, invite, kick)
-  const dynamics = await NPCGroupDynamicsService.processTickDynamics();
-  result.npcGroupDynamics = {
-    groupsCreated: dynamics.groupsCreated,
-    membersAdded: dynamics.membersAdded,
-    membersRemoved: dynamics.membersRemoved,
-    usersInvited: dynamics.usersInvited,
-    usersAutoJoined: dynamics.usersAutoJoined,
-    usersKicked: dynamics.usersKicked,
-    messagesPosted: dynamics.messagesPosted,
-  };
-  if (
-    dynamics.groupsCreated > 0 ||
-    dynamics.membersAdded > 0 ||
-    dynamics.membersRemoved > 0 ||
-    dynamics.usersInvited > 0 ||
-    dynamics.usersKicked > 0 ||
-    dynamics.messagesPosted > 0
-  ) {
-    logger.info('NPC group dynamics processed', dynamics, 'GameTick');
+  tracer?.startNode('group-dynamics', {});
+  const skipNpcGroupDynamics =
+    process.env.BABYLON_SKIP_NPC_GROUP_DYNAMICS === 'true' ||
+    process.env.BABYLON_TRUST_CORPUS_FAST_MODE === 'true';
+  if (skipNpcGroupDynamics || fastMode) {
+    logger.info(
+      'Skipping NPC group dynamics for this tick',
+      {
+        reason:
+          'BABYLON_SKIP_NPC_GROUP_DYNAMICS/BABYLON_TRUST_CORPUS_FAST_MODE',
+      },
+      'GameTick'
+    );
+  } else {
+    try {
+      const dynamics = await NPCGroupDynamicsService.processTickDynamics();
+      result.npcGroupDynamics = {
+        groupsCreated: dynamics.groupsCreated,
+        membersAdded: dynamics.membersAdded,
+        membersRemoved: dynamics.membersRemoved,
+        usersInvited: dynamics.usersInvited,
+        usersAutoJoined: dynamics.usersAutoJoined,
+        usersKicked: dynamics.usersKicked,
+        messagesPosted: dynamics.messagesPosted,
+      };
+      if (
+        dynamics.groupsCreated > 0 ||
+        dynamics.membersAdded > 0 ||
+        dynamics.membersRemoved > 0 ||
+        dynamics.usersInvited > 0 ||
+        dynamics.usersKicked > 0 ||
+        dynamics.messagesPosted > 0
+      ) {
+        logger.info('NPC group dynamics processed', dynamics, 'GameTick');
+      }
+    } catch (groupError) {
+      logger.error(
+        'NPC group dynamics failed, continuing tick',
+        groupError instanceof Error
+          ? groupError
+          : new Error(String(groupError)),
+        'GameTick'
+      );
+    }
   }
+  tracer?.endNode('group-dynamics', { ...(result.npcGroupDynamics ?? {}) });
 
   const durationMs = Date.now() - startedAt;
 
   // Validation: Quality checks after game tick
   const validationWarnings: string[] = [];
 
-  // Verify markets were updated if NPC trading ran
-  // Check both baseline investments and market decisions
-  const hadNPCTrading =
-    baselineResult || (marketDecisions && marketDecisions.length > 0);
-  if (result.marketsUpdated === 0 && hadNPCTrading) {
-    validationWarnings.push('NPC trading executed but no markets were updated');
-  }
+  // Note: NPC trading validation moved to npc-tick (single responsibility)
 
   // Verify content was generated if buffer was low and not skipped
   if (
@@ -1332,7 +899,7 @@ export async function executeGameTick(
   }
 
   // End token stats collection and store in database
-  const tickTokenStatsData = TokenStatsService.endTick();
+  const tickTokenStatsData = tokenStatsService.endTick();
   if (tickTokenStatsData) {
     // Calculate estimated cost from per-model usage
     let estimatedCostUSD = 0;
@@ -1400,23 +967,40 @@ export async function executeGameTick(
 
   // Simulate market volatility (independent of NPC trades)
   // This keeps markets "alive" with realistic price movements
+  // Skip volatility when narrative events fired (they already moved prices)
   try {
-    const volatilityUpdates = await simulateMarketVolatility();
+    const narrativeEventsCount = result.narrativeArcs?.eventsGenerated ?? 0;
+    const volatilityUpdates = await simulateMarketVolatility({
+      narrativeEventsCount,
+    });
     if (volatilityUpdates > 0) {
       result.priceVolatilitySimulated = volatilityUpdates;
     }
   } catch (error) {
     logger.warn(
       'Volatility simulation failed',
-      { error: error instanceof Error ? error.message : String(error) },
+      { error: formatError(error) },
       'GameTick'
     );
   }
 
-  // =========================================================================
-  // FEE REDISTRIBUTION - Keep NPC economy liquid
-  // Redistributes collected trading fees to NPCs below threshold
-  // =========================================================================
+  try {
+    const quoteRefreshes = await refreshPerpQuoteStates();
+    if (quoteRefreshes > 0) {
+      logger.info(
+        'Refreshed perp quote states',
+        { marketsUpdated: quoteRefreshes },
+        'GameTick'
+      );
+    }
+  } catch (error) {
+    logger.warn(
+      'Perp quote state refresh failed',
+      { error: formatError(error) },
+      'GameTick'
+    );
+  }
+
   try {
     const redistributionResult =
       await FeeRedistributionService.redistributeFunds();
@@ -1439,9 +1023,34 @@ export async function executeGameTick(
   } catch (error) {
     logger.warn(
       'Fee redistribution failed',
-      { error: error instanceof Error ? error.message : String(error) },
+      { error: formatError(error) },
       'GameTick'
     );
+  }
+
+  // Finalize DAG trace
+  tracer?.startNode('token-stats-finalize', {});
+
+  tracer?.endNode('token-stats-finalize', { ...(result.tokenStats ?? {}) });
+
+  // Write DAG trace to disk if enabled
+  if (dagTraceEnabled) {
+    tracer?.setGameTickResult(result as unknown as Record<string, unknown>);
+    if (result.tokenStats) {
+      tracer?.setTokenStats({
+        totalCalls: result.tokenStats.totalCalls,
+        totalInputTokens: result.tokenStats.totalInputTokens,
+        totalOutputTokens: result.tokenStats.totalOutputTokens,
+        totalTokens: result.tokenStats.totalTokens,
+        estimatedCostUSD: result.tokenStats.estimatedCostUSD ?? 0,
+        byPromptType: {},
+      });
+    }
+    const trace = endTrace();
+    if (trace) {
+      await writeTickTrace(trace);
+    }
+    uninstallLLMInterceptor();
   }
 
   logger.info(
@@ -1456,6 +1065,14 @@ export async function executeGameTick(
   );
 
   return result;
+}
+
+async function refreshPerpQuoteStates(): Promise<number> {
+  const service = new CorePerpQuoteStateService({
+    db: new CorePerpDbAdapter(),
+  });
+
+  return service.refreshQuoteStates();
 }
 
 /**
@@ -1690,1166 +1307,8 @@ async function bootstrapTrending(): Promise<void> {
   );
 }
 
-/**
- * Generate organization content (news articles and posts from media orgs)
- * NPC posts are now handled by /api/cron/npc-tick
- */
-async function generateOrganizationContent(
-  questions: Array<{ id: string; text: string; questionNumber: number }>,
-  timestamp: Date,
-  llm: BabylonLLMClient,
-  deadlineMs: number,
-  dayNumberForTimestamp: (t: Date) => number | undefined
-): Promise<{ posts: number; articles: number }> {
-  const postsToGenerate = 1; // Organization posts/articles per tick (reduced from 4)
-
-  if (questions.length === 0) {
-    logger.warn(
-      'No questions available for org content generation',
-      {},
-      'GameTick'
-    );
-    return { posts: 0, articles: 0 };
-  }
-
-  // Get organizations and world context
-  const [worldFactsBase, trendingContext] = await Promise.all([
-    worldFactsService.generatePromptContext(),
-    getTrendingPromptContext(),
-  ]);
-
-  const worldFactsContext = worldFactsBase + trendingContext;
-
-  // Get media organizations from static registry
-  const orgsList = StaticDataRegistry.getAllOrganizations()
-    .filter((org) => org.type === 'media')
-    .slice(0, 8);
-
-  if (orgsList.length === 0) {
-    logger.warn(
-      'No media organizations found for content generation',
-      {},
-      'GameTick'
-    );
-    return { posts: 0, articles: 0 };
-  }
-
-  // Shuffle orgs for variety
-  const shuffledOrgs = [...orgsList].sort(() => Math.random() - 0.5);
-  const shuffledQuestions = [...questions].sort(() => Math.random() - 0.5);
-
-  logger.info(
-    `Generating ${postsToGenerate} organization posts/articles`,
-    {
-      orgsAvailable: orgsList.length,
-      uniqueQuestions: shuffledQuestions.length,
-    },
-    'GameTick'
-  );
-
-  // Generate posts with timestamps spread across the tick interval
-  const tickDurationMs = 60000;
-  const timeSlotMs = tickDurationMs / postsToGenerate;
-
-  const postPromises = Array.from(
-    { length: Math.min(postsToGenerate, shuffledOrgs.length) },
-    async (_, i) => {
-      if (Date.now() > deadlineMs) {
-        return { posts: 0, articles: 0 };
-      }
-
-      const org = shuffledOrgs[i];
-      if (!org) return { posts: 0, articles: 0 };
-
-      const question = shuffledQuestions[i % shuffledQuestions.length];
-      if (!question?.text) return { posts: 0, articles: 0 };
-
-      const slotOffset = i * timeSlotMs;
-      const randomJitter = Math.random() * timeSlotMs * 0.8;
-      const timestampWithOffset = new Date(
-        timestamp.getTime() + slotOffset + randomJitter
-      );
-      const postDayNumber = dayNumberForTimestamp(timestampWithOffset);
-
-      // 5% chance of article (reduced from 20%), 95% chance of post
-      // Rationale: Articles are now primarily event-driven (arc events, question resolution)
-      // via NewsArticlePacingEngine. Random articles still occur but at lower frequency to:
-      // 1. Keep the feed fresh with occasional background coverage
-      // 2. Not overwhelm the event-driven article generation
-      // 3. Maintain realistic org behavior (not everything is breaking news)
-      const shouldCreateArticle = Math.random() < 0.05;
-
-      if (shouldCreateArticle) {
-        // Check hourly rate limit before creating an article
-        const { allowed } = await articleRateLimiter.canGenerateArticle();
-        if (!allowed) {
-          // Rate limit hit - fall through to create a post instead
-          logger.debug(
-            'Article rate limit reached - creating post instead',
-            { org: org.name },
-            'GameTick'
-          );
-        } else {
-          const success = await generateOrgArticle(
-            llm,
-            org,
-            question,
-            worldFactsContext,
-            timestampWithOffset,
-            postDayNumber
-          );
-          return { posts: success ? 1 : 0, articles: success ? 1 : 0 };
-        }
-      }
-
-      const success = await generateOrgPost(
-        llm,
-        org,
-        question,
-        worldFactsContext,
-        timestampWithOffset,
-        postDayNumber
-      );
-      return { posts: success ? 1 : 0, articles: 0 };
-    }
-  );
-
-  const results = await Promise.allSettled(postPromises);
-
-  let postsCreated = 0;
-  let articlesCreated = 0;
-
-  for (const result of results) {
-    if (result.status === 'fulfilled') {
-      postsCreated += result.value.posts;
-      articlesCreated += result.value.articles;
-    }
-  }
-
-  logger.info(
-    'Organization content generation complete',
-    {
-      postsCreated,
-      articlesCreated,
-      orgsAvailable: orgsList.length,
-      attempted: postPromises.length,
-    },
-    'GameTick'
-  );
-
-  return { posts: postsCreated, articles: articlesCreated };
-}
-
-/**
- * Generates multiple articles concurrently to maximize throughput
- * Rate limited to max 2 articles per hour across all sources
- */
-async function generateArticles(
-  _timestamp: Date,
-  llm: BabylonLLMClient,
-  deadlineMs: number,
-  dayNumberForTimestamp: (t: Date) => number | undefined
-): Promise<number> {
-  // Check hourly article rate limit (max 2 per hour)
-  const { allowed, currentCount, maxAllowed, remaining } =
-    await articleRateLimiter.canGenerateArticle();
-
-  if (!allowed) {
-    logger.info(
-      'Skipping article generation - hourly rate limit reached',
-      { currentCount, maxAllowed },
-      'GameTick'
-    );
-    return 0;
-  }
-
-  logger.info(
-    `Article rate limit check passed`,
-    { currentCount, maxAllowed, remaining },
-    'GameTick'
-  );
-
-  // Generate articles for active questions (with coverage tracking to prevent duplicates)
-  // Limit to remaining slots
-  const questionArticlesCreated = await generateArticlesForActiveQuestions(
-    llm,
-    deadlineMs,
-    dayNumberForTimestamp,
-    remaining // Pass remaining slots to limit generation
-  );
-
-  // Get recent events (from last 2 hours, up to current time)
-  const now = new Date();
-  const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
-  const recentEvents = await db
-    .select()
-    .from(worldEvents)
-    .where(
-      and(
-        gte(worldEvents.timestamp, twoHoursAgo),
-        lte(worldEvents.timestamp, now), // ✅ No future events
-        eq(worldEvents.visibility, 'public')
-      )
-    )
-    .orderBy(desc(worldEvents.timestamp))
-    .limit(10);
-
-  // Get news organizations from STATIC REGISTRY
-  const newsOrgs = StaticDataRegistry.getOrganizationsByType('media');
-
-  if (newsOrgs.length === 0) {
-    logger.warn(
-      'No news organizations found for article generation',
-      {},
-      'GameTick'
-    );
-    return questionArticlesCreated;
-  }
-
-  // Re-check rate limit after question articles (remaining might be 0 now)
-  const afterQuestionCheck = await articleRateLimiter.canGenerateArticle();
-  if (!afterQuestionCheck.allowed || afterQuestionCheck.remaining === 0) {
-    logger.info(
-      'Stopping article generation - rate limit reached after question articles',
-      { questionArticlesCreated, remaining: afterQuestionCheck.remaining },
-      'GameTick'
-    );
-    return questionArticlesCreated;
-  }
-
-  const remainingAfterQuestions = afterQuestionCheck.remaining;
-
-  // No recent events = generate baseline articles about actors/companies/topics
-  if (recentEvents.length === 0) {
-    logger.info(
-      'No recent events - generating baseline articles instead',
-      {
-        questionArticles: questionArticlesCreated,
-        remaining: remainingAfterQuestions,
-      },
-      'GameTick'
-    );
-
-    const baselineArticlesCreated = await generateBaselineArticlesParallel(
-      newsOrgs,
-      new Date(),
-      llm,
-      deadlineMs,
-      dayNumberForTimestamp,
-      remainingAfterQuestions // Limit to remaining slots
-    );
-
-    return questionArticlesCreated + baselineArticlesCreated;
-  }
-
-  // Get actors from STATIC REGISTRY
-  const actorsList = StaticDataRegistry.getTopActors(50);
-
-  if (actorsList.length === 0) {
-    logger.warn('No actors found for article generation', {}, 'GameTick');
-    return questionArticlesCreated;
-  }
-
-  // Initialize article generator
-  const articleGen = new ArticleGenerator(llm);
-
-  // Generate up to remaining slots (respecting hourly rate limit)
-  const articlesToGenerate = Math.min(
-    remainingAfterQuestions,
-    recentEvents.length
-  );
-  const eventsTocover = recentEvents.slice(0, articlesToGenerate);
-
-  logger.info(
-    `Generating ${articlesToGenerate} articles in parallel`,
-    {
-      eventCount: recentEvents.length,
-    },
-    'GameTick'
-  );
-
-  // Map organization data for article generation
-  const organizationsList: Organization[] = newsOrgs.map(
-    (org: (typeof newsOrgs)[number]) => ({
-      id: org.id,
-      name: org.name || 'Unknown Organization',
-      description: org.description || '',
-      type: (org.type as 'company' | 'media' | 'government') || 'media',
-      canBeInvolved: org.canBeInvolved,
-      initialPrice: org.initialPrice ?? undefined,
-      currentPrice: org.initialPrice ?? undefined, // Use initial price as default (static data)
-    })
-  );
-
-  const actorList = actorsList
-    .filter((a: (typeof actorsList)[number]) => a && a.id && a.name)
-    .map((a: (typeof actorsList)[number]) => ({
-      id: a.id,
-      name: a.name,
-      description: a.description || '',
-      domain: a.domain || '',
-      personality: a.personality || undefined,
-      tier: (a.tier as ActorTier) || undefined,
-      affiliations: a.affiliations || [],
-      postStyle: a.postStyle || undefined,
-      postExample: a.postExample || '',
-      role: (a.role as 'main' | 'supporting' | 'extra') || undefined,
-      initialLuck: (a.initialLuck as 'low' | 'medium' | 'high') || 'medium',
-      initialMood: a.initialMood || 0,
-    }));
-
-  // Check for existing articles to avoid duplicates
-  // Get articles from the last 4 hours to check for duplicates
-  const fourHoursAgo = new Date(now.getTime() - 4 * 60 * 60 * 1000);
-  const recentArticles = await db
-    .select({
-      articleTitle: posts.articleTitle,
-      content: posts.content,
-      timestamp: posts.timestamp,
-    })
-    .from(posts)
-    .where(
-      and(
-        eq(posts.type, 'article'),
-        gte(posts.timestamp, fourHoursAgo),
-        isNull(posts.deletedAt)
-      )
-    );
-
-  // Filter out events that already have articles
-  const eventsToCover = eventsTocover.filter((event) => {
-    // Check if articles already exist for this event
-    // Match by checking if recent articles mention similar topics
-    const eventKeywords = event.description
-      .toLowerCase()
-      .split(/\s+/)
-      .slice(0, 5);
-    const hasExistingArticle = recentArticles.some((article) => {
-      const articleText =
-        `${article.articleTitle || ''} ${article.content || ''}`.toLowerCase();
-      // Check if article contains at least 2 keywords from the event
-      const matchingKeywords = eventKeywords.filter(
-        (keyword) => keyword.length > 3 && articleText.includes(keyword)
-      );
-      return matchingKeywords.length >= 2;
-    });
-
-    if (hasExistingArticle) {
-      logger.debug(
-        'Skipping event - articles already exist',
-        { eventId: event.id },
-        'GameTick'
-      );
-      return false;
-    }
-    return true;
-  });
-
-  logger.info(
-    `Filtered events: ${eventsToCover.length}/${eventsTocover.length} events need articles`,
-    {
-      filtered: eventsToCover.length,
-      total: eventsTocover.length,
-    },
-    'GameTick'
-  );
-
-  // Generate articles in parallel with Promise.allSettled to handle failures gracefully
-  const articlePromises = eventsToCover.map(
-    async (event: {
-      id: string;
-      eventType: string;
-      description: string;
-      actors: string[] | null;
-      relatedQuestion: number | null;
-      visibility: string;
-      dayNumber: number | null;
-    }) => {
-      // Check deadline before starting each article
-      if (Date.now() > deadlineMs) {
-        logger.debug(
-          'Skipping article due to deadline',
-          { eventId: event.id },
-          'GameTick'
-        );
-        return 0;
-      }
-
-      const worldEvent: WorldEvent = {
-        id: event.id,
-        type: event.eventType as WorldEvent['type'],
-        description: event.description,
-        actors: (event.actors as string[]) || [],
-        relatedQuestion: event.relatedQuestion || undefined,
-        visibility: event.visibility as WorldEvent['visibility'],
-        day: event.dayNumber || 0,
-      };
-
-      const articles = await articleGen.generateArticlesForEvent(
-        worldEvent,
-        organizationsList,
-        actorList,
-        []
-      );
-
-      let created = 0;
-      for (const article of articles) {
-        if (!article || !article.authorOrgId) {
-          logger.warn(
-            'Invalid article generated',
-            { eventId: event.id },
-            'GameTick'
-          );
-          continue;
-        }
-
-        // Transform content to replace real names with parody names
-        const transformedSummary = await characterMappingService.transformText(
-          article.summary || ''
-        );
-        const transformedContent = await characterMappingService.transformText(
-          article.content || ''
-        );
-        const transformedTitle = await characterMappingService.transformText(
-          article.title || 'Untitled'
-        );
-        if (
-          transformedSummary.replacementCount > 0 ||
-          transformedContent.replacementCount > 0 ||
-          transformedTitle.replacementCount > 0
-        ) {
-          logger.warn(
-            `Fixed ${transformedSummary.replacementCount + transformedContent.replacementCount + transformedTitle.replacementCount} real name(s) in event article`,
-            {
-              eventId: event.id,
-              title: article.title,
-            },
-            'GameTick'
-          );
-        }
-
-        const articleTimestamp = article.publishedAt || new Date();
-
-        // Generate article cover image (non-blocking, with retry)
-        let imageUrl: string | null = null;
-        if (process.env.FAL_KEY) {
-          imageUrl = await generateArticleImageWithRetry({
-            title: transformedTitle.transformedText,
-            summary: transformedSummary.transformedText,
-            category: article.category,
-          });
-        }
-
-        await dbService().createPostWithAllFields({
-          id: await generateSnowflakeId(),
-          type: 'article',
-          content: transformedSummary.transformedText,
-          fullContent: transformedContent.transformedText,
-          articleTitle: transformedTitle.transformedText,
-          byline: article.byline || undefined,
-          biasScore: article.biasScore || undefined,
-          sentiment: article.sentiment || undefined,
-          slant: article.slant || undefined,
-          category: article.category || undefined,
-          imageUrl: imageUrl || undefined,
-          authorId: article.authorOrgId,
-          relatedQuestion: event.relatedQuestion ?? undefined,
-          gameId: 'continuous',
-          dayNumber: dayNumberForTimestamp(articleTimestamp),
-          timestamp: articleTimestamp,
-        });
-        created++;
-      }
-
-      return created;
-    }
-  );
-
-  // Wait for all article generation to complete
-  const results = await Promise.allSettled(articlePromises);
-
-  // Count successful articles and log failures
-  const articlesCreated = results.reduce((sum, result) => {
-    if (result.status === 'fulfilled') {
-      return sum + result.value;
-    }
-    logger.error(
-      'Failed to generate article from event',
-      { error: result.reason },
-      'GameTick'
-    );
-    return sum;
-  }, 0);
-
-  logger.info(
-    'Parallel article generation complete',
-    {
-      articlesCreated,
-      attempted: articlesToGenerate,
-      successful: results.filter((r) => r.status === 'fulfilled').length,
-      failed: results.filter((r) => r.status === 'rejected').length,
-    },
-    'GameTick'
-  );
-
-  return questionArticlesCreated + articlesCreated;
-}
-
-/**
- * Generate articles for active questions with coverage tracking
- *
- * @description
- * Generates articles for active questions with proper pacing:
- * - Breaking stage: 1-2 orgs when question first created
- * - Commentary stage: 2-3 orgs for ongoing analysis
- * - Resolution stage: All major orgs for outcome coverage
- *
- * Uses NewsArticlePacingEngine to prevent duplicate reporting.
- * Each org can only report on a question once per stage.
- *
- * @param maxArticles - Maximum articles to generate (respects hourly rate limit)
- */
-async function generateArticlesForActiveQuestions(
-  llm: BabylonLLMClient,
-  deadlineMs: number,
-  dayNumberForTimestamp: (t: Date) => number | undefined,
-  maxArticles: number = 2
-): Promise<number> {
-  // Get all active questions
-  const activeQuestions = await db
-    .select()
-    .from(questionsSchema)
-    .where(eq(questionsSchema.status, 'active'))
-    .orderBy(desc(questionsSchema.createdAt));
-
-  if (activeQuestions.length === 0) {
-    return 0;
-  }
-
-  // Get news organizations from STATIC REGISTRY
-  const newsOrgs = StaticDataRegistry.getOrganizationsByType('media');
-  const actorsList = StaticDataRegistry.getTopActors(50);
-
-  if (newsOrgs.length === 0 || actorsList.length === 0) {
-    logger.warn(
-      'Missing news orgs or actors for question articles',
-      {
-        newsOrgs: newsOrgs.length,
-        actors: actorsList.length,
-      },
-      'GameTick'
-    );
-    return 0;
-  }
-
-  // Get existing articles from last 24 hours to check coverage
-  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const recentArticles = await db
-    .select({
-      content: posts.content,
-      articleTitle: posts.articleTitle,
-      authorId: posts.authorId,
-    })
-    .from(posts)
-    .where(
-      and(
-        eq(posts.type, 'article'),
-        gte(posts.timestamp, oneDayAgo),
-        isNull(posts.deletedAt)
-      )
-    );
-
-  // Build a map of question -> orgs that have already covered it
-  const questionCoverage = new Map<string, Set<string>>();
-  for (const article of recentArticles) {
-    // Try to match article to a question by content
-    for (const q of activeQuestions) {
-      const questionKeywords = q.text
-        .toLowerCase()
-        .split(/\s+/)
-        .filter((w) => w.length > 3);
-      const articleText =
-        `${article.articleTitle || ''} ${article.content || ''}`.toLowerCase();
-      const matchingKeywords = questionKeywords.filter((keyword) =>
-        articleText.includes(keyword)
-      );
-
-      if (matchingKeywords.length >= 2 && article.authorId) {
-        if (!questionCoverage.has(q.id)) {
-          questionCoverage.set(q.id, new Set());
-        }
-        questionCoverage.get(q.id)!.add(article.authorId);
-      }
-    }
-  }
-
-  const actorList = actorsList
-    .filter((a) => a && a.id && a.name)
-    .map((a) => ({
-      id: a.id,
-      name: a.name,
-      description: a.description || '',
-      domain: Array.isArray(a.domain) ? a.domain : [a.domain || 'tech'],
-      personality: a.personality || undefined,
-      tier: (a.tier as ActorTier) || undefined,
-      affiliations: a.affiliations || [],
-      postStyle: a.postStyle || undefined,
-      postExample: a.postExample || '',
-      role: (a.role as 'main' | 'supporting' | 'extra') || undefined,
-      initialLuck: (a.initialLuck as 'low' | 'medium' | 'high') || 'medium',
-      initialMood: a.initialMood || 0,
-    }));
-
-  // Initialize article generator
-  const articleGen = new ArticleGenerator(llm);
-
-  let totalArticlesCreated = 0;
-  let pendingArticleCount = 0; // Track how many we're going to create
-  const articlePromises: Array<Promise<number>> = [];
-
-  for (const question of activeQuestions) {
-    if (Date.now() > deadlineMs) {
-      logger.warn(
-        'Article generation for questions aborted due to deadline',
-        { questionsProcessed: articlePromises.length },
-        'GameTick'
-      );
-      break;
-    }
-
-    // Check rate limit - stop if we've hit the max
-    if (pendingArticleCount >= maxArticles) {
-      logger.info(
-        'Stopping question article generation - reached maxArticles limit',
-        { pendingArticleCount, maxArticles },
-        'GameTick'
-      );
-      break;
-    }
-
-    // Check which orgs have already covered this question
-    const coveredOrgs = questionCoverage.get(question.id) || new Set();
-
-    // Filter to orgs that haven't covered yet
-    const eligibleOrgs = newsOrgs.filter((org) => !coveredOrgs.has(org.id));
-
-    if (eligibleOrgs.length === 0) {
-      logger.debug(
-        `Question Q${question.questionNumber} already fully covered`,
-        { questionId: question.id, coveredOrgs: coveredOrgs.size },
-        'GameTick'
-      );
-      continue;
-    }
-
-    // Determine stage based on coverage
-    // New question (no coverage) = breaking, some coverage = commentary
-    const stage = coveredOrgs.size === 0 ? 'breaking' : 'commentary';
-
-    // Breaking: 1-2 orgs, Commentary: 1-2 additional orgs
-    // But respect the rate limit (maxArticles)
-    const remainingSlots = maxArticles - pendingArticleCount;
-    const desiredCount =
-      stage === 'breaking'
-        ? 1 + Math.floor(Math.random() * 2) // 1-2 orgs
-        : Math.min(1, eligibleOrgs.length); // 1 more org for commentary
-
-    const targetCount = Math.min(
-      desiredCount,
-      remainingSlots,
-      eligibleOrgs.length
-    );
-
-    if (targetCount === 0) {
-      continue; // No slots left
-    }
-
-    const shuffledOrgs = [...eligibleOrgs].sort(() => Math.random() - 0.5);
-    const orgsForQuestion = shuffledOrgs.slice(0, targetCount);
-
-    pendingArticleCount += targetCount; // Track how many we're creating
-
-    logger.info(
-      `Generating ${orgsForQuestion.length} ${stage} articles for Q${question.questionNumber}`,
-      {
-        questionId: question.id,
-        stage,
-        existingCoverage: coveredOrgs.size,
-      },
-      'GameTick'
-    );
-
-    for (const orgData of orgsForQuestion) {
-      const articlePromise = (async () => {
-        const org: Organization = {
-          id: orgData.id,
-          name: orgData.name || 'Unknown Organization',
-          description: orgData.description || '',
-          type: (orgData.type as 'company' | 'media' | 'government') || 'media',
-          canBeInvolved: orgData.canBeInvolved,
-          initialPrice: orgData.initialPrice ?? undefined,
-          currentPrice: orgData.initialPrice ?? undefined,
-        };
-
-        const article = await articleGen.generateArticleForQuestion(
-          {
-            id: question.id,
-            text: question.text,
-            scenario: question.scenarioId || 1,
-            outcome: question.outcome ?? false,
-            rank: question.rank || 1,
-            createdDate: question.createdAt.toISOString().split('T')[0]!,
-            resolutionDate:
-              question.resolutionDate?.toISOString().split('T')[0] || '',
-            status: question.status as 'active' | 'resolved' | 'cancelled',
-          },
-          org,
-          stage,
-          actorList,
-          []
-        );
-
-        // Transform content to replace real names with parody names
-        const transformedSummary = await characterMappingService.transformText(
-          article.summary || ''
-        );
-        const transformedContent = await characterMappingService.transformText(
-          article.content || ''
-        );
-        const transformedTitle = await characterMappingService.transformText(
-          article.title || 'Untitled'
-        );
-
-        if (
-          transformedSummary.replacementCount > 0 ||
-          transformedContent.replacementCount > 0 ||
-          transformedTitle.replacementCount > 0
-        ) {
-          logger.warn(
-            `Fixed ${transformedSummary.replacementCount + transformedContent.replacementCount + transformedTitle.replacementCount} real name(s) in question article`,
-            { questionId: question.id, title: article.title },
-            'GameTick'
-          );
-        }
-
-        const articleTimestamp = article.publishedAt || new Date();
-
-        // Generate article cover image
-        let questionImageUrl: string | null = null;
-        if (process.env.FAL_KEY) {
-          questionImageUrl = await generateArticleImageWithRetry({
-            title: transformedTitle.transformedText,
-            summary: transformedSummary.transformedText,
-            category: article.category,
-          });
-        }
-
-        await dbService().createPostWithAllFields({
-          id: await generateSnowflakeId(),
-          type: 'article',
-          content: transformedSummary.transformedText,
-          fullContent: transformedContent.transformedText,
-          articleTitle: transformedTitle.transformedText,
-          byline: article.byline || undefined,
-          biasScore: article.biasScore || undefined,
-          sentiment: article.sentiment || undefined,
-          slant: article.slant || undefined,
-          category: article.category || undefined,
-          imageUrl: questionImageUrl || undefined,
-          authorId: article.authorOrgId,
-          relatedQuestion: question.questionNumber,
-          gameId: 'continuous',
-          dayNumber: dayNumberForTimestamp(articleTimestamp),
-          timestamp: articleTimestamp,
-        });
-
-        logger.debug(
-          'Created article for question',
-          {
-            questionId: question.id,
-            questionNumber: question.questionNumber,
-            org: org.name,
-            stage,
-            title: article.title,
-          },
-          'GameTick'
-        );
-
-        return 1;
-      })();
-
-      articlePromises.push(articlePromise);
-    }
-  }
-
-  const results = await Promise.allSettled(articlePromises);
-
-  totalArticlesCreated = results.reduce((sum, result) => {
-    if (result.status === 'fulfilled') {
-      return sum + result.value;
-    }
-    logger.warn(
-      'Failed to generate question article',
-      { error: result.reason },
-      'GameTick'
-    );
-    return sum;
-  }, 0);
-
-  logger.info(
-    'Question article generation complete',
-    {
-      articlesCreated: totalArticlesCreated,
-      questionsProcessed: activeQuestions.length,
-      attempted: articlePromises.length,
-      successful: results.filter((r) => r.status === 'fulfilled').length,
-      failed: results.filter((r) => r.status === 'rejected').length,
-    },
-    'GameTick'
-  );
-
-  return totalArticlesCreated;
-}
-
-/**
- * Generate baseline articles in parallel with game context
- * Generates articles about actors, companies, or diverse topics (not just questions)
- *
- * @description
- * This function provides variety in the news feed by generating articles about:
- * - Prominent actors (S-tier, A-tier) and their activities
- * - Companies and their market performance
- * - Diverse story seeds (not tied to specific questions)
- *
- * @param maxArticles - Maximum articles to generate (respects hourly rate limit)
- */
-async function generateBaselineArticlesParallel(
-  newsOrgs: Array<{
-    id: string;
-    name: string | null;
-    description: string | null;
-  }>,
-  timestamp: Date,
-  llm: BabylonLLMClient,
-  deadlineMs: number,
-  dayNumberForTimestamp: (t: Date) => number | undefined,
-  maxArticles: number = 2
-): Promise<number> {
-  // Gather game context for relevant articles
-  const [orgStates, worldFactsContext, worldContext] = await Promise.all([
-    dbService().getAllOrganizationStates(),
-    worldFactsService.generatePromptContext(),
-    generateWorldContext({
-      maxActors: 30,
-      realityGroundingLevel: 'concise',
-    }),
-  ]);
-
-  // Get actors with main/supporting roles from static registry
-  const actorsList = StaticDataRegistry.getAllActors()
-    .filter((a) => a.role === 'main' || a.role === 'supporting')
-    .slice(0, 10)
-    .map((a) => ({
-      id: a.id,
-      name: a.name,
-      description: a.description,
-      domain: a.domain,
-      tier: a.tier,
-    }));
-
-  // Get companies from static registry with dynamic prices
-  const priceMap = new Map(orgStates.map((s) => [s.id, s.currentPrice]));
-  const companiesList = StaticDataRegistry.getAllOrganizations()
-    .filter((org) => org.type === 'company')
-    .slice(0, 10)
-    .map((org) => ({
-      id: org.id,
-      name: org.name,
-      description: org.description,
-      currentPrice: priceMap.get(org.id) ?? org.initialPrice,
-      initialPrice: org.initialPrice,
-    }));
-
-  // Build article topics using DIVERSE story seeds
-  const articleTopics: Array<{
-    topic: string;
-    category: string;
-    context: string;
-  }> = [];
-
-  // Get diverse story seeds from the story seed service
-  const storySeedService = getStorySeedService(llm);
-  const diversityService = getTopicDiversityService();
-
-  // Generate diverse stories - these are NOT tied to questions
-  const storySeeds = await storySeedService.generateDiverseStories(3);
-
-  for (const seed of storySeeds) {
-    const shouldSkip = await diversityService.shouldSkipTopic(seed.headline);
-    if (shouldSkip) {
-      logger.debug(
-        'Skipping oversaturated topic for baseline article',
-        { topic: seed.headline, beat: seed.beat },
-        'GameTick'
-      );
-      continue;
-    }
-
-    articleTopics.push({
-      topic: seed.headline,
-      category: seed.beat,
-      context: `${seed.description}. ${seed.suggestedAngle}`,
-    });
-  }
-
-  // Add 1-2 actor topics for game relevance
-  const actorTopicsToAdd = Math.min(1, actorsList.length);
-  for (const actor of actorsList
-    .filter((a) => a.tier === 'S_TIER' || a.tier === 'A_TIER')
-    .slice(0, actorTopicsToAdd)) {
-    const domainStr = Array.isArray(actor.domain)
-      ? actor.domain[0]
-      : actor.domain;
-    const domain = domainStr || 'tech';
-    const topicText = `${actor.name} and their recent activities`;
-
-    const shouldSkip = await diversityService.shouldSkipTopic(topicText);
-    if (!shouldSkip) {
-      articleTopics.push({
-        topic: topicText,
-        category: domain === 'tech' ? 'tech' : 'business',
-        context: `${actor.name} (${actor.description || 'prominent figure'}) in ${domain}`,
-      });
-    }
-  }
-
-  // Add 1 company topic if we have room
-  if (articleTopics.length < 4 && companiesList.length > 0) {
-    const company = companiesList[0];
-    if (company) {
-      const currentPrice = company.currentPrice || company.initialPrice || 100;
-      const initialPrice = company.initialPrice || 100;
-      const changePercent =
-        ((currentPrice - initialPrice) / initialPrice) * 100;
-      const topicText = `${company.name} and market performance`;
-
-      const shouldSkip = await diversityService.shouldSkipTopic(topicText);
-      if (!shouldSkip) {
-        articleTopics.push({
-          topic: topicText,
-          category: 'finance',
-          context: `${company.name} (${company.description || 'company'}) - ${changePercent > 0 ? 'up' : 'down'} ${Math.abs(changePercent).toFixed(1)}% from initial price`,
-        });
-      }
-    }
-  }
-
-  // Limit to maxArticles (respects hourly rate limit)
-  const articlesToGenerate = Math.min(
-    maxArticles,
-    newsOrgs.length,
-    articleTopics.length
-  );
-
-  if (articlesToGenerate === 0) {
-    return 0;
-  }
-
-  logger.info(
-    `Generating ${articlesToGenerate} baseline articles with game context`,
-    {
-      topicsFromSeeds: storySeeds.length,
-      topicsFromActors: actorTopicsToAdd,
-      topicsFromCompanies:
-        articleTopics.length > storySeeds.length + actorTopicsToAdd ? 1 : 0,
-    },
-    'GameTick'
-  );
-
-  // Generate all articles in parallel
-  const articlePromises = Array.from(
-    { length: articlesToGenerate },
-    async (_, i) => {
-      if (Date.now() > deadlineMs) {
-        return 0;
-      }
-
-      const org = newsOrgs[i];
-      if (!org || !org.name) return 0;
-
-      const topicData = articleTopics[i];
-      if (!topicData) return 0;
-
-      const prompt = `You are ${org.name}, a news organization. Write a detailed news article about ${topicData.topic}.
-
-CONTEXT:
-${topicData.context}
-
-${worldFactsContext}
-
-${worldContext.realityGrounding || ''}
-
-CRITICAL RULES:
-- Use ONLY parody names (AIlon Musk, Sam AIltman, Mark Zuckerborg, etc.) - NEVER real names
-- Reference specific actors, companies, or questions from the game context above
-- Make the article relevant to the current game state
-- Include specific details about actors, companies when relevant
-
-Your article should include:
-- A compelling headline (max 100 chars)
-- A 2-3 sentence summary for the article listing (max 400 chars)
-- A full article body of at least 4 paragraphs
-- Be professional and informative
-- Match the tone of a ${org.description || 'news organization'}
-- Separate paragraphs with \\n\\n (two newlines)
-
-Return your response as XML in this exact format:
-<response>
-  <title>compelling headline here</title>
-  <summary>2-3 sentence summary here</summary>
-  <article>full article body here with \\n\\n between paragraphs</article>
-</response>`;
-
-      const response = await llm.generateJSON<
-        | { title: string; summary: string; article: string }
-        | { response: { title: string; summary: string; article: string } }
-      >(
-        prompt,
-        {
-          properties: {
-            title: { type: 'string' },
-            summary: { type: 'string' },
-            article: { type: 'string' },
-          },
-          required: ['title', 'summary', 'article'],
-        },
-        {
-          temperature: 0.7,
-          maxTokens: 8000,
-          format: 'xml',
-          promptType: 'generate_baseline_article',
-        }
-      );
-
-      // Handle XML structure
-      const baselineArticle =
-        'response' in response && response.response
-          ? (response.response as {
-              title: string;
-              summary: string;
-              article: string;
-            })
-          : (response as { title: string; summary: string; article: string });
-
-      if (
-        !baselineArticle.title ||
-        !baselineArticle.summary ||
-        !baselineArticle.article
-      )
-        return 0;
-
-      const summary = baselineArticle.summary.trim();
-      const articleTitle = baselineArticle.title.trim();
-      const articleBody = baselineArticle.article.trim();
-
-      if (articleBody.length < 400) {
-        logger.warn(
-          'Baseline article body too short',
-          { orgId: org.id, length: articleBody.length },
-          'GameTick'
-        );
-        return 0;
-      }
-
-      // Calculate timestamp with jitter
-      const timeSlotMs = 60000 / articlesToGenerate;
-      const slotOffset = i * timeSlotMs;
-      const randomJitter = Math.random() * timeSlotMs * 0.8;
-      const timestampWithOffset = new Date(
-        timestamp.getTime() + slotOffset + randomJitter
-      );
-
-      // Transform content to replace real names with parody names
-      const transformedSummary =
-        await characterMappingService.transformText(summary);
-      const transformedBody =
-        await characterMappingService.transformText(articleBody);
-      const transformedTitle =
-        await characterMappingService.transformText(articleTitle);
-
-      if (
-        transformedSummary.replacementCount > 0 ||
-        transformedBody.replacementCount > 0 ||
-        transformedTitle.replacementCount > 0
-      ) {
-        logger.warn(
-          `Fixed ${transformedSummary.replacementCount + transformedBody.replacementCount + transformedTitle.replacementCount} real name(s) in baseline article`,
-          { org: org.name, topic: topicData.topic },
-          'GameTick'
-        );
-      }
-
-      // Generate article cover image
-      let baselineImageUrl: string | null = null;
-      if (process.env.FAL_KEY) {
-        baselineImageUrl = await generateArticleImageWithRetry({
-          title: transformedTitle.transformedText,
-          summary: transformedSummary.transformedText,
-          category: topicData.category,
-        });
-      }
-
-      await dbService().createPostWithAllFields({
-        id: await generateSnowflakeId(),
-        type: 'article',
-        content: transformedSummary.transformedText,
-        fullContent: transformedBody.transformedText,
-        articleTitle: transformedTitle.transformedText,
-        category: topicData.category,
-        imageUrl: baselineImageUrl || undefined,
-        authorId: org.id,
-        gameId: 'continuous',
-        dayNumber: dayNumberForTimestamp(timestampWithOffset),
-        timestamp: timestampWithOffset,
-      });
-
-      logger.debug(
-        'Created baseline article with game context',
-        { org: org.name, topic: topicData.topic, category: topicData.category },
-        'GameTick'
-      );
-      return 1;
-    }
-  );
-
-  const results = await Promise.allSettled(articlePromises);
-
-  const articlesCreated = results.reduce((sum, result) => {
-    if (result.status === 'fulfilled') {
-      return sum + result.value;
-    }
-    logger.warn(
-      'Failed to generate baseline article',
-      { error: result.reason },
-      'GameTick'
-    );
-    return sum;
-  }, 0);
-
-  logger.info(
-    'Baseline article generation complete',
-    {
-      articlesCreated,
-      attempted: articlesToGenerate,
-      topicsUsed: articleTopics.length,
-    },
-    'GameTick'
-  );
-
-  return articlesCreated;
-}
-
 // generateEvents moved to services/event-generation-helpers.ts
+// generateOrganizationContent removed - now handled by organization-tick and article-tick
 
 /** Update market prices based on NPC trading activity (investment-based pricing). */
 export async function updateMarketPricesFromTrades(
@@ -2914,6 +1373,8 @@ export async function updateMarketPricesFromTrades(
       ticker: perpPositions.ticker,
       side: perpPositions.side,
       size: perpPositions.size,
+      leverage: perpPositions.leverage,
+      userId: perpPositions.userId,
     })
     .from(perpPositions)
     .where(
@@ -2924,10 +1385,30 @@ export async function updateMarketPricesFromTrades(
     );
 
   const holdingsByTicker = new Map<string, number>();
+  const invalidPositionsByTicker = new Map<string, number>();
   for (const pos of positionsOpen) {
+    if (!isOpenPerpPositionStateValid(pos)) {
+      invalidPositionsByTicker.set(
+        pos.ticker,
+        (invalidPositionsByTicker.get(pos.ticker) ?? 0) + 1
+      );
+      continue;
+    }
+
     const current = holdingsByTicker.get(pos.ticker) ?? 0;
     const delta = pos.side === 'long' ? Number(pos.size) : -Number(pos.size);
     holdingsByTicker.set(pos.ticker, current + delta);
+  }
+
+  for (const [ticker, invalidPositions] of invalidPositionsByTicker) {
+    logger.warn(
+      'Ignoring invalid open perp positions during tick price recomputation',
+      {
+        ticker,
+        invalidPositions,
+      },
+      'GameTick'
+    );
   }
 
   const updates = selected
@@ -3032,10 +1513,7 @@ export async function resolveQuestionPayouts(
   const winningSide = question.outcome;
   const resolutionTimestamp = new Date();
 
-  // Store market properties in consts to ensure type narrowing
   const marketId = market.id;
-  const marketOnChainMarketId = market.onChainMarketId;
-  const marketOnChainResolved = market.onChainResolved;
 
   const pnlsToRecord: Array<{ userId: string; pnl: number }> = [];
   let totalPayout = 0;
@@ -3081,11 +1559,13 @@ export async function resolveQuestionPayouts(
     });
 
     // Estimate positions settled for logging (coreService updates all positions for the market)
-    const existingPositions = await tx
-      .select({ id: positions.id })
+    // Use COUNT(*) instead of SELECT to avoid loading all position IDs into memory
+    // Note: count(*) returns bigint in Postgres; we parse as string to avoid overflow
+    const countResult = await tx
+      .select({ count: sql<string>`count(*)` })
       .from(positions)
       .where(eq(positions.marketId, marketId));
-    positionsSettled = existingPositions.length;
+    positionsSettled = Number(countResult[0]?.count ?? 0);
 
     await coreService.resolve({
       marketId,
@@ -3100,9 +1580,22 @@ export async function resolveQuestionPayouts(
       .set({
         status: 'resolved',
         resolvedOutcome: winningSide,
+        resolutionReviewedAt: resolutionTimestamp,
+        resolutionReviewedBy: 'system',
         updatedAt: resolutionTimestamp,
       })
       .where(eq(questionsSchema.id, question.id));
+
+    // Update timeframedMarkets in the same transaction for atomicity
+    await tx
+      .update(timeframedMarkets)
+      .set({
+        isResolved: true,
+        isActive: false,
+        resolvedAt: resolutionTimestamp,
+        updatedAt: resolutionTimestamp,
+      })
+      .where(eq(timeframedMarkets.questionId, question.id));
   });
 
   // Record PnL post-transaction to avoid nested transactions inside the DB tx.
@@ -3116,39 +1609,11 @@ export async function resolveQuestionPayouts(
     );
   }
 
-  // Check if on-chain reputation updates are configured (requires deployer key)
-  if (process.env.DEPLOYER_PRIVATE_KEY && REPUTATION_SYSTEM_BASE_SEPOLIA) {
-    await ReputationService.updateReputationForResolvedMarket({
-      marketId: marketId,
-      outcome: winningSide,
-    });
-  } else {
-    logger.debug(
-      'Skipping reputation update - DEPLOYER_PRIVATE_KEY not configured',
-      { marketId: marketId },
-      'GameTick'
-    );
-  }
-
-  // Resolve market on-chain if onChainMarketId exists
-  let onChainResolutionTxHash: string | null = null;
-  if (marketOnChainMarketId && !marketOnChainResolved) {
-    onChainResolutionTxHash = await resolveMarketOnChain(
-      marketOnChainMarketId,
-      winningSide ? 1 : 0 // Binary market: true = 1, false = 0
-    );
-  }
-
-  if (onChainResolutionTxHash) {
-    await db
-      .update(marketsSchema)
-      .set({
-        onChainResolved: true,
-        onChainResolutionTxHash,
-        updatedAt: new Date(),
-      })
-      .where(eq(marketsSchema.id, marketId));
-  }
+  // Update reputation in database (no longer requires deployer key or on-chain calls)
+  await ReputationService.updateReputationForResolvedMarket({
+    marketId: marketId,
+    outcome: winningSide,
+  });
 
   logger.info(
     'Resolved prediction market payouts',
@@ -3163,219 +1628,6 @@ export async function resolveQuestionPayouts(
   );
 }
 
-/**
- * Resolve market on-chain via PredictionMarketFacet
- */
-async function resolveMarketOnChain(
-  onChainMarketId: string,
-  winningOutcome: number
-): Promise<string> {
-  const deployerPrivateKey = process.env.DEPLOYER_PRIVATE_KEY as `0x${string}`;
-  const rpcUrl = getCurrentRpcUrl();
-
-  if (!DIAMOND_ADDRESS || !deployerPrivateKey) {
-    throw new Error(
-      'Missing blockchain configuration - DEPLOYER_PRIVATE_KEY required'
-    );
-  }
-
-  const { createPublicClient, createWalletClient, http, parseAbi } =
-    await import('viem');
-  const { privateKeyToAccount } = await import('viem/accounts');
-  const { baseSepolia } = await import('viem/chains');
-
-  const publicClient = createPublicClient({
-    chain: baseSepolia,
-    transport: http(rpcUrl),
-  });
-
-  const account = privateKeyToAccount(deployerPrivateKey);
-  const walletClient = createWalletClient({
-    account,
-    chain: baseSepolia,
-    transport: http(rpcUrl),
-  });
-
-  // Resolve market on-chain
-  // winningOutcome must be uint8 (0 or 1 for binary markets)
-  const txHash = await walletClient.writeContract({
-    address: DIAMOND_ADDRESS as `0x${string}`,
-    abi: parseAbi(PREDICTION_MARKET_ABI),
-    functionName: 'resolveMarket',
-    args: [onChainMarketId as `0x${string}`, winningOutcome as number],
-  });
-
-  // Wait for confirmation
-  await publicClient.waitForTransactionReceipt({
-    hash: txHash,
-    confirmations: 1,
-  });
-
-  return txHash;
-}
-
-/**
- * Publish question commitments to blockchain oracle
- */
-export async function publishOracleCommitments(
-  questions: Array<{
-    id: string;
-    questionNumber: number;
-    text: string;
-    outcome: boolean;
-  }>
-): Promise<{ committed: number; errors: number }> {
-  let committed = 0;
-  let errors = 0;
-
-  // Check if oracle is configured
-  if (
-    !process.env.NEXT_PUBLIC_BABYLON_ORACLE ||
-    !process.env.ORACLE_PRIVATE_KEY
-  ) {
-    logger.info(
-      'Oracle not configured, skipping commitments',
-      undefined,
-      'GameTick'
-    );
-    return { committed: 0, errors: 0 };
-  }
-
-  const oracleService = getOracleService();
-
-  // Health check
-  const health = await oracleService.healthCheck();
-  if (!health.healthy) {
-    logger.error(
-      `Oracle health check failed: ${health.error}`,
-      undefined,
-      'GameTick'
-    );
-    return { committed: 0, errors: questions.length };
-  }
-
-  // Batch commit games
-  const batch = questions.map((q) => ({
-    questionId: q.id,
-    questionNumber: q.questionNumber,
-    question: q.text,
-    category: 'general', // Could extract from question text
-    outcome: q.outcome,
-  }));
-
-  const result = await oracleService.batchCommitGames(batch);
-
-  // Update questions with oracle data
-  for (const success of result.successful) {
-    await db
-      .update(questionsSchema)
-      .set({
-        oracleSessionId: success.sessionId,
-        oracleCommitment: success.commitment,
-        oracleCommitTxHash: success.txHash,
-        oracleCommitBlock: success.blockNumber || null,
-        updatedAt: new Date(),
-      })
-      .where(eq(questionsSchema.id, success.questionId));
-    committed++;
-  }
-
-  errors = result.failed.length;
-
-  if (errors > 0) {
-    logger.warn(
-      `${errors} oracle commits failed`,
-      { failures: result.failed },
-      'GameTick'
-    );
-  }
-
-  logger.info(
-    `Oracle commits: ${committed} successful, ${errors} failed`,
-    undefined,
-    'GameTick'
-  );
-
-  return { committed, errors };
-}
-
-/**
- * Publish question reveals to blockchain oracle
- */
-export async function publishOracleReveals(
-  questions: Array<{ id: string; outcome: boolean }>
-): Promise<{ revealed: number; errors: number }> {
-  let revealed = 0;
-  let errors = 0;
-
-  // Check if oracle is configured
-  if (
-    !process.env.NEXT_PUBLIC_BABYLON_ORACLE ||
-    !process.env.ORACLE_PRIVATE_KEY
-  ) {
-    logger.info(
-      'Oracle not configured, skipping reveals',
-      undefined,
-      'GameTick'
-    );
-    return { revealed: 0, errors: 0 };
-  }
-
-  const oracleService = getOracleService();
-
-  // Health check
-  const health = await oracleService.healthCheck();
-  if (!health.healthy) {
-    logger.error(
-      `Oracle health check failed: ${health.error}`,
-      undefined,
-      'GameTick'
-    );
-    return { revealed: 0, errors: questions.length };
-  }
-
-  // Batch reveal games
-  const batch = questions.map((q) => ({
-    questionId: q.id,
-    outcome: q.outcome,
-    winners: [], // Could get from positions
-    totalPayout: BigInt(0), // Could calculate from positions
-  }));
-
-  const result = await oracleService.batchRevealGames(batch);
-
-  // Update questions with oracle data
-  for (const success of result.successful) {
-    await db
-      .update(questionsSchema)
-      .set({
-        oracleRevealTxHash: success.txHash,
-        oracleRevealBlock: success.blockNumber || null,
-        oraclePublishedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(questionsSchema.id, success.questionId));
-    revealed++;
-  }
-
-  errors = result.failed.length;
-
-  if (errors > 0) {
-    logger.warn(
-      `${errors} oracle reveals failed`,
-      { failures: result.failed },
-      'GameTick'
-    );
-  }
-
-  logger.info(
-    `Oracle reveals: ${revealed} successful, ${errors} failed`,
-    undefined,
-    'GameTick'
-  );
-
-  return { revealed, errors };
-}
 /**
  * Update widget caches
  * This pre-generates and caches widget data to improve performance
@@ -3615,106 +1867,372 @@ async function forceTrendingCalculation(): Promise<boolean> {
   return true;
 }
 
-// World facts update interval (24 hours in milliseconds)
-const WORLD_FACTS_UPDATE_INTERVAL_MS = 24 * 60 * 60 * 1000;
+// World facts update interval (configurable, default 8 hours - runs ~3 times per game day)
+const DEFAULT_WORLD_FACTS_UPDATE_INTERVAL_HOURS = 8;
+const parsedIntervalHours = Number(
+  process.env.WORLD_FACTS_UPDATE_INTERVAL_HOURS
+);
+const WORLD_FACTS_UPDATE_INTERVAL_MS =
+  (Number.isFinite(parsedIntervalHours) && parsedIntervalHours > 0
+    ? parsedIntervalHours
+    : DEFAULT_WORLD_FACTS_UPDATE_INTERVAL_HOURS) *
+  60 *
+  60 *
+  1000;
+
+// Lock configuration for world facts generation
+// Default 30 minutes to handle slow LLM responses; configurable via env
+const WORLD_FACTS_LOCK_ID = 'world-facts-generation';
+const DEFAULT_WORLD_FACTS_LOCK_DURATION_MINUTES = 30;
+const parsedLockDuration = Number(
+  process.env.WORLD_FACTS_LOCK_DURATION_MINUTES
+);
+const WORLD_FACTS_LOCK_DURATION_MS =
+  (Number.isFinite(parsedLockDuration) && parsedLockDuration > 0
+    ? parsedLockDuration
+    : DEFAULT_WORLD_FACTS_LOCK_DURATION_MINUTES) *
+  60 *
+  1000;
+// Renew lock at half the TTL to prevent expiry during long-running generation
+// No minimum floor - allows short locks for testing while ensuring renewal before expiry
+const WORLD_FACTS_LOCK_RENEWAL_INTERVAL_MS = Math.min(
+  Math.floor(WORLD_FACTS_LOCK_DURATION_MS / 2),
+  WORLD_FACTS_LOCK_DURATION_MS - 1 // Ensure renewal is always before expiry
+);
+
+/**
+ * Generation Marker Constants
+ *
+ * These constants define the marker inserted after each successful world facts generation.
+ * The marker tracks when generation last ran, preventing re-triggers when 0 facts are produced.
+ *
+ * Exported for use in tests to maintain a single source of truth (DRY principle).
+ */
+export const GENERATION_MARKER = {
+  /** Category for system markers */
+  CATEGORY: 'system',
+  /** Key identifying generation run markers */
+  KEY: 'generation-marker',
+  /** Human-readable label */
+  LABEL: 'World Facts Generation Marker',
+  /** Source identifier matching other auto-generated facts */
+  SOURCE: 'auto-generated',
+  /** Markers are inactive (not shown in prompts) */
+  IS_ACTIVE: false,
+  /** Low priority to stay out of the way */
+  PRIORITY: -1,
+} as const;
 
 /**
  * Check if we should update world facts
- * Uses the most recent RSSHeadline's fetchedAt timestamp
+ * Uses the most recent auto-generated world fact's createdAt timestamp
+ * This ensures game tick and cron don't conflict - they track independently
  */
 async function shouldUpdateWorldFacts(): Promise<boolean> {
-  const [lastHeadline] = await db
-    .select({ fetchedAt: rssHeadlines.fetchedAt })
-    .from(rssHeadlines)
-    .orderBy(desc(rssHeadlines.fetchedAt))
+  // Check when world facts from game activity were last generated
+  // Using 'auto-generated' source to track game activity facts specifically
+  const [lastAutoFact] = await db
+    .select({ createdAt: worldFacts.createdAt })
+    .from(worldFacts)
+    .where(eq(worldFacts.source, 'auto-generated'))
+    .orderBy(desc(worldFacts.createdAt))
     .limit(1);
 
-  if (!lastHeadline || !lastHeadline.fetchedAt) {
-    return true; // Never updated before
+  if (!lastAutoFact || !lastAutoFact.createdAt) {
+    logger.info(
+      'No auto-generated world facts found, triggering initial generation',
+      undefined,
+      'GameTick'
+    );
+    return true; // Never generated before
   }
 
-  const timeSinceLastUpdate = Date.now() - lastHeadline.fetchedAt.getTime();
-  return timeSinceLastUpdate >= WORLD_FACTS_UPDATE_INTERVAL_MS;
+  const timeSinceLastGeneration = Date.now() - lastAutoFact.createdAt.getTime();
+  const shouldUpdate =
+    timeSinceLastGeneration >= WORLD_FACTS_UPDATE_INTERVAL_MS;
+
+  if (shouldUpdate) {
+    logger.info(
+      'World facts generation triggered',
+      {
+        hoursSinceLastGeneration: Math.round(
+          timeSinceLastGeneration / (60 * 60 * 1000)
+        ),
+        thresholdHours: WORLD_FACTS_UPDATE_INTERVAL_MS / (60 * 60 * 1000),
+      },
+      'GameTick'
+    );
+  }
+
+  return shouldUpdate;
 }
 
-/** Updates world facts if 24+ hours since last update. */
-async function updateWorldFactsIfNeeded(): Promise<{
+/**
+ * @deprecated This function is no longer called from game-tick.
+ * World facts are now handled by /api/cron/world-facts which runs twice daily.
+ *
+ * Kept for reference during migration. TODO: Remove after confirming no regressions.
+ */
+export async function updateWorldFactsIfNeeded(): Promise<{
   updated: boolean;
   stats?: {
     feedsFetched: number;
     newHeadlines: number;
     parodiesGenerated: number;
     headlinesCleaned: number;
+    dailyTopic?: string | null;
+    worldFactsGenerated: number;
+    worldFactsArchived: number;
   };
 }> {
+  // Check if update is needed BEFORE acquiring lock to reduce database usage
+  // This avoids lock acquire/release overhead on most ticks (updates only every ~8 hours)
   const shouldUpdate = await shouldUpdateWorldFacts();
-
   if (!shouldUpdate) {
     logger.debug('World facts update not needed yet', undefined, 'GameTick');
     return { updated: false };
   }
 
-  logger.info(
-    '🌍 Starting world facts update from game tick',
-    undefined,
-    'GameTick'
-  );
+  // Generate a unique process ID for this run using cryptographically secure randomness
+  const processId = `game-tick-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
 
-  const startTime = Date.now();
+  // Acquire distributed lock to prevent concurrent generation
+  const lockAcquired = await DistributedLockService.acquireLock({
+    lockId: WORLD_FACTS_LOCK_ID,
+    durationMs: WORLD_FACTS_LOCK_DURATION_MS,
+    operation: 'world-facts-generation',
+    processId,
+  });
 
-  // Step 1: Fetch all RSS feeds
-  logger.info('Fetching RSS feeds...', undefined, 'GameTick');
-  const feedResult = await rssFeedService.fetchAllFeeds();
-  logger.info(
-    `RSS feeds fetched: ${feedResult.fetched} sources, ${feedResult.stored} new headlines, ${feedResult.errors} errors`,
-    feedResult,
-    'GameTick'
-  );
+  if (!lockAcquired) {
+    logger.debug(
+      'World facts generation lock held by another process, skipping',
+      {
+        processId,
+        lockId: WORLD_FACTS_LOCK_ID,
+        lockDurationMs: WORLD_FACTS_LOCK_DURATION_MS,
+      },
+      'GameTick'
+    );
+    return { updated: false };
+  }
 
-  // Step 2: Transform untransformed headlines into parodies
-  logger.info('Generating parody headlines...', undefined, 'GameTick');
-  const untransformedHeadlines =
-    await rssFeedService.getUntransformedHeadlines(20); // Process 20 at a time
-
-  const generator = createParodyHeadlineGenerator();
-  const parodies = await generator.processHeadlines(untransformedHeadlines);
-  logger.info(
-    `Generated ${parodies.length} parody headlines`,
-    { count: parodies.length },
-    'GameTick'
-  );
-
-  // Step 3: Clean up old headlines (older than 7 days)
-  logger.info('Cleaning up old headlines...', undefined, 'GameTick');
-  const cleaned = await rssFeedService.cleanupOldHeadlines();
-  logger.info(
-    `Cleaned up ${cleaned} old headlines`,
-    { count: cleaned },
-    'GameTick'
-  );
-
-  const duration = Date.now() - startTime;
-  logger.info(
-    '✅ World facts update completed',
+  logger.debug(
+    'Acquired world facts generation lock',
     {
-      duration: `${duration}ms`,
-      feedsFetched: feedResult.fetched,
-      newHeadlines: feedResult.stored,
-      parodiesGenerated: parodies.length,
-      headlinesCleaned: cleaned,
+      processId,
+      lockId: WORLD_FACTS_LOCK_ID,
+      lockDurationMs: WORLD_FACTS_LOCK_DURATION_MS,
     },
     'GameTick'
   );
 
-  return {
-    updated: true,
-    stats: {
-      feedsFetched: feedResult.fetched,
-      newHeadlines: feedResult.stored,
-      parodiesGenerated: parodies.length,
-      headlinesCleaned: cleaned,
-    },
+  // Set up periodic lock renewal to prevent expiry during long-running generation
+  let lockRenewalInterval: ReturnType<typeof setInterval> | null = null;
+  const startLockRenewal = () => {
+    lockRenewalInterval = setInterval(async () => {
+      try {
+        const renewed = await DistributedLockService.acquireLock({
+          lockId: WORLD_FACTS_LOCK_ID,
+          durationMs: WORLD_FACTS_LOCK_DURATION_MS,
+          operation: 'world-facts-generation-renewal',
+          processId,
+        });
+        if (renewed) {
+          logger.debug('World facts lock renewed', undefined, 'GameTick');
+        } else {
+          logger.warn(
+            'Failed to renew world facts lock - another process may have acquired it',
+            undefined,
+            'GameTick'
+          );
+        }
+      } catch (error) {
+        logger.warn('Error renewing world facts lock', { error }, 'GameTick');
+      }
+    }, WORLD_FACTS_LOCK_RENEWAL_INTERVAL_MS);
   };
+
+  try {
+    startLockRenewal();
+
+    // Re-check after acquiring lock to handle race condition where another process
+    // completed the update between our initial check and lock acquisition
+    const stillNeedsUpdate = await shouldUpdateWorldFacts();
+    if (!stillNeedsUpdate) {
+      logger.debug(
+        'World facts update no longer needed (another process completed it)',
+        undefined,
+        'GameTick'
+      );
+      return { updated: false };
+    }
+
+    logger.info(
+      '🌍 Starting world facts update from game tick',
+      undefined,
+      'GameTick'
+    );
+
+    const startTime = Date.now();
+
+    // Steps 1-3: RSS/parody pipeline - wrapped in try/catch so failures don't abort the whole tick
+    let feedResult = { fetched: 0, stored: 0, errors: 0 };
+    let parodies: Awaited<
+      ReturnType<
+        ReturnType<typeof createParodyHeadlineGenerator>['processHeadlines']
+      >
+    > = [];
+    let cleaned = 0;
+    let dailyTopic: Awaited<
+      ReturnType<typeof dailyTopicService.ensureTopicForDate>
+    > = null;
+
+    try {
+      // Step 1: Fetch all RSS feeds
+      logger.info('Fetching RSS feeds...', undefined, 'GameTick');
+      feedResult = await rssFeedService.fetchAllFeeds();
+      logger.info(
+        `RSS feeds fetched: ${feedResult.fetched} sources, ${feedResult.stored} new headlines, ${feedResult.errors} errors`,
+        feedResult,
+        'GameTick'
+      );
+
+      // Step 2: Transform untransformed headlines into parodies
+      logger.info('Generating parody headlines...', undefined, 'GameTick');
+      const untransformedHeadlines =
+        await rssFeedService.getUntransformedHeadlines(20); // Process 20 at a time
+
+      const generator = createParodyHeadlineGenerator();
+      parodies = await generator.processHeadlines(untransformedHeadlines);
+      logger.info(
+        `Generated ${parodies.length} parody headlines`,
+        { count: parodies.length },
+        'GameTick'
+      );
+
+      // Step 3: Clean up old headlines (older than 7 days)
+      logger.info('Cleaning up old headlines...', undefined, 'GameTick');
+      cleaned = await rssFeedService.cleanupOldHeadlines();
+      logger.info(
+        `Cleaned up ${cleaned} old headlines`,
+        { count: cleaned },
+        'GameTick'
+      );
+
+      dailyTopic = await dailyTopicService.ensureTopicForDate(new Date());
+      logger.info(
+        'Daily topic ready',
+        {
+          topicKey: dailyTopic?.topicKey ?? null,
+          topicLabel: dailyTopic?.topicLabel ?? null,
+        },
+        'GameTick'
+      );
+    } catch (error) {
+      logger.error(
+        'Error in RSS/parody pipeline, aborting world facts update',
+        { error },
+        'GameTick'
+      );
+      return { updated: false };
+    }
+
+    // Step 4: Generate new world facts from game activity (events, markets, questions, actors)
+    // This is critical for keeping the world narrative fresh and dynamic
+    logger.info(
+      'Generating new world facts from game activity...',
+      undefined,
+      'GameTick'
+    );
+    let factsResult = {
+      generated: 0,
+      archived: 0,
+      sources: { events: 0, markets: 0, questions: 0, actors: 0 },
+    };
+    let factsGenerationSucceeded = false;
+    try {
+      factsResult = await worldFactsGenerator.generateNewWorldFacts();
+      factsGenerationSucceeded = true;
+      logger.info(
+        `Generated ${factsResult.generated} new world facts, archived ${factsResult.archived}`,
+        factsResult,
+        'GameTick'
+      );
+    } catch (error) {
+      logger.error(
+        'Error generating world facts from game activity',
+        { error },
+        'GameTick'
+      );
+      // Don't set factsGenerationSucceeded - marker will be skipped so retries aren't delayed
+    }
+
+    // Step 5: Insert last-run marker to prevent re-triggers when generation produces 0 facts
+    // Only insert marker on successful runs - failed runs should allow immediate retry
+    if (factsGenerationSucceeded) {
+      let markerId: string | undefined;
+      try {
+        const now = new Date();
+        markerId = await generateSnowflakeId();
+        await db.insert(worldFacts).values({
+          id: markerId,
+          category: GENERATION_MARKER.CATEGORY,
+          key: GENERATION_MARKER.KEY,
+          label: GENERATION_MARKER.LABEL,
+          value: `Generation run at ${now.toISOString()} - ${factsResult.generated} facts created`,
+          source: GENERATION_MARKER.SOURCE,
+          lastUpdated: now,
+          isActive: GENERATION_MARKER.IS_ACTIVE,
+          priority: GENERATION_MARKER.PRIORITY,
+          createdAt: now,
+          updatedAt: now,
+        });
+      } catch (error) {
+        logger.error(
+          'Error inserting generation-marker world fact',
+          { error, markerId, factsGenerated: factsResult.generated },
+          'GameTick'
+        );
+      }
+    }
+
+    const duration = Date.now() - startTime;
+    logger.info(
+      '✅ World facts update completed',
+      {
+        duration: `${duration}ms`,
+        feedsFetched: feedResult.fetched,
+        newHeadlines: feedResult.stored,
+        parodiesGenerated: parodies.length,
+        headlinesCleaned: cleaned,
+        dailyTopic: dailyTopic?.topicLabel ?? null,
+        worldFactsGenerated: factsResult.generated,
+        worldFactsArchived: factsResult.archived,
+      },
+      'GameTick'
+    );
+
+    return {
+      updated: true,
+      stats: {
+        feedsFetched: feedResult.fetched,
+        newHeadlines: feedResult.stored,
+        parodiesGenerated: parodies.length,
+        headlinesCleaned: cleaned,
+        dailyTopic: dailyTopic?.topicLabel ?? null,
+        worldFactsGenerated: factsResult.generated,
+        worldFactsArchived: factsResult.archived,
+      },
+    };
+  } finally {
+    // Stop lock renewal
+    if (lockRenewalInterval) {
+      clearInterval(lockRenewalInterval);
+    }
+    // Always release lock, even on error
+    await DistributedLockService.releaseLock(WORLD_FACTS_LOCK_ID, processId);
+  }
 }
 
 // ============================================================================
@@ -3725,35 +2243,43 @@ async function updateWorldFactsIfNeeded(): Promise<{
  * Market volatility state for realistic price movements.
  * Tracks recent volatility and momentum per market for clustering effects.
  */
-const marketVolatilityState = new Map<
-  string,
-  {
-    recentVolatility: number;
-    momentum: number;
-    lastMove: number;
-  }
->();
+const marketVolatilityState = new Map<string, MarketSimulationState>();
+let globalMarketSimulationState: GlobalMarketSimulationState =
+  getDefaultGlobalMarketSimulationState();
 
 /**
  * Simulates natural market volatility for all perp markets.
  *
  * This creates realistic price movements independent of user/NPC trades:
- * - Volatility clustering (volatile periods follow volatile periods)
- * - Fat tails (occasional large moves)
- * - Random jumps (sudden price gaps)
- * - Momentum (trends persist slightly)
- * - Asymmetry (crashes faster than rallies)
+ * - Volatility clustering
+ * - Fat tails
+ * - Momentum persistence
+ * - Global market regimes + idiosyncratic market identities
  *
- * Called every game tick (~1 minute) to keep markets "alive".
+ * Called every game tick to keep markets alive even when no one trades.
  */
-export async function simulateMarketVolatility(): Promise<number> {
+export async function simulateMarketVolatility(options?: {
+  reduced?: boolean;
+  narrativeEventsCount?: number;
+}): Promise<number> {
+  const SIMULATED_PRICE_FLOOR_RATIO = 0.25;
+  const SIMULATED_PRICE_CEILING_RATIO = 4.0;
   try {
-    // Get all active perp market snapshots
+    if (options?.narrativeEventsCount && options.narrativeEventsCount > 0) {
+      logger.debug(
+        'Skipping volatility simulation (narrative events fired)',
+        { narrativeEventsCount: options.narrativeEventsCount },
+        'GameTick'
+      );
+      return 0;
+    }
+
     const markets = await db
       .select({
         ticker: perpMarketSnapshots.ticker,
         organizationId: perpMarketSnapshots.organizationId,
         currentPrice: perpMarketSnapshots.currentPrice,
+        openInterest: perpMarketSnapshots.openInterest,
       })
       .from(perpMarketSnapshots);
 
@@ -3761,7 +2287,6 @@ export async function simulateMarketVolatility(): Promise<number> {
       return 0;
     }
 
-    // Get organization base prices for bounds (do not depend on the legacy Organization table)
     const orgIds = [...new Set(markets.map((m) => m.organizationId))];
     const orgStates = await db
       .select({
@@ -3773,6 +2298,9 @@ export async function simulateMarketVolatility(): Promise<number> {
 
     const basePriceByOrgId = new Map(
       orgStates.map((o) => [o.id, Number(o.basePrice ?? 100)])
+    );
+    globalMarketSimulationState = evolveGlobalMarketSimulationState(
+      globalMarketSimulationState
     );
 
     let updatedCount = 0;
@@ -3792,71 +2320,64 @@ export async function simulateMarketVolatility(): Promise<number> {
           ? basePrice
           : currentPrice;
 
-      // Get or initialize volatility state for this market
+      const organization = StaticDataRegistry.getOrganization(
+        market.organizationId
+      );
+      const profile = buildMarketSimulationProfile({
+        organizationId: market.organizationId,
+        ticker: market.ticker,
+        organization,
+      });
+
       let state = marketVolatilityState.get(market.ticker);
       if (!state) {
-        state = {
-          recentVolatility: 0.003, // Start with 0.3% base volatility
-          momentum: 0,
-          lastMove: 0,
-        };
+        state = createInitialMarketSimulationState(currentPrice, profile);
         marketVolatilityState.set(market.ticker, state);
       }
 
-      // Calculate price move
-      const move = generateVolatilityMove(state, initialPrice, currentPrice);
+      const { move, nextState } = generateProfileDrivenMarketMove({
+        state,
+        profile,
+        globalState: globalMarketSimulationState,
+        currentPrice,
+        openInterest: Number(market.openInterest ?? 0),
+      });
 
-      // Apply move
       const newPrice = currentPrice * (1 + move);
+      const minPrice = initialPrice * SIMULATED_PRICE_FLOOR_RATIO;
+      const maxPrice = initialPrice * SIMULATED_PRICE_CEILING_RATIO;
+      const adjustedPrice = Math.max(minPrice, Math.min(newPrice, maxPrice));
 
-      // Apply absolute bounds (25% - 400% of initial)
-      const minPrice = initialPrice * PERP_MARKET_CONFIG.PRICE_FLOOR_RATIO;
-      const maxPrice = initialPrice * PERP_MARKET_CONFIG.PRICE_CEILING_RATIO;
-      const clampedPrice = Math.max(minPrice, Math.min(newPrice, maxPrice));
+      marketVolatilityState.set(market.ticker, nextState);
 
-      // Update state for next tick
-      state.lastMove = move;
-      state.momentum = move * 0.3; // 30% momentum carries forward
-      // Volatility clustering: if big move, stay volatile
-      state.recentVolatility =
-        state.recentVolatility * 0.8 + Math.abs(move) * 0.2;
-
-      // Only update if price changed meaningfully (> 0.01%)
-      if (Math.abs(clampedPrice - currentPrice) / currentPrice > 0.0001) {
+      if (Math.abs(adjustedPrice - currentPrice) / currentPrice > 0.0001) {
         priceUpdates.push({
           organizationId: market.organizationId,
           ticker: market.ticker,
-          newPrice: clampedPrice,
+          newPrice: adjustedPrice,
         });
         updatedCount++;
       }
     }
 
-    // Apply all price updates
     if (priceUpdates.length > 0) {
-      // Update perpMarketSnapshots
-      // Note: Don't update change24h/changePercent24h here - those should reflect
-      // true 24h deltas calculated elsewhere using price24hAgo reference
-      for (const update of priceUpdates) {
-        await db
-          .update(perpMarketSnapshots)
-          .set({
-            currentPrice: update.newPrice,
-            updatedAt: new Date(),
-          })
-          .where(eq(perpMarketSnapshots.ticker, update.ticker));
-      }
-
-      // Update organizations and broadcast via PriceUpdateService
       await PriceUpdateService.applyUpdates(
         priceUpdates.map((u) => ({
           organizationId: u.organizationId,
           newPrice: u.newPrice,
-          source: 'volatility_simulation',
+          source: 'system' as const,
           reason: 'Simulated market volatility',
           metadata: { ticker: u.ticker },
         }))
       );
+
+      // Also sync prices to perpMarketSnapshots (PriceUpdateService only updates organizationState)
+      for (const u of priceUpdates) {
+        await db
+          .update(perpMarketSnapshots)
+          .set({ currentPrice: u.newPrice })
+          .where(eq(perpMarketSnapshots.ticker, u.ticker));
+      }
 
       logger.info(
         `Simulated volatility for ${updatedCount} markets`,
@@ -3875,70 +2396,11 @@ export async function simulateMarketVolatility(): Promise<number> {
   } catch (error) {
     logger.error(
       'Failed to simulate market volatility',
-      { error: error instanceof Error ? error.message : String(error) },
+      { error: formatError(error) },
       'MarketVolatility'
     );
     return 0;
   }
-}
-
-/**
- * Generates a realistic price movement with fat tails and volatility clustering.
- */
-function generateVolatilityMove(
-  state: { recentVolatility: number; momentum: number; lastMove: number },
-  initialPrice: number,
-  currentPrice: number
-): number {
-  // Base volatility with clustering effect
-  const baseVolatility = state.recentVolatility;
-  const volatilityMultiplier = 0.5 + Math.random(); // 0.5x to 1.5x
-  const currentVolatility = baseVolatility * volatilityMultiplier;
-
-  // Generate move with fat tails
-  let move: number;
-  const fatTailChance = Math.random();
-
-  if (fatTailChance < 0.01) {
-    // 1% chance: LARGE jump (3-6x normal volatility)
-    const direction = Math.random() > 0.5 ? 1 : -1;
-    move = direction * currentVolatility * (3 + Math.random() * 3);
-  } else if (fatTailChance < 0.05) {
-    // 4% chance: Notable move (2-3x normal)
-    move = (Math.random() - 0.5) * 2 * currentVolatility * (2 + Math.random());
-  } else if (fatTailChance < 0.15) {
-    // 10% chance: Above average move (1.5-2x normal)
-    move =
-      (Math.random() - 0.5) *
-      2 *
-      currentVolatility *
-      (1.5 + Math.random() * 0.5);
-  } else {
-    // 85% chance: Normal move
-    move = (Math.random() - 0.5) * 2 * currentVolatility;
-  }
-
-  // Add momentum (trend continuation)
-  move += state.momentum * (0.5 + Math.random() * 0.5);
-
-  // Mean reversion - slight pull toward initial price
-  const priceRatio = currentPrice / initialPrice;
-  if (priceRatio > 1.5) {
-    // If price is >150% of initial, slight downward pressure
-    move -= 0.001 * (priceRatio - 1);
-  } else if (priceRatio < 0.7) {
-    // If price is <70% of initial, slight upward pressure
-    move += 0.001 * (1 - priceRatio);
-  }
-
-  // Asymmetry: crashes are 20% faster than rallies
-  if (move < 0) {
-    move *= 1.2;
-  }
-
-  // Cap individual tick move at 5% (but still allow through fat tail distribution)
-  const maxMove = 0.05;
-  return Math.max(-maxMove, Math.min(move, maxMove));
 }
 
 /**
@@ -4007,7 +2469,7 @@ async function processNarrativeArcs(
     } catch (error) {
       logger.error(
         `Failed to process narrative arc for question ${question.id}`,
-        { error: error instanceof Error ? error.message : String(error) },
+        { error: formatError(error) },
         'GameTick'
       );
     }

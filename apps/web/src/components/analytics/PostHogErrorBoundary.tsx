@@ -1,6 +1,7 @@
 'use client';
 
 import { logger } from '@babylon/shared';
+import * as Sentry from '@sentry/nextjs';
 /**
  * PostHog error boundary component for catching and tracking React errors.
  *
@@ -69,6 +70,16 @@ export class PostHogErrorBoundary extends Component<Props, State> {
       posthog.capture('$exception', properties);
     }
 
+    // Capture error in Sentry as well (primary error reporting)
+    Sentry.withScope((scope) => {
+      scope.setTag('errorBoundary', 'posthog');
+      scope.setTag('surface', 'react');
+      scope.setContext('react', {
+        componentStack: errorInfo.componentStack,
+      });
+      Sentry.captureException(error);
+    });
+
     // Also log using logger
     logger.error(
       'Error caught by PostHogErrorBoundary',
@@ -81,7 +92,7 @@ export class PostHogErrorBoundary extends Component<Props, State> {
     if (this.state.hasError) {
       return (
         this.props.fallback || (
-          <div className="flex min-h-screen items-center justify-center p-4">
+          <div className="flex min-h-dvh items-center justify-center p-4 md:min-h-screen">
             <div className="text-center">
               <h2 className="mb-2 font-bold text-2xl">Something went wrong</h2>
               <p className="mb-4 text-muted-foreground">

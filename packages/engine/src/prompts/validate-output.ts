@@ -8,6 +8,7 @@
  * - Character limits respected
  */
 
+import { escapeRegex } from '@babylon/shared';
 import { getForbiddenRealNames } from './world-context';
 
 export interface ValidationResult {
@@ -85,6 +86,7 @@ const FORBIDDEN_PATTERNS = [
 
 /**
  * Validates that text doesn't contain real names
+ * Uses pattern-based detection for variations and common misspellings
  */
 export function validateNoRealNames(text: string): string[] {
   const violations: string[] = [];
@@ -110,13 +112,6 @@ export function validateNoRealNames(text: string): string[] {
   });
 
   return violations;
-}
-
-/**
- * Escape special regex characters
- */
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**
@@ -223,14 +218,14 @@ export function validateFeedPost(
 export const CHARACTER_LIMITS = {
   AMBIENT: 280,
   JOURNALIST: 280,
-  COMPANY: 140,
-  GOVERNMENT: 140,
-  REPLY: 140,
-  REACTION: 140,
-  COMMENTARY: 140,
-  MEDIA: 140,
-  CONSPIRACY: 140,
-  EXPERT: 140,
+  COMPANY: 200,
+  GOVERNMENT: 200,
+  REPLY: 200,
+  REACTION: 200,
+  COMMENTARY: 200,
+  MEDIA: 200,
+  CONSPIRACY: 200,
+  EXPERT: 200,
   MINUTE_AMBIENT: 200,
   STOCK_TICKER: 150,
   ANALYST: 250,
@@ -315,6 +310,25 @@ export function validateArticle(article: {
     isValid: violations.length === 0,
     violations,
     warnings,
+  };
+}
+
+/**
+ * Complete validation of generated content.
+ *
+ * Checks parody names (errors). Returns a concise result.
+ *
+ * @param text - The generated content to validate
+ * @returns Validation result object with errors and isValid flag
+ */
+export function validateGeneratedContent(text: string): {
+  errors: string[];
+  isValid: boolean;
+} {
+  const errors = validateNoRealNames(text);
+  return {
+    errors,
+    isValid: errors.length === 0,
   };
 }
 

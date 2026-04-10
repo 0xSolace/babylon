@@ -2,10 +2,8 @@ import {
   and,
   db,
   desc,
-  eq,
   gte,
   inArray,
-  posts,
   type Question,
   worldEvents,
 } from '@babylon/db';
@@ -16,11 +14,15 @@ import {
   type ArcEventStatus,
   NewsArticlePacingEngine,
 } from '../NewsArticlePacingEngine';
-import { toSafeDayNumber } from '../utils/date-utils';
+import { toDateString, toSafeDayNumber } from '../utils/date-utils';
 import { secureRandom, weightedPick } from '../utils/entropy';
-import { generateArticleImageWithRetry } from './article-image-service';
-import { articleRateLimiter } from './article-rate-limiter';
-import { characterMappingService } from './character-mapping-service';
+import { formatError } from '../utils/error-utils';
+import { worldFactsService } from '../world-facts-service';
+import { persistArticle } from './article-persistence';
+import {
+  articleRateLimiter,
+  breakingArticleRateLimiter,
+} from './article-rate-limiter';
 import {
   getArcPlan,
   getPhaseForDay,
@@ -58,7 +60,6 @@ type QuestionForEvent = Pick<Question, 'id' | 'text' | 'questionNumber'> & {
 type EventTypeConfig = {
   type: string;
   weight: number;
-  templates: string[];
   visibility: 'public' | 'leaked' | 'private';
   requiresActors: boolean;
 };
@@ -67,91 +68,65 @@ const EVENT_TYPES: EventTypeConfig[] = [
   {
     type: 'announcement',
     weight: 25,
-    templates: [
-      'Official statement released regarding {topic}',
-      'Press release confirms developments in {topic}',
-      'Spokesperson addresses questions about {topic}',
-    ],
     visibility: 'public',
     requiresActors: false,
   },
-  {
-    type: 'leak',
-    weight: 15,
-    templates: [
-      'Anonymous source reveals details about {topic}',
-      'Internal documents surface regarding {topic}',
-      'Whistleblower alleges new information on {topic}',
-      'Leaked memo suggests developments in {topic}',
-    ],
-    visibility: 'leaked',
-    requiresActors: false,
-  },
-  {
-    type: 'meeting',
-    weight: 12,
-    templates: [
-      'Key figures meet to discuss {topic}',
-      'Emergency meeting called regarding {topic}',
-      'Private gathering addresses {topic} concerns',
-      'High-level discussions underway on {topic}',
-    ],
-    visibility: 'public',
-    requiresActors: true,
-  },
+  { type: 'leak', weight: 15, visibility: 'leaked', requiresActors: false },
+  { type: 'meeting', weight: 12, visibility: 'public', requiresActors: true },
   {
     type: 'development',
     weight: 20,
-    templates: [
-      'New evidence emerges in {topic}',
-      'Significant progress reported on {topic}',
-      'Breaking: Major update on {topic}',
-      'Sources confirm movement on {topic}',
-    ],
     visibility: 'public',
     requiresActors: false,
   },
-  {
-    type: 'rumor',
-    weight: 10,
-    templates: [
-      'Speculation grows around {topic}',
-      'Unconfirmed reports suggest changes in {topic}',
-      'Industry insiders whisper about {topic}',
-      'Social media abuzz with theories on {topic}',
-    ],
-    visibility: 'public',
-    requiresActors: false,
-  },
-  {
-    type: 'scandal',
-    weight: 8,
-    templates: [
-      'Controversy erupts over {topic}',
-      'Allegations surface regarding {topic}',
-      'Public outcry follows revelations about {topic}',
-    ],
-    visibility: 'public',
-    requiresActors: true,
-  },
+  { type: 'rumor', weight: 10, visibility: 'public', requiresActors: false },
+  { type: 'scandal', weight: 8, visibility: 'public', requiresActors: true },
   {
     type: 'revelation',
     weight: 10,
-    templates: [
-      'Investigation reveals new facts about {topic}',
-      'Documentary evidence confirms {topic} details',
-      'Analysis uncovers hidden aspects of {topic}',
-    ],
     visibility: 'public',
     requiresActors: false,
   },
 ];
 
 /**
- * Select a random event type based on weights
+ * Event types that warrant breaking news coverage.
+ * These high-impact events trigger immediate article generation
+ * with their own rate limit separate from regular scheduled articles.
+ */
+const BREAKING_EVENT_TYPES = ['scandal', 'leak', 'revelation'] as const;
+
+/**
+ * Rolling window of recently-generated event types.
+ * Used to penalize repeated types and enforce variety.
+ *
+ * TODO: In-memory state resets on server restart and is per-instance.
+ * Move to Redis or DB if horizontal scaling requires coordinated diversity.
+ */
+const recentEventTypes: string[] = [];
+const MAX_EVENT_TYPE_HISTORY = 6;
+
+/**
+ * Select a random event type based on weights, with diversity penalty.
+ * Each recent use of a type applies a 0.3x multiplicative penalty,
+ * making repeated types exponentially less likely.
  */
 function selectEventType(): EventTypeConfig {
-  return weightedPick(EVENT_TYPES, (config) => config.weight);
+  const adjustedTypes = EVENT_TYPES.map((et) => {
+    const recentCount = recentEventTypes.filter((t) => t === et.type).length;
+    const penalty = Math.pow(0.3, recentCount);
+    return { ...et, adjustedWeight: et.weight * penalty };
+  });
+
+  const selected = weightedPick(adjustedTypes, (et) => et.adjustedWeight);
+
+  // Update rolling history
+  recentEventTypes.push(selected.type);
+  if (recentEventTypes.length > MAX_EVENT_TYPE_HISTORY) {
+    recentEventTypes.shift();
+  }
+
+  return selected;
 }
 
 /**
@@ -169,62 +144,114 @@ function sanitizeTopic(topic: string): string {
 }
 
 /**
- * Generate a description from template
+ * Generate a description from the topic and actors.
+ * No templates — just the topic with actor context.
  */
 function generateDescription(
-  template: string,
+  _template: string,
   topic: string,
   actors: string[]
 ): string {
-  // Sanitize topic to remove any template variable leakage
   const cleanTopic = sanitizeTopic(topic);
-  let description = template.replace('{topic}', cleanTopic);
 
-  // Add actor names if template supports it
   if (actors.length > 0) {
     const actorNames = actors
       .map((id) => {
         const actor = StaticDataRegistry.getActor(id);
-        return actor?.name || 'Unknown';
+        return actor?.name || null;
       })
-      .filter((name) => name !== 'Unknown');
+      .filter(Boolean);
 
-    if (actorNames.length > 0 && description.includes('Key figures')) {
-      description = description.replace(
-        'Key figures',
-        actorNames.slice(0, 2).join(' and ')
-      );
+    if (actorNames.length > 0) {
+      return `${actorNames.join(' and ')}: ${cleanTopic}`;
     }
   }
 
-  return description;
+  return cleanTopic;
 }
 
 /**
- * Select random actors relevant to a question
+ * Module-level cooldown tracker: prevents the same actor from appearing
+ * in back-to-back events. Keyed by actorId → last-selected timestamp.
+ *
+ * TODO: In-memory state resets on server restart and is per-instance.
+ * Move to Redis or DB if horizontal scaling requires coordinated cooldowns.
+ */
+const actorEventCooldown = new Map<string, number>();
+const ACTOR_COOLDOWN_MS =
+  Number(process.env.EVENT_ACTOR_COOLDOWN_HOURS || 4) * 60 * 60 * 1000;
+
+const TIER_WEIGHTS: Record<string, number> = {
+  S_TIER: 4,
+  A_TIER: 3,
+  B_TIER: 2,
+  C_TIER: 1,
+};
+
+/**
+ * Select actors for events using weighted sampling with diversity controls.
+ *
+ * Unlike the previous implementation that hard-filtered to S/A tier only,
+ * this uses tier-based weighting so all actors are eligible (lower tiers
+ * just less likely). A 4-hour cooldown prevents the same actor from
+ * appearing in consecutive events, and an affiliation penalty reduces
+ * over-representation of highly-affiliated actors (e.g., AIlon Musk with
+ * 4 org affiliations).
  */
 function selectRelevantActors(maxActors: number = 2): string[] {
   const allActors = StaticDataRegistry.getAllActors();
   if (allActors.length === 0) return [];
 
-  // Prefer S_TIER and A_TIER actors (most influential)
-  const tieredActors = allActors.filter(
-    (a) => a.tier === 'S_TIER' || a.tier === 'A_TIER'
-  );
-  const pool = tieredActors.length > 0 ? tieredActors : allActors;
+  const now = Date.now();
 
-  // Randomly select actors
-  const selected: string[] = [];
-  const shuffled = [...pool].sort(() => secureRandom() - 0.5);
-
-  for (let i = 0; i < Math.min(maxActors, shuffled.length); i++) {
-    const actor = shuffled[i];
-    if (actor) {
-      selected.push(actor.id);
+  // Evict expired cooldown entries to prevent unbounded growth
+  // Two-pass to avoid deleting from Map during iteration
+  const expired: string[] = [];
+  for (const [id, ts] of actorEventCooldown) {
+    if (now - ts >= ACTOR_COOLDOWN_MS) {
+      expired.push(id);
     }
   }
+  for (const id of expired) {
+    actorEventCooldown.delete(id);
+  }
 
-  return selected;
+  // Build weighted pool: tier weight × cooldown factor × affiliation factor
+  const weighted = allActors.map((a) => {
+    const tierWeight = (a.tier && TIER_WEIGHTS[a.tier]) ?? 1;
+
+    // Penalize actors on cooldown (recently appeared in events)
+    const lastAppearance = actorEventCooldown.get(a.id) ?? 0;
+    const elapsed = now - lastAppearance;
+    const cooldownFactor = elapsed < ACTOR_COOLDOWN_MS ? 0.1 : 1.0;
+
+    // Penalize high-affiliation actors to reduce dominance
+    const affiliationCount = a.affiliations?.length ?? 0;
+    const affiliationFactor = 1 / Math.max(1, affiliationCount);
+
+    return {
+      actor: a,
+      weight: tierWeight * cooldownFactor * affiliationFactor,
+    };
+  });
+
+  // Weighted sampling without replacement via repeated weightedPick
+  const selected: Array<{ actor: (typeof allActors)[number]; weight: number }> =
+    [];
+  let remaining = weighted;
+
+  for (let i = 0; i < maxActors && remaining.length > 0; i++) {
+    const pick = weightedPick(remaining, (item) => item.weight);
+    selected.push(pick);
+    remaining = remaining.filter((r) => r.actor.id !== pick.actor.id);
+  }
+
+  // Update cooldown timestamps
+  for (const entry of selected) {
+    actorEventCooldown.set(entry.actor.id, now);
+  }
+
+  return selected.map((e) => e.actor.id);
 }
 
 /**
@@ -247,12 +274,14 @@ function selectRelevantActors(maxActors: number = 2): string[] {
  * @param questions - Active questions to generate events for
  * @param timestamp - Timestamp for the generated events
  * @param currentDay - Current game day (optional, used for arc plan phase detection)
+ * @param llmClient - Optional LLM client for breaking article generation
  * @returns Number of events created
  */
 export async function generateEvents(
   questions: QuestionForEvent[],
   timestamp: Date,
-  currentDay?: number
+  currentDay?: number,
+  llmClient?: BabylonLLMClient
 ): Promise<number> {
   if (questions.length === 0) return 0;
 
@@ -309,23 +338,20 @@ export async function generateEvents(
     // Select event type with weighted randomness
     const eventConfig = selectEventType();
 
-    // Select random template from the event type
-    const templateIndex = Math.floor(
-      secureRandom() * eventConfig.templates.length
-    );
-    const template = eventConfig.templates[templateIndex] || '{topic}';
-
-    // Extract topic from question text (simplified extraction)
-    const topic =
-      question.text.length > 100
-        ? question.text.slice(0, 100) + '...'
-        : question.text;
+    // Extract concise topic — strip "Will X" prefix and date/resolution clauses
+    let topic = question.text
+      .replace(/^Will\s+/i, '')
+      .replace(/\s+by\s+\d{4}[-/]\d{2}[-/]\d{2}.*$/i, '')
+      .replace(/\s+before\s+(the\s+)?(close|end)\s+of\s+\d{4}.*$/i, '')
+      .replace(/\?+$/, '')
+      .trim();
+    if (topic.length > 80) topic = topic.slice(0, 77) + '...';
 
     // Select actors if required by event type
     const actors = eventConfig.requiresActors ? selectRelevantActors(2) : [];
 
-    // Generate description
-    const description = generateDescription(template, topic, actors);
+    // Description is just the topic with optional actor context — no templates
+    const description = generateDescription('', topic, actors);
 
     // Adjust visibility based on phase (late game has more leaks/revelations)
     let visibility = eventConfig.visibility;
@@ -336,8 +362,10 @@ export async function generateEvents(
       }
     }
 
+    const eventId = await generateSnowflakeId();
+
     await db.insert(worldEvents).values({
-      id: await generateSnowflakeId(),
+      id: eventId,
       eventType: eventConfig.type,
       description,
       actors,
@@ -360,6 +388,45 @@ export async function generateEvents(
       },
       'EventGeneration'
     );
+
+    // Trigger breaking article for high-impact events (scandals, leaks, revelations)
+    // This adds unpredictability to article timing - users can't predict when breaking news appears
+    if (llmClient) {
+      try {
+        const breakingArticles = await maybeGenerateBreakingArticle(
+          eventId,
+          eventConfig.type,
+          question,
+          llmClient,
+          timestamp,
+          safeDayNumber
+        );
+        if (breakingArticles > 0) {
+          logger.info(
+            'Breaking article generated from world event',
+            {
+              eventId,
+              eventType: eventConfig.type,
+              articlesCreated: breakingArticles,
+            },
+            'EventGeneration'
+          );
+        }
+      } catch (error) {
+        // Log the error but don't rethrow - the world event was already inserted,
+        // so we don't want article generation failures to abort the surrounding loop
+        logger.error(
+          'Failed to generate breaking article from world event',
+          {
+            eventId,
+            eventType: eventConfig.type,
+            safeDayNumber,
+            error: formatError(error),
+          },
+          'EventGeneration'
+        );
+      }
+    }
   }
 
   return eventsCreated;
@@ -492,6 +559,8 @@ export async function generateArcPulseEventsIfNeeded(
  * @param llmClient - LLM client for article generation
  * @param timestamp - Timestamp for the articles
  * @param dayNumber - Current game day
+ * @param options - Optional settings for article generation
+ * @param options.skipRateLimit - If true, skip the internal articleRateLimiter check (used by breaking articles which have their own rate limiter)
  * @returns Number of articles created
  */
 export async function generateArticlesForArcEvent(
@@ -500,19 +569,31 @@ export async function generateArticlesForArcEvent(
   question: QuestionForEvent,
   llmClient: BabylonLLMClient,
   timestamp: Date,
-  dayNumber?: number
+  dayNumber?: number,
+  options?: { skipRateLimit?: boolean }
 ): Promise<number> {
-  // Check hourly article rate limit FIRST - this is the global throttle
-  const { allowed, currentCount, maxAllowed, remaining } =
-    await articleRateLimiter.canGenerateArticle();
+  const { skipRateLimit = false } = options ?? {};
 
-  if (!allowed) {
-    logger.info(
-      'Skipping arc event article generation - hourly rate limit reached',
-      { arcEventId, eventStatus, currentCount, maxAllowed },
-      'EventGeneration'
-    );
-    return 0;
+  // Check hourly article rate limit FIRST - this is the global throttle
+  // Skip this check if caller has already checked a separate rate limiter (e.g., breaking articles)
+  let remaining = 2; // Default max if skipping rate limit
+  if (!skipRateLimit) {
+    const rateLimitResult = await articleRateLimiter.canGenerateArticle();
+
+    if (!rateLimitResult.allowed) {
+      logger.info(
+        'Skipping arc event article generation - hourly rate limit reached',
+        {
+          arcEventId,
+          eventStatus,
+          currentCount: rateLimitResult.currentCount,
+          maxAllowed: rateLimitResult.maxAllowed,
+        },
+        'EventGeneration'
+      );
+      return 0;
+    }
+    remaining = rateLimitResult.remaining;
   }
 
   // Get news organizations that haven't reported on this event status
@@ -548,6 +629,21 @@ export async function generateArticlesForArcEvent(
   // Get actors for article context
   const actorsList = StaticDataRegistry.getTopActors(20);
 
+  // Get world facts context for article generation with graceful fallback
+  let worldFactsContext = '';
+  try {
+    worldFactsContext = await worldFactsService.generatePromptContext();
+  } catch (error) {
+    logger.warn(
+      'Failed to fetch world facts context for arc event articles - proceeding without',
+      {
+        arcEventId,
+        error: formatError(error),
+      },
+      'EventGeneration'
+    );
+  }
+
   // Initialize article generator
   const articleGen = new ArticleGenerator(llmClient);
 
@@ -561,15 +657,18 @@ export async function generateArticlesForArcEvent(
 
   for (const orgData of orgsToPublish) {
     // Re-check rate limit before each article to prevent race conditions
-    const { allowed: stillAllowed } =
-      await articleRateLimiter.canGenerateArticle();
-    if (!stillAllowed) {
-      logger.info(
-        'Rate limit reached during arc event article generation - stopping',
-        { arcEventId, eventStatus, articlesGenerated: results.length },
-        'EventGeneration'
-      );
-      break;
+    // Skip this check if caller has already checked a separate rate limiter
+    if (!skipRateLimit) {
+      const { allowed: stillAllowed } =
+        await articleRateLimiter.canGenerateArticle();
+      if (!stillAllowed) {
+        logger.info(
+          'Rate limit reached during arc event article generation - stopping',
+          { arcEventId, eventStatus, articlesGenerated: results.length },
+          'EventGeneration'
+        );
+        break;
+      }
     }
 
     const org = {
@@ -598,7 +697,7 @@ export async function generateArticlesForArcEvent(
           scenario: 1,
           outcome: question.outcome ?? false,
           rank: 1,
-          createdDate: new Date().toISOString().split('T')[0]!,
+          createdDate: toDateString(new Date()),
           resolutionDate: '',
           status: 'active',
         },
@@ -618,103 +717,66 @@ export async function generateArticlesForArcEvent(
           initialLuck: (a.initialLuck as 'low' | 'medium' | 'high') || 'medium',
           initialMood: a.initialMood || 0,
         })),
-        [] // Events are included in context via question
+        [], // Events are included in context via question
+        worldFactsContext // World facts context for current game state
       );
 
-      // Transform content to replace real names with parody names
-      // Run all transformations concurrently to reduce latency
-      const [transformedSummary, transformedContent, transformedTitle] =
-        await Promise.all([
-          characterMappingService.transformText(article.summary || ''),
-          characterMappingService.transformText(article.content || ''),
-          characterMappingService.transformText(article.title || 'Untitled'),
-        ]);
-
+      // Note: ArticleGenerator already applies character mapping internally,
+      // so we use the article content directly without additional transformation.
       const articleTimestamp = article.publishedAt || timestamp;
 
-      // TOCTOU re-check: Verify rate limit immediately before DB insert
-      // Another process may have created articles during LLM generation
-      const { allowed: finalCheckAllowed } =
-        await articleRateLimiter.canGenerateArticle();
-      if (!finalCheckAllowed) {
-        logger.info(
-          'Rate limit reached during arc event article persistence (TOCTOU re-check)',
-          { arcEventId, eventStatus, orgId: org.id },
-          'EventGeneration'
-        );
-        // Record as rejected but not an error - rate limiting worked correctly
+      // Use shared persistence service (includes rate limit check and image generation)
+      // Skip rate limit check in persistence if we're bypassing it (breaking articles have their own limiter)
+      const persistResult = await persistArticle(
+        {
+          title: article.title || 'Untitled',
+          summary: article.summary || '',
+          content: article.content || '',
+          authorOrgId: article.authorOrgId,
+          gameId: 'continuous',
+          dayNumber: dayNumber,
+          byline: article.byline,
+          biasScore: article.biasScore,
+          sentiment: article.sentiment,
+          slant: article.slant,
+          category: article.category,
+          timestamp: articleTimestamp,
+          relatedQuestion: article.relatedQuestion,
+        },
+        { checkRateLimit: !skipRateLimit }
+      );
+
+      if (!persistResult.success) {
+        if (persistResult.rateLimited) {
+          logger.info(
+            'Rate limit reached during arc event article persistence',
+            { arcEventId, eventStatus, orgId: org.id },
+            'EventGeneration'
+          );
+          results.push({
+            status: 'rejected',
+            reason: new Error('Rate limit exceeded during persistence'),
+          });
+          break; // Exit loop immediately - no point trying more orgs if rate limited
+        }
+        // Other persistence error
         results.push({
           status: 'rejected',
-          reason: new Error('Rate limit exceeded during persistence'),
+          reason: new Error(persistResult.error || 'Unknown persistence error'),
         });
-        break; // Exit loop immediately - no point trying more orgs if rate limited
+        continue;
       }
 
-      // Insert article first, then generate image asynchronously (fire-and-forget)
-      // This makes article creation non-blocking on image generation
-      const articleId = await generateSnowflakeId();
-
-      await db.insert(posts).values({
-        id: articleId,
-        type: 'article',
-        content: transformedSummary.transformedText,
-        fullContent: transformedContent.transformedText,
-        articleTitle: transformedTitle.transformedText,
-        byline: article.byline || undefined,
-        biasScore: article.biasScore || undefined,
-        sentiment: article.sentiment || undefined,
-        slant: article.slant || undefined,
-        category: article.category || undefined,
-        imageUrl: undefined, // Will be updated asynchronously if FAL_KEY is set
-        authorId: article.authorOrgId,
-        gameId: 'continuous',
-        dayNumber: dayNumber,
-        timestamp: articleTimestamp,
-      });
-
-      // Fire-and-forget image generation - updates post asynchronously after insert
-      // Use void to explicitly mark as intentionally unhandled (silences floating-promise lint)
-      if (process.env.FAL_KEY) {
-        void generateArticleImageWithRetry({
-          title: transformedTitle.transformedText,
-          summary: transformedSummary.transformedText,
-          category: article.category,
-        })
-          .then((imageUrl) => {
-            if (imageUrl) {
-              // Update the post with the generated image URL
-              db.update(posts)
-                .set({ imageUrl })
-                .where(eq(posts.id, articleId))
-                .catch((err) => {
-                  logger.warn(
-                    'Failed to update article with image URL',
-                    {
-                      arcEventId,
-                      eventStatus,
-                      orgId: org.id,
-                      articleId,
-                      error: err instanceof Error ? err.message : String(err),
-                    },
-                    'EventGeneration'
-                  );
-                });
-            }
-          })
-          .catch((err) => {
-            logger.debug(
-              'Image generation failed (non-blocking)',
-              {
-                arcEventId,
-                eventStatus,
-                orgId: org.id,
-                articleId,
-                error: err instanceof Error ? err.message : String(err),
-              },
-              'EventGeneration'
-            );
-          });
+      // Defensive guard: verify articleId exists after successful persistence
+      if (!persistResult.articleId) {
+        results.push({
+          status: 'rejected',
+          reason: new Error('Missing articleId after successful persistence'),
+        });
+        continue;
       }
+
+      const articleId = persistResult.articleId;
 
       // Record that this org has covered this event status
       arcEventPacer.recordArcEventCoverage(
@@ -731,7 +793,7 @@ export async function generateArticlesForArcEvent(
           eventStatus,
           org: org.name,
           articleId,
-          title: transformedTitle.transformedText.slice(0, 50),
+          title: (article.title || 'Untitled').slice(0, 50),
         },
         'EventGeneration'
       );
@@ -746,7 +808,7 @@ export async function generateArticlesForArcEvent(
           eventStatus,
           orgId: org.id,
           orgName: org.name,
-          error: error instanceof Error ? error.message : String(error),
+          error: formatError(error),
         },
         'EventGeneration'
       );
@@ -774,6 +836,91 @@ export async function generateArticlesForArcEvent(
   );
 
   return articlesCreated;
+}
+
+/**
+ * Maybe generate a breaking article for a significant world event.
+ *
+ * Breaking articles are triggered by high-impact events (scandals, leaks, revelations)
+ * and use a separate rate limit from regular scheduled articles. This adds unpredictability
+ * to article timing - users can't predict when breaking news will appear.
+ *
+ * @param eventId - The world event ID that triggered this
+ * @param eventType - The type of world event (scandal, leak, revelation, etc.)
+ * @param question - Related question for context
+ * @param llmClient - LLM client for article generation
+ * @param timestamp - Timestamp for the article
+ * @param dayNumber - Current game day
+ * @returns Number of articles created (0 if skipped, 1+ if generated)
+ */
+export async function maybeGenerateBreakingArticle(
+  eventId: string,
+  eventType: string,
+  question: QuestionForEvent,
+  llmClient: BabylonLLMClient,
+  timestamp: Date,
+  dayNumber?: number
+): Promise<number> {
+  // Only breaking-worthy events trigger articles
+  if (
+    !BREAKING_EVENT_TYPES.includes(
+      eventType as (typeof BREAKING_EVENT_TYPES)[number]
+    )
+  ) {
+    return 0;
+  }
+
+  // Use reservation pattern to prevent race conditions:
+  // Reserve a slot before generation, release if it fails
+  const reservationId = breakingArticleRateLimiter.tryReserveSlot();
+  if (reservationId === null) {
+    const { currentCount, maxAllowed } =
+      breakingArticleRateLimiter.canGenerateArticle();
+    logger.debug(
+      'Breaking article skipped - rate limit reached',
+      { eventId, eventType, currentCount, maxAllowed },
+      'EventGeneration'
+    );
+    return 0;
+  }
+
+  logger.info(
+    'Triggering breaking article for world event',
+    { eventId, eventType, questionId: question.id, reservationId },
+    'EventGeneration'
+  );
+
+  try {
+    // Reuse the existing arc event article generation logic
+    // This handles org selection, article generation, and persistence
+    // Pass skipRateLimit=true since we've already reserved a slot
+    const articlesCreated = await generateArticlesForArcEvent(
+      eventId,
+      'created', // Breaking articles are always fresh coverage
+      question,
+      llmClient,
+      timestamp,
+      dayNumber,
+      { skipRateLimit: true }
+    );
+
+    // If we created more than 1 article, record the additional ones
+    // (first one was already recorded via tryReserveSlot)
+    for (let i = 1; i < articlesCreated; i++) {
+      breakingArticleRateLimiter.recordBreakingArticle(timestamp.getTime());
+    }
+
+    // If no articles were created, release the reserved slot
+    if (articlesCreated === 0) {
+      breakingArticleRateLimiter.releaseSlot(reservationId);
+    }
+
+    return articlesCreated;
+  } catch (error) {
+    // Release the reserved slot on failure
+    breakingArticleRateLimiter.releaseSlot(reservationId);
+    throw error;
+  }
 }
 
 /**
@@ -832,3 +979,11 @@ export function markEventAsCovered(
 ): void {
   arcEventPacer.recordArcEventCoverage(eventId, orgId, status, articleId);
 }
+
+/** @internal Exported for testing only */
+export const _testing = {
+  selectRelevantActors,
+  selectEventType,
+  actorEventCooldown,
+  recentEventTypes,
+};

@@ -137,143 +137,134 @@ export function AgentLogs({ agentId }: AgentLogsProps) {
   return (
     <div className="space-y-4">
       {/* Filters */}
-      <div className="rounded-lg border border-border bg-card/50 p-4 backdrop-blur">
-        <div className="flex flex-wrap items-center gap-4">
-          <Filter className="h-5 w-5 text-muted-foreground" />
-          <select
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
-            className="rounded-lg border border-border bg-muted px-3 py-2 text-foreground"
-          >
-            <option value="all">All Types</option>
-            <option value="chat">Chat</option>
-            <option value="tick">Tick</option>
-            <option value="trade">Trade</option>
-            <option value="post">Post</option>
-            <option value="comment">Comment</option>
-            <option value="error">Error</option>
-            <option value="system">System</option>
-          </select>
-          <select
-            value={levelFilter}
-            onChange={(e) => setLevelFilter(e.target.value)}
-            className="rounded-lg border border-border bg-muted px-3 py-2 text-foreground"
-          >
-            <option value="all">All Levels</option>
-            <option value="info">Info</option>
-            <option value="warn">Warning</option>
-            <option value="error">Error</option>
-            <option value="debug">Debug</option>
-          </select>
-          <button
-            onClick={fetchLogs}
-            disabled={loading}
-            className="rounded-lg bg-muted px-4 py-2 font-medium text-foreground transition-all hover:bg-muted/80 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {loading ? 'Refreshing...' : 'Refresh'}
-          </button>
-        </div>
+      <div className="flex items-center gap-2">
+        <Filter className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <select
+          value={typeFilter}
+          onChange={(e) => setTypeFilter(e.target.value)}
+          className="min-w-0 flex-1 rounded-md border border-border bg-muted px-2 py-1.5 text-xs"
+        >
+          <option value="all">All Types</option>
+          <option value="chat">Chat</option>
+          <option value="tick">Tick</option>
+          <option value="trade">Trade</option>
+          <option value="post">Post</option>
+          <option value="comment">Comment</option>
+          <option value="error">Error</option>
+          <option value="system">System</option>
+        </select>
+        <select
+          value={levelFilter}
+          onChange={(e) => setLevelFilter(e.target.value)}
+          className="min-w-0 flex-1 rounded-md border border-border bg-muted px-2 py-1.5 text-xs"
+        >
+          <option value="all">All Levels</option>
+          <option value="info">Info</option>
+          <option value="warn">Warning</option>
+          <option value="error">Error</option>
+          <option value="debug">Debug</option>
+        </select>
+        <button
+          onClick={fetchLogs}
+          disabled={loading}
+          className="shrink-0 rounded-md border border-border px-2 py-1.5 font-medium text-xs transition-colors hover:bg-muted disabled:opacity-50"
+        >
+          {loading ? '...' : 'Refresh'}
+        </button>
       </div>
 
       {/* Logs */}
-      <div className="rounded-lg border border-border bg-card/50 p-4 backdrop-blur">
-        {logs.length === 0 ? (
-          <div className="py-12 text-center text-muted-foreground">
-            <FileText className="mx-auto mb-4 h-12 w-12 opacity-50" />
-            <p>No logs found</p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {logs.map((log) => (
-              <div
-                key={log.id}
-                className={cn('rounded-lg border p-3', getTypeColor(log.type))}
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="mb-1 flex flex-wrap items-center gap-2">
-                      <span
-                        className={cn(
-                          'font-mono font-semibold text-xs uppercase',
-                          getLevelColor(log.level)
-                        )}
-                      >
-                        {log.level}
-                      </span>
-                      <span className="text-muted-foreground text-xs">•</span>
-                      <span className="text-muted-foreground text-xs uppercase">
-                        {log.type}
-                      </span>
-                      <span className="text-muted-foreground text-xs">•</span>
-                      <span className="text-muted-foreground text-xs">
-                        {new Date(log.createdAt).toLocaleString()}
-                      </span>
-                    </div>
-                    <div className="text-sm">{log.message}</div>
-
-                    {(log.prompt ||
-                      log.completion ||
-                      log.thinking ||
-                      log.metadata) && (
-                      <button
-                        onClick={() => toggleExpanded(log.id)}
-                        className="mt-2 rounded bg-muted px-3 py-1 text-xs transition-all hover:bg-muted/80"
-                      >
-                        {expanded.has(log.id) ? 'Hide Details' : 'Show Details'}
-                      </button>
-                    )}
-
-                    {expanded.has(log.id) && (
-                      <div className="mt-3 space-y-2 text-xs">
-                        {log.prompt && (
-                          <div>
-                            <div className="mb-1 font-medium text-muted-foreground">
-                              Prompt:
-                            </div>
-                            <pre className="overflow-x-auto whitespace-pre-wrap rounded bg-black/30 p-2">
-                              {log.prompt}
-                            </pre>
-                          </div>
-                        )}
-                        {log.completion && (
-                          <div>
-                            <div className="mb-1 font-medium text-muted-foreground">
-                              Completion:
-                            </div>
-                            <pre className="overflow-x-auto whitespace-pre-wrap rounded bg-black/30 p-2">
-                              {log.completion}
-                            </pre>
-                          </div>
-                        )}
-                        {log.thinking && (
-                          <div>
-                            <div className="mb-1 font-medium text-muted-foreground">
-                              Thinking:
-                            </div>
-                            <pre className="overflow-x-auto whitespace-pre-wrap rounded bg-black/30 p-2">
-                              {log.thinking}
-                            </pre>
-                          </div>
-                        )}
-                        {log.metadata && (
-                          <div className="min-w-0">
-                            <div className="mb-1 font-medium text-muted-foreground">
-                              Metadata:
-                            </div>
-                            <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded bg-black/30 p-2">
-                              {JSON.stringify(log.metadata, null, 2)}
-                            </pre>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
+      {logs.length === 0 ? (
+        <div className="py-8 text-center text-muted-foreground">
+          <FileText className="mx-auto mb-3 h-8 w-8 opacity-50" />
+          <p className="text-sm">No logs found</p>
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          {logs.map((log) => (
+            <div
+              key={log.id}
+              className={cn('rounded-lg border p-2.5', getTypeColor(log.type))}
+            >
+              <div className="mb-1 flex flex-wrap items-center gap-1.5">
+                <span
+                  className={cn(
+                    'font-mono font-semibold text-[10px] uppercase',
+                    getLevelColor(log.level)
+                  )}
+                >
+                  {log.level}
+                </span>
+                <span className="text-[10px] text-muted-foreground">·</span>
+                <span className="text-[10px] text-muted-foreground uppercase">
+                  {log.type}
+                </span>
+                <span className="ml-auto text-[10px] text-muted-foreground">
+                  {new Date(log.createdAt).toLocaleTimeString()}
+                </span>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+              <div className="text-xs leading-relaxed">{log.message}</div>
+
+              {(log.prompt ||
+                log.completion ||
+                log.thinking ||
+                log.metadata) && (
+                <button
+                  onClick={() => toggleExpanded(log.id)}
+                  className="mt-1.5 rounded bg-muted px-2 py-0.5 text-[10px] transition-colors hover:bg-muted/80"
+                >
+                  {expanded.has(log.id) ? 'Hide' : 'Details'}
+                </button>
+              )}
+
+              {expanded.has(log.id) && (
+                <div className="mt-2 space-y-2 text-[11px]">
+                  {log.prompt && (
+                    <div>
+                      <div className="mb-0.5 font-medium text-[10px] text-muted-foreground">
+                        Prompt
+                      </div>
+                      <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded bg-black/30 p-2">
+                        {log.prompt}
+                      </pre>
+                    </div>
+                  )}
+                  {log.completion && (
+                    <div>
+                      <div className="mb-0.5 font-medium text-[10px] text-muted-foreground">
+                        Completion
+                      </div>
+                      <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded bg-black/30 p-2">
+                        {log.completion}
+                      </pre>
+                    </div>
+                  )}
+                  {log.thinking && (
+                    <div>
+                      <div className="mb-0.5 font-medium text-[10px] text-muted-foreground">
+                        Thinking
+                      </div>
+                      <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded bg-black/30 p-2">
+                        {log.thinking}
+                      </pre>
+                    </div>
+                  )}
+                  {log.metadata && (
+                    <div>
+                      <div className="mb-0.5 font-medium text-[10px] text-muted-foreground">
+                        Metadata
+                      </div>
+                      <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded bg-black/30 p-2">
+                        {JSON.stringify(log.metadata, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

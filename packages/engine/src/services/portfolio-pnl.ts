@@ -2,12 +2,26 @@
  * Server-side portfolio P&L calculation
  */
 
-import { db, markets, perpPositions, positions, users } from '@babylon/db';
-import { and, eq, isNull } from 'drizzle-orm';
+import {
+  balanceTransactions,
+  db,
+  markets,
+  perpPositions,
+  positions,
+  users,
+} from '@babylon/db';
+import {
+  CANONICAL_AGENT_TRANSFER_TRANSACTION_TYPES,
+  CANONICAL_PEER_TRANSFER_TRANSACTION_TYPES,
+  resolveUserIdentifierKind,
+  toNumber,
+} from '@babylon/shared';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 export interface PortfolioPnLSnapshot {
   lifetimePnL: number;
   netContributions: number;
+  netPeerTransfers: number;
   totalDeposited: number;
   totalWithdrawn: number;
   availableBalance: number;
@@ -18,33 +32,58 @@ export interface PortfolioPnLSnapshot {
   accountEquity: number;
 }
 
-function toNumber(value: unknown, fallback = 0): number {
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : fallback;
-  }
-  if (typeof value === 'string') {
-    const parsed = Number.parseFloat(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
-  }
-  return fallback;
-}
-
 export async function calculatePortfolioPnL(
   userId: string
 ): Promise<PortfolioPnLSnapshot | null> {
+  const normalizedUserId = userId.trim();
+  if (!normalizedUserId) {
+    return null;
+  }
+
+  const kind = resolveUserIdentifierKind(normalizedUserId);
+  const whereClause =
+    kind === 'id'
+      ? eq(users.id, normalizedUserId)
+      : kind === 'privyId'
+        ? eq(users.privyId, normalizedUserId)
+        : sql`lower(${users.username}) = lower(${normalizedUserId})`;
+
   const userResult = await db
     .select({
+      id: users.id,
+      privyId: users.privyId,
       virtualBalance: users.virtualBalance,
       totalDeposited: users.totalDeposited,
       totalWithdrawn: users.totalWithdrawn,
       lifetimePnL: users.lifetimePnL,
     })
     .from(users)
-    .where(eq(users.id, userId))
+    .where(whereClause)
     .limit(1);
 
-  const user = userResult[0];
+  let user = userResult[0];
+  if (!user && kind !== 'id') {
+    const fallbackResult = await db
+      .select({
+        id: users.id,
+        privyId: users.privyId,
+        virtualBalance: users.virtualBalance,
+        totalDeposited: users.totalDeposited,
+        totalWithdrawn: users.totalWithdrawn,
+        lifetimePnL: users.lifetimePnL,
+      })
+      .from(users)
+      .where(eq(users.id, normalizedUserId))
+      .limit(1);
+    user = fallbackResult[0];
+  }
+
   if (!user) return null;
+
+  const canonicalUserId = user.id;
+  const positionUserIds = Array.from(
+    new Set([canonicalUserId, user.privyId].filter(Boolean))
+  ) as string[];
 
   const perpPositionResults = await db
     .select({
@@ -52,7 +91,10 @@ export async function calculatePortfolioPnL(
     })
     .from(perpPositions)
     .where(
-      and(eq(perpPositions.userId, userId), isNull(perpPositions.closedAt))
+      and(
+        inArray(perpPositions.userId, positionUserIds),
+        isNull(perpPositions.closedAt)
+      )
     );
 
   // For prediction positions, we need to join with markets
@@ -66,12 +108,34 @@ export async function calculatePortfolioPnL(
     })
     .from(positions)
     .innerJoin(markets, eq(positions.marketId, markets.id))
-    .where(and(eq(positions.userId, userId), eq(markets.resolved, false)));
+    .where(
+      and(
+        inArray(positions.userId, positionUserIds),
+        eq(markets.resolved, false)
+      )
+    );
 
   const totalDeposited = toNumber(user.totalDeposited);
   const totalWithdrawn = toNumber(user.totalWithdrawn);
   const lifetimePnL = toNumber(user.lifetimePnL);
   const availableBalance = toNumber(user.virtualBalance);
+  const [peerTransferRow] = await db
+    .select({
+      netPeerTransfers: sql<number>`COALESCE(SUM(${balanceTransactions.amount}::numeric), 0)`,
+    })
+    .from(balanceTransactions)
+    .where(
+      and(
+        inArray(balanceTransactions.userId, positionUserIds),
+        inArray(balanceTransactions.type, [
+          ...CANONICAL_AGENT_TRANSFER_TRANSACTION_TYPES,
+          ...CANONICAL_PEER_TRANSFER_TRANSACTION_TYPES,
+          'transfer_sent',
+          'transfer_received',
+        ])
+      )
+    )
+    .limit(1);
 
   const perpUnrealized = perpPositionResults.reduce(
     (sum, position) => sum + toNumber(position.unrealizedPnL),
@@ -102,12 +166,14 @@ export async function calculatePortfolioPnL(
 
   const totalUnrealizedPnL = perpUnrealized + predictionUnrealized;
   const totalPnL = lifetimePnL + totalUnrealizedPnL;
-  const netContributions = totalDeposited - totalWithdrawn;
+  const netPeerTransfers = toNumber(peerTransferRow?.netPeerTransfers);
+  const netContributions = totalDeposited - totalWithdrawn + netPeerTransfers;
   const accountEquity = netContributions + totalPnL;
 
   return {
     lifetimePnL,
     netContributions,
+    netPeerTransfers,
     totalDeposited,
     totalWithdrawn,
     availableBalance,

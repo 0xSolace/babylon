@@ -49,7 +49,12 @@
  * ```
  */
 
-import { successResponse, withErrorHandling } from '@babylon/api';
+import {
+  addPublicReadHeaders,
+  publicRateLimit,
+  successResponse,
+  withErrorHandling,
+} from '@babylon/api';
 import {
   and,
   db,
@@ -59,8 +64,10 @@ import {
   perpMarketSnapshots,
   stockPrices,
 } from '@babylon/db';
+import { toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
+import { chooseBucketMs } from '@/lib/api/chart-utils';
 
 type TimeRange = '1H' | '4H' | '1D' | '1W' | 'ALL';
 
@@ -86,32 +93,6 @@ const RANGE_MS: Record<TimeRange, number> = {
   '1W': 7 * 24 * 60 * 60 * 1000,
   ALL: 0,
 };
-
-const BUCKET_CANDIDATES_MS = [
-  60_000, // 1m
-  2 * 60_000, // 2m
-  5 * 60_000, // 5m
-  10 * 60_000, // 10m
-  15 * 60_000, // 15m
-  30 * 60_000, // 30m
-  60 * 60_000, // 1h
-  2 * 60 * 60_000, // 2h
-  4 * 60 * 60_000, // 4h
-  6 * 60 * 60_000, // 6h
-  12 * 60 * 60_000, // 12h
-  24 * 60 * 60_000, // 1d
-];
-
-function chooseBucketMs(spanMs: number, maxPoints: number): number {
-  if (!Number.isFinite(spanMs) || spanMs <= 0) return BUCKET_CANDIDATES_MS[0]!;
-  if (!Number.isFinite(maxPoints) || maxPoints <= 1)
-    return BUCKET_CANDIDATES_MS.at(-1)!;
-
-  for (const candidate of BUCKET_CANDIDATES_MS) {
-    if (Math.ceil(spanMs / candidate) <= maxPoints) return candidate;
-  }
-  return BUCKET_CANDIDATES_MS.at(-1)!;
-}
 
 function downsampleStockPrices(
   points: Array<{
@@ -209,6 +190,9 @@ export const GET = withErrorHandling(
     request: NextRequest,
     context: { params: Promise<{ ticker: string }> }
   ) => {
+    const { error, rateLimitInfo } = await publicRateLimit(request);
+    if (error) return error;
+
     const { ticker } = ParamsSchema.parse(await context.params);
     const { searchParams } = new URL(request.url);
     const { limit, range } = QuerySchema.parse({
@@ -286,7 +270,7 @@ export const GET = withErrorHandling(
         }))
       : ascending;
 
-    return successResponse({
+    const res = successResponse({
       ticker,
       organizationId: marketSnapshot.organizationId,
       history: history.map((point) => ({
@@ -294,12 +278,14 @@ export const GET = withErrorHandling(
         price: point.price,
         change: point.change,
         changePercent: point.changePercent,
-        timestamp: point.timestamp.toISOString(),
+        timestamp: toISO(point.timestamp),
         openPrice: point.openPrice,
         highPrice: point.highPrice,
         lowPrice: point.lowPrice,
         volume: point.volume,
       })),
     });
+    if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
+    return res;
   }
 );

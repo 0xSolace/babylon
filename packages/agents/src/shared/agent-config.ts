@@ -13,6 +13,7 @@ import {
   userAgentConfigs,
   users,
 } from '@babylon/db';
+import { generateSnowflakeId } from './snowflake';
 
 /** User with agent configuration attached */
 export type UserWithAgentConfig = User & {
@@ -22,7 +23,7 @@ export type UserWithAgentConfig = User & {
 /**
  * Get agent config for a user
  */
-export async function getAgentConfig(
+async function fetchAgentConfig(
   userId: string
 ): Promise<UserAgentConfig | null> {
   const result = await db
@@ -31,6 +32,40 @@ export async function getAgentConfig(
     .where(eq(userAgentConfigs.userId, userId))
     .limit(1);
   return result[0] ?? null;
+}
+
+export async function getAgentConfig(
+  userId: string
+): Promise<UserAgentConfig | null> {
+  const existing = await fetchAgentConfig(userId);
+  if (existing) return existing;
+
+  const [user] = await db
+    .select({ id: users.id, isAgent: users.isAgent })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  if (!user?.isAgent) return null;
+
+  const now = new Date();
+  const [created] = await db
+    .insert(userAgentConfigs)
+    .values({
+      id: await generateSnowflakeId(),
+      userId,
+      // Explicit true ensures agents trade by default regardless of DB migration state
+      autonomousTrading: true,
+      status: 'idle',
+      createdAt: now,
+      updatedAt: now,
+    })
+    .onConflictDoNothing({ target: userAgentConfigs.userId })
+    .returning();
+
+  if (created) return created;
+
+  return await fetchAgentConfig(userId);
 }
 
 /**
@@ -88,106 +123,38 @@ export async function upsertAgentConfig(
     return result[0]!;
   }
 
-  // Generate a new ID
-  const id = `uac_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  // Generate a new ID using snowflake for consistency
+  const id = await generateSnowflakeId();
+  const now = new Date();
   const result = await db
     .insert(userAgentConfigs)
     .values({
       id,
       userId,
       ...config,
-      updatedAt: new Date(),
+      createdAt: now,
+      updatedAt: now,
     })
     .returning();
 
   return result[0]!;
 }
 
-/**
- * Helper to get system prompt from agent config or user personality
- */
-export function getSystemPrompt(
-  user: User,
-  config: UserAgentConfig | null
-): string | null {
-  // systemPrompt is stored in the 'system' column in the database
-  return config?.systemPrompt ?? user.personality ?? null;
-}
-
-/**
- * Get style from config
- */
-export function getStyle(config: UserAgentConfig | null): string[] {
-  if (!config?.style) return [];
-  const style = config.style as { all?: string[] };
-  return style?.all ?? [];
-}
-
-/**
- * Get message examples from config
- */
-export function getMessageExamples(
-  config: UserAgentConfig | null
-): Array<Array<{ user: string; content: { text: string } }>> {
-  if (!config?.messageExamples) return [];
-  return config.messageExamples as Array<
-    Array<{ user: string; content: { text: string } }>
-  >;
-}
-
-/**
- * Get trading strategy from config
- */
-export function getTradingStrategy(
-  config: UserAgentConfig | null
-): string | null {
-  return config?.tradingStrategy ?? null;
-}
-
-/**
- * Get directives from config
- */
-export function getDirectives(config: UserAgentConfig | null): string[] {
-  if (!config?.directives) return [];
-  return config.directives as string[];
-}
-
-/**
- * Get constraints from config
- */
-export function getConstraints(config: UserAgentConfig | null): string[] {
-  if (!config?.constraints) return [];
-  return config.constraints as string[];
-}
-
-/**
- * Get max actions per tick from config
- */
-export function getMaxActionsPerTick(config: UserAgentConfig | null): number {
-  return config?.maxActionsPerTick ?? 3;
-}
-
-/**
- * Get risk tolerance from config
- */
-export function getRiskTolerance(config: UserAgentConfig | null): string {
-  return config?.riskTolerance ?? 'medium';
-}
-
-/**
- * Get planning horizon from config
- */
-export function getPlanningHorizon(config: UserAgentConfig | null): string {
-  return config?.planningHorizon ?? 'single';
-}
+// Legacy config helpers (getSystemPrompt, getStyle, getMessageExamples, etc.) removed.
+// Access config fields directly: config?.systemPrompt, config?.style, etc.
 
 /**
  * Helper to check if autonomous trading is enabled
+ * Defaults to true to match database schema (autonomousTrading defaults to true)
  */
 export function isAutonomousTradingEnabled(
   config: UserAgentConfig | null
 ): boolean {
-  return config?.autonomousTrading ?? false;
+  // Note: Database schema defaults autonomousTrading to true for new agents
+  // When config is null (no config exists), we default to false (agent not set up)
+  // When config exists but autonomousTrading is null/undefined (legacy), default to true
+  if (!config) return false;
+  return config.autonomousTrading ?? true;
 }
 
 /**
@@ -227,8 +194,65 @@ export function isAutonomousGroupChatsEnabled(
 }
 
 /**
+ * Helper to check if autonomous transfers are enabled
+ */
+export function isAutonomousTransfersEnabled(
+  config: UserAgentConfig | null
+): boolean {
+  return config?.autonomousTransfers ?? false;
+}
+
+/**
+ * Get all autonomous feature flags with proper defaults
+ * Trading defaults to true, all others default to false
+ */
+export function getAutonomousFeatures(config: UserAgentConfig | null) {
+  return {
+    trading: isAutonomousTradingEnabled(config),
+    posting: isAutonomousPostingEnabled(config),
+    commenting: isAutonomousCommentingEnabled(config),
+    dms: isAutonomousDMsEnabled(config),
+    groupChats: isAutonomousGroupChatsEnabled(config),
+    transfers: isAutonomousTransfersEnabled(config),
+  };
+}
+
+/**
+ * Check if any autonomous feature is enabled
+ */
+export function hasAnyAutonomousFeature(
+  config: UserAgentConfig | null
+): boolean {
+  const features = getAutonomousFeatures(config);
+  return (
+    features.trading ||
+    features.posting ||
+    features.commenting ||
+    features.dms ||
+    features.groupChats ||
+    features.transfers
+  );
+}
+
+/**
  * Helper to get model tier from config
  */
 export function getModelTier(config: UserAgentConfig | null): string {
   return config?.modelTier ?? 'free';
+}
+
+export function getAlignment(
+  config: UserAgentConfig | null
+): 'good' | 'neutral' | 'evil' {
+  const val = config?.alignment;
+  if (val === 'good' || val === 'evil') return val;
+  return 'neutral';
+}
+
+export function getTeam(
+  config: UserAgentConfig | null
+): 'red' | 'blue' | 'gray' {
+  const val = config?.team;
+  if (val === 'red' || val === 'blue') return val;
+  return 'gray';
 }

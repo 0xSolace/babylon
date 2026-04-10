@@ -28,21 +28,25 @@ import {
   recordCronExecution,
   relayCronToStaging,
   verifyCronAuth,
+  withErrorHandling,
 } from '@babylon/api';
-import { db, eq, games, generateSnowflakeId, posts } from '@babylon/db';
+import { db, eq, games } from '@babylon/db';
 import {
+  type Article,
+  ArticleGenerator,
   articleRateLimiter,
   BabylonLLMClient,
-  characterMappingService,
-  generateArticleImageWithRetry,
   getActiveEventsForPosting,
   hasEventBeenCovered,
   markEventAsCovered,
+  persistArticle,
+  type StaticActor,
   StaticDataRegistry,
+  type StaticOrganization,
   secureRandom,
   worldFactsService,
 } from '@babylon/engine';
-import { logger } from '@babylon/shared';
+import { generateSnowflakeId, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
@@ -53,6 +57,87 @@ interface GameState {
   isContinuous: boolean;
   currentDay: number | null;
 }
+
+/** Valid values for Actor.initialLuck field */
+const VALID_INITIAL_LUCK = ['low', 'medium', 'high'] as const;
+type InitialLuck = (typeof VALID_INITIAL_LUCK)[number];
+
+/**
+ * Type guard to validate initialLuck values at runtime.
+ * Ensures the string value is one of the allowed union members.
+ */
+function isValidInitialLuck(value: unknown): value is InitialLuck {
+  return (
+    typeof value === 'string' &&
+    VALID_INITIAL_LUCK.includes(value as InitialLuck)
+  );
+}
+
+/**
+ * Map StaticActor[] to Actor[] interface expected by ArticleGenerator.
+ * Extracted to module-scope helper to avoid duplication between
+ * generateEventArticle and generateBaselineArticle.
+ */
+function mapStaticActorsToActors(actorsList: StaticActor[]) {
+  return actorsList.map((a) => ({
+    id: a.id,
+    name: a.name,
+    description: a.description,
+    domain: a.domain,
+    personality: a.personality,
+    tier: a.tier ?? undefined,
+    affiliations: a.affiliations,
+    postStyle: a.postStyle,
+    postExample: a.postExample, // Keep as string[] to match Actor interface
+    role: a.role,
+    // Validate initialLuck at runtime - use validated value or default to 'medium'
+    initialLuck: isValidInitialLuck(a.initialLuck) ? a.initialLuck : 'medium',
+    initialMood: a.initialMood,
+  }));
+}
+
+/**
+ * Map StaticOrganization to Organization interface expected by ArticleGenerator.
+ */
+function mapStaticOrgToOrganization(org: StaticOrganization) {
+  return {
+    id: org.id,
+    name: org.name,
+    description: org.description,
+    type: org.type,
+    canBeInvolved: org.canBeInvolved,
+  };
+}
+
+/**
+ * Create a standardized question object for ArticleGenerator.
+ * Centralizes question construction to ensure consistency between
+ * event articles and baseline articles.
+ *
+ * @param id - Question identifier (event questionId or synthetic baseline ID)
+ * @param text - Question/topic text for the article
+ */
+function createQuestionForArticle(id: string, text: string) {
+  return {
+    id,
+    text,
+    scenario: 1, // Default - article-tick articles don't have scenario context
+    outcome: false,
+    rank: 1, // Default - article-tick articles don't have ranking context
+    createdDate: new Date().toISOString().split('T')[0]!,
+    resolutionDate: '',
+    status: 'active' as const,
+  };
+}
+
+/**
+ * Result type for article generation helpers.
+ * Distinguishes between success, skip (rate limit), and error for accurate metrics.
+ */
+type ArticleGenerationResult =
+  | { status: 'success'; id: string }
+  | { status: 'skipped'; reason: string }
+  | { status: 'error'; error: string };
 
 // Vercel function configuration
 export const maxDuration = 300; // 5 minutes max
@@ -72,149 +157,66 @@ export const dynamic = 'force-dynamic';
 const MAX_ARTICLES_PER_TICK = 1;
 
 /**
- * Article payload for persistence
- */
-interface ArticlePayload {
-  title: string;
-  summary: string;
-  article: string;
-}
-
-/**
- * Result type for persistArticle to handle rate-limiting gracefully
- */
-type PersistArticleResult =
-  | { success: true; postId: string }
-  | { success: false; rateLimited: true };
-
-/**
- * Persist an article to the database.
- * Handles text transformation, image generation, and DB insert.
+ * Helper to persist an article using the shared persistence service.
+ * Converts Article from ArticleGenerator to ArticlePersistInput format.
  *
- * @param payload - The article content (title, summary, article body)
- * @param authorId - The organization ID authoring the article
+ * @param article - The Article from ArticleGenerator (already has parody names)
  * @param gameState - Current game state for context
- * @returns Success with post ID, or rate-limited result (not an error)
+ * @returns Result from the persistence service
  */
-async function persistArticle(
-  payload: ArticlePayload,
-  authorId: string,
+async function persistArticleFromGenerator(
+  article: Article,
   gameState: GameState
-): Promise<PersistArticleResult> {
-  // Validate required fields before doing any work
-  const trimmedTitle = payload.title?.trim() ?? '';
-  const trimmedSummary = payload.summary?.trim() ?? '';
-  const trimmedArticle = payload.article?.trim() ?? '';
-
-  if (!trimmedTitle) {
+) {
+  // Validate required fields before calling persistence service
+  if (!article.id?.trim()) {
+    throw new Error('Missing article id');
+  }
+  if (!article.title?.trim()) {
     throw new Error('Missing article title');
   }
-  if (!trimmedSummary) {
+  if (!article.summary?.trim()) {
     throw new Error('Missing article summary');
   }
-  if (!trimmedArticle) {
+  if (!article.content?.trim()) {
     throw new Error('Missing article body');
   }
-  if (!authorId) {
-    throw new Error('Missing authorId');
+  if (!article.authorOrgId) {
+    throw new Error('Missing authorOrgId');
   }
   if (!gameState?.id) {
     throw new Error('Missing gameState.id');
   }
 
-  // Transform content to use parody names - run concurrently to reduce latency
-  const [transformedTitle, transformedSummary, transformedBody] =
-    await Promise.all([
-      characterMappingService.transformText(trimmedTitle),
-      characterMappingService.transformText(trimmedSummary),
-      characterMappingService.transformText(trimmedArticle),
-    ]);
-
-  // Re-check rate limit immediately before insert to prevent TOCTOU race condition
-  // Another process may have created articles between the initial check and now
-  const { allowed: stillAllowed } =
-    await articleRateLimiter.canGenerateArticle();
-  if (!stillAllowed) {
-    // Return rate-limited result instead of throwing - this is not an error condition
-    logger.info(
-      'Article skipped due to rate limit (TOCTOU re-check)',
-      { authorId },
-      'ArticleTick'
-    );
-    return { success: false, rateLimited: true };
-  }
-
-  const postId = await generateSnowflakeId();
-  const now = new Date();
-
-  // Insert article first without image - image generation is fire-and-forget
-  await db.insert(posts).values({
-    id: postId,
-    type: 'article',
-    content: transformedSummary.transformedText,
-    fullContent: transformedBody.transformedText,
-    articleTitle: transformedTitle.transformedText,
-    category: 'news',
-    imageUrl: undefined, // Will be updated asynchronously if FAL_KEY is set
-    authorId,
-    gameId: gameState.id,
-    dayNumber: gameState.currentDay ?? 1,
-    timestamp: now,
-    createdAt: now,
-  });
-
-  // Fire-and-forget image generation - updates post asynchronously after insert
-  // Use void to explicitly mark as intentionally unhandled (silences floating-promise lint)
-  if (process.env.FAL_KEY) {
-    void generateArticleImageWithRetry({
-      title: transformedTitle.transformedText,
-      summary: transformedSummary.transformedText,
-      category: 'news',
-    })
-      .then(async (imageUrl) => {
-        if (imageUrl) {
-          // Update the post with the generated image URL
-          try {
-            await db
-              .update(posts)
-              .set({ imageUrl })
-              .where(eq(posts.id, postId));
-          } catch (err) {
-            logger.warn(
-              'Failed to update article with image URL',
-              {
-                postId,
-                authorId,
-                error: err instanceof Error ? err.message : String(err),
-              },
-              'ArticleTick'
-            );
-          }
-        }
-      })
-      .catch((err) => {
-        logger.debug(
-          'Image generation failed (non-blocking)',
-          {
-            postId,
-            authorId,
-            error: err instanceof Error ? err.message : String(err),
-          },
-          'ArticleTick'
-        );
-      });
-  }
-
-  return { success: true, postId };
+  // Use the shared persistence service
+  return persistArticle(
+    {
+      id: article.id,
+      title: article.title,
+      summary: article.summary,
+      content: article.content,
+      authorOrgId: article.authorOrgId,
+      gameId: gameState.id,
+      dayNumber: gameState.currentDay ?? 1,
+      byline: article.byline,
+      biasScore: article.biasScore,
+      sentiment: article.sentiment,
+      slant: article.slant,
+      category: article.category,
+      relatedQuestion: article.relatedQuestion,
+      timestamp: article.publishedAt,
+    },
+    { checkRateLimit: true }
+  );
 }
 
 /**
  * GET /api/cron/article-tick
  * Alias for POST endpoint to support GET requests from cron services.
  */
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandling(async function GET(req: NextRequest) {
   return POST(req);
-}
+});
 
 /**
  * POST /api/cron/article-tick
@@ -222,7 +224,7 @@ export async function GET(req: NextRequest) {
  * Generates articles based on active events and questions.
  * Rate limited to prevent feed flooding.
  */
-export async function POST(_req: NextRequest) {
+export const POST = withErrorHandling(async function POST(_req: NextRequest) {
   // Verify cron authorization
   if (!verifyCronAuth(_req, { jobName: 'ArticleTick' })) {
     logger.warn(
@@ -240,21 +242,14 @@ export async function POST(_req: NextRequest) {
   const processId = `article-tick-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
   logger.info('Article tick started', { processId }, 'ArticleTick');
 
-  // Relay to staging if configured
+  // Relay to staging if configured (fan-out)
   const relayResult = await relayCronToStaging(_req, 'article-tick');
   if (relayResult.forwarded) {
     logger.info(
-      'Cron execution relayed to staging - skipping local execution',
+      'Cron execution relayed to staging (fan-out: continuing local execution)',
       { status: relayResult.status, error: relayResult.error },
       'ArticleTick'
     );
-    return NextResponse.json({
-      success: true,
-      skipped: true,
-      reason: 'Relayed to staging environment',
-      relayStatus: relayResult.status,
-      articlesCreated: 0,
-    });
   }
 
   // Acquire global lock to prevent overlapping cron invocations
@@ -388,7 +383,18 @@ export async function POST(_req: NextRequest) {
 
     // Get active events for article generation
     const activeEventsData = await getActiveEventsForPosting();
-    const worldFactsContext = await worldFactsService.generatePromptContext();
+
+    // Get world facts context with graceful fallback if service fails
+    let worldFactsContext = '';
+    try {
+      worldFactsContext = await worldFactsService.generatePromptContext();
+    } catch (error) {
+      logger.warn(
+        'Failed to fetch world facts context - proceeding without',
+        { error: error instanceof Error ? error.message : String(error) },
+        'ArticleTick'
+      );
+    }
 
     // Create LLM client for article generation
     const llmClient = BabylonLLMClient.forGameTick();
@@ -415,38 +421,29 @@ export async function POST(_req: NextRequest) {
           const orgIndex = Math.floor(secureRandom() * newsOrgs.length);
           const org = newsOrgs[orgIndex]!;
 
-          try {
-            const article = await generateEventArticle(
-              event,
-              org,
-              actorsList,
-              worldFactsContext,
-              gameState,
-              llmClient
-            );
+          const result = await generateEventArticle(
+            event,
+            org,
+            actorsList,
+            worldFactsContext,
+            gameState,
+            llmClient
+          );
 
-            if (article) {
-              articlesCreated++;
-              // Mark this event as covered for future duplicate detection
-              markEventAsCovered(eventId, org.id, article.id);
-              logger.info(
-                `Article created by ${org.name}`,
-                { eventId: event.questionId, articleId: article.id },
-                'ArticleTick'
-              );
-            }
-          } catch (error) {
-            errorCount++;
-            logger.error(
-              'Failed to generate event article',
-              {
-                eventId: event.questionId,
-                orgId: org.id,
-                error: error instanceof Error ? error.message : String(error),
-              },
+          if (result.status === 'success') {
+            articlesCreated++;
+            // Mark this event as covered for future duplicate detection
+            markEventAsCovered(eventId, org.id, result.id);
+            logger.info(
+              `Article created by ${org.name}`,
+              { eventId: event.questionId, articleId: result.id },
               'ArticleTick'
             );
+          } else if (result.status === 'error') {
+            // Count actual errors for accurate metrics
+            errorCount++;
           }
+          // 'skipped' status is not an error, just means rate limit hit
         } else {
           logger.debug(
             'Event already covered - skipping',
@@ -462,34 +459,26 @@ export async function POST(_req: NextRequest) {
       const orgIndex = Math.floor(secureRandom() * newsOrgs.length);
       const org = newsOrgs[orgIndex]!;
 
-      try {
-        const article = await generateBaselineArticle(
-          org,
-          actorsList,
-          worldFactsContext,
-          gameState,
-          llmClient
-        );
+      const result = await generateBaselineArticle(
+        org,
+        actorsList,
+        worldFactsContext,
+        gameState,
+        llmClient
+      );
 
-        if (article) {
-          articlesCreated++;
-          logger.info(
-            `Baseline article created by ${org.name}`,
-            { articleId: article.id },
-            'ArticleTick'
-          );
-        }
-      } catch (error) {
-        errorCount++;
-        logger.error(
-          'Failed to generate baseline article',
-          {
-            orgId: org.id,
-            error: error instanceof Error ? error.message : String(error),
-          },
+      if (result.status === 'success') {
+        articlesCreated++;
+        logger.info(
+          `Baseline article created by ${org.name}`,
+          { articleId: result.id },
           'ArticleTick'
         );
+      } else if (result.status === 'error') {
+        // Count actual errors for accurate metrics
+        errorCount++;
       }
+      // 'skipped' status is not an error, just means rate limit hit
     }
 
     const duration = Date.now() - startTime;
@@ -507,8 +496,12 @@ export async function POST(_req: NextRequest) {
       errorCount,
     });
 
+    // Note: skipped: false indicates the tick ran to completion (vs early-exit scenarios
+    // like rate limit reached, no game, game paused). This provides consistent response
+    // shape for monitoring and test assertions.
     return NextResponse.json({
       success,
+      skipped: false,
       articlesCreated,
       errorCount,
       duration,
@@ -517,95 +510,99 @@ export async function POST(_req: NextRequest) {
   } finally {
     await DistributedLockService.releaseLock('article-tick-global', processId);
   }
-}
+});
 
 /**
- * Generate an article about a specific event
+ * Generate an article about a specific event using ArticleGenerator.
+ * Returns structured result for accurate metrics tracking.
  */
 async function generateEventArticle(
-  event: { questionId: string },
-  org: { id: string; name: string | null; description: string | null },
-  _actorsList: Array<{ id: string; name: string; description?: string }>,
+  event: { questionId: string; text?: string },
+  org: StaticOrganization,
+  actorsList: StaticActor[],
   worldFactsContext: string,
   gameState: GameState,
   llmClient: BabylonLLMClient
-): Promise<{ id: string } | null> {
-  const prompt = `You are ${org.name}, a ${org.description || 'news organization'}.
+): Promise<ArticleGenerationResult> {
+  // P0: Pre-check rate limit BEFORE expensive LLM calls to avoid wasting resources
+  const { allowed } = await articleRateLimiter.canGenerateArticle();
+  if (!allowed) {
+    logger.info(
+      'Event article skipped - rate limit reached before LLM call',
+      { eventId: event.questionId, orgId: org.id },
+      'ArticleTick'
+    );
+    return { status: 'skipped', reason: 'rate_limit' };
+  }
 
-${worldFactsContext}
+  // Create ArticleGenerator instance
+  const articleGen = new ArticleGenerator(llmClient);
 
-CURRENT TOPIC: Question ID ${event.questionId} has active market activity
+  // Use helper functions to map static data to expected interfaces
+  const organization = mapStaticOrgToOrganization(org);
+  const actors = mapStaticActorsToActors(actorsList);
 
-Write a compelling news article about this event.
-
-CRITICAL RULES:
-- Use ONLY parody names (AIlon Musk, Sam AIltman, Mark Zuckerborg, etc.) - NEVER real names
-- Match the publication's voice and editorial stance
-- Be informative and engaging
-
-Your article should include:
-- A compelling headline (max 100 chars)
-- A 2-3 sentence summary (max 400 chars)
-- A full article body of 3-4 paragraphs
-
-Return your response as XML:
-<response>
-  <title>headline here</title>
-  <summary>summary here</summary>
-  <article>full article body here</article>
-</response>`;
-
-  const rawResponse = await llmClient.generateJSON<
-    | { title: string; summary: string; article: string }
-    | { response: { title: string; summary: string; article: string } }
-  >(
-    prompt,
-    {
-      properties: {
-        title: { type: 'string' },
-        summary: { type: 'string' },
-        article: { type: 'string' },
-      },
-      required: ['title', 'summary', 'article'],
-    },
-    {
-      temperature: 0.7,
-      maxTokens: 2000,
-      format: 'xml',
-      promptType: 'generate_event_article',
-    }
+  // Create standardized question object using factory helper
+  const question = createQuestionForArticle(
+    event.questionId,
+    event.text || `Market activity for ${event.questionId}`
   );
 
-  const articleData =
-    'response' in rawResponse && rawResponse.response
-      ? rawResponse.response
-      : (rawResponse as { title: string; summary: string; article: string });
+  try {
+    // Generate article using ArticleGenerator (handles character mapping internally)
+    // Pass worldFactsContext for current game state awareness
+    const article = await articleGen.generateArticleForQuestion(
+      question,
+      organization,
+      'breaking', // Event articles are breaking news
+      actors,
+      [], // Recent events (empty - world context provides this info)
+      worldFactsContext // World facts context for current game state
+    );
 
-  if (!articleData.title || !articleData.summary || !articleData.article) {
-    return null;
+    // Persist the article using shared persistence service (includes rate limit check)
+    const result = await persistArticleFromGenerator(article, gameState);
+
+    // Handle persistence failures - distinguish rate limiting from actual errors
+    if (!result.success) {
+      if (result.rateLimited) {
+        return { status: 'skipped', reason: 'rate_limit_at_persist' };
+      }
+      // Actual persistence error (DB failure, validation, etc.)
+      return {
+        status: 'error',
+        error: result.error || 'Unknown persistence error',
+      };
+    }
+
+    // With discriminated union, articleId is guaranteed present when success is true
+    return { status: 'success', id: result.articleId };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error(
+      'ArticleGenerator failed for event article',
+      {
+        eventId: event.questionId,
+        orgId: org.id,
+        error: errorMessage,
+      },
+      'ArticleTick'
+    );
+    return { status: 'error', error: errorMessage };
   }
-
-  // Use shared helper for transformation, image generation, and DB insert
-  const result = await persistArticle(articleData, org.id, gameState);
-
-  // Handle rate-limited result (not an error, just return null)
-  if (!result.success) {
-    return null;
-  }
-
-  return { id: result.postId };
 }
 
 /**
- * Generate a baseline article (not tied to a specific event)
+ * Generate a baseline article (not tied to a specific event) using ArticleGenerator.
+ * Returns structured result for accurate metrics tracking.
  */
 async function generateBaselineArticle(
-  org: { id: string; name: string | null; description: string | null },
-  actorsList: Array<{ id: string; name: string; description?: string }>,
+  org: StaticOrganization,
+  actorsList: StaticActor[],
   worldFactsContext: string,
   gameState: GameState,
   llmClient: BabylonLLMClient
-): Promise<{ id: string } | null> {
+): Promise<ArticleGenerationResult> {
   // Pick a random actor to focus on
   const actorIndex = Math.floor(
     secureRandom() * Math.min(10, actorsList.length)
@@ -616,67 +613,71 @@ async function generateBaselineArticle(
     ? `${actor.name} and recent developments`
     : 'AI industry trends and market movements';
 
-  const prompt = `You are ${org.name}, a ${org.description || 'news organization'}.
+  // P0: Pre-check rate limit BEFORE expensive LLM calls to avoid wasting resources
+  const { allowed } = await articleRateLimiter.canGenerateArticle();
+  if (!allowed) {
+    logger.info(
+      'Baseline article skipped - rate limit reached before LLM call',
+      { topic, orgId: org.id },
+      'ArticleTick'
+    );
+    return { status: 'skipped', reason: 'rate_limit' };
+  }
 
-${worldFactsContext}
+  // Create ArticleGenerator instance
+  const articleGen = new ArticleGenerator(llmClient);
 
-Write a news article about: ${topic}
+  // Use helper functions to map static data to expected interfaces
+  const organization = mapStaticOrgToOrganization(org);
+  const actors = mapStaticActorsToActors(actorsList);
 
-CRITICAL RULES:
-- Use ONLY parody names (AIlon Musk, Sam AIltman, Mark Zuckerborg, etc.) - NEVER real names
-- Match the publication's voice and editorial stance
-- Be informative and engaging
-- Focus on the AI/crypto/tech space
+  // Create synthetic question for baseline article (topic-based)
+  // Use snowflake ID to prevent collisions if multiple baselines generated simultaneously.
+  // The "baseline-" prefix distinguishes synthetic IDs from real question IDs (which are
+  // numeric snowflakes) to avoid conflicts in logging, analytics, and caching systems.
+  const questionId = await generateSnowflakeId();
+  const question = createQuestionForArticle(`baseline-${questionId}`, topic);
 
-Your article should include:
-- A compelling headline (max 100 chars)
-- A 2-3 sentence summary (max 400 chars)
-- A full article body of 3-4 paragraphs
+  try {
+    // Generate article using ArticleGenerator (handles character mapping internally)
+    // Pass worldFactsContext for current game state awareness
+    const article = await articleGen.generateArticleForQuestion(
+      question,
+      organization,
+      'commentary', // Baseline articles are commentary/analysis
+      actors,
+      [], // Recent events (empty - world context provides this info)
+      worldFactsContext // World facts context for current game state
+    );
 
-Return your response as XML:
-<response>
-  <title>headline here</title>
-  <summary>summary here</summary>
-  <article>full article body here</article>
-</response>`;
+    // Persist the article using shared persistence service (includes rate limit check)
+    const result = await persistArticleFromGenerator(article, gameState);
 
-  const rawResponse = await llmClient.generateJSON<
-    | { title: string; summary: string; article: string }
-    | { response: { title: string; summary: string; article: string } }
-  >(
-    prompt,
-    {
-      properties: {
-        title: { type: 'string' },
-        summary: { type: 'string' },
-        article: { type: 'string' },
-      },
-      required: ['title', 'summary', 'article'],
-    },
-    {
-      temperature: 0.7,
-      maxTokens: 2000,
-      format: 'xml',
-      promptType: 'generate_baseline_article',
+    // Handle persistence failures - distinguish rate limiting from actual errors
+    if (!result.success) {
+      if (result.rateLimited) {
+        return { status: 'skipped', reason: 'rate_limit_at_persist' };
+      }
+      // Actual persistence error (DB failure, validation, etc.)
+      return {
+        status: 'error',
+        error: result.error || 'Unknown persistence error',
+      };
     }
-  );
 
-  const articleData =
-    'response' in rawResponse && rawResponse.response
-      ? rawResponse.response
-      : (rawResponse as { title: string; summary: string; article: string });
-
-  if (!articleData.title || !articleData.summary || !articleData.article) {
-    return null;
+    // With discriminated union, articleId is guaranteed present when success is true
+    return { status: 'success', id: result.articleId };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error(
+      'ArticleGenerator failed for baseline article',
+      {
+        topic,
+        orgId: org.id,
+        error: errorMessage,
+      },
+      'ArticleTick'
+    );
+    return { status: 'error', error: errorMessage };
   }
-
-  // Use shared helper for transformation, image generation, and DB insert
-  const result = await persistArticle(articleData, org.id, gameState);
-
-  // Handle rate-limited result (not an error, just return null)
-  if (!result.success) {
-    return null;
-  }
-
-  return { id: result.postId };
 }

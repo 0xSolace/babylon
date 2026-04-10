@@ -15,15 +15,39 @@
 
 import * as schema from './schema';
 
-// Re-export everything from schema
-export * from './schema';
-export { schema };
-
 // Re-export client types
 export type { DrizzleClient, JsonValue, SQLValue } from './client';
 export { TableRepository } from './client';
 // Database runtime (connection management, `db`, JSON mode)
+// We use both "export *" and explicit import-then-export for the same symbols.
+// This dual approach is necessary because some runtimes (particularly Bun in CI)
+// don't reliably resolve symbols from barrel files with only "export *".
+// See: https://github.com/oven-sh/bun/issues/4552 (barrel file re-export issues)
 export * from './db';
+// Re-export everything from schema
+export * from './schema';
+export { schema };
+
+// Import-then-export so runtimes (e.g. Bun in CI) resolve these reliably from the barrel
+//
+// MIGRATION GUIDE for deprecated functions:
+// - onReadReplica(query) -> Use dbRead directly: dbRead.select()...
+// - onReadReplicaClient  -> Use dbRead (it's the read replica client)
+// These deprecated functions remain accessible via "export * from './db'" for backward
+// compatibility but will be removed in a future major version.
+import {
+  asPublic,
+  asSystem,
+  asUser,
+  db,
+  dbRead,
+  dbWrite,
+  getJsonState,
+  getJsonStoragePath,
+  getStorageMode,
+} from './db';
+
+export * from './balance-transaction-classification';
 /**
  * Re-export unique relation types from model-types.
  *
@@ -49,6 +73,17 @@ export type {
 } from './model-types';
 // Re-export types
 export * from './types';
+export {
+  asPublic,
+  asSystem,
+  asUser,
+  db,
+  dbRead,
+  dbWrite,
+  getJsonState,
+  getJsonStoragePath,
+  getStorageMode,
+};
 
 // ============================================================================
 // Drizzle Query Operators
@@ -91,12 +126,11 @@ export {
   sql,
   sum,
 } from 'drizzle-orm';
-// Re-export database service
-export {
-  DatabaseService,
-  type FeedPost,
-  getDbInstance,
-} from './database-service';
+
+// Re-export database service (import-then-export for reliable resolution in Bun/CI)
+import { DatabaseService, getDbInstance } from './database-service';
+
+export type { FeedPost } from './database-service';
 // Re-export query helpers
 export {
   $connect,
@@ -117,3 +151,4 @@ export {
 export type { DatabaseErrorType } from './types';
 // Re-export error utilities
 export { isUniqueConstraintError, toDatabaseErrorType } from './types';
+export { DatabaseService, getDbInstance };

@@ -83,7 +83,7 @@ describe('Token Counter Utilities', () => {
 
     it('should have entry for Groq models', () => {
       expect(getModelTokenLimit('llama-3.3-70b-versatile')).toBe(131072);
-      expect(getModelTokenLimit('qwen/qwen3-32b')).toBe(131072);
+      expect(getModelTokenLimit('openai/gpt-oss-120b')).toBe(131072);
     });
   });
 

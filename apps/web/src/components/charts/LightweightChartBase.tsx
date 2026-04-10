@@ -22,6 +22,11 @@ interface LightweightChartBaseProps {
   autoSize?: boolean;
 }
 
+interface ChartContainerNode {
+  childElementCount: number;
+  replaceChildren: () => void;
+}
+
 /**
  * Dark theme configuration for charts.
  * Uses explicit colors for consistent rendering on dark backgrounds.
@@ -106,6 +111,17 @@ export const AREA_STYLES = {
     crosshairMarkerBorderColor: '#ffffff',
     crosshairMarkerBorderWidth: 2,
   } satisfies DeepPartial<AreaSeriesOptions>,
+  bluePastel: {
+    lineColor: '#60a5fa', // blue-400
+    topColor: 'rgba(96, 165, 250, 0.22)',
+    bottomColor: 'rgba(96, 165, 250, 0.02)',
+    lineWidth: 2,
+    crosshairMarkerVisible: true,
+    crosshairMarkerRadius: 4,
+    crosshairMarkerBackgroundColor: '#60a5fa',
+    crosshairMarkerBorderColor: '#ffffff',
+    crosshairMarkerBorderWidth: 2,
+  } satisfies DeepPartial<AreaSeriesOptions>,
 };
 
 /**
@@ -130,6 +146,15 @@ export const LINE_STYLES = {
     crosshairMarkerBorderColor: '#ffffff',
     crosshairMarkerBorderWidth: 2,
   } satisfies DeepPartial<LineSeriesOptions>,
+  violetPastel: {
+    color: '#8b5cf6', // violet-500 (a bit less pastel)
+    lineWidth: 2,
+    crosshairMarkerVisible: true,
+    crosshairMarkerRadius: 4,
+    crosshairMarkerBackgroundColor: '#8b5cf6',
+    crosshairMarkerBorderColor: '#ffffff',
+    crosshairMarkerBorderWidth: 2,
+  } satisfies DeepPartial<LineSeriesOptions>,
 };
 
 /**
@@ -138,6 +163,25 @@ export const LINE_STYLES = {
 interface UseLightweightChartResult {
   chartContainerRef: React.RefObject<HTMLDivElement | null>;
   chart: IChartApi | null;
+  error: string | null;
+}
+
+export function clearChartContainer(container: ChartContainerNode): void {
+  if (container.childElementCount > 0) {
+    container.replaceChildren();
+  }
+}
+
+export function getChartInitializationFailureMessage(params: {
+  height: number;
+  lastCreateErrorMessage?: string | null;
+  width: number;
+}): string {
+  if (params.lastCreateErrorMessage) {
+    return params.lastCreateErrorMessage;
+  }
+
+  return `Chart failed to initialize (container ${Math.floor(params.width)}x${Math.floor(params.height)}).`;
 }
 
 /**
@@ -158,7 +202,9 @@ export function useLightweightChart(
 ): UseLightweightChartResult {
   const chartContainerRef = useRef<HTMLDivElement | null>(null);
   const [chart, setChart] = useState<IChartApi | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const chartInstanceRef = useRef<IChartApi | null>(null);
+  const lastCreateErrorRef = useRef<string | null>(null);
   // Capture initial options to avoid re-creating chart on every render
   const initialOptionsRef = useRef(options);
 
@@ -166,10 +212,10 @@ export function useLightweightChart(
     // Skip during SSR
     if (typeof window === 'undefined') return;
 
-    let rafId: number | null = null;
     let mounted = true;
-    let retryCount = 0;
-    const MAX_RETRIES = 60; // ~1 second at 60fps
+    let rafId: number | null = null;
+    let resizeObserver: ResizeObserver | null = null;
+    let initTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
     const createChartInstance = () => {
       const container = chartContainerRef.current;
@@ -181,25 +227,26 @@ export function useLightweightChart(
       // Check if container has dimensions
       const { width, height } = container.getBoundingClientRect();
       if (width === 0 || height === 0) {
-        retryCount++;
-        if (retryCount >= MAX_RETRIES) {
-          logger.warn(
-            'Chart container never acquired dimensions after max retries',
-            { retryCount },
-            'useLightweightChart'
-          );
-          return;
-        }
-        // Container not ready yet, retry on next frame
-        rafId = requestAnimationFrame(createChartInstance);
         return;
       }
 
       try {
+        setError(null);
+        lastCreateErrorRef.current = null;
+
+        // A failed lightweight-charts constructor can leave partial DOM behind.
+        // Always retry against a clean dedicated container.
+        clearChartContainer(container);
+
+        // NOTE: Do not rely on `autoSize` here.
+        // Our repo pins lightweight-charts ~5.0.x in some environments, and `autoSize`
+        // support can be inconsistent. We instead pass explicit dimensions and handle
+        // resizing via ResizeObserver below.
         const chartInstance = createChart(container, {
           ...DARK_CHART_THEME,
           ...initialOptionsRef.current,
-          autoSize: true,
+          width: Math.floor(width),
+          height: Math.floor(height),
         });
 
         chartInstanceRef.current = chartInstance;
@@ -207,31 +254,153 @@ export function useLightweightChart(
           setChart(chartInstance);
         }
       } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'Failed to create chart';
+        lastCreateErrorRef.current = message;
+        clearChartContainer(container);
+        setError(message);
         logger.error(
-          'Failed to create chart',
-          { error },
-          'useLightweightChart'
+          'createChart failed',
+          {
+            error: error instanceof Error ? error : { error },
+            height: Math.floor(height),
+            width: Math.floor(width),
+          },
+          'LightweightChartBase'
         );
       }
     };
 
+    const scheduleCreate = () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(createChartInstance);
+    };
+
     // Use RAF to ensure DOM is ready after hydration
-    rafId = requestAnimationFrame(createChartInstance);
+    scheduleCreate();
+
+    // If we still haven't created a chart shortly after mount, surface a concrete error.
+    // This prevents "Initializing chart..." from hanging forever when the container never
+    // gets real dimensions (a common layout bug).
+    //
+    // Two-phase timeout: at 1.5s we do a quiet retry (the container may still be
+    // animating into view or waiting for layout). Only at 4s do we surface an error.
+    initTimeoutId = setTimeout(() => {
+      if (!mounted) return;
+      if (chartInstanceRef.current) return;
+
+      const container = chartContainerRef.current;
+      if (!container) {
+        setError('Chart container ref was not attached.');
+        logger.error(
+          'Container ref missing',
+          undefined,
+          'LightweightChartBase'
+        );
+        return;
+      }
+
+      const { width, height } = container.getBoundingClientRect();
+      if (width > 0 && height > 0) {
+        scheduleCreate();
+      }
+
+      // Phase 2: if still no chart after an extended wait, surface the error.
+      setTimeout(() => {
+        if (!mounted) return;
+        if (chartInstanceRef.current) return;
+        const retryRect = container.getBoundingClientRect();
+
+        if (retryRect.width > 0 && retryRect.height > 0) {
+          scheduleCreate();
+          return;
+        }
+
+        const message = getChartInitializationFailureMessage({
+          height: retryRect.height,
+          lastCreateErrorMessage: lastCreateErrorRef.current,
+          width: retryRect.width,
+        });
+        setError(message);
+        logger.warn(
+          'Chart container still zero-sized after timeout — ResizeObserver will retry when visible',
+          {
+            height: Math.floor(retryRect.height),
+            width: Math.floor(retryRect.width),
+          },
+          'LightweightChartBase'
+        );
+      }, 2500);
+    }, 1500);
+
+    // If the chart initially mounts into a zero-sized container (common with tabs/panels),
+    // listen for size changes and retry initialization when dimensions become available.
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => {
+        const container = chartContainerRef.current;
+        if (!container) return;
+
+        const instance = chartInstanceRef.current;
+        if (!instance) {
+          scheduleCreate();
+          return;
+        }
+
+        const { width, height } = container.getBoundingClientRect();
+        if (width === 0 || height === 0) return;
+        try {
+          instance.applyOptions({
+            width: Math.floor(width),
+            height: Math.floor(height),
+          });
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : 'Failed to resize chart';
+          setError(message);
+          logger.warn(
+            'Failed to resize chart',
+            error instanceof Error ? error : { error },
+            'LightweightChartBase'
+          );
+        }
+      });
+      if (chartContainerRef.current) {
+        resizeObserver.observe(chartContainerRef.current);
+      }
+    }
+
+    const handleVisibility = () => {
+      scheduleCreate();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       mounted = false;
       if (rafId !== null) {
         cancelAnimationFrame(rafId);
       }
+      if (initTimeoutId) {
+        clearTimeout(initTimeoutId);
+        initTimeoutId = null;
+      }
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+        resizeObserver = null;
+      }
+      document.removeEventListener('visibilitychange', handleVisibility);
       if (chartInstanceRef.current) {
         chartInstanceRef.current.remove();
         chartInstanceRef.current = null;
         setChart(null);
       }
+      if (chartContainerRef.current) {
+        clearChartContainer(chartContainerRef.current);
+      }
+      lastCreateErrorRef.current = null;
     };
   }, []);
 
-  return { chartContainerRef, chart };
+  return { chartContainerRef, chart, error };
 }
 
 /**
@@ -259,12 +428,12 @@ export function formatChartPrice(value: number, includeSymbol = false): string {
 }
 
 export type {
-  LightweightChartBaseProps,
+  AreaSeriesOptions,
+  ChartOptions,
+  DeepPartial,
   IChartApi,
   ISeriesApi,
-  Time,
-  DeepPartial,
-  ChartOptions,
-  AreaSeriesOptions,
+  LightweightChartBaseProps,
   LineSeriesOptions,
+  Time,
 };

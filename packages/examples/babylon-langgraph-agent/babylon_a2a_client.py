@@ -309,8 +309,6 @@ class BabylonA2AClient:
             'unfavoriteProfile': 'unfavorite_profile',
             'getFavorites': 'get_favorites',
             'getFavoritePosts': 'get_favorite_posts',
-            # Points
-            'transferPoints': 'transfer_points',
             # Moderation
             'blockUser': 'block_user',
             'unblockUser': 'unblock_user',
@@ -421,6 +419,5 @@ class BabylonA2AClient:
     async def get_notifications(self, limit: int = 20) -> Dict[str, Any]:
         """Get notifications"""
         return await self.call('a2a.getNotifications', {'limit': limit})
-
 
 

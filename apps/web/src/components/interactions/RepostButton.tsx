@@ -7,7 +7,6 @@ import { useState } from 'react';
 import { Avatar } from '@/components/shared/Avatar';
 import { Skeleton } from '@/components/shared/Skeleton';
 import { useAuth } from '@/hooks/useAuth';
-import { useLoginModal } from '@/hooks/useLoginModal';
 import { useFeedStore } from '@/stores/feedStore';
 import { useInteractionStore } from '@/stores/interactionStore';
 
@@ -39,15 +38,15 @@ import { useInteractionStore } from '@/stores/interactionStore';
  * ```
  */
 const sizeClasses = {
-  sm: 'h-8 px-2 text-xs gap-1',
+  sm: 'text-xs gap-1',
   md: 'h-10 px-3 text-sm gap-1.5',
   lg: 'h-12 px-4 text-base gap-2',
 };
 
 const iconSizes = {
-  sm: 18,
-  md: 20,
-  lg: 22,
+  sm: 20,
+  md: 22,
+  lg: 24,
 };
 
 const skeletonSizes = {
@@ -63,6 +62,7 @@ export function RepostButton({
   size = 'md',
   showCount = true,
   className,
+  onShareChange,
   postData,
 }: RepostButtonProps) {
   // Ensure size is properly typed for index access
@@ -81,15 +81,11 @@ export function RepostButton({
   const count = storeData?.shareCount ?? shareCount;
   const isLoading = loadingStates.get(`share-${postId}`) ?? false;
 
-  const { authenticated } = useAuth();
-  const { showLoginModal } = useLoginModal();
+  const { authenticated, login } = useAuth();
 
   const handleClick = () => {
     if (!authenticated) {
-      showLoginModal({
-        title: 'Login to Share',
-        message: 'Log in to share posts with your followers.',
-      });
+      login();
       return;
     }
     if (isShared) {
@@ -103,6 +99,7 @@ export function RepostButton({
   };
 
   const handleShare = async () => {
+    const willBeShared = !isShared;
     const commentToSend = quoteComment.trim() || undefined;
     const isQuote = !!commentToSend;
 
@@ -114,6 +111,7 @@ export function RepostButton({
     setTimeout(() => setIsAnimating(false), 300);
 
     const response = await toggleShare(postId, commentToSend);
+    onShareChange?.(willBeShared);
 
     // If this is a quote post and we got repost data back, add it optimistically to the feed
     if (response && response.repostPost && isQuote) {
@@ -208,17 +206,17 @@ export function RepostButton({
         <>
           {/* Backdrop */}
           <div
-            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
+            className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm"
             onClick={() => {
               setShowConfirmation(false);
               setQuoteComment('');
             }}
           />
 
-          {/* Modal - Mobile */}
-          <div className="fixed inset-x-4 top-20 bottom-auto z-50 flex max-h-[85vh] flex-col overflow-hidden rounded-2xl border border-border bg-sidebar shadow-2xl md:hidden">
-            {/* Header */}
-            <div className="flex items-center justify-between border-border border-b px-6 py-4">
+          {/* Modal - Mobile (Full Screen) */}
+          <div className="fixed inset-0 z-[110] flex flex-col bg-sidebar md:hidden">
+            {/* Header - Fixed */}
+            <div className="flex shrink-0 items-center justify-between border-border border-b px-6 py-4">
               <div className="flex items-center gap-3">
                 <button
                   type="button"
@@ -256,19 +254,23 @@ export function RepostButton({
               </button>
             </div>
 
-            {/* Content - Scrollable */}
-            <div className="flex-1 overflow-y-auto px-6 py-4">
-              {/* Quote Comment Textarea */}
+            {/* Content - Whole area scrolls */}
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-4">
+              {/* Quote Comment Textarea - auto-grows, never scrolls internally */}
               <textarea
                 value={quoteComment}
-                onChange={(e) => setQuoteComment(e.target.value)}
+                onChange={(e) => {
+                  setQuoteComment(e.target.value);
+                  e.target.style.height = 'auto';
+                  e.target.style.height = `${e.target.scrollHeight}px`;
+                }}
                 placeholder="Add your thoughts (optional)"
                 maxLength={500}
                 rows={3}
                 aria-label="Quote comment"
                 aria-describedby="char-count-mobile"
                 className={cn(
-                  'mb-1 w-full rounded-xl p-3',
+                  'mb-1 w-full overflow-hidden rounded-xl py-3 pr-3',
                   'border-0 bg-transparent',
                   'text-foreground placeholder:text-muted-foreground',
                   'resize-none focus:outline-none',
@@ -278,21 +280,21 @@ export function RepostButton({
               />
 
               {/* Character Count */}
-              {quoteComment.length > 0 && (
-                <div className="mb-3 flex justify-end">
-                  <span
-                    id="char-count-mobile"
-                    className={cn(
-                      'text-xs',
-                      quoteComment.length > 450
+              <div className="mb-3 flex justify-end">
+                <span
+                  id="char-count-mobile"
+                  className={cn(
+                    'text-xs',
+                    quoteComment.length === 0
+                      ? 'invisible'
+                      : quoteComment.length > 450
                         ? 'text-red-400'
                         : 'text-muted-foreground'
-                    )}
-                  >
-                    {quoteComment.length}/500
-                  </span>
-                </div>
-              )}
+                  )}
+                >
+                  {quoteComment.length || 0}/500
+                </span>
+              </div>
 
               {/* Original Post Preview */}
               {postData && (
@@ -337,7 +339,7 @@ export function RepostButton({
           </div>
 
           {/* Modal - Desktop */}
-          <div className="fixed inset-0 z-50 hidden items-center justify-center p-4 md:flex">
+          <div className="fixed inset-0 z-[110] hidden items-center justify-center p-4 md:flex">
             <div className="flex max-h-[85vh] w-full max-w-[580px] flex-col overflow-hidden rounded-2xl border border-border bg-sidebar shadow-2xl">
               {/* Header */}
               <div className="flex items-center justify-between border-border border-b px-6 py-4">
@@ -387,7 +389,7 @@ export function RepostButton({
               </div>
 
               {/* Content - Scrollable */}
-              <div className="flex-1 overflow-y-auto px-6 py-6">
+              <div className="flex-1 overflow-y-auto px-6 pb-6">
                 {/* Quote Comment Textarea */}
                 <textarea
                   value={quoteComment}
@@ -398,7 +400,7 @@ export function RepostButton({
                   aria-label="Quote comment"
                   aria-describedby="char-count-desktop"
                   className={cn(
-                    'mb-1 w-full rounded-xl p-4',
+                    'mb-1 w-full rounded-xl py-4 pr-4',
                     'border-0 bg-transparent',
                     'text-base text-foreground placeholder:text-muted-foreground',
                     'resize-none focus:outline-none',
@@ -408,21 +410,21 @@ export function RepostButton({
                 />
 
                 {/* Character Count */}
-                {quoteComment.length > 0 && (
-                  <div className="mb-4 flex justify-end">
-                    <span
-                      id="char-count-desktop"
-                      className={cn(
-                        'text-sm',
-                        quoteComment.length > 450
+                <div className="mb-4 flex justify-end">
+                  <span
+                    id="char-count-desktop"
+                    className={cn(
+                      'text-sm',
+                      quoteComment.length === 0
+                        ? 'invisible'
+                        : quoteComment.length > 450
                           ? 'text-red-400'
                           : 'text-muted-foreground'
-                      )}
-                    >
-                      {quoteComment.length}/500
-                    </span>
-                  </div>
-                )}
+                    )}
+                  >
+                    {quoteComment.length || 0}/500
+                  </span>
+                </div>
 
                 {/* Original Post Preview */}
                 {postData && (

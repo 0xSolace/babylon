@@ -9,7 +9,8 @@
  * @see src/lib/services/agent-registry.service.ts
  */
 
-import { verifyApiKey } from '@babylon/api';
+import { agentRegistry } from '@babylon/agents';
+import { withErrorHandling } from '@babylon/api';
 import { db } from '@babylon/db';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -21,7 +22,7 @@ const ConnectSchema = z.object({
   apiKey: z.string().regex(/^bab_(live|test)_[a-f0-9]{64}$/),
 });
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandling(async function POST(req: NextRequest) {
   // Parse and validate request body
   const body = await req.json();
   const { externalId, apiKey } = ConnectSchema.parse(body);
@@ -49,14 +50,18 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Verify API key
-  let storedHash: string | undefined;
-  if (connection.authType === 'apiKey' && connection.authCredentials) {
-    const credentials = JSON.parse(connection.authCredentials);
-    storedHash = credentials.apiKeyHash;
+  if (connection.revokedAt) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'API key revoked',
+        message: 'This agent API key has been revoked',
+      },
+      { status: 401 }
+    );
   }
 
-  if (!storedHash) {
+  if (connection.authType !== 'apiKey' || !connection.authCredentials) {
     return NextResponse.json(
       {
         success: false,
@@ -67,7 +72,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (!verifyApiKey(apiKey, storedHash)) {
+  const verifiedAgent = await agentRegistry.verifyExternalAgentApiKey(apiKey);
+  if (!verifiedAgent || verifiedAgent.agentId !== externalId) {
     return NextResponse.json(
       {
         success: false,
@@ -120,4 +126,4 @@ export async function POST(req: NextRequest) {
     },
     { status: 200 }
   );
-}
+});

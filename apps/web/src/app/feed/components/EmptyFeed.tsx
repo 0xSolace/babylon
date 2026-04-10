@@ -1,6 +1,14 @@
 'use client';
 
-type EmptyFeedVariant = 'latest' | 'hot' | 'following' | 'default';
+import { BookOpen, Clock, Compass, FileText, Users } from 'lucide-react';
+import { EmptyState } from '@/components/shared/EmptyState';
+
+type EmptyFeedVariant =
+  | 'latest'
+  | 'stories'
+  | 'forYou'
+  | 'following'
+  | 'default';
 
 interface EmptyFeedProps {
   variant: EmptyFeedVariant;
@@ -12,76 +20,61 @@ interface EmptyFeedProps {
  *
  * Variants:
  * - latest: No posts in the main feed yet
- * - hot: No hot posts in the last 24 hours
+ * - stories: No narrative stories for today's topic
+ * - forYou: No ranked recommendations in the feed
  * - following: User hasn't followed anyone
  * - default: Generic empty state
  */
 export function EmptyFeed({ variant, isLoading = false }: EmptyFeedProps) {
   if (variant === 'latest') {
     return (
-      <div className="w-full p-4 text-center sm:p-8">
-        <div className="py-8 text-muted-foreground sm:py-12">
-          <h2 className="mb-2 font-bold text-foreground text-lg sm:text-2xl">
-            No Posts Yet
-          </h2>
-          <p className="mb-4 text-sm sm:text-base">
-            Engine is generating posts...
-          </p>
-          <div className="space-y-2 text-muted-foreground text-xs sm:text-sm">
-            <p>Check terminal for tick logs.</p>
-            <p>Posts appear within 60 seconds.</p>
-          </div>
-        </div>
-      </div>
+      <EmptyState
+        icon={FileText}
+        title="No Posts Yet"
+        description="Engine is generating posts. Check terminal for tick logs. Posts appear within 60 seconds."
+      />
     );
   }
 
-  if (variant === 'hot') {
+  if (variant === 'forYou') {
     return (
-      <div className="w-full p-4 text-center sm:p-8">
-        <div className="py-8 text-muted-foreground sm:py-12">
-          <h2 className="mb-2 font-bold text-foreground text-lg sm:text-2xl">
-            🔥 No Hot Posts Yet
-          </h2>
-          <p className="mb-4 text-sm sm:text-base">
-            Posts with the most engagement in the last 24 hours appear here.
-          </p>
-          <p className="text-muted-foreground text-xs sm:text-sm">
-            Like, comment, and share posts to heat things up!
-          </p>
-        </div>
-      </div>
+      <EmptyState
+        icon={Compass}
+        title="No Recommendations Yet"
+        description="For You fills up as the world reacts to the day's story. New posts, articles, and markets will appear here as activity picks up."
+      />
+    );
+  }
+
+  if (variant === 'stories') {
+    return (
+      <EmptyState
+        icon={BookOpen}
+        title="No Stories Yet"
+        description="Today's story will appear here as the daily topic unfolds."
+      />
     );
   }
 
   if (variant === 'following') {
     return (
-      <div className="w-full p-4 text-center sm:p-8">
-        <div className="py-8 text-muted-foreground sm:py-12">
-          <h2 className="mb-2 font-semibold text-foreground text-lg sm:text-xl">
-            👥 Not Following Anyone Yet
-          </h2>
-          <p className="mb-4 text-sm sm:text-base">
-            {isLoading
-              ? 'Loading following...'
-              : 'Follow profiles to see their posts here. Visit a profile and click the Follow button.'}
-          </p>
-        </div>
-      </div>
+      <EmptyState
+        icon={Users}
+        title="Not Following Anyone Yet"
+        description={
+          isLoading
+            ? 'Loading following...'
+            : 'Follow profiles to see their posts here. Visit a profile and click the Follow button.'
+        }
+      />
     );
   }
 
   return (
-    <div className="w-full p-4 text-center sm:p-8">
-      <div className="py-8 text-muted-foreground sm:py-12">
-        <h2 className="mb-2 font-semibold text-foreground text-lg sm:text-xl">
-          ⏱️ No Posts Yet
-        </h2>
-        <p className="mb-4 text-sm sm:text-base">
-          Game tick runs every 60 seconds. Content will appear here as it&apos;s
-          generated.
-        </p>
-      </div>
-    </div>
+    <EmptyState
+      icon={Clock}
+      title="No Posts Yet"
+      description="Game tick runs every 60 seconds. Content will appear here as it's generated."
+    />
   );
 }

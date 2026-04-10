@@ -147,7 +147,12 @@
  * @see {@link /src/components/trading} Trading components
  */
 
-import { optionalAuth, successResponse, withErrorHandling } from '@babylon/api';
+import {
+  addPublicReadHeaders,
+  publicRateLimit,
+  successResponse,
+  withErrorHandling,
+} from '@babylon/api';
 import { db } from '@babylon/db';
 import { StaticDataRegistry } from '@babylon/engine';
 import { logger } from '@babylon/shared';
@@ -161,8 +166,8 @@ const QuerySchema = z.object({
 });
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
-  // Optional auth - trades are public
-  await optionalAuth(request).catch(() => null);
+  const { error, rateLimitInfo } = await publicRateLimit(request);
+  if (error) return error;
 
   // Parse query parameters
   const { searchParams } = new URL(request.url);
@@ -196,19 +201,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     },
   });
 
-  // Get recent point transfers (sent and received)
-  const pointTransfers = await db.pointsTransaction.findMany({
-    take: params.limit,
-    skip: params.offset,
-    orderBy: { createdAt: 'desc' },
-    where: {
-      ...userFilter,
-      reason: {
-        in: ['transfer_sent', 'transfer_received'],
-      },
-    },
-  });
-
   // Fetch users for balance transactions
   const balanceUserIds = [
     ...new Set(balanceTransactions.map((tx) => tx.userId)),
@@ -224,35 +216,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     },
   });
   const balanceUsersMap = new Map(balanceUsers.map((u) => [u.id, u]));
-
-  // Fetch users for point transfers (both sender and recipient)
-  const transferUserIds = new Set<string>();
-  for (const transfer of pointTransfers) {
-    transferUserIds.add(transfer.userId);
-    // Parse metadata to get the other party's ID
-    if (transfer.metadata) {
-      const metadata = JSON.parse(transfer.metadata) as {
-        senderId?: string;
-        recipientId?: string;
-        senderName?: string;
-        recipientName?: string;
-        message?: string;
-      };
-      if (metadata.senderId) transferUserIds.add(metadata.senderId);
-      if (metadata.recipientId) transferUserIds.add(metadata.recipientId);
-    }
-  }
-  const transferUsers = await db.user.findMany({
-    where: { id: { in: Array.from(transferUserIds) } },
-    select: {
-      id: true,
-      username: true,
-      displayName: true,
-      profileImageUrl: true,
-      isActor: true,
-    },
-  });
-  const transferUsersMap = new Map(transferUsers.map((u) => [u.id, u]));
 
   // Get recent NPC trades (if not filtering by specific user, or if user is an NPC)
   // Note: npcActorId references Actor.id, not User.id
@@ -383,6 +346,34 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   });
   const perpUsersMap = new Map(perpUsers.map((u) => [u.id, u]));
 
+  // Fetch prediction markets for pred_buy/pred_sell balance transactions and NPC prediction trades
+  const predictionMarketIds = [
+    ...new Set([
+      ...balanceTransactions
+        .filter(
+          (tx) =>
+            (tx.type === 'pred_buy' || tx.type === 'pred_sell') && tx.relatedId
+        )
+        .map((tx) => tx.relatedId as string),
+      ...npcTrades
+        .filter((t) => t.marketType === 'prediction' && t.marketId)
+        .map((t) => t.marketId as string),
+    ]),
+  ];
+  const predictionMarkets =
+    predictionMarketIds.length > 0
+      ? await db.market.findMany({
+          where: { id: { in: predictionMarketIds } },
+          select: {
+            id: true,
+            question: true,
+            resolved: true,
+            resolution: true,
+          },
+        })
+      : [];
+  const predictionMarketsMap = new Map(predictionMarkets.map((m) => [m.id, m]));
+
   // Merge and sort by timestamp
   // Filter out balance transactions from NPC actors - they have npcTrades entries instead
   const allTrades = [
@@ -391,57 +382,32 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         const user = balanceUsersMap.get(tx.userId);
         return !user?.isActor; // Exclude NPC actors
       })
-      .map((tx) => ({
-        type: 'balance' as const,
-        id: tx.id,
-        timestamp: tx.createdAt,
-        user: balanceUsersMap.get(tx.userId) || null,
-        amount: tx.amount.toString(),
-        balanceBefore: tx.balanceBefore.toString(),
-        balanceAfter: tx.balanceAfter.toString(),
-        transactionType: tx.type,
-        description: tx.description,
-        relatedId: tx.relatedId,
-      })),
-    ...pointTransfers.map((tx) => {
-      const metadata = tx.metadata
-        ? (JSON.parse(tx.metadata) as {
-            senderId?: string;
-            recipientId?: string;
-            senderName?: string;
-            recipientName?: string;
-            message?: string;
-          })
-        : {};
-      const isSent = tx.reason === 'transfer_sent';
-      const otherPartyId = isSent ? metadata.recipientId : metadata.senderId;
-      const otherPartyName = isSent
-        ? metadata.recipientName
-        : metadata.senderName;
-
-      return {
-        type: 'transfer' as const,
-        id: tx.id,
-        timestamp: tx.createdAt,
-        user: transferUsersMap.get(tx.userId) || null,
-        otherParty: otherPartyId
-          ? transferUsersMap.get(otherPartyId) || {
-              id: otherPartyId,
-              username: otherPartyName,
-              displayName: otherPartyName,
-              profileImageUrl: null,
-              isActor: false,
-            }
-          : null,
-        amount: tx.amount,
-        pointsBefore: tx.pointsBefore,
-        pointsAfter: tx.pointsAfter,
-        direction: isSent ? ('sent' as const) : ('received' as const),
-        message: metadata.message,
-      };
-    }),
+      .map((tx) => {
+        const isPrediction = tx.type === 'pred_buy' || tx.type === 'pred_sell';
+        const market =
+          isPrediction && tx.relatedId
+            ? (predictionMarketsMap.get(tx.relatedId) ?? null)
+            : null;
+        return {
+          type: 'balance' as const,
+          id: tx.id,
+          timestamp: tx.createdAt,
+          user: balanceUsersMap.get(tx.userId) || null,
+          amount: tx.amount.toString(),
+          balanceBefore: tx.balanceBefore.toString(),
+          balanceAfter: tx.balanceAfter.toString(),
+          transactionType: tx.type,
+          description: tx.description,
+          relatedId: tx.relatedId,
+          market,
+        };
+      }),
     ...npcTrades.map((trade) => {
       const actor = actorsMap.get(trade.npcActorId);
+      const npcMarket =
+        trade.marketType === 'prediction' && trade.marketId
+          ? (predictionMarketsMap.get(trade.marketId) ?? null)
+          : null;
       return {
         type: 'npc' as const,
         id: trade.id,
@@ -458,6 +424,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         marketType: trade.marketType,
         ticker: trade.ticker,
         marketId: trade.marketId,
+        marketQuestion: npcMarket?.question ?? null,
         action: trade.action,
         side: trade.side,
         amount: trade.amount,
@@ -500,9 +467,11 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   // Limit to requested amount
   const limitedTrades = allTrades.slice(0, params.limit);
 
-  return successResponse({
+  const res = successResponse({
     trades: limitedTrades,
     total: allTrades.length,
     hasMore: allTrades.length > params.limit,
   });
+  if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
+  return res;
 });

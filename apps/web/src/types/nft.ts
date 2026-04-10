@@ -117,6 +117,17 @@ export interface EligibilityResponse {
 }
 
 /**
+ * Eligibility API response wrapper
+ *
+ * Note: we use a wrapped format here to keep API responses consistent with other
+ * NFT endpoints that return `{ success, data }`.
+ */
+export interface EligibilityApiResponse {
+  success: true;
+  data: EligibilityResponse;
+}
+
+/**
  * Mint preparation response (contract call data with signature)
  */
 export interface MintPrepareResponse {
@@ -127,6 +138,28 @@ export interface MintPrepareResponse {
   nonce: string;
   signature: string;
   encodedData: string;
+}
+
+// ============================================================================
+// Ownership / Holdings Types
+// ============================================================================
+
+export interface NftHoldingsResponse {
+  success: true;
+  data: {
+    walletAddress: string | null;
+    collectionId: string | null;
+    tokenIds: number[];
+    nfts: Array<{
+      tokenId: number;
+      name: string;
+      thumbnailUrl: string;
+    }>;
+    /**
+     * True when the indexer was unavailable and we fell back to DB ownership.
+     */
+    degraded: boolean;
+  };
 }
 
 /**

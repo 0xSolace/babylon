@@ -11,7 +11,7 @@
 
 'use client';
 
-import { cn } from '@babylon/shared';
+import { cn, logger } from '@babylon/shared';
 import {
   Calendar,
   ChevronDown,
@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useState, useTransition } from 'react';
 import { z } from 'zod';
+import { AdminStandalonePage } from '@/components/admin/AdminStandalonePage';
 
 /**
  * Participant schema for validation.
@@ -89,7 +90,11 @@ export default function AdminGroupsPage() {
       const response = await fetch(
         `/api/admin/groups?sortBy=${sortBy}&sortOrder=${sortOrder}`
       ).catch((err: Error) => {
-        console.error('Failed to fetch groups:', err);
+        logger.error(
+          'Failed to fetch groups',
+          err instanceof Error ? err : { error: err },
+          'AdminGroupsPage'
+        );
         setError('Failed to fetch groups. Are you on localhost?');
         setIsLoading(false);
         throw err;
@@ -97,7 +102,7 @@ export default function AdminGroupsPage() {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('API error:', errorText);
+        logger.error('API error', { errorText }, 'AdminGroupsPage');
         setError(`API error: ${response.status} - ${errorText}`);
         setIsLoading(false);
         return;
@@ -106,7 +111,11 @@ export default function AdminGroupsPage() {
       const data = await response.json();
       const validation = z.array(GroupChatSchema).safeParse(data.data?.groups);
       if (!validation.success) {
-        console.error('Validation error:', validation.error);
+        logger.error(
+          'Validation error',
+          { error: validation.error },
+          'AdminGroupsPage'
+        );
         setError('Invalid group data structure from API');
         setIsLoading(false);
         return;
@@ -179,7 +188,7 @@ export default function AdminGroupsPage() {
   const totalMessages = groups.reduce((sum, g) => sum + g.messageCount, 0);
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6">
+    <AdminStandalonePage>
       {/* Header */}
       <div className="mb-6 border-border border-b pb-4">
         <div className="mb-2 flex items-center justify-between">
@@ -480,6 +489,6 @@ export default function AdminGroupsPage() {
           </div>
         )}
       </div>
-    </div>
+    </AdminStandalonePage>
   );
 }

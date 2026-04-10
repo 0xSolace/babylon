@@ -1,7 +1,7 @@
 /**
  * Next.js Instrumentation
  *
- * Runs on server startup to register Babylon in Agent0 registry and initialize Sentry.
+ * Runs on server startup to bootstrap NPC agents and initialize Sentry.
  * This file handles server-side Sentry initialization.
  *
  * Note: Client-side Sentry is initialized via instrumentation-client.ts
@@ -24,12 +24,21 @@ export async function register() {
     // Dynamically import Node.js-only modules to avoid Edge Runtime errors
     // Import from main package entry point
     const {
-      setPointsService,
+      setReputationService,
       setNotificationService,
-      PointsService,
+      setDefaultErrorCapture,
+      ReputationService,
       createNotification,
       logDevCredentials,
     } = await import('@babylon/api');
+    const { createSentryApiRouteCapture } = await import(
+      './src/lib/sentry/api-route-capture'
+    );
+
+    // Route-level captureError options still override this default.
+    setDefaultErrorCapture(
+      sentryDisabled ? undefined : createSentryApiRouteCapture()
+    );
 
     // Log development credentials at startup (only in dev mode)
     // This makes it easy for developers to authenticate with admin APIs
@@ -49,16 +58,16 @@ export async function register() {
     void npcBootstrapService.bootstrapAllNpcs();
 
     // Initialize shared moderation services with web app implementations
-    setPointsService({
-      awardPoints: async (userId, amount, reason, metadata) => {
+    setReputationService({
+      awardReputation: async (userId, amount, reason, metadata) => {
         // Cast metadata from Record<string, unknown> to Record<string, JsonValue>
         // JsonValue is a subset of unknown, so this cast is safe
         // JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue }
-        return await PointsService.awardPoints(
+        return await ReputationService.awardReputation(
           userId,
           amount,
           reason as never,
-          metadata as Parameters<typeof PointsService.awardPoints>[3]
+          metadata as Parameters<typeof ReputationService.awardReputation>[3]
         );
       },
     });
@@ -72,6 +81,23 @@ export async function register() {
         );
       },
     });
+
+    // Initialize API key lastUsedAt write-back cache flusher
+    // WHY: Batches Redis updates and flushes to database periodically, reducing DB load by 90%+.
+    // The write-back cache pattern stores updates in Redis first (fast), then batches them
+    // into periodic database transactions (efficient). This solves the performance issue where
+    // 1,830 individual UPDATE queries were taking 115,885 seconds of database time.
+    // WHY globalThis check: Prevents multiple initializations in serverless environments where
+    // module may be reloaded. Each serverless function invocation is a new process, but within
+    // a single process (e.g., Next.js dev server), we only want one flusher running.
+    const g = globalThis as typeof globalThis & {
+      __lastUsedFlusherStarted?: boolean;
+    };
+    if (!g.__lastUsedFlusherStarted) {
+      const { startLastUsedFlusher } = await import('@babylon/api');
+      startLastUsedFlusher();
+      g.__lastUsedFlusherStarted = true;
+    }
   }
 
   if (sentryDisabled && process.env.NODE_ENV === 'development') {
@@ -83,28 +109,9 @@ export async function register() {
     await import('./sentry.server.config');
   }
 
-  // Register reputation sync service if agents package is available
-  // This breaks the circular dependency between engine and agents packages
-  // Only load agent0 code server-side to avoid bundling electron-fetch in client
-  if (
-    process.env.AGENT0_ENABLED === 'true' &&
-    process.env.NEXT_RUNTIME === 'nodejs'
-  ) {
-    const { setReputationSyncService } = await import('@babylon/engine');
-    const { createReputationSyncAdapter } = await import('@babylon/agents');
-    setReputationSyncService(createReputationSyncAdapter());
-  }
-
-  // Register Babylon on Agent0 registry (ERC-8004) on startup
-  // Only if Agent0 is enabled and we're in Node.js runtime
-  // Only load agent0 code server-side to avoid bundling electron-fetch in client
-  if (
-    process.env.AGENT0_ENABLED === 'true' &&
-    process.env.NEXT_RUNTIME === 'nodejs' &&
-    process.env.NODE_ENV === 'production' // Only in production to avoid blocking dev
-  ) {
-    const { registerBabylonGame } = await import('@babylon/agents');
-    await registerBabylonGame();
+  // Initialize Sentry for Edge Runtime (middleware, edge route handlers)
+  if (!sentryDisabled && process.env.NEXT_RUNTIME === 'edge') {
+    await import('./sentry.edge.config');
   }
 }
 

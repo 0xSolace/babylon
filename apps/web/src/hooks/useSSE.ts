@@ -17,8 +17,9 @@
  * ```
  */
 
-import { usePrivy } from '@privy-io/react-auth';
+import { logger } from '@babylon/shared';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useAuth } from '@/hooks/useAuth';
 import {
   type Channel,
   type ConnectionState,
@@ -35,24 +36,6 @@ export type {
   SSEMessage,
   StaticChannel,
 } from '@/lib/sse';
-
-// Simple console logger for client-side SSE
-const logger = {
-  debug: (...args: unknown[]) => {
-    if (process.env.NODE_ENV === 'development') {
-      console.debug('[SSE]', ...args);
-    }
-  },
-  info: (...args: unknown[]) => {
-    console.info('[SSE]', ...args);
-  },
-  warn: (...args: unknown[]) => {
-    console.warn('[SSE]', ...args);
-  },
-  error: (...args: unknown[]) => {
-    console.error('[SSE]', ...args);
-  },
-};
 
 /**
  * Options for configuring the SSE hook.
@@ -520,7 +503,7 @@ export function useSSE(options: SSEHookOptions = {}): SSEHookReturn {
     maxReconnectAttempts = 5,
   } = options;
 
-  const { getAccessToken, authenticated } = usePrivy();
+  const { getAccessToken, authenticated } = useAuth();
 
   // Connection state - initialized to match SSR
   const [connectionState, setConnectionState] =

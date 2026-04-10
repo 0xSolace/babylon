@@ -1,12 +1,15 @@
 /**
  * Team Chat Message API
  *
- * @route POST /api/agents/team-chat/message - Send message to team chat with @mention handling
+ * @route POST /api/agents/team-chat/message - Send message to team chat
  * @access Authenticated
  *
  * @description
- * Sends a message to the user's Command Center team chat.
- * Automatically triggers priority responses from @mentioned agents.
+ * Sends a message to the user's Agents team chat.
+ * Agent responses are triggered separately by the frontend calling /api/agents/[agentId]/chat
+ * for each selected agent (parallel execution model).
+ *
+ * On the first user message, an LLM-generated title is created for the conversation.
  *
  * @openapi
  * /api/agents/team-chat/message:
@@ -14,7 +17,9 @@
  *     tags:
  *       - Agents
  *     summary: Send team chat message
- *     description: Sends a message to Command Center and triggers agent responses for @mentions.
+ *     description: |
+ *       Sends a message to Agents.
+ *       Agent responses are triggered separately via /api/agents/[agentId]/chat.
  *     security:
  *       - PrivyAuth: []
  *     requestBody:
@@ -28,33 +33,134 @@
  *             properties:
  *               content:
  *                 type: string
- *                 description: Message content (can include @mentions)
- *               mentionedAgentIds:
- *                 type: array
- *                 items:
- *                   type: string
- *                 description: Agent IDs that were @mentioned (parsed client-side)
+ *                 description: Message content
+ *               replyToMessageId:
+ *                 type: string
+ *                 description: Optional ID of the message being replied to
  *     responses:
  *       201:
- *         description: Message sent, agent responses triggered
+ *         description: Message sent successfully
  *       401:
  *         description: Unauthorized
  *       404:
  *         description: No team chat exists
  */
 
-import { teamChatResponseService, teamChatService } from '@babylon/agents';
+import { createGroq } from '@ai-sdk/groq';
+import { teamChatService } from '@babylon/agents';
 import {
   authenticateUser,
   broadcastChatMessage,
   checkRateLimitAsync,
   RATE_LIMIT_CONFIGS,
+  withErrorHandling,
 } from '@babylon/api';
-import { db, eq, generateSnowflakeId, messages, users } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { and, db, eq, generateSnowflakeId, messages, users } from '@babylon/db';
+import { logger, toISO } from '@babylon/shared';
+import { generateText } from 'ai';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+
+// =============================================================================
+// Title Generation
+// =============================================================================
+
+/**
+ * Generate a chat title from the first user message using LLM.
+ * Returns the generated title or null if generation failed.
+ */
+async function generateAndUpdateChatTitle(
+  chatId: string,
+  firstMessage: string,
+  userId: string
+): Promise<string | null> {
+  try {
+    if (!process.env.GROQ_API_KEY) {
+      logger.warn(
+        'GROQ_API_KEY not set, skipping title generation',
+        { chatId },
+        'TeamChatMessageAPI'
+      );
+      return null;
+    }
+
+    const groq = createGroq({
+      apiKey: process.env.GROQ_API_KEY,
+      baseURL: 'https://api.groq.com/openai/v1',
+    });
+
+    const prompt = `Create a brief chat title (2-5 words) that captures the topic of this message.
+
+Rules:
+- Just the topic, no meta commentary (NOT "Question about X" or "User asks about X")
+- No quotes, prefixes, or formatting
+
+Message: "${firstMessage.slice(0, 200)}"
+
+Title:`;
+
+    // Add timeout to prevent hanging on slow API responses
+    const GENERATE_TIMEOUT_MS = 10000;
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(
+      () => abortController.abort(),
+      GENERATE_TIMEOUT_MS
+    );
+
+    let result: { text: string };
+    try {
+      result = await generateText({
+        model: groq('llama-3.1-8b-instant'),
+        prompt,
+        temperature: 0.7,
+        maxOutputTokens: 50,
+        abortSignal: abortController.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    const title = result.text.trim().slice(0, 50);
+
+    if (title) {
+      // Use atomic update to prevent race conditions when multiple first messages
+      // arrive simultaneously - only the first one to update will succeed
+      const updated = await teamChatService.updateChatTitleIfNull(
+        chatId,
+        title,
+        userId
+      );
+      if (updated) {
+        logger.info(
+          'Generated chat title from first message',
+          { chatId, title },
+          'TeamChatMessageAPI'
+        );
+        return title;
+      }
+      // Another message already set the title - this is fine, no error needed
+      logger.debug(
+        'Chat title already set by concurrent request',
+        { chatId },
+        'TeamChatMessageAPI'
+      );
+      return null;
+    }
+    return null;
+  } catch (error) {
+    logger.error(
+      'Failed to generate chat title',
+      { chatId, error: error instanceof Error ? error.message : 'Unknown' },
+      'TeamChatMessageAPI'
+    );
+    return null;
+  }
+}
+
+// =============================================================================
+// Request Validation
+// =============================================================================
 
 /** Request body schema for team chat messages */
 const messageSchema = z.object({
@@ -62,13 +168,15 @@ const messageSchema = z.object({
     .string()
     .min(1, 'Message content is required')
     .max(4000, 'Message too long. Maximum 4000 characters allowed.'),
-  mentionedAgentIds: z
-    .array(z.string().regex(/^\d+$/, 'Invalid agent ID format'))
-    .max(10, 'Maximum 10 agents can be mentioned at once.')
-    .optional(),
+  // Target IDs for message routing in team chat
+  // - Array of agent IDs when @mentioning agents
+  // - Empty array or undefined = coordinator (no @mentions)
+  targetIds: z.array(z.string()).optional(),
+  // Reply to a specific message (Telegram/Discord-style)
+  replyToMessageId: z.string().min(1).optional(),
 });
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandling(async function POST(req: NextRequest) {
   const user = await authenticateUser(req);
 
   // Rate limit to prevent spam (especially important with agent auto-responses)
@@ -107,7 +215,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { content, mentionedAgentIds } = parseResult.data;
+  const {
+    content,
+    targetIds: providedTargetIds,
+    replyToMessageId,
+  } = parseResult.data;
 
   // Get user's team chat
   const teamChat = await teamChatService.getTeamChat(user.id);
@@ -117,10 +229,58 @@ export async function POST(req: NextRequest) {
       {
         success: false,
         error: 'No team chat exists',
-        message: 'Create your first agent to initialize your Command Center.',
+        message: 'Create your first agent to initialize your Agents chat.',
       },
       { status: 404 }
     );
+  }
+
+  // Determine target IDs for message routing
+  const targetIds =
+    providedTargetIds && providedTargetIds.length > 0 ? providedTargetIds : [];
+
+  // Validate reply target and build reply snippet (if replying)
+  let replyToMessage: {
+    id: string;
+    content: string;
+    senderId: string;
+    senderName?: string;
+  } | null = null;
+
+  if (replyToMessageId) {
+    const [replyMsg] = await db
+      .select({
+        id: messages.id,
+        content: messages.content,
+        senderId: messages.senderId,
+        senderName: users.displayName,
+      })
+      .from(messages)
+      .leftJoin(users, eq(users.id, messages.senderId))
+      .where(
+        and(
+          eq(messages.id, replyToMessageId),
+          eq(messages.chatId, teamChat.chatId)
+        )
+      )
+      .limit(1);
+
+    if (!replyMsg) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Invalid replyToMessageId: message not found in this chat',
+        },
+        { status: 400 }
+      );
+    }
+
+    replyToMessage = {
+      id: replyMsg.id,
+      content: replyMsg.content.slice(0, 200),
+      senderId: replyMsg.senderId,
+      senderName: replyMsg.senderName ?? undefined,
+    };
   }
 
   // Create the message
@@ -134,15 +294,13 @@ export async function POST(req: NextRequest) {
     content: content.trim(),
     type: 'user',
     createdAt: now,
+    targetIds,
+    replyToMessageId: replyToMessageId ?? null,
   });
 
   logger.info(
     `Team chat message sent by user ${user.id}`,
-    {
-      chatId: teamChat.chatId,
-      messageId,
-      mentionCount: mentionedAgentIds?.length ?? 0,
-    },
+    { chatId: teamChat.chatId, messageId },
     'TeamChatMessageAPI'
   );
 
@@ -153,57 +311,38 @@ export async function POST(req: NextRequest) {
     chatId: teamChat.chatId,
     senderId: user.id,
     type: 'user',
-    createdAt: now.toISOString(),
+    createdAt: toISO(now),
     isGameChat: false,
     isDMChat: false,
+    replyToMessageId: replyToMessageId ?? undefined,
+    replyToMessage,
   });
 
-  // Trigger agent responses if there are mentions
-  let responseResult = null;
-  if (mentionedAgentIds && mentionedAgentIds.length > 0) {
-    // Validate that mentioned agents are actually in the team chat
-    const teamAgents = await teamChatService.getTeamChatAgents(
-      user.id,
-      teamChat.groupId
+  // Generate chat title on first message
+  // Check if chat needs title (name is null) and this is the first user message
+  let generatedTitle: string | null = null;
+  const needsTitle = await teamChatService.chatNeedsTitle(
+    teamChat.chatId,
+    user.id
+  );
+  if (needsTitle) {
+    const messageCount = await teamChatService.getUserMessageCount(
+      teamChat.chatId,
+      user.id
     );
-    const teamAgentIds = new Set(teamAgents.map((agent) => agent.id));
-    const validMentionedIds = mentionedAgentIds.filter((id) =>
-      teamAgentIds.has(id)
-    );
-
-    if (validMentionedIds.length > 0) {
-      // Get user display name for mentions
-      const [userInfo] = await db
-        .select({ displayName: users.displayName, username: users.username })
-        .from(users)
-        .where(eq(users.id, user.id))
-        .limit(1);
-      const senderDisplayName =
-        userInfo?.displayName || userInfo?.username || 'User';
-
-      // Trigger responses asynchronously (don't block the API response)
-      teamChatResponseService
-        .triggerMentionedAgentResponses({
-          chatId: teamChat.chatId,
-          messageContent: content.trim(),
-          mentionedAgentIds: validMentionedIds,
-          senderUserId: user.id,
-          senderDisplayName,
-        })
-        .catch((error) => {
-          logger.error(
-            `Failed to trigger agent responses: ${error}`,
-            { chatId: teamChat.chatId },
-            'TeamChatMessageAPI'
-          );
-        });
-
-      responseResult = {
-        agentsNotified: validMentionedIds.length,
-        invalidMentions: mentionedAgentIds.length - validMentionedIds.length,
-      };
+    // Only generate on first message (count is 1 after insert)
+    if (messageCount === 1) {
+      generatedTitle = await generateAndUpdateChatTitle(
+        teamChat.chatId,
+        content.trim(),
+        user.id
+      );
     }
   }
+
+  // Note: Agent responses are now triggered by the frontend calling
+  // /api/agents/[agentId]/chat for each selected agent (parallel execution).
+  // The old broadcastToAllAgents flow has been removed to prevent duplicate responses.
 
   return NextResponse.json(
     {
@@ -214,10 +353,11 @@ export async function POST(req: NextRequest) {
         chatId: teamChat.chatId,
         senderId: user.id,
         type: 'user',
-        createdAt: now.toISOString(),
+        createdAt: toISO(now),
       },
-      agentResponses: responseResult,
+      // Include generated title if one was created
+      generatedTitle,
     },
     { status: 201 }
   );
-}
+});

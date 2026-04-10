@@ -64,8 +64,8 @@
  */
 
 import {
-  type AuthenticatedUser,
-  optionalAuth,
+  addPublicReadHeaders,
+  publicRateLimit,
   withErrorHandling,
 } from '@babylon/api';
 import {
@@ -86,11 +86,18 @@ import {
   users,
 } from '@babylon/db';
 import { StaticDataRegistry } from '@babylon/engine';
-import { logger } from '@babylon/shared';
+import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
+  const {
+    error,
+    user: authUser,
+    rateLimitInfo,
+  } = await publicRateLimit(request);
+  if (error) return error;
+
   const { searchParams } = new URL(request.url);
   const tagsParam = searchParams.get('tags');
   const limitParam = searchParams.get('limit');
@@ -120,11 +127,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     'Fetching grouped trending posts',
     { tagSlugs, limit },
     'GET /api/trending/group'
-  );
-
-  // Optional auth for RLS
-  const authUser: AuthenticatedUser | null = await optionalAuth(request).catch(
-    () => null
   );
 
   // Get tag information by slug (name)
@@ -349,7 +351,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       authorId: pt.post.authorId,
       authorName,
       authorUsername,
-      timestamp: pt.post.timestamp.toISOString(),
+      timestamp: toISO(pt.post.timestamp),
       likeCount: likeMap.get(pt.post.id) || 0,
       commentCount: commentMap.get(pt.post.id) || 0,
       shareCount: shareMap.get(pt.post.id) || 0,
@@ -370,9 +372,11 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     'GET /api/trending/group'
   );
 
-  return NextResponse.json({
+  const res = NextResponse.json({
     success: true,
     posts: formattedPosts,
     tags: tagsList,
   });
+  if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
+  return res;
 });

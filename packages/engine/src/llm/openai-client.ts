@@ -2,8 +2,6 @@
  * LLM Client for Babylon Game Generation
  * Supports multiple providers with intelligent fallback
  * Priority: Groq > Claude > OpenAI
- *
- * IMPORTANT: Always requires an API key - never falls back to mock mode
  */
 
 import OpenAI from 'openai';
@@ -11,6 +9,7 @@ import 'dotenv/config';
 import { logger } from '@babylon/shared';
 import type { JsonValue } from '../types/common';
 import type { LLMCallTokenUsage } from '../types/token-stats';
+import { first } from '../utils/array-utils';
 import { isPromptLoggingEnabled, logPrompt } from '../utils/prompt-logger';
 import {
   cleanMarkdownCodeBlocks,
@@ -20,7 +19,8 @@ import {
 import type { LLMJsonSchema as JSONSchema } from './types';
 import { parseXML } from './xml-parser';
 
-type LLMProvider = 'groq' | 'claude' | 'openai';
+type LLMProvider = 'elizacloud' | 'groq' | 'claude' | 'openai';
+type LLMDisabledContext = 'default' | 'gameTick';
 
 /**
  * Token usage callback function type
@@ -32,6 +32,9 @@ export type TokenUsageCallback = (
 
 // Global token usage callback (can be set by TokenStatsService)
 let globalTokenUsageCallback: TokenUsageCallback | null = null;
+
+// Global LLM call detail callback (can be set by DAG trace interceptor)
+import { getLLMCallCallback } from '../dag-trace/llm-interceptor';
 
 /**
  * Set the global token usage callback
@@ -50,20 +53,53 @@ export function getTokenUsageCallback(): TokenUsageCallback | null {
   return globalTokenUsageCallback;
 }
 
+function resolveElizaCloudConfig():
+  | { apiKey: string; baseURL: string }
+  | undefined {
+  const apiKey = process.env.ELIZACLOUD_API_KEY;
+  if (!apiKey) return undefined;
+  const base =
+    process.env.ELIZACLOUD_API_URL?.replace(/\/$/, '') ||
+    'https://api.elizacloud.com';
+  return { apiKey, baseURL: `${base}/openai/v1` };
+}
+
+function resolveGroqBaseURL(): string {
+  return process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1';
+}
+
+function resolveGroqDefaultModel(): string {
+  return (
+    process.env.MARKET_DECISION_MODEL ||
+    process.env.GROQ_PRIMARY_MODEL ||
+    process.env.GROQ_LARGE_MODEL ||
+    'openai/gpt-oss-120b'
+  );
+}
+
 /**
  * Simple JSON schema for validation
  */
 // NOTE: Schema types are shared via ./types to avoid duplicating shapes across the engine.
 
 export class BabylonLLMClient {
-  private client: OpenAI;
-  private provider: LLMProvider;
+  private client: OpenAI | null = null;
+  private provider: LLMProvider = 'openai';
+  private elizacloudKey: string | undefined;
   private groqKey: string | undefined;
   private claudeKey: string | undefined;
   private openaiKey: string | undefined;
+  private missingKeyContext: LLMDisabledContext = 'default';
 
   /**
-   * Create a BabylonLLMClient configured to use Groq provider (Priority #1)
+   * Create a BabylonLLMClient configured to use ElizaCloud (Priority #1)
+   */
+  static forElizaCloud(): BabylonLLMClient {
+    return new BabylonLLMClient('', 'elizacloud');
+  }
+
+  /**
+   * Create a BabylonLLMClient configured to use Groq provider (Priority #2)
    * This is a convenience factory method for forcing Groq without passing undefined parameters
    */
   static forGroq(): BabylonLLMClient {
@@ -71,7 +107,7 @@ export class BabylonLLMClient {
   }
 
   /**
-   * Create a BabylonLLMClient configured to use Anthropic/Claude provider (Priority #2)
+   * Create a BabylonLLMClient configured to use Anthropic/Claude provider (Priority #3)
    * This is a convenience factory method for forcing Claude without passing undefined parameters
    */
   static forClaude(): BabylonLLMClient {
@@ -79,7 +115,7 @@ export class BabylonLLMClient {
   }
 
   /**
-   * Create a BabylonLLMClient configured to use OpenAI provider (Priority #3 - fallback)
+   * Create a BabylonLLMClient configured to use OpenAI provider (Priority #4 - fallback)
    * This is a convenience factory method for forcing OpenAI without passing undefined parameters
    */
   static forOpenAI(apiKey?: string): BabylonLLMClient {
@@ -88,32 +124,22 @@ export class BabylonLLMClient {
 
   /**
    * Create a BabylonLLMClient for game tick operations
-   * Priority: Groq > Claude > OpenAI
+   * Priority: ElizaCloud > Groq > Claude > OpenAI
    */
   static forGameTick(): BabylonLLMClient {
-    // Check providers in order
-    if (process.env.GROQ_API_KEY) {
-      return new BabylonLLMClient('', 'groq');
-    }
-    if (process.env.ANTHROPIC_API_KEY) {
-      return new BabylonLLMClient('', 'claude');
-    }
-    if (process.env.OPENAI_API_KEY) {
-      return new BabylonLLMClient('', 'openai');
-    }
-    // Fallback: throw error if no providers available
-    throw new Error(
-      '❌ No API key found for game tick operations!\n' +
-        '   Set one of these environment variables:\n' +
-        '   - GROQ_API_KEY (recommended for game tick)\n' +
-        '   - ANTHROPIC_API_KEY\n' +
-        '   - OPENAI_API_KEY\n' +
-        '   Example: export GROQ_API_KEY=your_key_here'
-    );
+    return new BabylonLLMClient('', undefined, 'gameTick');
   }
 
-  constructor(apiKey?: string, forceProvider?: LLMProvider) {
-    // Priority: Groq > Claude > OpenAI (unless forceProvider is set)
+  constructor(
+    apiKey?: string,
+    forceProvider?: LLMProvider,
+    missingKeyContext: LLMDisabledContext = 'default'
+  ) {
+    this.missingKeyContext = missingKeyContext;
+
+    // Priority: ElizaCloud > Groq > Claude > OpenAI (unless forceProvider is set)
+    const elizaCloud = resolveElizaCloudConfig();
+    this.elizacloudKey = elizaCloud?.apiKey;
     this.groqKey = process.env.GROQ_API_KEY;
     this.claudeKey = process.env.ANTHROPIC_API_KEY;
     this.openaiKey = apiKey || process.env.OPENAI_API_KEY;
@@ -131,11 +157,20 @@ export class BabylonLLMClient {
     const sdkMaxRetries = 2;
 
     // Force specific provider if requested
-    if (forceProvider === 'groq' && this.groqKey) {
+    if (forceProvider === 'elizacloud' && elizaCloud) {
+      logger.info('Using ElizaCloud (forced)', undefined, 'BabylonLLMClient');
+      this.client = new OpenAI({
+        apiKey: elizaCloud.apiKey,
+        baseURL: elizaCloud.baseURL,
+        timeout: timeoutMs,
+        maxRetries: sdkMaxRetries,
+      });
+      this.provider = 'elizacloud';
+    } else if (forceProvider === 'groq' && this.groqKey) {
       logger.info('Using Groq (forced)', undefined, 'BabylonLLMClient');
       this.client = new OpenAI({
         apiKey: this.groqKey,
-        baseURL: 'https://api.groq.com/openai/v1',
+        baseURL: resolveGroqBaseURL(),
         timeout: timeoutMs,
         maxRetries: sdkMaxRetries,
       });
@@ -157,11 +192,24 @@ export class BabylonLLMClient {
         maxRetries: sdkMaxRetries,
       });
       this.provider = 'openai';
+    } else if (elizaCloud) {
+      logger.info(
+        'Using ElizaCloud (unified inference)',
+        undefined,
+        'BabylonLLMClient'
+      );
+      this.client = new OpenAI({
+        apiKey: elizaCloud.apiKey,
+        baseURL: elizaCloud.baseURL,
+        timeout: timeoutMs,
+        maxRetries: sdkMaxRetries,
+      });
+      this.provider = 'elizacloud';
     } else if (this.groqKey) {
       logger.info('Using Groq (fast inference)', undefined, 'BabylonLLMClient');
       this.client = new OpenAI({
         apiKey: this.groqKey,
-        baseURL: 'https://api.groq.com/openai/v1',
+        baseURL: resolveGroqBaseURL(),
         timeout: timeoutMs,
         maxRetries: sdkMaxRetries,
       });
@@ -188,15 +236,46 @@ export class BabylonLLMClient {
       });
       this.provider = 'openai';
     } else {
+      this.client = null;
+      const suppressOptionalWarnings = ['1', 'true', 'yes'].includes(
+        (process.env.BABYLON_SUPPRESS_OPTIONAL_LLM_WARNINGS || '')
+          .trim()
+          .toLowerCase()
+      );
+      if (!suppressOptionalWarnings) {
+        logger.warn(
+          'No LLM API key configured - BabylonLLMClient is disabled',
+          { missingKeyContext: this.missingKeyContext },
+          'BabylonLLMClient'
+        );
+      }
+    }
+  }
+
+  private assertEnabled(): void {
+    if (this.client) return;
+
+    if (this.missingKeyContext === 'gameTick') {
       throw new Error(
-        '❌ No API key found!\n' +
-          '   Set one of these environment variables (in priority order):\n' +
-          '   - GROQ_API_KEY (fast inference)\n' +
-          '   - ANTHROPIC_API_KEY (Claude)\n' +
-          '   - OPENAI_API_KEY (fallback)\n' +
-          '   Example: export GROQ_API_KEY=your_key_here'
+        '❌ No API key found for game tick operations!\n' +
+          '   Set one of these environment variables:\n' +
+          '   - ELIZACLOUD_API_KEY (recommended — single key for all inference)\n' +
+          '   - GROQ_API_KEY (direct Groq)\n' +
+          '   - ANTHROPIC_API_KEY\n' +
+          '   - OPENAI_API_KEY\n' +
+          '   Example: export ELIZACLOUD_API_KEY=elc_...'
       );
     }
+
+    throw new Error(
+      '❌ No API key found!\n' +
+        '   Set one of these environment variables (in priority order):\n' +
+        '   - ELIZACLOUD_API_KEY (recommended — single key for all inference)\n' +
+        '   - GROQ_API_KEY (direct Groq, fast inference)\n' +
+        '   - ANTHROPIC_API_KEY (Claude)\n' +
+        '   - OPENAI_API_KEY (fallback)\n' +
+        '   Example: export ELIZACLOUD_API_KEY=elc_...'
+    );
   }
 
   /**
@@ -218,6 +297,7 @@ export class BabylonLLMClient {
       promptTemplate?: string;
     } = {}
   ): Promise<T> {
+    this.assertEnabled();
     const defaultModel = this.getDefaultModel();
 
     const {
@@ -284,7 +364,7 @@ WORLD RULES:
         const isQwen3Model = model.includes('qwen3');
 
         callStartTime = Date.now();
-        const response = await this.client.chat.completions.create({
+        const response = await this.client!.chat.completions.create({
           model,
           messages,
           ...(useJsonFormat ? { response_format: useJsonFormat } : {}),
@@ -295,8 +375,12 @@ WORLD RULES:
         });
         const callDurationMs = Date.now() - callStartTime;
 
-        let content = response.choices[0]!.message.content!;
-        let finishReason = response.choices[0]!.finish_reason;
+        const firstChoice = first(response.choices);
+        if (!firstChoice || !firstChoice.message.content) {
+          throw new Error('LLM response missing content');
+        }
+        let content = firstChoice.message.content;
+        let finishReason = firstChoice.finish_reason;
 
         // Extract token usage from response
         const usage = response.usage;
@@ -360,7 +444,7 @@ WORLD RULES:
             );
 
             const continuationResponse =
-              await this.client.chat.completions.create({
+              await this.client!.chat.completions.create({
                 model,
                 messages: continuationMessages,
                 ...(useJsonFormat ? { response_format: useJsonFormat } : {}),
@@ -369,9 +453,14 @@ WORLD RULES:
                 ...(isQwen3Model ? { reasoning_effort: 'none' as const } : {}),
               });
 
-            const continuationContent =
-              continuationResponse.choices[0]!.message.content!;
-            finishReason = continuationResponse.choices[0]!.finish_reason;
+            const contChoice = first(continuationResponse.choices);
+            if (!contChoice || !contChoice.message.content) {
+              throw new Error(
+                'LLM continuation response missing choices or content - invalid API response'
+              );
+            }
+            const continuationContent = contChoice.message.content;
+            finishReason = contChoice.finish_reason ?? 'stop';
 
             // Append continuation to content
             content += continuationContent;
@@ -432,6 +521,28 @@ WORLD RULES:
             });
           }
 
+          // Report full LLM call details to DAG trace
+          const dagCallback = getLLMCallCallback();
+          if (dagCallback) {
+            dagCallback({
+              provider: this.provider,
+              model,
+              promptType,
+              format,
+              temperature,
+              maxTokens,
+              systemPrompt: systemContent,
+              userPrompt: prompt,
+              rawResponse: content,
+              parsedResponse: xmlResult.data,
+              inputTokens,
+              outputTokens,
+              totalTokens,
+              durationMs: callDurationMs,
+              success: true,
+            });
+          }
+
           return xmlResult.data as T;
         }
         // Use JSON parser
@@ -457,6 +568,28 @@ WORLD RULES:
                 outputTokens,
                 totalTokens,
                 promptType,
+                durationMs: callDurationMs,
+                success: true,
+              });
+            }
+
+            // Report full LLM call details to DAG trace
+            const dagCb1 = getLLMCallCallback();
+            if (dagCb1) {
+              dagCb1({
+                provider: this.provider,
+                model,
+                promptType,
+                format,
+                temperature,
+                maxTokens,
+                systemPrompt: systemContent,
+                userPrompt: prompt,
+                rawResponse: content,
+                parsedResponse: parsed,
+                inputTokens,
+                outputTokens,
+                totalTokens,
                 durationMs: callDurationMs,
                 success: true,
               });
@@ -497,6 +630,28 @@ WORLD RULES:
             outputTokens,
             totalTokens,
             promptType,
+            durationMs: callDurationMs,
+            success: true,
+          });
+        }
+
+        // Report full LLM call details to DAG trace
+        const dagCb2 = getLLMCallCallback();
+        if (dagCb2) {
+          dagCb2({
+            provider: this.provider,
+            model,
+            promptType,
+            format,
+            temperature,
+            maxTokens,
+            systemPrompt: systemContent,
+            userPrompt: prompt,
+            rawResponse: content,
+            parsedResponse: parsed,
+            inputTokens,
+            outputTokens,
+            totalTokens,
             durationMs: callDurationMs,
             success: true,
           });
@@ -720,8 +875,7 @@ WORLD RULES:
   private getDefaultModel(): string {
     switch (this.provider) {
       case 'groq':
-        // Use qwen3-32b as workhorse model for most operations
-        return 'qwen/qwen3-32b';
+        return resolveGroqDefaultModel();
       case 'claude':
         return 'claude-sonnet-4-5';
       case 'openai':

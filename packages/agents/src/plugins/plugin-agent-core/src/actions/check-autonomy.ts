@@ -12,7 +12,10 @@ import type {
   Memory,
   State,
 } from '@elizaos/core';
-import { getAgentConfig } from '../../../../shared/agent-config';
+import {
+  getAgentConfig,
+  isAutonomousTradingEnabled,
+} from '../../../../shared/agent-config';
 import { logger } from '../../../../shared/logger';
 import type { AutonomyStatus } from '../types';
 
@@ -24,9 +27,9 @@ import type { AutonomyStatus } from '../types';
 export const checkAutonomyAction: Action = {
   name: 'CHECK_AUTONOMY',
   description:
-    'Check the current status of all autonomous features (trading, posting, commenting, DMs, group chats)',
+    'Check which of YOUR autonomous features are enabled (trading, posting, commenting, DMs, group chats). When enabled, you act independently without explicit commands from your owner.',
 
-  parameters: {},
+  parameters: [] as Action['parameters'],
 
   examples: [
     [
@@ -97,9 +100,10 @@ export const checkAutonomyAction: Action = {
       // Get agent config directly from userAgentConfigs table
       const config = await getAgentConfig(agentId);
 
-      // Extract autonomy status from config (defaults to false if no config)
+      // Extract autonomy status from config
+      // Note: autonomousTrading defaults to true per database schema
       const status: AutonomyStatus = {
-        autonomousTrading: config?.autonomousTrading ?? false,
+        autonomousTrading: isAutonomousTradingEnabled(config),
         autonomousPosting: config?.autonomousPosting ?? false,
         autonomousCommenting: config?.autonomousCommenting ?? false,
         autonomousDMs: config?.autonomousDMs ?? false,

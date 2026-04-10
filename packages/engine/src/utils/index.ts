@@ -18,6 +18,23 @@ export {
   hasInsiderLanguage,
   sanitizeContent,
 } from '@babylon/shared';
+// Actor utilities (shared across actor-related services)
+export {
+  fetchRelevantPosts,
+  findRelatedActorsByAffiliation,
+  resolveActorName,
+} from './actor-utils';
+// Array utilities (safe array access)
+export {
+  assertNonEmpty,
+  at,
+  atOrThrow,
+  first,
+  firstOrThrow,
+  isNonEmpty,
+  last,
+  lastOrThrow,
+} from './array-utils';
 // Comprehensive context builder for rich NPC context
 export {
   buildComprehensiveNPCContext,
@@ -37,6 +54,8 @@ export {
   extractDayFromEvent,
   extractDayFromPost,
   extractDayFromTimestamp,
+  getTodayDateString,
+  toDateString,
 } from './date-utils';
 // Entropy utilities (secure random, weighted picks, cooldowns)
 export {
@@ -52,6 +71,28 @@ export {
   urgencyWeight,
   weightedPick,
 } from './entropy';
+// Error utilities for consistent error handling
+export {
+  formatError,
+  formatErrorWithStack,
+  handleNonCritical,
+  handleNonCriticalWithDefault,
+  hasErrorCode,
+  isTransientError,
+  logAndRethrow,
+  logError,
+  logWarning,
+  safeExecute,
+  withRetry,
+} from './error-utils';
+// Feed diversity utilities (TikTok-inspired clustering prevention)
+export {
+  ActionDiversityTracker,
+  createDiscourseActionDeck,
+  type DiscourseActionType,
+  type EngagementActionType,
+  shuffleWithNoConsecutive,
+} from './feed-diversity';
 // Rich game context builder for game generation prompts
 export {
   buildCharacterRoster,
@@ -66,6 +107,19 @@ export {
   generateAntiLoopContext,
   type RichGameContext,
 } from './game-context-builder';
+// Math utilities (clamp, lerp, etc.)
+export {
+  clamp,
+  clamp01,
+  clampPercent,
+  clampSentiment,
+  inRange,
+  lerp,
+  normalize,
+  percentChange,
+  roundTo,
+  safeDivide,
+} from './math-utils';
 // Prompt logging utilities
 export {
   isPromptLoggingEnabled,
@@ -75,6 +129,7 @@ export {
 // Randomization utilities
 export {
   pickRandom,
+  type RngFunction,
   randomChance,
   randomInt,
   sampleRandom,

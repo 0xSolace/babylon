@@ -27,6 +27,8 @@ export interface X402Config {
   rpcUrl: string;
   minPaymentAmount?: string; // Minimum payment in wei (default: 0)
   paymentTimeout?: number; // Payment timeout in ms (default: 5 minutes)
+  /** Max time for each JSON-RPC read (getTransaction / receipt). Prevents hung providers on serverless. */
+  rpcReadTimeoutMs?: number;
   redis?: RedisClient; // Optional Redis client for persistence
 }
 
@@ -56,9 +58,13 @@ const REDIS_PREFIX = 'x402:payment:';
 
 export class X402Manager {
   private provider: Provider;
-  private config: Required<Omit<X402Config, 'redis'>> & { redis?: RedisClient };
+  private config: Required<Omit<X402Config, 'redis' | 'rpcReadTimeoutMs'>> & {
+    redis?: RedisClient;
+    rpcReadTimeoutMs: number;
+  };
   private readonly DEFAULT_MIN_PAYMENT = '1000000000000000'; // 0.001 ETH
   private readonly DEFAULT_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+  private readonly DEFAULT_RPC_READ_TIMEOUT_MS = 20_000;
   private inMemoryStore: Map<string, PendingPayment> = new Map();
 
   constructor(config: X402Config) {
@@ -67,8 +73,30 @@ export class X402Manager {
       rpcUrl: config.rpcUrl,
       minPaymentAmount: config.minPaymentAmount || this.DEFAULT_MIN_PAYMENT,
       paymentTimeout: config.paymentTimeout || this.DEFAULT_TIMEOUT,
+      rpcReadTimeoutMs:
+        config.rpcReadTimeoutMs ?? this.DEFAULT_RPC_READ_TIMEOUT_MS,
       redis: config.redis,
     };
+  }
+
+  private async withRpcTimeout<T>(
+    label: string,
+    operation: Promise<T>
+  ): Promise<T> {
+    const ms = this.config.rpcReadTimeoutMs;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        reject(new Error(`${label} timed out after ${ms}ms`));
+      }, ms);
+    });
+    try {
+      return await Promise.race([operation, timeoutPromise]);
+    } finally {
+      if (timeoutId !== undefined) {
+        clearTimeout(timeoutId);
+      }
+    }
   }
 
   /**
@@ -253,14 +281,44 @@ export class X402Manager {
       return { verified: false, error: 'Payment request expired' };
     }
 
-    const tx = await this.provider.getTransaction(verificationData.txHash);
+    let tx;
+    try {
+      tx = await this.withRpcTimeout(
+        'getTransaction',
+        this.provider.getTransaction(verificationData.txHash)
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes('timed out')) {
+        return {
+          verified: false,
+          error:
+            'Blockchain RPC timed out. Wait for confirmation, then try again.',
+        };
+      }
+      throw e;
+    }
     if (!tx) {
       return { verified: false, error: 'Transaction not found on blockchain' };
     }
 
-    const txReceipt = await this.provider.getTransactionReceipt(
-      verificationData.txHash
-    );
+    let txReceipt;
+    try {
+      txReceipt = await this.withRpcTimeout(
+        'getTransactionReceipt',
+        this.provider.getTransactionReceipt(verificationData.txHash)
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes('timed out')) {
+        return {
+          verified: false,
+          error:
+            'Blockchain RPC timed out. Wait for confirmation, then try again.',
+        };
+      }
+      throw e;
+    }
     if (!txReceipt) {
       return { verified: false, error: 'Transaction not yet confirmed' };
     }

@@ -1,5 +1,5 @@
 /**
- * Team Chat (Command Center) Integration Tests
+ * Team Chat (Agents) Integration Tests
  *
  * Tests the unified team chat functionality with real database operations:
  * - TeamChatService lifecycle (create, add, remove)
@@ -7,15 +7,11 @@
  * - Concurrent operations
  * - API endpoint validation
  *
- * These tests verify the Command Center works correctly for agent coordination.
+ * These tests verify the Agents chat works correctly for agent coordination.
  */
 
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import {
-  type TeamChatInfo,
-  teamChatResponseService,
-  teamChatService,
-} from '@babylon/agents';
+import { afterAll, describe, expect, test } from 'bun:test';
+import { teamChatService } from '@babylon/agents';
 import {
   chatParticipants,
   chats,
@@ -26,7 +22,6 @@ import {
   groups,
   messages,
   userAgentConfigs,
-  userAgentTeamChats,
   users,
 } from '@babylon/db';
 
@@ -35,12 +30,10 @@ const testCleanup: {
   userIds: string[];
   groupIds: string[];
   chatIds: string[];
-  teamChatIds: string[];
 } = {
   userIds: [],
   groupIds: [],
   chatIds: [],
-  teamChatIds: [],
 };
 
 // Helper to create a test user (human owner)
@@ -113,15 +106,12 @@ async function cleanupTestData() {
     await db
       .delete(chatParticipants)
       .where(eq(chatParticipants.chatId, chatId));
+    await db.delete(chats).where(eq(chats.id, chatId));
   }
 
   for (const groupId of testCleanup.groupIds) {
     await db.delete(groupMembers).where(eq(groupMembers.groupId, groupId));
     await db.delete(groups).where(eq(groups.id, groupId));
-  }
-
-  for (const id of testCleanup.teamChatIds) {
-    await db.delete(userAgentTeamChats).where(eq(userAgentTeamChats.id, id));
   }
 
   for (const userId of testCleanup.userIds) {
@@ -135,7 +125,6 @@ async function cleanupTestData() {
   testCleanup.userIds = [];
   testCleanup.groupIds = [];
   testCleanup.chatIds = [];
-  testCleanup.teamChatIds = [];
 }
 
 describe('TeamChatService', () => {
@@ -149,14 +138,13 @@ describe('TeamChatService', () => {
 
       const teamChat = await teamChatService.ensureTeamChat(user.id);
 
-      // Track for cleanup
-      testCleanup.teamChatIds.push(teamChat.id);
+      // Track for cleanup (id and groupId are now the same)
       testCleanup.groupIds.push(teamChat.groupId);
       testCleanup.chatIds.push(teamChat.chatId);
 
       // Verify structure
       expect(teamChat.id).toBeDefined();
-      expect(teamChat.userId).toBe(user.id);
+      expect(teamChat.ownerId).toBe(user.id);
       expect(teamChat.groupId).toBeDefined();
       expect(teamChat.chatId).toBeDefined();
       expect(teamChat.createdAt).toBeInstanceOf(Date);
@@ -168,8 +156,8 @@ describe('TeamChatService', () => {
         .from(groups)
         .where(eq(groups.id, teamChat.groupId));
       expect(group).toBeDefined();
-      expect(group!.name).toBe('Command Center');
-      expect(group!.type).toBe('agent');
+      expect(group!.name).toBe('Agents');
+      expect(group!.type).toBe('team');
       expect(group!.ownerId).toBe(user.id);
 
       // Verify user is group member
@@ -180,16 +168,6 @@ describe('TeamChatService', () => {
       expect(member).toBeDefined();
       expect(member!.userId).toBe(user.id);
       expect(member!.role).toBe('owner');
-
-      // Verify welcome message was created
-      const welcomeMessages = await db
-        .select()
-        .from(messages)
-        .where(eq(messages.chatId, teamChat.chatId));
-      expect(welcomeMessages.length).toBeGreaterThanOrEqual(1);
-      const welcomeMsg = welcomeMessages.find((m) => m.type === 'system');
-      expect(welcomeMsg).toBeDefined();
-      expect(welcomeMsg?.content).toContain('Command Center');
     });
 
     test('returns existing team chat if one already exists', async () => {
@@ -197,7 +175,6 @@ describe('TeamChatService', () => {
 
       // Create first
       const first = await teamChatService.ensureTeamChat(user.id);
-      testCleanup.teamChatIds.push(first.id);
       testCleanup.groupIds.push(first.groupId);
       testCleanup.chatIds.push(first.chatId);
 
@@ -225,7 +202,6 @@ describe('TeamChatService', () => {
       expect(ids.size).toBe(1);
 
       // Track for cleanup (only one unique)
-      testCleanup.teamChatIds.push(results[0].id);
       testCleanup.groupIds.push(results[0].groupId);
       testCleanup.chatIds.push(results[0].chatId);
     });
@@ -243,7 +219,6 @@ describe('TeamChatService', () => {
     test('returns team chat info for user with one', async () => {
       const user = await createTestUser('get-exists');
       const teamChat = await teamChatService.ensureTeamChat(user.id);
-      testCleanup.teamChatIds.push(teamChat.id);
       testCleanup.groupIds.push(teamChat.groupId);
       testCleanup.chatIds.push(teamChat.chatId);
 
@@ -268,7 +243,6 @@ describe('TeamChatService', () => {
       const user = await createTestUser('add-1');
       const agent = await createTestAgent(user.id, 'add-1');
       const teamChat = await teamChatService.ensureTeamChat(user.id);
-      testCleanup.teamChatIds.push(teamChat.id);
       testCleanup.groupIds.push(teamChat.groupId);
       testCleanup.chatIds.push(teamChat.chatId);
 
@@ -292,24 +266,12 @@ describe('TeamChatService', () => {
       const agentParticipant = participants.find((p) => p.userId === agent.id);
       expect(agentParticipant).toBeDefined();
       expect(agentParticipant?.isActive).toBe(true);
-
-      // Verify system message was created
-      const msgs = await db
-        .select()
-        .from(messages)
-        .where(eq(messages.chatId, teamChat.chatId));
-      const joinMsg = msgs.find(
-        (m) => m.type === 'system' && m.content?.includes('joined the team')
-      );
-      expect(joinMsg).toBeDefined();
-      expect(joinMsg?.content).toContain(agent.displayName);
     });
 
     test('handles adding same agent twice (upsert)', async () => {
       const user = await createTestUser('add-dup');
       const agent = await createTestAgent(user.id, 'add-dup');
       const teamChat = await teamChatService.ensureTeamChat(user.id);
-      testCleanup.teamChatIds.push(teamChat.id);
       testCleanup.groupIds.push(teamChat.groupId);
       testCleanup.chatIds.push(teamChat.chatId);
 
@@ -330,7 +292,6 @@ describe('TeamChatService', () => {
       const user = await createTestUser('add-noagent');
       const fakeAgentId = await generateSnowflakeId();
       await teamChatService.ensureTeamChat(user.id).then((tc) => {
-        testCleanup.teamChatIds.push(tc.id);
         testCleanup.groupIds.push(tc.groupId);
         testCleanup.chatIds.push(tc.chatId);
       });
@@ -344,7 +305,6 @@ describe('TeamChatService', () => {
       const user = await createTestUser('add-notag');
       const otherUser = await createTestUser('add-notag-other');
       await teamChatService.ensureTeamChat(user.id).then((tc) => {
-        testCleanup.teamChatIds.push(tc.id);
         testCleanup.groupIds.push(tc.groupId);
         testCleanup.chatIds.push(tc.chatId);
       });
@@ -359,7 +319,6 @@ describe('TeamChatService', () => {
       const user2 = await createTestUser('add-wrong-2');
       const agent = await createTestAgent(user2.id, 'add-wrong');
       await teamChatService.ensureTeamChat(user1.id).then((tc) => {
-        testCleanup.teamChatIds.push(tc.id);
         testCleanup.groupIds.push(tc.groupId);
         testCleanup.chatIds.push(tc.chatId);
       });
@@ -375,7 +334,6 @@ describe('TeamChatService', () => {
       const user = await createTestUser('remove-1');
       const agent = await createTestAgent(user.id, 'remove-1');
       const teamChat = await teamChatService.ensureTeamChat(user.id);
-      testCleanup.teamChatIds.push(teamChat.id);
       testCleanup.groupIds.push(teamChat.groupId);
       testCleanup.chatIds.push(teamChat.chatId);
 
@@ -424,7 +382,6 @@ describe('TeamChatService', () => {
       const user = await createTestUser('remove-notin');
       const agent = await createTestAgent(user.id, 'remove-notin');
       const teamChat = await teamChatService.ensureTeamChat(user.id);
-      testCleanup.teamChatIds.push(teamChat.id);
       testCleanup.groupIds.push(teamChat.groupId);
       testCleanup.chatIds.push(teamChat.chatId);
 
@@ -439,7 +396,6 @@ describe('TeamChatService', () => {
     test('returns empty array when no agents', async () => {
       const user = await createTestUser('agents-none');
       const teamChat = await teamChatService.ensureTeamChat(user.id);
-      testCleanup.teamChatIds.push(teamChat.id);
       testCleanup.groupIds.push(teamChat.groupId);
       testCleanup.chatIds.push(teamChat.chatId);
 
@@ -454,7 +410,6 @@ describe('TeamChatService', () => {
       const agent2 = await createTestAgent(user.id, 'agents-m2');
       const agent3 = await createTestAgent(user.id, 'agents-m3');
       const teamChat = await teamChatService.ensureTeamChat(user.id);
-      testCleanup.teamChatIds.push(teamChat.id);
       testCleanup.groupIds.push(teamChat.groupId);
       testCleanup.chatIds.push(teamChat.chatId);
 
@@ -476,7 +431,6 @@ describe('TeamChatService', () => {
       const agent1 = await createTestAgent(user.id, 'agents-e1');
       const agent2 = await createTestAgent(user.id, 'agents-e2');
       const teamChat = await teamChatService.ensureTeamChat(user.id);
-      testCleanup.teamChatIds.push(teamChat.id);
       testCleanup.groupIds.push(teamChat.groupId);
       testCleanup.chatIds.push(teamChat.chatId);
 
@@ -498,7 +452,6 @@ describe('TeamChatService', () => {
       await createTestAgent(user2.id, 'agents-o2');
 
       const tc1 = await teamChatService.ensureTeamChat(user1.id);
-      testCleanup.teamChatIds.push(tc1.id);
       testCleanup.groupIds.push(tc1.groupId);
       testCleanup.chatIds.push(tc1.chatId);
 
@@ -524,7 +477,6 @@ describe('TeamChatService', () => {
       const user = await createTestUser('withmem-1');
       const agent = await createTestAgent(user.id, 'withmem-a1');
       const teamChat = await teamChatService.ensureTeamChat(user.id);
-      testCleanup.teamChatIds.push(teamChat.id);
       testCleanup.groupIds.push(teamChat.groupId);
       testCleanup.chatIds.push(teamChat.chatId);
       await teamChatService.addAgentToTeamChat(user.id, agent.id);
@@ -536,78 +488,6 @@ describe('TeamChatService', () => {
       expect(result!.agents.length).toBe(1);
       expect(result!.agents[0]!.id).toBe(agent.id);
       expect(result!.agents[0]!.username).toBe(agent.username);
-    });
-  });
-});
-
-describe('TeamChatResponseService', () => {
-  let testUser: { id: string; username: string; displayName: string };
-  let testAgent: { id: string; username: string; displayName: string };
-  let testTeamChat: TeamChatInfo;
-
-  beforeAll(async () => {
-    testUser = await createTestUser('response-user');
-    testAgent = await createTestAgent(testUser.id, 'response-agent');
-    testTeamChat = await teamChatService.ensureTeamChat(testUser.id);
-    testCleanup.teamChatIds.push(testTeamChat.id);
-    testCleanup.groupIds.push(testTeamChat.groupId);
-    testCleanup.chatIds.push(testTeamChat.chatId);
-    await teamChatService.addAgentToTeamChat(testUser.id, testAgent.id);
-  });
-
-  afterAll(async () => {
-    await cleanupTestData();
-  });
-
-  describe('triggerMentionedAgentResponses', () => {
-    test('returns empty result for empty mentions array', async () => {
-      const result =
-        await teamChatResponseService.triggerMentionedAgentResponses({
-          chatId: testTeamChat.chatId,
-          messageContent: 'Hello everyone',
-          mentionedAgentIds: [],
-          senderUserId: testUser.id,
-          senderDisplayName: testUser.displayName,
-        });
-
-      expect(result.triggered).toBe(0);
-      expect(result.responses).toEqual([]);
-    });
-
-    test('schedules responses for mentioned agents', async () => {
-      const result =
-        await teamChatResponseService.triggerMentionedAgentResponses({
-          chatId: testTeamChat.chatId,
-          messageContent: `Hey @${testAgent.username}, can you help?`,
-          mentionedAgentIds: [testAgent.id],
-          senderUserId: testUser.id,
-          senderDisplayName: testUser.displayName,
-        });
-
-      expect(result.triggered).toBe(1);
-      expect(result.responses.length).toBe(1);
-      expect(result.responses[0]!.agentId).toBe(testAgent.id);
-      expect(result.responses[0]!.success).toBe(true);
-
-      // Note: Actual response generation happens asynchronously
-      // In a full test, we'd wait and verify messages were created
-    });
-
-    test('handles multiple mentioned agents', async () => {
-      const agent2 = await createTestAgent(testUser.id, 'response-a2');
-      await teamChatService.addAgentToTeamChat(testUser.id, agent2.id);
-
-      const result =
-        await teamChatResponseService.triggerMentionedAgentResponses({
-          chatId: testTeamChat.chatId,
-          messageContent: `@${testAgent.username} and @${agent2.username}, coordinate!`,
-          mentionedAgentIds: [testAgent.id, agent2.id],
-          senderUserId: testUser.id,
-          senderDisplayName: testUser.displayName,
-        });
-
-      expect(result.triggered).toBe(2);
-      expect(result.responses.length).toBe(2);
     });
   });
 });
@@ -642,7 +522,6 @@ describe('Edge Cases and Boundary Conditions', () => {
     });
 
     const teamChat = await teamChatService.ensureTeamChat(user.id);
-    testCleanup.teamChatIds.push(teamChat.id);
     testCleanup.groupIds.push(teamChat.groupId);
     testCleanup.chatIds.push(teamChat.chatId);
 
@@ -685,7 +564,6 @@ describe('Edge Cases and Boundary Conditions', () => {
     });
 
     const teamChat = await teamChatService.ensureTeamChat(user.id);
-    testCleanup.teamChatIds.push(teamChat.id);
     testCleanup.groupIds.push(teamChat.groupId);
     testCleanup.chatIds.push(teamChat.chatId);
 
@@ -702,7 +580,6 @@ describe('Edge Cases and Boundary Conditions', () => {
     const user = await createTestUser('edge-rapid');
     const agent = await createTestAgent(user.id, 'edge-rapid');
     const teamChat = await teamChatService.ensureTeamChat(user.id);
-    testCleanup.teamChatIds.push(teamChat.id);
     testCleanup.groupIds.push(teamChat.groupId);
     testCleanup.chatIds.push(teamChat.chatId);
 
@@ -724,7 +601,6 @@ describe('Edge Cases and Boundary Conditions', () => {
   test('handles maximum agent count (stress test)', async () => {
     const user = await createTestUser('edge-max');
     const teamChat = await teamChatService.ensureTeamChat(user.id);
-    testCleanup.teamChatIds.push(teamChat.id);
     testCleanup.groupIds.push(teamChat.groupId);
     testCleanup.chatIds.push(teamChat.chatId);
 
@@ -756,7 +632,6 @@ describe('Data Integrity Verification', () => {
     const teamChat = await teamChatService.ensureTeamChat(user.id);
     const afterCreate = new Date();
 
-    testCleanup.teamChatIds.push(teamChat.id);
     testCleanup.groupIds.push(teamChat.groupId);
     testCleanup.chatIds.push(teamChat.chatId);
 
@@ -773,7 +648,6 @@ describe('Data Integrity Verification', () => {
     const user = await createTestUser('data-upd');
     const agent = await createTestAgent(user.id, 'data-upd');
     const teamChat = await teamChatService.ensureTeamChat(user.id);
-    testCleanup.teamChatIds.push(teamChat.id);
     testCleanup.groupIds.push(teamChat.groupId);
     testCleanup.chatIds.push(teamChat.chatId);
 
@@ -793,7 +667,6 @@ describe('Data Integrity Verification', () => {
   test('foreign key relationships are valid', async () => {
     const user = await createTestUser('data-fk');
     const teamChat = await teamChatService.ensureTeamChat(user.id);
-    testCleanup.teamChatIds.push(teamChat.id);
     testCleanup.groupIds.push(teamChat.groupId);
     testCleanup.chatIds.push(teamChat.chatId);
 
@@ -831,7 +704,6 @@ describe('syncExistingAgents', () => {
     const agent1 = await createTestAgent(user.id, 'sync-a1');
     const agent2 = await createTestAgent(user.id, 'sync-a2');
     const teamChat = await teamChatService.ensureTeamChat(user.id);
-    testCleanup.teamChatIds.push(teamChat.id);
     testCleanup.groupIds.push(teamChat.groupId);
     testCleanup.chatIds.push(teamChat.chatId);
 
@@ -854,7 +726,6 @@ describe('syncExistingAgents', () => {
     const user = await createTestUser('sync-2');
     const agent = await createTestAgent(user.id, 'sync-a3');
     const teamChat = await teamChatService.ensureTeamChat(user.id);
-    testCleanup.teamChatIds.push(teamChat.id);
     testCleanup.groupIds.push(teamChat.groupId);
     testCleanup.chatIds.push(teamChat.chatId);
 
@@ -869,7 +740,6 @@ describe('syncExistingAgents', () => {
   test('returns 0 when user has no agents', async () => {
     const user = await createTestUser('sync-3');
     const teamChat = await teamChatService.ensureTeamChat(user.id);
-    testCleanup.teamChatIds.push(teamChat.id);
     testCleanup.groupIds.push(teamChat.groupId);
     testCleanup.chatIds.push(teamChat.chatId);
 
@@ -884,7 +754,6 @@ describe('syncExistingAgents', () => {
     await createTestAgent(user.id, 'sync-a5');
     await createTestAgent(user.id, 'sync-a6');
     const teamChat = await teamChatService.ensureTeamChat(user.id);
-    testCleanup.teamChatIds.push(teamChat.id);
     testCleanup.groupIds.push(teamChat.groupId);
     testCleanup.chatIds.push(teamChat.chatId);
 
@@ -913,7 +782,6 @@ describe('syncExistingAgents', () => {
 
     const afterSync = await teamChatService.getTeamChat(user.id);
     expect(afterSync).not.toBeNull();
-    testCleanup.teamChatIds.push(afterSync!.id);
     testCleanup.groupIds.push(afterSync!.groupId);
     testCleanup.chatIds.push(afterSync!.chatId);
 
@@ -928,7 +796,6 @@ describe('syncExistingAgents', () => {
     await createTestAgent(user1.id, 'sync-a8');
     await createTestAgent(user2.id, 'sync-a9');
     const teamChat = await teamChatService.ensureTeamChat(user1.id);
-    testCleanup.teamChatIds.push(teamChat.id);
     testCleanup.groupIds.push(teamChat.groupId);
     testCleanup.chatIds.push(teamChat.chatId);
 
@@ -938,81 +805,5 @@ describe('syncExistingAgents', () => {
 
     const agents = await teamChatService.getTeamChatAgents(user1.id);
     expect(agents.length).toBe(1);
-  });
-});
-
-describe('Loop Prevention Behavior', () => {
-  afterAll(async () => {
-    await cleanupTestData();
-  });
-
-  test('allows first response from mentioned agent', async () => {
-    const user = await createTestUser('loop-1');
-    const agent = await createTestAgent(user.id, 'loop-a1');
-    const teamChat = await teamChatService.ensureTeamChat(user.id);
-    testCleanup.teamChatIds.push(teamChat.id);
-    testCleanup.groupIds.push(teamChat.groupId);
-    testCleanup.chatIds.push(teamChat.chatId);
-    await teamChatService.addAgentToTeamChat(user.id, agent.id);
-
-    // First mention should trigger response
-    const result1 =
-      await teamChatResponseService.triggerMentionedAgentResponses({
-        chatId: teamChat.chatId,
-        messageContent: `@${agent.username} hello`,
-        mentionedAgentIds: [agent.id],
-        senderUserId: user.id,
-        senderDisplayName: user.displayName,
-      });
-
-    expect(result1.triggered).toBe(1);
-    expect(result1.responses[0]?.success).toBe(true);
-  });
-
-  test('deduplicates agent IDs in same request', async () => {
-    const user = await createTestUser('loop-2');
-    const agent = await createTestAgent(user.id, 'loop-a2');
-    const teamChat = await teamChatService.ensureTeamChat(user.id);
-    testCleanup.teamChatIds.push(teamChat.id);
-    testCleanup.groupIds.push(teamChat.groupId);
-    testCleanup.chatIds.push(teamChat.chatId);
-    await teamChatService.addAgentToTeamChat(user.id, agent.id);
-
-    // Same agent ID mentioned multiple times
-    const result = await teamChatResponseService.triggerMentionedAgentResponses(
-      {
-        chatId: teamChat.chatId,
-        messageContent: `@${agent.username} @${agent.username} @${agent.username}`,
-        mentionedAgentIds: [agent.id, agent.id, agent.id],
-        senderUserId: user.id,
-        senderDisplayName: user.displayName,
-      }
-    );
-
-    // Should only trigger once despite duplicate IDs
-    // Note: The service currently doesn't dedupe at the caller level,
-    // but cooldown will prevent multiple responses
-    expect(result.triggered).toBeGreaterThanOrEqual(1);
-  });
-
-  test('handles empty string agent IDs gracefully', async () => {
-    const user = await createTestUser('loop-3');
-    const teamChat = await teamChatService.ensureTeamChat(user.id);
-    testCleanup.teamChatIds.push(teamChat.id);
-    testCleanup.groupIds.push(teamChat.groupId);
-    testCleanup.chatIds.push(teamChat.chatId);
-
-    // Test that empty/whitespace agent IDs are filtered out before processing
-    const result = await teamChatResponseService.triggerMentionedAgentResponses(
-      {
-        chatId: teamChat.chatId,
-        messageContent: 'Hello',
-        mentionedAgentIds: ['', '   '].filter(Boolean),
-        senderUserId: user.id,
-        senderDisplayName: user.displayName,
-      }
-    );
-
-    expect(result.triggered).toBe(0);
   });
 });

@@ -30,10 +30,16 @@ import {
   type Question,
   worldEvents,
 } from '@babylon/db';
-import { type JsonValue, logger } from '@babylon/shared';
+import {
+  escapeRegex,
+  isNonEmptyString,
+  type JsonValue,
+  logger,
+} from '@babylon/shared';
 import type { BabylonLLMClient } from '../llm/openai-client';
 import type { LLMJsonClient } from '../llm/types';
 import type { EventContext, FeedPostContext } from '../types/market-context';
+import { createDiscourseActionDeck } from '../utils/feed-diversity';
 import {
   formatActorFinanceGuardrails,
   formatActorToneGuardrails,
@@ -41,8 +47,8 @@ import {
   isDegenSpeaker,
   stripHashtagsAndEmojis,
 } from '../utils/shared-utils';
-import { generateArticleImageWithRetry } from './article-image-service';
 import { characterMappingService } from './character-mapping-service';
+import { parseStringArraySafe } from './jsonb-validators';
 import { buildPositionsPromptContextByActorId } from './npc-positions-context-service';
 import {
   ensureRunningBits,
@@ -130,8 +136,6 @@ import {
   logVoiceMetrics,
 } from './npc-character-config';
 import { StaticDataRegistry } from './static-data-registry';
-import type { GeneratedTag } from './tag-service';
-import { generateTagsFromPost, storeTagsForPost } from './tag-service';
 
 /**
  * NPC-to-NPC interaction cooldown tracking (in-memory for simplicity)
@@ -249,7 +253,6 @@ interface NPCContentContext {
 }
 
 const MAX_POST_TOKENS = 16384; // No practical limit
-const MAX_ARTICLE_TOKENS = 16384; // No practical limit
 
 /**
  * Pre-fetch all shared context ONCE before generating posts
@@ -318,14 +321,14 @@ export async function loadSharedPostContext(
     postsByAuthor.set(post.author, existing);
   }
 
-  // Convert events to context format
+  // Convert events to context format with safe parsing for JSONB actors array
   const recentEvents: EventContext[] = recentEventsRaw.map((event) => ({
     type: event.eventType,
     description:
       event.description.length > 200
         ? event.description.slice(0, 200) + '...'
         : event.description,
-    actors: event.actors as string[] | undefined,
+    actors: parseStringArraySafe(event.actors, { field: 'worldEvents.actors' }),
     timestamp: event.timestamp.toISOString(),
     relatedQuestion: event.relatedQuestion || undefined,
     pointsToward: event.pointsToward || undefined,
@@ -404,13 +407,6 @@ function buildNPCContext(
     previousPosts,
     recentFeedPosts,
   };
-}
-
-/**
- * Escape special regex characters in a string
- */
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**
@@ -1291,194 +1287,9 @@ ${worldFactsContext}
   return true;
 }
 
-/**
- * Generate a full news article from an organization
- */
-export async function generateOrgArticle(
-  llmClient: BabylonLLMClient,
-  org: OrganizationForPost,
-  question: QuestionForPost,
-  worldFactsContext: string,
-  timestamp: Date,
-  currentDay?: number
-): Promise<boolean> {
-  const orgName = org.name || 'Unknown Org';
-
-  const prompt = `You are ${orgName}, a news organization writing a comprehensive article.
-
-=== YOUR IDENTITY ===
-${org.description || 'A major news publication'}
-
-=== TOPIC ===
-"${question.text}"
-
-=== CRITICAL RULES ===
-- ABSOLUTELY NO HASHTAGS anywhere in the article (no #crypto, #AI, NOTHING with #)
-- NO EMOJIS
-- Use ONLY parody names (AIlon Musk, TeslAI, OpenAGI, etc.) - NEVER real names
-
-${worldFactsContext}
-
-=== REQUIRED OUTPUT ===
-- "title": a compelling headline (max 100 characters)
-- "summary": a succinct 2-3 sentence summary for social feeds (max 400 characters)
-- "article": a FULL-LENGTH article body (800-1200 words, at least 4 paragraphs). Include:
-  * An engaging lead paragraph that hooks readers
-  * Background context and relevant details
-  * Analysis of implications and what this means
-  * Expert perspectives or insider viewpoints (you can fabricate realistic quotes)
-  * A conclusion with forward-looking analysis
-  
-  The article must read like a professional newsroom piece from a major publication - NOT bullet points, NOT a summary. Separate paragraphs with \\n\\n (two newlines).
-
-Return your response as XML in this exact format:
-<response>
-  <title>news headline here</title>
-  <summary>2-3 sentence summary here</summary>
-  <article>full article body here with \\n\\n between paragraphs</article>
-</response>`;
-
-  const response = await llmClient.generateJSON<
-    | { title: string; summary: string; article: string }
-    | { response: { title: string; summary: string; article: string } }
-  >(
-    prompt,
-    {
-      properties: {
-        title: { type: 'string' },
-        summary: { type: 'string' },
-        article: { type: 'string' },
-      },
-      required: ['title', 'summary', 'article'],
-    },
-    {
-      temperature: 0.7,
-      maxTokens: MAX_ARTICLE_TOKENS,
-      format: 'xml',
-      promptType: 'generate_org_article',
-    }
-  );
-
-  // Safely extract article data, guarding against string responses
-  let articleData: { title: string; summary: string; article: string };
-  if (typeof response === 'string') {
-    logger.warn(
-      'LLM returned raw string instead of article object',
-      { orgName: org.name, questionId: question.id },
-      'PostGeneration'
-    );
-    return false;
-  }
-  if (
-    typeof response === 'object' &&
-    response !== null &&
-    'response' in response &&
-    response.response
-  ) {
-    articleData = response.response as typeof articleData;
-  } else {
-    articleData = response as typeof articleData;
-  }
-
-  if (!articleData?.title || !articleData?.summary || !articleData?.article) {
-    logger.warn(
-      'Empty article generated',
-      { orgName: org.name, questionId: question.id },
-      'PostGeneration'
-    );
-    return false;
-  }
-
-  // Strip hashtags and emojis first (defense-in-depth)
-  const summary = stripHashtagsAndEmojis(articleData.summary.trim());
-  const articleTitle = stripHashtagsAndEmojis(articleData.title.trim());
-  const articleBody = stripHashtagsAndEmojis(articleData.article.trim());
-
-  // Content should be a full article (800-1200 words = ~4000-6000 chars)
-  // Minimum 500 chars to ensure it's not just a summary
-  if (articleBody.length < 500) {
-    logger.warn(
-      'Article body too short - rejecting',
-      { orgName: org.name, length: articleBody.length, minRequired: 500 },
-      'PostGeneration'
-    );
-    return false;
-  }
-
-  // Transform content to replace real names with parody names
-  const transformedSummary =
-    await characterMappingService.transformText(summary);
-  const transformedBody =
-    await characterMappingService.transformText(articleBody);
-  if (
-    transformedSummary.replacementCount > 0 ||
-    transformedBody.replacementCount > 0
-  ) {
-    logger.warn(
-      `Fixed ${transformedSummary.replacementCount + transformedBody.replacementCount} real name(s) in org article`,
-      {
-        org: org.name,
-        title: articleTitle,
-      },
-      'PostGeneration'
-    );
-  }
-
-  // Generate article cover image (non-blocking, with retry)
-  let imageUrl: string | null = null;
-  if (process.env.FAL_KEY) {
-    imageUrl = await generateArticleImageWithRetry({
-      title: articleTitle,
-      summary: transformedSummary.transformedText,
-      category: question.text.slice(0, 100), // Use question as category hint
-    });
-  }
-
-  const postId = await generateSnowflakeId();
-  await getDbInstance().createPostWithAllFields({
-    id: postId,
-    type: 'article',
-    content: transformedSummary.transformedText,
-    fullContent: transformedBody.transformedText,
-    articleTitle: articleTitle,
-    imageUrl: imageUrl || undefined,
-    authorId: org.id,
-    relatedQuestion: question.questionNumber,
-    gameId: 'continuous',
-    dayNumber: currentDay,
-    timestamp,
-  });
-
-  logger.debug(
-    'Created org article',
-    { org: org.name, timestamp, hasImage: Boolean(imageUrl) },
-    'PostGeneration'
-  );
-
-  // Generate and store tags asynchronously
-  void generateTagsFromPost(transformedSummary.transformedText)
-    .then((generatedTags: GeneratedTag[]) => {
-      if (generatedTags.length > 0) {
-        return storeTagsForPost(postId, generatedTags).then(() => {
-          logger.info(
-            'Tagged org article',
-            { postId, orgName: org.name, tagCount: generatedTags.length },
-            'PostGeneration'
-          );
-        });
-      }
-      return Promise.resolve();
-    })
-    .catch((tagError: Error) => {
-      logger.warn(
-        'Failed to tag org article',
-        { postId, orgName: org.name, error: tagError },
-        'PostGeneration'
-      );
-    });
-
-  return true;
-}
+// NOTE: generateOrgArticle was removed - articles are now event-driven only
+// via article-tick cron (rate-limited) and breaking articles from world events.
+// Use ArticleGenerator from @babylon/engine for article generation.
 
 /**
  * Represents a post that NPCs can reply to
@@ -1528,6 +1339,11 @@ export interface GenerateNPCDiscourseOptions {
    * @default 0.5
    */
   quoteProbability?: number;
+  /**
+   * Timestamp supplier called per-action for staggered timestamps.
+   * If not provided, uses the base timestamp parameter for all actions.
+   */
+  getTimestamp?: () => Date;
 }
 
 /**
@@ -1676,86 +1492,120 @@ export async function generateNPCRepliesFromPreviousTicks(
     Math.min(maxReplies, eligiblePosts.length)
   );
 
+  // Identify which posts are original (can become quotes) vs replies (always reply)
+  // Pre-compute this to avoid race conditions in parallel processing
+  const postActionAssignments = postsToReplyTo.map((post) => ({
+    post,
+    isOriginalPost:
+      post.commentOnPostId === null || post.commentOnPostId === undefined,
+  }));
+
+  // Count original posts and build deck sized for them only
+  const originalPosts = postActionAssignments.filter((p) => p.isOriginalPost);
+  const originalPostCount = originalPosts.length;
+
+  // Create stratified action deck for guaranteed diversity (TikTok-style)
+  // Deck is sized for original posts only since replies can't become quotes
+  const quoteDeck = createDiscourseActionDeck(
+    originalPostCount,
+    quoteProbability,
+    random
+  );
+
+  // PRE-ASSIGN deck actions to posts BEFORE parallel execution
+  // This avoids race condition from incrementing shared index in async callbacks
+  let quoteDeckIndex = 0;
+  const actionAssignments = postActionAssignments.map((assignment) => ({
+    ...assignment,
+    // Short-circuit evaluation: quoteDeckIndex++ only runs when isOriginalPost is true.
+    // This ensures we only consume deck entries for original posts, preserving the ratio.
+    shouldQuote:
+      assignment.isOriginalPost && quoteDeck[quoteDeckIndex++] === 'quote',
+  }));
+
+  const quoteCount = quoteDeck.filter((a) => a === 'quote').length;
+  const replyCount = quoteDeck.filter((a) => a === 'reply').length;
+
   logger.info(
     `Generating ${postsToReplyTo.length} NPC replies to previous tick posts`,
     {
       eligiblePosts: eligiblePosts.length,
       targetReplies: postsToReplyTo.length,
+      originalPosts: originalPostCount,
+      quoteDeck: { quotes: quoteCount, replies: replyCount },
     },
     'PostGeneration'
   );
 
   // Generate replies and quote posts in parallel
-  // 70% chance of reply, 30% chance of quote post for variety
-  const discoursePromises = postsToReplyTo.map(async (originalPost) => {
-    // Pick a random actor to engage (not the original author)
-    // Filter by cooldown to prevent repetitive interactions
-    const availableEngagers = actorsWithContext.filter(
-      (a) =>
-        a.id !== originalPost.authorId &&
-        canNPCReplyToNPC(a.id, originalPost.authorId)
-    );
-
-    if (availableEngagers.length === 0) {
-      logger.debug(
-        'No eligible engagers for post (all on cooldown or same author)',
-        { postAuthor: originalPost.authorName },
-        'PostGeneration'
+  // Action type is pre-assigned to avoid race conditions
+  const discoursePromises = actionAssignments.map(
+    async ({ post: originalPost, shouldQuote }) => {
+      // Pick a random actor to engage (not the original author)
+      // Filter by cooldown to prevent repetitive interactions
+      const availableEngagers = actorsWithContext.filter(
+        (a) =>
+          a.id !== originalPost.authorId &&
+          canNPCReplyToNPC(a.id, originalPost.authorId)
       );
-      return { type: 'none' as const, success: false };
+
+      if (availableEngagers.length === 0) {
+        logger.debug(
+          'No eligible engagers for post (all on cooldown or same author)',
+          { postAuthor: originalPost.authorName },
+          'PostGeneration'
+        );
+        return { type: 'none' as const, success: false };
+      }
+
+      const engager =
+        availableEngagers[Math.floor(random() * availableEngagers.length)];
+      if (!engager) return { type: 'none' as const, success: false };
+
+      // Get staggered timestamp for this action (or use base timestamp)
+      const actionTimestamp = options.getTimestamp?.() ?? timestamp;
+
+      let success = false;
+      if (shouldQuote) {
+        success = await generateNPCQuotePost(
+          llmClient,
+          engager,
+          originalPost,
+          worldFactsContext,
+          actionTimestamp,
+          currentDay
+        );
+      } else {
+        success = await generateNPCReplyToPost(
+          llmClient,
+          engager,
+          originalPost,
+          worldFactsContext,
+          actionTimestamp,
+          currentDay
+        );
+      }
+
+      // Record interaction for cooldown tracking if successful
+      if (success) {
+        recordNPCInteraction(engager.id, originalPost.authorId);
+        logger.debug(
+          'Recorded NPC interaction for cooldown',
+          {
+            replier: engager.name,
+            target: originalPost.authorName,
+            type: shouldQuote ? 'quote' : 'reply',
+          },
+          'PostGeneration'
+        );
+      }
+
+      return {
+        type: shouldQuote ? ('quote' as const) : ('reply' as const),
+        success,
+      };
     }
-
-    const engager =
-      availableEngagers[Math.floor(random() * availableEngagers.length)];
-    if (!engager) return { type: 'none' as const, success: false };
-
-    // Decide: reply (70%) or quote post (30%)
-    // Quote posts only for original posts (not replies) to keep it clean
-    const isOriginalPost =
-      originalPost.commentOnPostId === null ||
-      originalPost.commentOnPostId === undefined;
-    const shouldQuote = isOriginalPost && random() < quoteProbability;
-
-    let success = false;
-    if (shouldQuote) {
-      success = await generateNPCQuotePost(
-        llmClient,
-        engager,
-        originalPost,
-        worldFactsContext,
-        timestamp,
-        currentDay
-      );
-    } else {
-      success = await generateNPCReplyToPost(
-        llmClient,
-        engager,
-        originalPost,
-        worldFactsContext,
-        timestamp,
-        currentDay
-      );
-    }
-
-    // Record interaction for cooldown tracking if successful
-    if (success) {
-      recordNPCInteraction(engager.id, originalPost.authorId);
-      logger.debug(
-        'Recorded NPC interaction for cooldown',
-        {
-          replier: engager.name,
-          target: originalPost.authorName,
-          type: shouldQuote ? 'quote' : 'reply',
-        },
-        'PostGeneration'
-      );
-    }
-
-    return {
-      type: shouldQuote ? ('quote' as const) : ('reply' as const),
-      success,
-    };
-  });
+  );
 
   const results = await Promise.allSettled(discoursePromises);
 
@@ -1820,10 +1670,6 @@ function inferSelfInterest(actor: DiscourseActor): SelfInterest {
     return 'ideology';
   }
   return 'reputation';
-}
-
-function isNonEmptyString(v: string | undefined): v is string {
-  return typeof v === 'string' && v.trim().length > 0;
 }
 
 function formatAgendaContext(

@@ -262,6 +262,23 @@ export interface FeedPost {
   originalAuthorUsername?: string | null;
   originalAuthorProfileImageUrl?: string | null;
   originalContent?: string | null;
+  // Inline comment previews for feed display
+  commentPreviews?: CommentPreviewData[];
+}
+
+/**
+ * Comment preview data for inline display on post cards
+ */
+export interface CommentPreviewData {
+  id: string;
+  content: string;
+  createdAt: string;
+  userId: string;
+  userName: string;
+  userUsername?: string | null;
+  userAvatar?: string | null;
+  likeCount?: number;
+  isLiked?: boolean;
 }
 
 /**
@@ -364,9 +381,51 @@ export interface ElizaCharacter {
 }
 
 /**
+ * Per-actor tier customization for alpha group mechanics.
+ * Allows NPCs to have different invite thresholds based on personality.
+ *
+ * Trading-focused NPCs (crypto, finance) should weight trading activity higher.
+ * Social-focused NPCs (media, entertainment) should weight social interactions higher.
+ */
+export interface ActorTierOverrides {
+  /**
+   * Multiplier for minEngagementScore thresholds.
+   * - 1.0 = default thresholds
+   * - 1.5 = 50% harder to join (higher engagement required)
+   * - 0.8 = 20% easier to join
+   * @default 1.0
+   */
+  minEngagementScoreMultiplier?: number;
+
+  /**
+   * Multiplier for invite probabilities.
+   * - 1.0 = default probability
+   * - 0.5 = half as likely to send invites
+   * - 2.0 = twice as likely to send invites
+   * @default 1.0
+   */
+  inviteProbabilityMultiplier?: number;
+
+  /**
+   * Focus weights for engagement score calculation.
+   * Controls how social interactions vs trading activity contribute to the score.
+   * Values should sum to 1.0.
+   *
+   * @example
+   * { social: 0.7, trading: 0.3 } // Social-focused NPC
+   * { social: 0.3, trading: 0.7 } // Trading-focused NPC
+   */
+  focusWeights?: {
+    /** Weight for social interactions (replies, likes, shares) */
+    social: number;
+    /** Weight for trading activity (trades, P&L) */
+    trading: number;
+  };
+}
+
+/**
  * Extended Actor definition for data files
- * Includes all fields from individual actor TypeScript files
- * (stored in packages/engine/src/data/actors/*.ts)
+ * Includes all fields from actor source files used to seed pack definitions.
  */
 export interface ActorData extends Actor {
   realName: string;
@@ -378,6 +437,11 @@ export interface ActorData extends Actor {
   originalHandle: string; // For name replacement
   firstName?: string; // Current first name (for name replacement)
   lastName?: string; // Current last name (for name replacement)
+  /**
+   * Optional tier customization for alpha group mechanics.
+   * Allows this actor to have different thresholds than the defaults.
+   */
+  tierOverrides?: ActorTierOverrides;
 }
 
 /**
@@ -417,6 +481,9 @@ export interface Question {
   resolutionProofUrl?: string; // URL to post/article proving outcome
   resolutionDescription?: string; // Description of how it resolved
   timeframe?: string; // Timeframe category (e.g., '24h', '7d', '30d')
+  topicKey?: string; // Daily topic key controlling this question
+  topicLabel?: string; // Human-readable daily topic label
+  topicDate?: Date | string; // UTC day this topic was selected for
   // Database fields
   questionNumber?: number; // Question number for tracking
   createdAt?: Date | string; // Database timestamp
@@ -552,10 +619,10 @@ export interface GeneratedGame {
 
 /**
  * Actors database structure
- * Used for loading actor/organization data from TypeScript files
- * - Individual files in packages/engine/src/data/actors/*.ts
- * - Individual files in packages/engine/src/data/organizations/*.ts
- * - Loaded via loadActorsData() utility (direct TypeScript imports)
+ * Used for loading actor/organization seed data
+ * - Actor data is derived from pack definitions for active universes
+ * - Organization data can be loaded from pack or compatibility seed sources
+ * - Loaded via loadActorsData() utility
  */
 export interface ActorsDatabase {
   actors: ActorData[];

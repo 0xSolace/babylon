@@ -60,6 +60,8 @@ export interface PerpMarket {
   ticker: string;
   organizationId: string;
   name: string;
+  /** Company logo URL when available (Organization.imageUrl). */
+  imageUrl?: string | null;
   currentPrice: number;
   change24h: number;
   changePercent24h: number;
@@ -74,6 +76,12 @@ export interface PerpMarket {
   };
   maxLeverage: number;
   minOrderSize: number;
+  bidPrice?: number;
+  askPrice?: number;
+  spreadBps?: number;
+  bidDepth?: number;
+  askDepth?: number;
+  liquidityRegime?: 'thin' | 'balanced' | 'deep';
 }
 
 /**
@@ -82,16 +90,21 @@ export interface PerpMarket {
 export interface PredictionMarket {
   id: number | string;
   text: string;
+  /** Alias sometimes returned by API routes */
+  question?: string;
   status: 'active' | 'resolved' | 'cancelled';
   createdDate?: string;
   resolutionDate?: string;
+  endDate?: string | null;
   resolvedOutcome?: boolean;
   scenario: number;
   yesShares?: number;
   noShares?: number;
-  oracleCommitTxHash?: string | null;
-  oracleRevealTxHash?: string | null;
-  oraclePublishedAt?: string | null;
+  yesProbability?: number;
+  noProbability?: number;
+  tradeCount?: number;
+  resolutionProofUrl?: string | null;
+  resolutionDescription?: string | null;
 }
 
 /**
@@ -202,6 +215,13 @@ export interface DisplayPerpPosition {
   unrealizedPnLPercent: number;
   fundingPaid: number;
   openedAt: string;
+  // Agent position metadata (optional)
+  /** True if this position belongs to an agent */
+  isAgentPosition?: boolean;
+  /** Agent's user ID (only set if isAgentPosition=true) */
+  agentId?: string;
+  /** Agent's display name (only set if isAgentPosition=true) */
+  agentName?: string;
 }
 
 // =============================================================================

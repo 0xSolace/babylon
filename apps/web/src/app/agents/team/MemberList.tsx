@@ -1,24 +1,38 @@
 'use client';
 
-import { Bot, Plus } from 'lucide-react';
+import { cn, formatCompactCurrency } from '@babylon/shared';
+import { ExternalLink, MoreVertical, Settings, Square } from 'lucide-react';
 import Link from 'next/link';
 import { Avatar } from '@/components/shared/Avatar';
-import { Separator } from '@/components/shared/Separator';
-import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 /** Agent info for member list */
-interface TeamChatAgent {
+export interface TeamChatAgent {
   id: string;
   username: string | null;
   displayName: string | null;
   profileImageUrl: string | null;
+  isAgent: boolean;
+  modelTier: 'free' | 'pro';
+  virtualBalance: number;
 }
 
-/** User info for member list */
-interface UserInfo {
-  profileImageUrl?: string | null | undefined;
-  displayName?: string | null | undefined;
-  username?: string | null | undefined;
+/** Agent stats from /api/agents */
+export interface AgentStats {
+  lifetimePnL: number;
+  totalTrades: number;
+  profitableTrades: number;
+  winRate: number;
+  lastTickAt: string | null;
+  lastChatAt: string | null;
+  isActive: boolean;
+  status: string;
+  openPositions: number;
 }
 
 /** Team chat info for member list */
@@ -28,100 +42,362 @@ interface TeamChatInfo {
 }
 
 interface MemberListProps {
-  user: UserInfo | null | undefined;
   teamChat: TeamChatInfo | null | undefined;
-  /** Called when a link is clicked (for closing drawer on mobile) */
   onClose?: () => void;
+  processingAgentIds?: Set<string>;
+  onTagAgent?: (agent: TeamChatAgent) => void;
+  onStopAgent?: (agentId: string) => void;
+  onViewSettings?: (agentId: string) => void;
+  onSelectAgent?: (agentId: string) => void;
+  selectedAgentId?: string | null;
+  viewMode?: 'list' | 'cards';
+  agentStatsMap?: ReadonlyMap<string, AgentStats>;
 }
 
-/**
- * Member list component for Command Center sidebar/drawer
- *
- * Shows the current user and all agents in the team chat.
- * Used by both desktop sidebar and mobile drawer.
- */
-export function MemberList({ user, teamChat, onClose }: MemberListProps) {
-  return (
-    <div className="flex-1 overflow-y-auto p-4">
-      {/* You (the user) */}
-      <div className="mb-4">
-        <p className="mb-2 font-medium text-muted-foreground text-xs uppercase">
-          You
-        </p>
-        <div className="flex items-center gap-3">
-          <Avatar
-            src={user?.profileImageUrl ?? undefined}
-            name={user?.displayName || user?.username || 'You'}
-            size="sm"
-          />
-          <span className="font-medium text-foreground text-sm">
-            {user?.displayName || user?.username || 'You'}
-          </span>
+function formatTimeAgo(dateStr: string | null): string {
+  if (!dateStr) return 'Never';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
+
+export function MemberList({
+  teamChat,
+  onClose,
+  processingAgentIds = new Set(),
+  onTagAgent,
+  onStopAgent,
+  onViewSettings,
+  onSelectAgent,
+  selectedAgentId,
+  viewMode = 'list',
+  agentStatsMap,
+}: MemberListProps) {
+  if (!teamChat?.agents.length) return null;
+
+  if (viewMode === 'cards') {
+    return (
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
+        <div className="space-y-3">
+          {teamChat.agents.map((agent) => {
+            const agentName = agent.displayName || agent.username || 'Agent';
+            const isSelected = selectedAgentId === agent.id;
+            const isProcessing = processingAgentIds.has(agent.id);
+            const stats = agentStatsMap?.get(agent.id);
+            const hasStats = stats !== undefined;
+
+            // Determine last active time (most recent of lastTickAt or lastChatAt)
+            const lastActive =
+              stats?.lastTickAt && stats?.lastChatAt
+                ? new Date(stats.lastTickAt) > new Date(stats.lastChatAt)
+                  ? stats.lastTickAt
+                  : stats.lastChatAt
+                : stats?.lastTickAt || stats?.lastChatAt || null;
+
+            return (
+              <div
+                key={agent.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  onTagAgent?.(agent);
+                  onSelectAgent?.(agent.id);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onTagAgent?.(agent);
+                    onSelectAgent?.(agent.id);
+                  }
+                }}
+                className={cn(
+                  'w-full cursor-pointer rounded-xl border p-3 text-left transition-all',
+                  isSelected
+                    ? 'border-primary/40 bg-primary/5'
+                    : 'border-border bg-muted/30 hover:border-border/80 hover:bg-muted/50'
+                )}
+              >
+                {/* Top: Avatar + Name + Status + Gear */}
+                <div className="mb-3 flex items-start gap-3">
+                  <div className="relative shrink-0">
+                    <Avatar
+                      src={agent.profileImageUrl ?? undefined}
+                      name={agentName}
+                      size="md"
+                    />
+                    {isProcessing && (
+                      <div className="-top-0.5 -right-0.5 absolute h-3 w-3 animate-pulse rounded-full bg-amber-500 ring-2 ring-background" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="truncate font-semibold text-foreground text-sm">
+                        {agentName}
+                      </span>
+                      {agent.username && (
+                        <span className="truncate text-muted-foreground text-xs">
+                          @{agent.username}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                      {hasStats && (
+                        <span
+                          className={cn(
+                            'inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-medium text-[10px]',
+                            stats.isActive
+                              ? 'bg-green-500/15 text-green-500'
+                              : 'bg-muted text-muted-foreground'
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              'h-1.5 w-1.5 rounded-full',
+                              stats.isActive
+                                ? 'bg-green-500'
+                                : 'bg-muted-foreground'
+                            )}
+                          />
+                          {stats.isActive ? 'Active' : 'Idle'}
+                        </span>
+                      )}
+                      {agent.modelTier === 'pro' && (
+                        <span className="rounded bg-primary/20 px-1.5 py-0.5 font-medium text-[10px] text-primary">
+                          PRO
+                        </span>
+                      )}
+                      {hasStats && stats.openPositions > 0 && (
+                        <span className="rounded bg-blue-500/15 px-1.5 py-0.5 font-medium text-[10px] text-blue-500">
+                          {stats.openPositions} open
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onViewSettings?.(agent.id);
+                    }}
+                    className="shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    aria-label="Agent settings"
+                  >
+                    <Settings className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {/* Stats row */}
+                <div className="mb-3 flex items-stretch rounded-lg border border-border/60 bg-background/50">
+                  <div className="flex flex-1 flex-col items-center justify-center px-1 py-2">
+                    <span className="font-semibold text-foreground text-xs">
+                      {formatCompactCurrency(agent.virtualBalance)}
+                    </span>
+                    <span className="text-[9px] text-muted-foreground uppercase tracking-wider">
+                      Wallet
+                    </span>
+                  </div>
+                  <div className="w-px bg-border/60" />
+                  <div className="flex flex-1 flex-col items-center justify-center px-1 py-2">
+                    <span
+                      className={cn(
+                        'font-semibold text-xs',
+                        hasStats
+                          ? stats.lifetimePnL >= 0
+                            ? 'text-green-600'
+                            : 'text-red-600'
+                          : 'text-foreground'
+                      )}
+                    >
+                      {hasStats
+                        ? `${stats.lifetimePnL >= 0 ? '+' : ''}${formatCompactCurrency(stats.lifetimePnL)}`
+                        : '—'}
+                    </span>
+                    <span className="text-[9px] text-muted-foreground uppercase tracking-wider">
+                      P&L
+                    </span>
+                  </div>
+                  <div className="w-px bg-border/60" />
+                  <div className="flex flex-1 flex-col items-center justify-center px-1 py-2">
+                    <span className="font-semibold text-foreground text-xs">
+                      {hasStats ? `${(stats.winRate * 100).toFixed(0)}%` : '—'}
+                    </span>
+                    <span className="text-[9px] text-muted-foreground uppercase tracking-wider">
+                      Win Rate
+                    </span>
+                  </div>
+                  <div className="w-px bg-border/60" />
+                  <div className="flex flex-1 flex-col items-center justify-center px-1 py-2">
+                    <span className="font-semibold text-foreground text-xs">
+                      {hasStats ? stats.totalTrades : '—'}
+                    </span>
+                    <span className="text-[9px] text-muted-foreground uppercase tracking-wider">
+                      Trades
+                    </span>
+                  </div>
+                </div>
+
+                {/* Bottom: Last active + actions */}
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                    {hasStats && lastActive ? (
+                      <>
+                        <span
+                          className={cn(
+                            'h-1.5 w-1.5 rounded-full',
+                            stats.isActive
+                              ? 'bg-green-500'
+                              : 'bg-muted-foreground'
+                          )}
+                        />
+                        Last active {formatTimeAgo(lastActive)}
+                      </>
+                    ) : hasStats ? (
+                      <>
+                        <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground" />
+                        No activity yet
+                      </>
+                    ) : (
+                      <>
+                        <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground" />
+                        Loading...
+                      </>
+                    )}
+                  </span>
+                  {agent.username && (
+                    <Link
+                      href={`/profile/${agent.username}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="flex items-center gap-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      View Profile
+                      <ExternalLink className="h-3 w-3" />
+                    </Link>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
+    );
+  }
 
-      <Separator className="my-4" />
+  // List view (default)
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <nav role="list" aria-label="Team agents" className="space-y-1">
+        {teamChat.agents.map((agent) => {
+          const isProcessing = processingAgentIds.has(agent.id);
+          const agentName = agent.displayName || agent.username || 'Agent';
 
-      {/* Agents */}
-      <div>
-        <p className="mb-2 font-medium text-muted-foreground text-xs uppercase">
-          Agents ({teamChat?.agentCount ?? 0})
-        </p>
-        {!teamChat?.agents.length ? (
-          <p className="text-muted-foreground text-sm">
-            No agents yet.{' '}
-            <Link
-              href="/agents/create"
-              className="text-blue-500 hover:underline"
-              onClick={onClose}
+          return (
+            <div
+              key={agent.id}
+              className={cn(
+                'group flex min-w-0 items-center gap-2 rounded-lg p-2 transition-colors',
+                'hover:bg-muted/50 has-[[data-state=open]]:bg-muted/50',
+                isProcessing && 'opacity-70'
+              )}
             >
-              Create one
-            </Link>
-          </p>
-        ) : (
-          <nav role="list" aria-label="Team agents" className="space-y-3">
-            {teamChat.agents.map((agent) => (
-              <Link
-                key={agent.id}
-                href={`/agents/${agent.id}`}
-                onClick={onClose}
-                role="listitem"
-                className="flex items-center gap-3 rounded-lg p-2 transition-colors hover:bg-muted/50"
+              <button
+                type="button"
+                onClick={() => {
+                  onTagAgent?.(agent);
+                  onSelectAgent?.(agent.id);
+                }}
+                className={cn(
+                  'flex min-w-0 flex-1 items-center gap-3 text-left',
+                  'cursor-pointer'
+                )}
+                aria-label={`Open ${agentName}`}
               >
-                <Avatar
-                  src={agent.profileImageUrl ?? undefined}
-                  name={agent.displayName || agent.username || 'Agent'}
-                  size="sm"
-                />
+                <div className="relative">
+                  <Avatar
+                    src={agent.profileImageUrl ?? undefined}
+                    name={agentName}
+                    size="sm"
+                  />
+                </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium text-foreground text-sm">
-                    {agent.displayName || agent.username || 'Agent'}
-                  </p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="truncate font-medium text-foreground text-sm">
+                      {agentName}
+                    </p>
+                    {agent.modelTier === 'pro' && (
+                      <span className="shrink-0 rounded bg-primary/20 px-1.5 py-0.5 font-medium text-[10px] text-primary">
+                        PRO
+                      </span>
+                    )}
+                  </div>
                   {agent.username && (
                     <p className="truncate text-muted-foreground text-xs">
                       @{agent.username}
                     </p>
                   )}
                 </div>
-                <Bot
-                  className="h-4 w-4 flex-shrink-0 text-blue-500"
-                  aria-hidden="true"
-                />
-              </Link>
-            ))}
-          </nav>
-        )}
-      </div>
+              </button>
 
-      {/* Add agent button */}
-      <div className="mt-4">
-        <Link href="/agents/create" onClick={onClose}>
-          <Button variant="outline" size="sm" className="w-full gap-2">
-            <Plus className="h-4 w-4" />
-            Add Agent
-          </Button>
-        </Link>
-      </div>
+              {isProcessing ? (
+                <button
+                  type="button"
+                  className="relative flex h-7 w-7 flex-shrink-0 items-center justify-center rounded transition-colors hover:bg-primary/10"
+                  onClick={() => onStopAgent?.(agent.id)}
+                  aria-label={`Stop ${agentName}`}
+                >
+                  <div className="absolute inset-0.5 animate-spin rounded-full border-2 border-transparent border-t-primary" />
+                  <Square className="relative h-3 w-3 fill-primary text-primary" />
+                </button>
+              ) : (
+                <DropdownMenu modal={false}>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className={cn(
+                        'flex h-7 w-7 flex-shrink-0 items-center justify-center rounded transition-colors',
+                        'text-muted-foreground hover:bg-muted hover:text-foreground',
+                        'focus:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100 lg:opacity-0'
+                      )}
+                      aria-label={`More options for ${agentName}`}
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {agent.username && (
+                      <DropdownMenuItem asChild>
+                        <Link
+                          href={`/profile/${agent.username}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <ExternalLink className="mr-2 h-4 w-4" />
+                          <span>View Profile</span>
+                        </Link>
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem
+                      onClick={() => {
+                        onViewSettings?.(agent.id);
+                        onClose?.();
+                      }}
+                    >
+                      <Settings className="mr-2 h-4 w-4" />
+                      <span>Settings</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
+          );
+        })}
+      </nav>
     </div>
   );
 }

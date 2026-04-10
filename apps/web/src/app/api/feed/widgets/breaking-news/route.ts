@@ -104,9 +104,12 @@ import { StaticDataRegistry } from '@babylon/engine';
 import {
   BreakingNewsQuerySchema,
   FEED_WIDGET_CONFIG,
+  getTimeAgo,
   logger,
+  toISO,
 } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+import { selectSignificantWorldEvents } from './helpers';
 
 interface BreakingNewsItem {
   id: string;
@@ -127,8 +130,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   // Validate query parameters
   const { searchParams } = new URL(request.url);
   const queryParams = {
-    limit: searchParams.get('limit') || '5',
-    category: searchParams.get('category'),
+    limit: searchParams.get('limit') ?? undefined,
+    category: searchParams.get('category') ?? undefined,
   };
   BreakingNewsQuerySchema.parse(queryParams);
 
@@ -140,64 +143,27 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     authUser && authUser.userId
       ? await asUser(authUser, async (db) => {
           const items: BreakingNewsItem[] = [];
-          const currentTime = new Date(); // Single timestamp for all queries in this scope
+          const currentTime = new Date();
 
-          // 1. Get recent significant world events - dynamically determine event types from database
-          // First, get all unique event types that exist in the database
-          // Get unique event types - query all and deduplicate
-          const allEventTypesRaw = await db
-            .select({ eventType: worldEvents.eventType })
-            .from(worldEvents)
-            .limit(1000); // Get more to ensure we have enough unique types
-
-          const uniqueEventTypesSet = new Set(
-            allEventTypesRaw.map((e) => e.eventType).filter(Boolean)
-          );
-          const availableEventTypes = Array.from(uniqueEventTypesSet)
-            .map((e) => e.toLowerCase())
-            .slice(0, 50);
-
-          // Get recent events, filtering for news-worthy types dynamically
-          // Only show events up to current time (prevent future access)
           const recentEvents = await db
             .select()
             .from(worldEvents)
             .where(
               and(
-                eq(worldEvents.visibility, 'public'), // Only show public events
-                lte(worldEvents.timestamp, currentTime) // ✅ No future events
+                eq(worldEvents.visibility, 'public'),
+                lte(worldEvents.timestamp, currentTime)
               )
             )
             .orderBy(desc(worldEvents.timestamp))
             .limit(FEED_WIDGET_CONFIG.MAX_WORLD_EVENTS_QUERY);
 
-          // Filter for significant events - use actual event types from database
-          const significantEvents = recentEvents
-            .filter((event) => {
-              const eventType = event.eventType.toLowerCase();
-              // Include events that are likely news-worthy based on type
-              const newsWorthyTypes = [
-                'announcement',
-                'development',
-                'scandal',
-                'deal',
-                'meeting',
-                'news:published',
-                'leak',
-                'revelation',
-                'conflict',
-                'development:occurred',
-              ];
-              return newsWorthyTypes.some(
-                (type) =>
-                  eventType.includes(type) ||
-                  availableEventTypes.includes(eventType)
-              );
-            })
-            .slice(0, 5); // Get more to ensure we have content
+          const significantEvents = selectSignificantWorldEvents(
+            recentEvents,
+            5
+          );
 
           for (const event of significantEvents) {
-            const description = event.description || 'Event occurred';
+            const description = event.description;
 
             let icon: 'chart' | 'calendar' | 'dollar' | 'trending' = 'trending';
             if (event.eventType.toLowerCase().includes('meeting')) {
@@ -221,13 +187,10 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
               eventDate.getTime() > Date.now() - trendingThreshold;
 
             let imageUrl: string | undefined;
-            const firstActorId =
-              event.actors && event.actors.length > 0
-                ? event.actors[0]
-                : undefined;
+            const firstActorId = event.actors[0];
             if (firstActorId) {
               const actor = StaticDataRegistry.getActor(firstActorId);
-              imageUrl = actor?.profileImageUrl || undefined;
+              imageUrl = actor?.profileImageUrl;
             }
 
             items.push({
@@ -238,7 +201,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
                   : description,
               description: `${getTimeAgo(eventDate)}${isTrending ? ' • Trending' : ''}`,
               icon,
-              timestamp: eventDate.toISOString(),
+              timestamp: toISO(eventDate),
               trending: isTrending,
               source: event.relatedQuestion
                 ? `World Event (Related to Question #${event.relatedQuestion})`
@@ -250,10 +213,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
                   : ''),
               imageUrl,
               relatedQuestion: event.relatedQuestion || undefined,
-              relatedActorId:
-                event.actors && event.actors.length > 0
-                  ? event.actors[0]
-                  : undefined,
+              relatedActorId: event.actors[0],
             });
           }
 
@@ -327,7 +287,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
                 : `${org.name || org.id} ${changePercent > 0 ? 'up' : 'down'} ${Math.abs(changePercent).toFixed(1)}%`,
               description: `Trading at $${price.toFixed(2)} • ${getTimeAgo(update.timestamp)}${isTrending ? ' • Trending' : ''}`,
               icon: 'chart',
-              timestamp: update.timestamp.toISOString(),
+              timestamp: toISO(update.timestamp),
               trending: isTrending,
               source: 'Stock Price Update',
               fullDescription: fullDesc,
@@ -413,11 +373,11 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
               title,
               description: `${getTimeAgo(eventDate)}${isTrending ? ' • Trending' : ''}`,
               icon: 'trending',
-              timestamp: eventDate.toISOString(),
+              timestamp: toISO(eventDate),
               trending: isTrending,
               source: `Post by ${actorName}`,
               fullDescription: content,
-              imageUrl: actor.profileImageUrl || undefined,
+              imageUrl: actor.profileImageUrl,
               relatedActorId: actor.id,
             });
           }
@@ -466,11 +426,11 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
                 title,
                 description: `${getTimeAgo(eventDate)}${isTrending ? ' • Trending' : ''}`,
                 icon: 'trending',
-                timestamp: eventDate.toISOString(),
+                timestamp: toISO(eventDate),
                 trending: isTrending,
                 source: `Post by ${actorName}`,
                 fullDescription: content,
-                imageUrl: actor.profileImageUrl || undefined,
+                imageUrl: actor.profileImageUrl,
                 relatedActorId: actor.id,
               });
             }
@@ -510,7 +470,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
                     : description,
                 description: `${getTimeAgo(eventDate)}${isTrending ? ' • Trending' : ''}`,
                 icon: 'trending',
-                timestamp: eventDate.toISOString(),
+                timestamp: toISO(eventDate),
                 trending: isTrending,
                 source: 'World Event',
                 fullDescription: description,
@@ -530,66 +490,28 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           return sortedNews;
         })
       : await asPublic(async (db) => {
-          // Same logic for public access
           const items: BreakingNewsItem[] = [];
-          const currentTime = new Date(); // Single timestamp for all queries in this scope
+          const currentTime = new Date();
 
-          // 1. Get recent significant world events - dynamically determine event types from database
-          // First, get all unique event types that exist in the database
-          // Get unique event types - query all and deduplicate
-          const allEventTypesRaw = await db
-            .select({ eventType: worldEvents.eventType })
-            .from(worldEvents)
-            .limit(1000); // Get more to ensure we have enough unique types
-
-          const uniqueEventTypesSet = new Set(
-            allEventTypesRaw.map((e) => e.eventType).filter(Boolean)
-          );
-          const availableEventTypes = Array.from(uniqueEventTypesSet)
-            .map((e) => e.toLowerCase())
-            .slice(0, 50);
-
-          // Get recent events, filtering for news-worthy types dynamically
-          // Only show events up to current time (prevent future access)
           const recentEvents = await db
             .select()
             .from(worldEvents)
             .where(
               and(
-                eq(worldEvents.visibility, 'public'), // Only show public events
-                lte(worldEvents.timestamp, currentTime) // ✅ No future events
+                eq(worldEvents.visibility, 'public'),
+                lte(worldEvents.timestamp, currentTime)
               )
             )
             .orderBy(desc(worldEvents.timestamp))
             .limit(FEED_WIDGET_CONFIG.MAX_WORLD_EVENTS_QUERY);
 
-          // Filter for significant events - use actual event types from database
-          const significantEvents = recentEvents
-            .filter((event) => {
-              const eventType = event.eventType.toLowerCase();
-              // Include events that are likely news-worthy based on type
-              const newsWorthyTypes = [
-                'announcement',
-                'development',
-                'scandal',
-                'deal',
-                'meeting',
-                'news:published',
-                'leak',
-                'revelation',
-                'conflict',
-                'development:occurred',
-              ];
-              return newsWorthyTypes.some(
-                (type) =>
-                  eventType.includes(type) ||
-                  availableEventTypes.includes(eventType)
-              );
-            })
-            .slice(0, 5); // Get more to ensure we have content
+          const significantEvents = selectSignificantWorldEvents(
+            recentEvents,
+            5
+          );
 
           for (const event of significantEvents) {
-            const description = event.description || 'Event occurred';
+            const description = event.description;
 
             let icon: 'chart' | 'calendar' | 'dollar' | 'trending' = 'trending';
             if (event.eventType.toLowerCase().includes('meeting')) {
@@ -613,13 +535,10 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
               eventDate.getTime() > Date.now() - trendingThreshold;
 
             let imageUrl: string | undefined;
-            const firstActorId =
-              event.actors && event.actors.length > 0
-                ? event.actors[0]
-                : undefined;
+            const firstActorId = event.actors[0];
             if (firstActorId) {
               const actor = StaticDataRegistry.getActor(firstActorId);
-              imageUrl = actor?.profileImageUrl || undefined;
+              imageUrl = actor?.profileImageUrl;
             }
 
             items.push({
@@ -630,7 +549,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
                   : description,
               description: `${getTimeAgo(eventDate)}${isTrending ? ' • Trending' : ''}`,
               icon,
-              timestamp: eventDate.toISOString(),
+              timestamp: toISO(eventDate),
               trending: isTrending,
               source: event.relatedQuestion
                 ? `World Event (Related to Question #${event.relatedQuestion})`
@@ -642,10 +561,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
                   : ''),
               imageUrl,
               relatedQuestion: event.relatedQuestion || undefined,
-              relatedActorId:
-                event.actors && event.actors.length > 0
-                  ? event.actors[0]
-                  : undefined,
+              relatedActorId: event.actors[0],
             });
           }
 
@@ -719,7 +635,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
                 : `${org.name || org.id} ${changePercent > 0 ? 'up' : 'down'} ${Math.abs(changePercent).toFixed(1)}%`,
               description: `Trading at $${price.toFixed(2)} • ${getTimeAgo(update.timestamp)}${isTrending ? ' • Trending' : ''}`,
               icon: 'chart',
-              timestamp: update.timestamp.toISOString(),
+              timestamp: toISO(update.timestamp),
               trending: isTrending,
               source: 'Stock Price Update',
               fullDescription: fullDesc,
@@ -805,11 +721,11 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
               title,
               description: `${getTimeAgo(eventDate)}${isTrending ? ' • Trending' : ''}`,
               icon: 'trending',
-              timestamp: eventDate.toISOString(),
+              timestamp: toISO(eventDate),
               trending: isTrending,
               source: `Post by ${actorName}`,
               fullDescription: content,
-              imageUrl: actor.profileImageUrl || undefined,
+              imageUrl: actor.profileImageUrl,
               relatedActorId: actor.id,
             });
           }
@@ -858,11 +774,11 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
                 title,
                 description: `${getTimeAgo(eventDate)}${isTrending ? ' • Trending' : ''}`,
                 icon: 'trending',
-                timestamp: eventDate.toISOString(),
+                timestamp: toISO(eventDate),
                 trending: isTrending,
                 source: `Post by ${actorName}`,
                 fullDescription: content,
-                imageUrl: actor.profileImageUrl || undefined,
+                imageUrl: actor.profileImageUrl,
                 relatedActorId: actor.id,
               });
             }
@@ -902,7 +818,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
                     : description,
                 description: `${getTimeAgo(eventDate)}${isTrending ? ' • Trending' : ''}`,
                 icon: 'trending',
-                timestamp: eventDate.toISOString(),
+                timestamp: toISO(eventDate),
                 trending: isTrending,
                 source: 'World Event',
                 fullDescription: description,
@@ -934,18 +850,3 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     news: newsItems,
   });
 });
-
-function getTimeAgo(date: Date): string {
-  const now = Date.now();
-  const diff = now - date.getTime();
-  const hours = Math.floor(diff / (1000 * 60 * 60));
-  const minutes = Math.floor(diff / (1000 * 60));
-
-  if (hours > 0) {
-    return `${hours}h ago`;
-  }
-  if (minutes > 0) {
-    return `${minutes}m ago`;
-  }
-  return 'Just now';
-}

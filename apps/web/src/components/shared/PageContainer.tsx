@@ -1,5 +1,5 @@
 import { cn } from '@babylon/shared';
-import type { ReactNode } from 'react';
+import type { HTMLAttributes, ReactNode } from 'react';
 import { forwardRef } from 'react';
 
 /**
@@ -18,20 +18,21 @@ import { forwardRef } from 'react';
  * </PageContainer>
  * ```
  */
-interface PageContainerProps {
+interface PageContainerProps
+  extends Omit<HTMLAttributes<HTMLDivElement>, 'className'> {
   children: ReactNode;
   className?: string;
   noPadding?: boolean;
 }
 
 export const PageContainer = forwardRef<HTMLDivElement, PageContainerProps>(
-  ({ children, className, noPadding = false }, ref) => {
+  ({ children, className, noPadding = false, ...rest }, ref) => {
     return (
       <div
         ref={ref}
         className={cn(
           // Sharp corners, simple boxy layout
-          'overflow-hidden bg-background',
+          'overflow-x-hidden bg-background',
           'h-full min-h-full w-full',
           // Desktop: Simple container - use full height
           'md:h-full',
@@ -39,6 +40,7 @@ export const PageContainer = forwardRef<HTMLDivElement, PageContainerProps>(
           !noPadding && 'px-4 md:px-6',
           className
         )}
+        {...rest}
       >
         {children}
       </div>

@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, test } from 'bun:test';
-import { PredictionPricing } from '@babylon/engine';
+import { PredictionPricing } from '../../core/markets/prediction/pricing';
 
 describe('PredictionPricing CPMM', () => {
   describe('k invariant', () => {
@@ -193,6 +193,17 @@ describe('PredictionPricing CPMM', () => {
       // Should succeed but remove most liquidity
       expect(result.newYesShares).toBeGreaterThan(0);
       expect(result.newYesShares).toBeLessThan(500);
+    });
+
+    test('throws when sell proceeds are not finite', () => {
+      expect(() => {
+        PredictionPricing.calculateSell(
+          Number.POSITIVE_INFINITY,
+          500,
+          'yes',
+          1
+        );
+      }).toThrow('Calculated proceeds must be positive');
     });
   });
 

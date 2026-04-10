@@ -6,6 +6,7 @@
 
 // Import and re-export AgentCapabilities from shared
 import type { AgentCapabilities } from '@babylon/shared';
+
 export type { AgentCapabilities };
 
 /**
@@ -20,6 +21,9 @@ export enum AgentType {
 
   /** External agents from ElizaOS, MCP, Agent0, etc. */
   EXTERNAL = 'EXTERNAL',
+
+  /** Global user coordinator for team chat (shared runtime) */
+  USER_COORDINATOR = 'USER_COORDINATOR',
 }
 
 /**
@@ -274,4 +278,7 @@ export interface ExternalAgentConnectionParams {
 
   /** Agent Card metadata */
   agentCard?: AgentCard;
+
+  /** User ID of the person registering the agent */
+  registeredByUserId?: string;
 }

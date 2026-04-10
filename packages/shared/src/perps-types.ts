@@ -25,6 +25,10 @@ export interface PerpPosition {
   openedAt: string; // ISO timestamp
   lastUpdated: string;
   closedAt?: string | null; // ISO timestamp when position was closed, null if open
+  // Agent position metadata (optional)
+  isAgentPosition?: boolean; // True if this position belongs to an agent
+  agentId?: string; // Agent's user ID (only set if isAgentPosition=true)
+  agentName?: string; // Agent's display name (only set if isAgentPosition=true)
 }
 
 export interface FundingRate {
@@ -38,6 +42,15 @@ export interface PerpMarket {
   ticker: string;
   organizationId: string;
   name: string;
+  /**
+   * Canonical public market price for the instrument.
+   *
+   * Convention:
+   * - this is the live public mid/spot price
+   * - bid/ask/spread/depth are derived around it
+   * - execution price can differ from it based on side/size
+   * - it is not the internal fair value and not the liquidation mark price
+   */
   currentPrice: number;
   change24h: number; // Dollar change
   changePercent24h: number; // Percentage change
@@ -48,6 +61,12 @@ export interface PerpMarket {
   fundingRate: FundingRate;
   maxLeverage: number;
   minOrderSize: number;
+  bidPrice?: number;
+  askPrice?: number;
+  spreadBps?: number;
+  bidDepth?: number;
+  askDepth?: number;
+  liquidityRegime?: 'thin' | 'balanced' | 'deep';
   maxPositionSize: number; // Maximum single position size (based on liquidity)
   markPrice: number; // Fair price for liquidations
   indexPrice: number; // Spot price reference
@@ -112,12 +131,9 @@ export function calculateLiquidationPrice(
   side: 'long' | 'short',
   leverage: number
 ): number {
-  // Liquidation happens when loss reaches (1 / leverage) of position value
-  // For long: liquidationPrice = entryPrice * (1 - 0.9/leverage)
-  // For short: liquidationPrice = entryPrice * (1 + 0.9/leverage)
-  // Using 0.9 instead of 1.0 to account for liquidation fees
-
-  const liquidationThreshold = 0.9 / leverage;
+  // Liquidation happens when loss reaches full margin (1/leverage).
+  // Matches Hyperliquid-style mechanics: initial margin = 1/leverage.
+  const liquidationThreshold = 1 / leverage;
 
   if (side === 'long') {
     return entryPrice * (1 - liquidationThreshold);

@@ -43,9 +43,15 @@ import { GROUP_CONFIG, generateSnowflakeId, logger } from '@babylon/shared';
 import { NPC_GROUP_DYNAMICS_CONFIG } from '../config/npc-activity';
 import { BabylonLLMClient } from '../llm/openai-client';
 import { generateWorldContext, validateNoRealNames } from '../prompts';
+import {
+  pickRandom,
+  type RngFunction,
+  randomChance,
+} from '../utils/randomization';
 import { MarketContextService } from './market-context-service';
 import { autoJoinEmptyUsersToNpcGroupChats } from './npc-group-chat-onboarding-service';
 import { NPCGroupDynamicsCalculations } from './npc-group-dynamics-calculations';
+import { sharedChatContextService } from './shared-chat-context-service';
 import { StaticDataRegistry } from './static-data-registry';
 import { getTierMessageGuidance } from './tier-config';
 import { TieredGroupService } from './tiered-group-service';
@@ -65,13 +71,57 @@ export interface GroupDynamicsResult {
   tieredDemotions: number;
 }
 
+export function normalizeNpcGroupMessageResponse(
+  rawResponse: unknown
+): { message: string } | null {
+  if (typeof rawResponse === 'string') {
+    const trimmed = rawResponse.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const xmlMatch = trimmed.match(/<message>([\s\S]*?)<\/message>/i);
+    if (xmlMatch?.[1]) {
+      return { message: xmlMatch[1].trim() };
+    }
+
+    return { message: trimmed };
+  }
+
+  if (
+    typeof rawResponse === 'object' &&
+    rawResponse !== null &&
+    !Array.isArray(rawResponse)
+  ) {
+    const record = rawResponse as Record<string, unknown>;
+    const nested =
+      typeof record.response === 'object' &&
+      record.response !== null &&
+      !Array.isArray(record.response)
+        ? (record.response as Record<string, unknown>)
+        : null;
+    const message =
+      (typeof nested?.message === 'string' && nested.message) ||
+      (typeof record.message === 'string' && record.message) ||
+      '';
+
+    return message.trim() ? { message: message.trim() } : null;
+  }
+
+  return null;
+}
+
 export class NPCGroupDynamicsService {
   // User group participation limits - now use GROUP_CONFIG from @babylon/shared
 
   /**
    * Process all NPC group dynamics for one tick
+   *
+   * @param rng - Optional random number generator (defaults to Math.random)
    */
-  static async processTickDynamics(): Promise<GroupDynamicsResult> {
+  static async processTickDynamics(
+    rng: RngFunction = Math.random
+  ): Promise<GroupDynamicsResult> {
     const startTime = Date.now();
     const result: GroupDynamicsResult = {
       groupsCreated: 0,
@@ -96,7 +146,7 @@ export class NPCGroupDynamicsService {
     const llm = BabylonLLMClient.forGameTick();
 
     // 1. Form new groups
-    const newGroups = await NPCGroupDynamicsService.formNewGroups();
+    const newGroups = await NPCGroupDynamicsService.formNewGroups(rng);
     result.groupsCreated = newGroups;
 
     // 1.5. Dev/demo: ensure new users land in at least one NPC group chat
@@ -104,36 +154,45 @@ export class NPCGroupDynamicsService {
     const autoJoined = await autoJoinEmptyUsersToNpcGroupChats({
       enabled: NPC_GROUP_DYNAMICS_CONFIG.autoJoinEmptyUsersToNpcGroupChat,
       batchSize: NPC_GROUP_DYNAMICS_CONFIG.autoJoinEmptyUsersBatchSize,
+      targetChatsPerUser:
+        process.env.NODE_ENV === 'development' ||
+        process.env.NODE_ENV === 'test'
+          ? 3
+          : 1,
       defaultMaxMembers: NPC_GROUP_DYNAMICS_CONFIG.maxGroupSize,
+      rng,
     });
     result.usersAutoJoined = autoJoined;
 
     // 2. NPCs join existing groups
-    const joins = await NPCGroupDynamicsService.processGroupJoins();
+    const joins = await NPCGroupDynamicsService.processGroupJoins(rng);
     result.membersAdded = joins;
 
     // 3. NPCs leave groups
-    const leaves = await NPCGroupDynamicsService.processGroupLeaves();
+    const leaves = await NPCGroupDynamicsService.processGroupLeaves(rng);
     result.membersRemoved = leaves;
 
     // 4. NPCs post messages to groups
     if (llm) {
-      const messages = await NPCGroupDynamicsService.postGroupMessages(llm);
+      const messages = await NPCGroupDynamicsService.postGroupMessages(
+        llm,
+        rng
+      );
       result.messagesPosted = messages;
     }
 
     // 5. Invite users to groups
-    const invites = await NPCGroupDynamicsService.inviteUsersToGroups();
+    const invites = await NPCGroupDynamicsService.inviteUsersToGroups(rng);
     result.usersInvited = invites;
 
     // 6. Kick users based on weighted participation metrics
-    const kicks = await NPCGroupDynamicsService.kickUsersWithWeightedLogic();
+    const kicks = await NPCGroupDynamicsService.kickUsersWithWeightedLogic(rng);
     result.usersKicked = kicks;
 
     // 7. Process tiered group system (promotions/demotions run ~daily)
     // Probability math: 0.0007 * 60 ticks/hr * 24 hrs = ~1.0 times per day
     const DAILY_TICK_PROBABILITY = 0.0007;
-    if (Math.random() < DAILY_TICK_PROBABILITY) {
+    if (randomChance(DAILY_TICK_PROBABILITY, rng)) {
       result.tieredPromotions = await TieredGroupService.processAllPromotions();
       result.tieredDemotions = await TieredGroupService.processAllDemotions();
     }
@@ -149,127 +208,58 @@ export class NPCGroupDynamicsService {
   }
 
   /**
-   * Form new NPC groups based on relationships
+   * Form new NPC tier groups using the tiered group system.
+   *
+   * Creates all 3 tiers per NPC (Inner Circle, Community, Followers) with proper
+   * tier configuration. This replaces the legacy single-group creation.
+   *
+   * Each NPC can have:
+   * - Tier 1 (Inner Circle): 12 members, full alpha content
+   * - Tier 2 (Community): 50 members, partial alpha content
+   * - Tier 3 (Followers): 500 members, public-facing content
    */
-  private static async formNewGroups(): Promise<number> {
+  private static async formNewGroups(rng: RngFunction): Promise<number> {
     let groupsCreated = 0;
 
-    // Get NPCs from static registry
-    const npcs = StaticDataRegistry.getAllActors().map((a) => ({
-      id: a.id,
-      name: a.name,
-    }));
+    // Get non-test NPCs from static registry
+    const npcs = StaticDataRegistry.getAllActors()
+      .filter((a) => !a.isTest)
+      .map((a) => ({
+        id: a.id,
+        name: a.name,
+      }));
 
     for (const npc of npcs) {
-      // Random chance to form a group
-      if (Math.random() > NPC_GROUP_DYNAMICS_CONFIG.formGroupProbability) {
+      // Random chance to bootstrap this NPC's tier groups
+      // Lower probability since we're creating 3 groups at once
+      if (!randomChance(NPC_GROUP_DYNAMICS_CONFIG.formGroupProbability, rng)) {
         continue;
       }
 
-      // Check if NPC already has a group they admin by querying groups with their name
-      const [hasGroup] = await db
-        .select({ id: chats.id, name: chats.name })
-        .from(chats)
-        .where(eq(chats.isGroup, true))
-        .limit(1000);
+      // Use TieredGroupService to ensure all 3 tiers exist (idempotent)
+      // This creates the groups with proper tier configuration if they don't exist
+      const tiers = await TieredGroupService.ensureAllTiersExist(npc.id);
 
-      const alreadyHasGroup = hasGroup
-        ? (
-            await db
-              .select({ id: chats.id, name: chats.name })
-              .from(chats)
-              .where(eq(chats.isGroup, true))
-          ).some((g) => g.name?.includes(npc.name))
-        : false;
+      // Count newly created tiers (memberCount === 1 means only NPC owner)
+      const newTiers = tiers.filter((t) => t.memberCount === 1);
+      groupsCreated += newTiers.length;
 
-      if (alreadyHasGroup) {
-        continue; // Already has a group
+      if (newTiers.length > 0) {
+        logger.info(
+          'NPC tier groups created',
+          {
+            npcId: npc.id,
+            npcName: npc.name,
+            tiersCreated: newTiers.map((t) => ({
+              tier: t.tier,
+              name: t.groupName,
+              maxMembers: t.maxMembers,
+            })),
+            existingTiers: tiers.length - newTiers.length,
+          },
+          'NPCGroupDynamicsService'
+        );
       }
-
-      // Get NPC's positive relationships
-      const relationships = await db
-        .select()
-        .from(actorRelationships)
-        .where(
-          and(
-            or(
-              eq(actorRelationships.actor1Id, npc.id),
-              eq(actorRelationships.actor2Id, npc.id)
-            ),
-            gte(actorRelationships.sentiment, 0.5)
-          )
-        )
-        .limit(NPC_GROUP_DYNAMICS_CONFIG.idealGroupSize - 1);
-
-      const memberIds = new Set<string>([npc.id]);
-
-      // Add related actors as members
-      for (const rel of relationships) {
-        const memberId = rel.actor1Id === npc.id ? rel.actor2Id : rel.actor1Id;
-        memberIds.add(memberId);
-      }
-
-      if (memberIds.size < NPC_GROUP_DYNAMICS_CONFIG.minGroupSize) {
-        continue; // Not enough members
-      }
-
-      // Create the group chat
-      const chatId = await generateSnowflakeId();
-      const groupId = await generateSnowflakeId();
-      const chatName = `${npc.name}'s Circle`;
-
-      // Create Group
-      await db.insert(groups).values({
-        id: groupId,
-        name: chatName,
-        type: 'npc',
-        ownerId: npc.id,
-        createdById: npc.id,
-        updatedAt: new Date(),
-      });
-
-      // Create Chat with groupId link (Chat.groupId → Group.id)
-      await db.insert(chats).values({
-        id: chatId,
-        name: chatName,
-        isGroup: true,
-        groupId, // Link Chat → Group
-        updatedAt: new Date(),
-      });
-
-      // Create participants
-      const participantValues = await Promise.all(
-        Array.from(memberIds).map(async (memberId) => ({
-          id: await generateSnowflakeId(),
-          chatId,
-          userId: memberId,
-        }))
-      );
-      await db.insert(chatParticipants).values(participantValues);
-
-      // Create GroupMember records
-      const memberValues = await Promise.all(
-        Array.from(memberIds).map(async (memberId) => ({
-          id: await generateSnowflakeId(),
-          groupId,
-          userId: memberId,
-          role: memberId === npc.id ? 'owner' : ('member' as const),
-          addedBy: npc.id,
-        }))
-      );
-      await db.insert(groupMembers).values(memberValues);
-
-      groupsCreated++;
-      logger.info(
-        'NPC formed new group',
-        {
-          npcId: npc.id,
-          npcName: npc.name,
-          chatName,
-          memberCount: memberIds.size,
-        },
-        'NPCGroupDynamicsService'
-      );
     }
 
     return groupsCreated;
@@ -278,7 +268,7 @@ export class NPCGroupDynamicsService {
   /**
    * Process NPCs joining existing groups
    */
-  private static async processGroupJoins(): Promise<number> {
+  private static async processGroupJoins(rng: RngFunction): Promise<number> {
     let joinsProcessed = 0;
 
     // Get all NPC group chats
@@ -311,7 +301,9 @@ export class NPCGroupDynamicsService {
 
       for (const candidate of potentialMembers) {
         // Random chance to join
-        if (Math.random() > NPC_GROUP_DYNAMICS_CONFIG.joinGroupProbability) {
+        if (
+          !randomChance(NPC_GROUP_DYNAMICS_CONFIG.joinGroupProbability, rng)
+        ) {
           continue;
         }
 
@@ -437,7 +429,7 @@ export class NPCGroupDynamicsService {
   /**
    * Process NPCs leaving groups
    */
-  private static async processGroupLeaves(): Promise<number> {
+  private static async processGroupLeaves(rng: RngFunction): Promise<number> {
     let leavesProcessed = 0;
 
     // Get all group chats
@@ -460,7 +452,9 @@ export class NPCGroupDynamicsService {
 
       for (const membership of participantList) {
         // Random chance to leave
-        if (Math.random() > NPC_GROUP_DYNAMICS_CONFIG.leaveGroupProbability) {
+        if (
+          !randomChance(NPC_GROUP_DYNAMICS_CONFIG.leaveGroupProbability, rng)
+        ) {
           continue;
         }
 
@@ -548,7 +542,8 @@ export class NPCGroupDynamicsService {
    * Optimized: Single query with LEFT JOIN to get tier data upfront instead of N+1.
    */
   private static async postGroupMessages(
-    llm: BabylonLLMClient
+    llm: BabylonLLMClient,
+    rng: RngFunction
   ): Promise<number> {
     let messagesPosted = 0;
 
@@ -573,7 +568,7 @@ export class NPCGroupDynamicsService {
       const messageChance =
         tier === 1 ? 0.25 : tier === 2 ? 0.15 : tier === 3 ? 0.05 : 0.25;
 
-      if (Math.random() > messageChance) {
+      if (!randomChance(messageChance, rng)) {
         continue;
       }
 
@@ -608,8 +603,7 @@ export class NPCGroupDynamicsService {
       }
 
       // Pick a random NPC to post
-      const randomNpc =
-        npcParticipants[Math.floor(Math.random() * npcParticipants.length)];
+      const randomNpc = pickRandom(npcParticipants, rng);
       if (!randomNpc) continue;
 
       // Get full NPC actor data from static registry
@@ -689,7 +683,21 @@ export class NPCGroupDynamicsService {
       // Tier guidance extracted to tier-config.ts for maintainability
       const tierGuidance = getTierMessageGuidance(tier);
 
+      // Character voice context for in-character messages
+      const voiceContext = npcActor?.voice
+        ? `YOUR VOICE: ${npcActor.voice}`
+        : '';
+      const personalityContext = npcActor?.personality
+        ? `PERSONALITY: ${npcActor.personality}`
+        : '';
+      const postStyleContext = npcActor?.postStyle
+        ? `STYLE: ${npcActor.postStyle}`
+        : '';
+
       const prompt = `You are ${randomNpc.displayName} in a ${tier ? `TIER ${tier}` : 'private'} group chat.
+${voiceContext}
+${personalityContext}
+${postStyleContext}
 ${affiliationContext}
 
 ${personalEventsContext}
@@ -704,6 +712,7 @@ ${worldContext.currentMarkets}
 ${tierGuidance}
 
 Write a private message (max 200 chars) appropriate for this tier.
+SPEAK IN CHARACTER — your message should be immediately recognizable as ${randomNpc.displayName}.
 NO hashtags. Emojis OK (🤫 👀 🔥).
 Use parody names from World Actors (AIlon Musk, not Elon Musk).
 
@@ -712,30 +721,37 @@ Return your response as XML:
   <message>your message here</message>
 </response>`;
 
-      const rawResponse = await llm.generateJSON<
-        { message: string } | { response: { message: string } }
-      >(
-        prompt,
-        {
-          properties: {
-            message: { type: 'string' },
+      let response: { message: string } | null = null;
+      try {
+        const rawResponse = await llm.generateJSON<
+          { message: string } | { response: { message: string } }
+        >(
+          prompt,
+          {
+            properties: {
+              message: { type: 'string' },
+            },
+            required: ['message'],
           },
-          required: ['message'],
-        },
-        {
-          temperature: 0.9,
-          maxTokens: 100,
-          promptType: 'npc_group_dynamic_message',
-        }
-      );
-
-      // Handle XML structure
-      const response =
-        'response' in rawResponse && rawResponse.response
-          ? rawResponse.response
-          : (rawResponse as { message: string });
-
-      if (!response.message || response.message.length === 0) {
+          {
+            temperature: 0.9,
+            maxTokens: 100,
+            promptType: 'npc_group_dynamic_message',
+          }
+        );
+        response = normalizeNpcGroupMessageResponse(rawResponse);
+      } catch (error) {
+        logger.warn(
+          'LLM failed to generate group message, skipping',
+          {
+            npcId: randomNpc.id,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          'NPCGroupDynamicsService'
+        );
+        continue;
+      }
+      if (!response?.message) {
         continue;
       }
 
@@ -779,6 +795,26 @@ Return your response as XML:
         .update(chats)
         .set({ updatedAt: new Date() })
         .where(eq(chats.id, group.id));
+
+      // Refresh the shared chat summary opportunistically so agents can see
+      // compact cross-chat context without pulling the raw transcript.
+      try {
+        await sharedChatContextService.maybeRefreshChatContext(group.id, {
+          messageWindowSize: 10,
+          factLimit: 5,
+          staleAfterMinutes: 30,
+          refreshThreshold: 10,
+        });
+      } catch (error) {
+        logger.warn(
+          'Shared chat context refresh failed after NPC group post',
+          {
+            chatId: group.id,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          'NPCGroupDynamicsService'
+        );
+      }
 
       messagesPosted++;
       logger.debug(
@@ -1112,7 +1148,7 @@ Return your response as XML:
    *
    * Excessive engagement (spam) reduces invitation likelihood
    */
-  private static async inviteUsersToGroups(): Promise<number> {
+  private static async inviteUsersToGroups(rng: RngFunction): Promise<number> {
     let usersInvited = 0;
 
     // Get groups with space for more members
@@ -1134,7 +1170,7 @@ Return your response as XML:
       }
 
       // Random chance to invite
-      if (Math.random() > NPC_GROUP_DYNAMICS_CONFIG.inviteUserProbability) {
+      if (!randomChance(NPC_GROUP_DYNAMICS_CONFIG.inviteUserProbability, rng)) {
         continue;
       }
 
@@ -1226,7 +1262,7 @@ Return your response as XML:
 
       // Weighted random selection
       if (topCandidates.length === 0) continue;
-      let randomValue = Math.random() * totalScore;
+      let randomValue = rng() * totalScore;
       let selectedCandidate = topCandidates[0];
 
       for (const candidate of topCandidates) {
@@ -1492,21 +1528,28 @@ Return your response as XML:
    * All probabilities are then multiplied by a per-tick factor (5%) to make
    * kicks gradual rather than immediate.
    */
-  private static async kickUsersWithWeightedLogic(): Promise<number> {
+  private static async kickUsersWithWeightedLogic(
+    rng: RngFunction
+  ): Promise<number> {
     let usersKicked = 0;
 
     // Only check for kicks some of the time
-    if (Math.random() > NPC_GROUP_DYNAMICS_CONFIG.kickCheckProbability) {
+    if (!randomChance(NPC_GROUP_DYNAMICS_CONFIG.kickCheckProbability, rng)) {
       return 0;
     }
 
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-    // Get all group chats
+    // Only NPC-managed group chats participate in NPC kick dynamics
     const groupList = await db
-      .select()
+      .select({
+        id: chats.id,
+        name: chats.name,
+        groupId: chats.groupId,
+      })
       .from(chats)
-      .where(eq(chats.isGroup, true));
+      .innerJoin(groups, eq(chats.groupId, groups.id))
+      .where(and(eq(chats.isGroup, true), eq(groups.type, 'npc')));
 
     for (const group of groupList) {
       // Get participants for this group
@@ -1587,7 +1630,37 @@ Return your response as XML:
         // 5% base multiplier, but spam gets 20% (faster kick for egregious behavior)
         const tickMultiplier = category === 'spam' ? 0.2 : 0.05;
 
-        if (Math.random() < kickProbability * tickMultiplier) {
+        if (randomChance(kickProbability * tickMultiplier, rng)) {
+          // PROTECTION: Don't kick if user would fall below minimum group count
+          const [userGroupCount] = await db
+            .select({ count: count() })
+            .from(groupMembers)
+            .innerJoin(groups, eq(groupMembers.groupId, groups.id))
+            .where(
+              and(
+                eq(groupMembers.userId, userId),
+                eq(groupMembers.isActive, true),
+                eq(groups.type, 'npc')
+              )
+            );
+
+          const currentGroups = userGroupCount?.count ?? 0;
+          if (currentGroups <= GROUP_CONFIG.MIN_DEFAULT_GROUPS) {
+            logger.debug(
+              'Skipping kick - user at or below minimum group count',
+              {
+                userId,
+                userName: participant.displayName,
+                currentGroups,
+                minRequired: GROUP_CONFIG.MIN_DEFAULT_GROUPS,
+                chatName: group.name,
+                reason,
+              },
+              'NPCGroupDynamicsService'
+            );
+            continue;
+          }
+
           // Remove from chat participants
           await db
             .delete(chatParticipants)

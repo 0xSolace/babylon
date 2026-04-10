@@ -21,11 +21,11 @@ import {
   referrals,
   users,
 } from '@babylon/db';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+import { generateSnowflakeId, logger, POINTS } from '@babylon/shared';
 import { nanoid } from 'nanoid';
 import { NotFoundError } from '../errors';
-import { PointsService } from './points-service';
 import { getOrCreateReferralCode } from './referral-service';
+import { ReputationService } from './reputation-service';
 
 export interface WaitlistMarkResult {
   success: boolean;
@@ -224,9 +224,9 @@ export class WaitlistService {
         }
         // Valid referral - use referral system
         else {
-          // Use PointsService.awardReferralSignup for referral processing
+          // Use ReputationService.awardReferralSignup for referral processing
           // This handles weekly limits, IP checks, and creates proper Referral records
-          const referralResult = await PointsService.awardReferralSignup(
+          const referralResult = await ReputationService.awardReferralSignup(
             referrer.id,
             userId
           );
@@ -278,11 +278,11 @@ export class WaitlistService {
             referrerRewarded = true;
 
             logger.info(
-              `Rewarded referrer ${referrer.id} with ${referralResult.pointsAwarded} points via referral system`,
+              `Rewarded referrer ${referrer.id} with ${referralResult.reputationAwarded} reputation via referral system`,
               {
                 referrerId: referrer.id,
-                pointsAwarded: referralResult.pointsAwarded,
-                newTotal: referralResult.newTotal,
+                reputationAwarded: referralResult.reputationAwarded,
+                newReputationTotal: referralResult.newReputationTotal,
               },
               'WaitlistService'
             );
@@ -503,6 +503,68 @@ export class WaitlistService {
         userId,
         bonusAmount,
       },
+      'WaitlistService'
+    );
+
+    return true;
+  }
+
+  /**
+   * Award bonus points for providing an email address (one-time bonus).
+   * Saves the email and sets pointsAwardedForEmail to prevent double-awarding.
+   */
+  static async awardEmailBonus(
+    userId: string,
+    email: string
+  ): Promise<boolean> {
+    const userResult = await db
+      .select({
+        isWaitlistActive: users.isWaitlistActive,
+        pointsAwardedForEmail: users.pointsAwardedForEmail,
+        reputationPoints: users.reputationPoints,
+        bonusPoints: users.bonusPoints,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    const user = userResult[0];
+
+    if (!user || !user.isWaitlistActive) {
+      return false;
+    }
+
+    if (user.pointsAwardedForEmail) {
+      return false;
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const bonusAmount = POINTS.EMAIL_SUBMIT;
+    const newBonusPoints = user.bonusPoints + bonusAmount;
+    const newReputationPoints = user.reputationPoints + bonusAmount;
+
+    await db
+      .update(users)
+      .set({
+        email: normalizedEmail,
+        pointsAwardedForEmail: true,
+        bonusPoints: newBonusPoints,
+        reputationPoints: newReputationPoints,
+      })
+      .where(eq(users.id, userId));
+
+    await db.insert(pointsTransactions).values({
+      id: await generateSnowflakeId(),
+      userId,
+      amount: bonusAmount,
+      pointsBefore: user.reputationPoints,
+      pointsAfter: newReputationPoints,
+      reason: 'email_submit',
+    });
+
+    logger.info(
+      `Awarded email bonus to user ${userId}`,
+      { userId, bonusAmount },
       'WaitlistService'
     );
 

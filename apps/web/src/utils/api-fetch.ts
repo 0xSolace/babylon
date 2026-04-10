@@ -5,6 +5,9 @@
  * Uses Privy's HTTP-only cookie authentication.
  */
 
+import { extractErrorMessage, logger } from '@babylon/shared';
+import { getBrowserDevAuthSession } from '@/lib/auth/dev-auth';
+
 /**
  * API Fetch Options
  *
@@ -32,11 +35,29 @@ export interface ApiFetchOptions extends RequestInit {
  */
 export async function getPrivyAccessToken(): Promise<string | null> {
   if (typeof window === 'undefined') return null;
+  const devSession = getBrowserDevAuthSession();
+  if (devSession?.accessToken) {
+    return devSession.accessToken;
+  }
+  const privyWindow = window as Window & {
+    __privyGetAccessToken?: () => Promise<string | null>;
+  };
 
   // ALWAYS call getAccessToken() on-demand - it auto-refreshes expired tokens
-  if (window.__privyGetAccessToken) {
-    const token = await window.__privyGetAccessToken();
-    return token;
+  if (privyWindow.__privyGetAccessToken) {
+    try {
+      const token = await privyWindow.__privyGetAccessToken();
+      return token;
+    } catch (error) {
+      logger.warn(
+        'Failed to retrieve Privy access token',
+        {
+          error: extractErrorMessage(error),
+        },
+        'apiFetch'
+      );
+      return null;
+    }
   }
 
   // No token available - user not authenticated via Privy hook
@@ -81,16 +102,15 @@ export async function apiFetch(
     if (token) {
       finalHeaders.set('Authorization', `Bearer ${token}`);
     } else if (typeof window !== 'undefined') {
-      // In embed mode (Milady iframe), use the session token obtained via postMessage handshake
       const embedToken = (window as Window & { __babylonEmbedToken?: string })
         .__babylonEmbedToken;
       if (embedToken) {
         finalHeaders.set('Authorization', `Bearer ${embedToken}`);
       } else {
-        // Log when we can't get a token - helps debug auth issues
-        console.warn(
-          '[apiFetch] No access token available for authenticated request:',
-          typeof input === 'string' ? input : (input as Request).url
+        logger.warn(
+          'No access token available for authenticated request',
+          { url: typeof input === 'string' ? input : (input as Request).url },
+          'apiFetch'
         );
       }
     }

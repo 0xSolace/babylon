@@ -5,11 +5,10 @@
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { IAgentRuntime, ModelType } from '@elizaos/core';
-import { ethers } from 'ethers';
 
 // Mock agent data
 const testAgentId = '123456789012345678';
-const testWalletAddress = ethers.Wallet.createRandom().address;
+const testWalletAddress = '0xd8da6bf26964af9d7eed9e03e53415d37aa96045';
 
 // Mock user data (users table)
 const mockUser = {
@@ -43,7 +42,7 @@ const mockDb = {
       where: mock(async () => {
         // Return different data based on table being queried
         // In the real implementation, we'd check the table name
-        return [{ ...mockUser, ...mockAgentConfig }];
+        return [{ ...mockAgentConfig, ...mockUser }];
       }),
     })),
   })),

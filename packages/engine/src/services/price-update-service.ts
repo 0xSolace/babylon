@@ -112,53 +112,73 @@ export class PriceUpdateService {
         .select({
           id: organizations.id,
           currentPrice: organizations.currentPrice,
+          initialPrice: organizations.initialPrice,
         })
         .from(organizations)
         .where(eq(organizations.id, orgId))
         .limit(1);
 
+      // Resolve basePrice for bounds enforcement
+      // Priority: organizationState.basePrice > organization.initialPrice
+      const resolvedBasePrice = Number(
+        state?.basePrice ?? organization?.initialPrice ?? 0
+      );
+
+      // Price sanity check — must be positive and finite (AMM handles bounds)
+      const clampedNewPrice = update.newPrice;
+      if (!Number.isFinite(clampedNewPrice) || clampedNewPrice <= 0) {
+        logger.warn(
+          'Invalid price update value, skipping',
+          { orgId, newPrice: update.newPrice },
+          'PriceUpdateService'
+        );
+        continue;
+      }
+
       const oldPriceCandidate =
         organization?.currentPrice ??
         state?.currentPrice ??
         state?.basePrice ??
-        update.newPrice;
-      const oldPrice = Number(oldPriceCandidate ?? update.newPrice);
-      const change = update.newPrice - oldPrice;
+        clampedNewPrice;
+      const oldPrice = Number(oldPriceCandidate ?? clampedNewPrice);
+      const change = clampedNewPrice - oldPrice;
       const changePercent = oldPrice === 0 ? 0 : (change / oldPrice) * 100;
 
       if (organization) {
         await db
           .update(organizations)
-          .set({ currentPrice: update.newPrice, updatedAt: now })
+          .set({ currentPrice: clampedNewPrice, updatedAt: now })
           .where(eq(organizations.id, organization.id));
       }
 
       // Keep runtime price state in sync (used across engine + widgets)
+      // Ensure basePrice is always set to prevent null fallback drift
       await db
         .insert(organizationState)
         .values({
           id: orgId,
-          currentPrice: update.newPrice,
+          currentPrice: clampedNewPrice,
+          basePrice: resolvedBasePrice,
           updatedAt: now,
         })
         .onConflictDoUpdate({
           target: organizationState.id,
-          set: { currentPrice: update.newPrice, updatedAt: now },
+          set: { currentPrice: clampedNewPrice, updatedAt: now },
         });
 
       await getDbInstance().recordPriceUpdate(
         orgId,
-        update.newPrice,
+        clampedNewPrice,
         change,
         changePercent
       );
 
-      priceMap.set(orgId, update.newPrice);
+      priceMap.set(orgId, clampedNewPrice);
 
       appliedUpdates.push({
         organizationId: orgId,
         oldPrice,
-        newPrice: update.newPrice,
+        newPrice: clampedNewPrice,
         change,
         changePercent,
         source: update.source,
@@ -190,6 +210,13 @@ export class PriceUpdateService {
           updates: updatesForBroadcast,
         });
 
+        const marketsByTicker = new Map(
+          (await perpService.getMarketsSnapshot()).map((market) => [
+            market.ticker.toUpperCase(),
+            market,
+          ])
+        );
+
         // If any updates include a canonical perp ticker, also broadcast a
         // `perp_price_update` for real-time UI hooks/stores.
         const perpUpdates = appliedUpdates
@@ -200,6 +227,7 @@ export class PriceUpdateService {
                 ? tickerRaw.toUpperCase()
                 : null;
             if (!ticker) return null;
+            const market = marketsByTicker.get(ticker);
             return {
               ticker,
               organizationId: u.organizationId,
@@ -207,6 +235,24 @@ export class PriceUpdateService {
               price: u.newPrice,
               change: u.change,
               changePercent: u.changePercent,
+              ...(market?.bidPrice !== undefined && {
+                bidPrice: market.bidPrice,
+              }),
+              ...(market?.askPrice !== undefined && {
+                askPrice: market.askPrice,
+              }),
+              ...(market?.spreadBps !== undefined && {
+                spreadBps: market.spreadBps,
+              }),
+              ...(market?.bidDepth !== undefined && {
+                bidDepth: market.bidDepth,
+              }),
+              ...(market?.askDepth !== undefined && {
+                askDepth: market.askDepth,
+              }),
+              ...(market?.liquidityRegime !== undefined && {
+                liquidityRegime: market.liquidityRegime,
+              }),
             };
           })
           .filter((u): u is NonNullable<typeof u> => u !== null);

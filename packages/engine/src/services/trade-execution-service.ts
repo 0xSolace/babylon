@@ -6,6 +6,24 @@
  *
  * NPC perp trades now use PerpMarketService for consistency with user trades,
  * ensuring funding and liquidation logic applies uniformly.
+ *
+ * ## NPC Trade Rate Limiting
+ *
+ * NPC trading is rate-limited at two levels (by design):
+ *
+ * 1. **Probability Filter (MarketDecisionEngine)**: Before LLM calls, NPCs are
+ *    filtered by `NPC_TRADE_PROBABILITY` (default 60%). This reduces LLM API
+ *    costs and spreads trading decisions across ticks.
+ *
+ * 2. **Hard Rate Limits (TradeExecutionService)**: Before execution, each NPC
+ *    is checked against cooldown (`NPC_MIN_MINUTES_BETWEEN_TRADES`) and daily
+ *    cap (`NPC_MAX_TRADES_PER_DAY`) via `NpcTradeRateLimiter`.
+ *
+ * The dual filtering is intentional:
+ * - Probability filter = reduces LLM workload per tick (cost optimization)
+ * - Execution filter = enforces hard rate limits (behavior control)
+ *
+ * @see NpcTradeRateLimiter for rate limiting implementation details
  */
 import { PerpDbAdapter, PerpMarketService } from '@babylon/core/markets/perps';
 import {
@@ -20,6 +38,7 @@ import {
   eq,
   gte,
   isNull,
+  type JsonValue,
   npcTrades,
   organizationState,
   perpPositions,
@@ -29,6 +48,7 @@ import {
 } from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import { FEE_CONFIG } from '../config/fees';
+import { getSimulationPrice } from '../config/simulation';
 import { isSimulationMode } from '../storage-bridge';
 import type {
   ExecutedTrade,
@@ -36,13 +56,17 @@ import type {
   TradingDecision,
   TradingExecutionResult,
 } from '../types/market-decisions';
+import { formatError } from '../utils/error-utils';
 import { FeeService } from './fee-service';
 import {
   type AggregatedImpact,
   aggregateTradeImpacts,
   type TradeImpactInput,
 } from './market-impact-service';
+import { NpcTradeRateLimiter } from './npc-trade-rate-limiter';
 import { createNpcWalletAdapter } from './npc-wallet-adapter';
+import { createPerpPriceImpactPort } from './perp-price-impact-port';
+import { broadcastToChannel } from './realtime-broadcaster';
 import { StaticDataRegistry } from './static-data-registry';
 import { invalidateAfterPredictionTrade } from './trade-cache-invalidation';
 
@@ -117,7 +141,7 @@ export class TradeExecutionService {
           side: this.deriveSideFromAction(d.action),
           amount: d.amount,
           size: d.amount,
-          executionPrice: 100, // dummy price
+          executionPrice: getSimulationPrice(d.ticker ?? ''),
           confidence: d.confidence,
           reasoning: d.reasoning,
           positionId: 'sim-pos-' + Date.now(),
@@ -152,9 +176,26 @@ export class TradeExecutionService {
       process.env.STRICT_LLM_VALIDATION === 'true' ||
       process.env.STRICT_LLM_VALIDATION === '1';
 
+    // Track rate-limited trades for logging
+    let rateLimitedCount = 0;
+
     for (const decision of decisions) {
       if (decision.action === 'hold') {
         result.holdDecisions++;
+        continue;
+      }
+
+      // Check rate limits before executing (cooldown + daily cap)
+      // Uses NpcTradeRateLimiter which supports pluggable providers for distributed deployments
+      const canTrade = await NpcTradeRateLimiter.canTrade(decision.npcId);
+      if (!canTrade) {
+        rateLimitedCount++;
+        logger.debug(
+          `NPC ${decision.npcName} rate limited, skipping trade`,
+          { npcId: decision.npcId, action: decision.action },
+          'TradeExecutionService'
+        );
+        result.holdDecisions++; // Count as hold since we're not executing
         continue;
       }
 
@@ -163,6 +204,9 @@ export class TradeExecutionService {
         result.executedTrades.push(executedTrade);
         result.successfulTrades++;
 
+        // Record successful trade for rate limiting
+        await NpcTradeRateLimiter.recordTrade(decision.npcId);
+
         if (executedTrade.marketType === 'perp') {
           result.totalVolumePerp += executedTrade.size;
         } else {
@@ -170,8 +214,7 @@ export class TradeExecutionService {
         }
       } catch (error) {
         result.failedTrades++;
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
+        const errorMessage = formatError(error);
         result.errors.push({
           npcId: decision.npcId,
           decision,
@@ -220,11 +263,19 @@ export class TradeExecutionService {
 
     const duration = Date.now() - startTime;
 
+    // Periodically clean up stale rate limit entries to prevent memory growth
+    // This is cheap (O(n) scan) and only runs when using in-memory provider
+    const cleanedEntries = NpcTradeRateLimiter.cleanupStaleEntries();
+    const providerStats = NpcTradeRateLimiter.getProviderStats();
+
     logger.info(
       `Executed ${result.successfulTrades} trades in ${duration}ms`,
       {
         ...result,
+        rateLimited: rateLimitedCount,
         durationMs: duration,
+        ...(cleanedEntries > 0 && { rateLimitEntriesCleaned: cleanedEntries }),
+        ...(providerStats && { rateLimitMapSize: providerStats.lastTradeTime }),
       },
       'TradeExecutionService'
     );
@@ -244,16 +295,26 @@ export class TradeExecutionService {
     // Normalize amount - handle string amounts with commas (e.g., "12,000" -> 12000)
     if (typeof decision.amount === 'string') {
       const cleanedAmount = String(decision.amount).replace(/,/g, '');
-      decision.amount = Number.parseFloat(cleanedAmount);
+      const parsed = Number.parseFloat(cleanedAmount);
+      // Validate parsed value is finite (not NaN, not Infinity, not -Infinity)
+      if (!Number.isFinite(parsed)) {
+        throw new Error(`Invalid amount (not finite): ${decision.amount}`);
+      }
+      decision.amount = parsed;
     }
 
-    // For close_position, amount=0 is valid (we close the full position)
-    // For other actions, amount must be > 0
+    // For close_position and prediction sell actions, amount=0 is valid and
+    // means "close the full position". Other actions must carry a positive amount.
     const isClosePosition = decision.action === 'close_position';
-    if (isNaN(decision.amount)) {
-      throw new Error(`Invalid amount (NaN): ${decision.amount}`);
+    const isPredictionSell =
+      decision.action === 'sell_yes' || decision.action === 'sell_no';
+    if (!Number.isFinite(decision.amount)) {
+      throw new Error(`Invalid amount (not finite): ${decision.amount}`);
     }
-    if (!isClosePosition && decision.amount <= 0) {
+    if (!(isClosePosition || isPredictionSell) && decision.amount <= 0) {
+      throw new Error(`Invalid amount: ${decision.amount}`);
+    }
+    if ((isClosePosition || isPredictionSell) && decision.amount < 0) {
       throw new Error(`Invalid amount: ${decision.amount}`);
     }
 
@@ -323,11 +384,11 @@ export class TradeExecutionService {
 
   private createPredictionBroadcast() {
     return {
-      emit: async (_channel: string, payload: Record<string, unknown>) => {
+      emit: async (channel: string, payload: Record<string, unknown>) => {
         if (!isPredictionBroadcastPayload(payload)) return;
 
-        // Broadcast events are handled by the service's internal broadcast mechanism
-        // The payload is logged for debugging purposes
+        await broadcastToChannel(channel, payload as Record<string, JsonValue>);
+
         logger.debug('Prediction broadcast event', {
           type: payload.type,
           marketId: payload.marketId,
@@ -423,11 +484,9 @@ export class TradeExecutionService {
     const leverage = 5; // Standard leverage for NPCs
     const side = decision.action === 'open_long' ? 'long' : 'short';
 
-    // Cap position size to market limit (max 50,000)
-    // Increased from 10k to allow NPCs to have more market impact
-    // This creates more dynamic, volatile markets with bigger price swings
-    const MAX_POSITION_SIZE = 50_000;
-    const maxAmount = MAX_POSITION_SIZE / leverage; // e.g., 50,000 / 5 = 10,000
+    // Cap position size to market limit (max 10,000 or 10% of open interest)
+    const MAX_POSITION_SIZE = 10_000;
+    const maxAmount = MAX_POSITION_SIZE / leverage; // e.g., 10,000 / 5 = 2,000
     const cappedAmount = Math.min(decision.amount, maxAmount);
     const positionSize = cappedAmount * leverage;
 
@@ -442,6 +501,7 @@ export class TradeExecutionService {
         referrerShare: FEE_CONFIG.REFERRER_SHARE,
         minFeeAmount: FEE_CONFIG.MIN_FEE_AMOUNT,
       },
+      priceImpact: createPerpPriceImpactPort(),
     });
 
     // Open position via PerpMarketService (uses perpPositions table)
@@ -499,6 +559,8 @@ export class TradeExecutionService {
     if (!decision.marketId) {
       throw new Error('MarketId required for prediction position');
     }
+    // Store validated marketId to avoid non-null assertions
+    const validatedMarketId = decision.marketId;
 
     const sideLabel: 'yes' | 'no' =
       decision.action === 'buy_yes' ? 'yes' : 'no';
@@ -510,7 +572,7 @@ export class TradeExecutionService {
       wallet: this.buildActorWallet(actorId),
       broadcast,
       cache: {
-        invalidate: () => invalidateAfterPredictionTrade(decision.marketId!),
+        invalidate: () => invalidateAfterPredictionTrade(validatedMarketId),
       },
       fees: {
         tradingFeeRate: FEE_CONFIG.TRADING_FEE_RATE,
@@ -518,6 +580,8 @@ export class TradeExecutionService {
         referrerShare: FEE_CONFIG.REFERRER_SHARE,
         minFeeAmount: FEE_CONFIG.MIN_FEE_AMOUNT,
       },
+      tradeSource: 'npc_trade',
+      tradeActorType: 'npc',
     });
 
     const result = await service.buy({
@@ -527,23 +591,31 @@ export class TradeExecutionService {
       amount: decision.amount,
     });
 
-    const entryPrice = result.avgPrice * 100;
+    // avgPrice from CPMM is cost-per-share (can exceed 1 for large trades),
+    // NOT a 0-1 probability. Store as-is without * 100 conversion.
+    const entryPrice = result.avgPrice;
     const now = new Date();
 
     // Back-compat: store poolPositions/npcTrades for NPC analytics
     // Use onConflictDoUpdate to handle re-runs where position already exists
     await db.transaction(async (tx: Transaction) => {
+      // Validate marketId before database operations
+      if (decision.marketId === null || decision.marketId === undefined) {
+        throw new Error('marketId is required for prediction position');
+      }
+      const marketIdStr = decision.marketId.toString();
+
       await tx
         .insert(poolPositions)
         .values({
           id: result.positionId,
           poolId: actorId,
           marketType: 'prediction',
-          marketId: decision.marketId!.toString(),
+          marketId: marketIdStr,
           side: sideLabel === 'yes' ? 'YES' : 'NO',
           entryPrice,
           currentPrice:
-            result.market[sideLabel === 'yes' ? 'yesPrice' : 'noPrice'] * 100,
+            result.market[sideLabel === 'yes' ? 'yesPrice' : 'noPrice'],
           size: result.totalCost ?? decision.amount,
           shares: result.shares,
           unrealizedPnL: 0,
@@ -554,7 +626,7 @@ export class TradeExecutionService {
           target: poolPositions.id,
           set: {
             currentPrice:
-              result.market[sideLabel === 'yes' ? 'yesPrice' : 'noPrice'] * 100,
+              result.market[sideLabel === 'yes' ? 'yesPrice' : 'noPrice'],
             size: result.totalCost ?? decision.amount,
             shares: result.shares,
             updatedAt: now,
@@ -566,7 +638,7 @@ export class TradeExecutionService {
         npcActorId: decision.npcId,
         poolId: null,
         marketType: 'prediction',
-        marketId: decision.marketId!.toString(),
+        marketId: marketIdStr,
         action: decision.action,
         side: sideLabel === 'yes' ? 'YES' : 'NO',
         amount: decision.amount,
@@ -576,10 +648,10 @@ export class TradeExecutionService {
       });
     });
 
-    await invalidateAfterPredictionTrade(decision.marketId).catch((error) => {
+    await invalidateAfterPredictionTrade(validatedMarketId).catch((error) => {
       logger.warn(
         'Failed to invalidate cache after NPC prediction buy',
-        { error, marketId: decision.marketId },
+        { error, marketId: validatedMarketId },
         'TradeExecutionService'
       );
     });
@@ -614,6 +686,9 @@ export class TradeExecutionService {
     if (!decision.marketId) {
       throw new Error('MarketId required for prediction sell');
     }
+    // Store validated marketId to avoid non-null assertions
+    const validatedMarketId = decision.marketId;
+    const marketIdStr = validatedMarketId.toString();
 
     // Find the actor's open position in this market
     const sideToClose = decision.action === 'sell_yes' ? 'YES' : 'NO';
@@ -624,7 +699,7 @@ export class TradeExecutionService {
       .where(
         and(
           eq(poolPositions.poolId, actorId),
-          eq(poolPositions.marketId, decision.marketId.toString()),
+          eq(poolPositions.marketId, marketIdStr),
           eq(poolPositions.side, sideToClose),
           eq(poolPositions.marketType, 'prediction'),
           isNull(poolPositions.closedAt)
@@ -655,7 +730,7 @@ export class TradeExecutionService {
       wallet: this.buildActorWallet(actorId),
       broadcast,
       cache: {
-        invalidate: () => invalidateAfterPredictionTrade(decision.marketId!),
+        invalidate: () => invalidateAfterPredictionTrade(validatedMarketId),
       },
       fees: {
         tradingFeeRate: FEE_CONFIG.TRADING_FEE_RATE,
@@ -663,11 +738,13 @@ export class TradeExecutionService {
         referrerShare: FEE_CONFIG.REFERRER_SHARE,
         minFeeAmount: FEE_CONFIG.MIN_FEE_AMOUNT,
       },
+      tradeSource: 'npc_trade',
+      tradeActorType: 'npc',
     });
 
     const sellResult = await service.sell({
       userId: actorId,
-      marketId: decision.marketId.toString(),
+      marketId: marketIdStr,
       shares,
       positionId: position.id,
     });
@@ -681,8 +758,7 @@ export class TradeExecutionService {
         .set({
           closedAt: now,
           currentPrice:
-            sellResult.market[sideLabel === 'yes' ? 'yesPrice' : 'noPrice'] *
-            100,
+            sellResult.market[sideLabel === 'yes' ? 'yesPrice' : 'noPrice'],
           shares: 0,
           unrealizedPnL: 0,
           realizedPnL: sellResult.pnl ?? 0,
@@ -705,20 +781,20 @@ export class TradeExecutionService {
         npcActorId: decision.npcId,
         poolId: null,
         marketType: 'prediction',
-        marketId: decision.marketId!.toString(),
+        marketId: marketIdStr,
         action: decision.action,
         side: sideToClose,
         amount: sellResult.netProceeds ?? 0,
-        price: (sellResult.avgPrice ?? 0) * 100,
+        price: sellResult.avgPrice ?? 0,
         sentiment: 0,
         reason: decision.reasoning,
       });
     });
 
-    await invalidateAfterPredictionTrade(decision.marketId).catch((error) => {
+    await invalidateAfterPredictionTrade(validatedMarketId).catch((error) => {
       logger.warn(
         'Failed to invalidate cache after NPC prediction sell',
-        { error, marketId: decision.marketId },
+        { error, marketId: validatedMarketId },
         'TradeExecutionService'
       );
     });
@@ -734,7 +810,7 @@ export class TradeExecutionService {
       amount: sellResult.netProceeds ?? 0,
       size: sellResult.netProceeds ?? 0, // Executed sell volume
       shares, // The shares that were sold (local variable)
-      executionPrice: (sellResult.avgPrice ?? 0) * 100,
+      executionPrice: sellResult.avgPrice ?? 0,
       confidence: decision.confidence,
       reasoning: decision.reasoning,
       positionId: position.id,
@@ -838,7 +914,7 @@ export class TradeExecutionService {
             currentPrice:
               sellResult.market[
                 sellResult.side === 'yes' ? 'yesPrice' : 'noPrice'
-              ] * 100,
+              ],
             unrealizedPnL: 0,
             realizedPnL: sellResult.pnl ?? 0,
             updatedAt: now,
@@ -854,7 +930,7 @@ export class TradeExecutionService {
           action: 'close',
           side,
           amount: sellResult.netProceeds ?? 0,
-          price: (sellResult.avgPrice ?? 0) * 100,
+          price: sellResult.avgPrice ?? 0,
           sentiment: 0,
           reason: decision.reasoning,
         });
@@ -879,7 +955,7 @@ export class TradeExecutionService {
         amount: sellResult.netProceeds ?? 0,
         size: position.size,
         shares: position.shares ?? undefined,
-        executionPrice: (sellResult.avgPrice ?? 0) * 100,
+        executionPrice: sellResult.avgPrice ?? 0,
         confidence: decision.confidence,
         reasoning: decision.reasoning,
         positionId: position.id,
@@ -919,7 +995,8 @@ export class TradeExecutionService {
 
     let realizedPnL: number;
     if (position.marketType === 'perp') {
-      const percentChange = priceChange / position.entryPrice;
+      const percentChange =
+        position.entryPrice !== 0 ? priceChange / position.entryPrice : 0;
       realizedPnL = percentChange * position.size * pnlMultiplier;
     } else {
       const shares = position.shares || 0;
@@ -933,7 +1010,7 @@ export class TradeExecutionService {
 
     // Execute in transaction
     await db.transaction(async (tx: Transaction) => {
-      // Close position
+      // Close position (guard against double-close via closedAt IS NULL)
       await tx
         .update(poolPositions)
         .set({
@@ -943,7 +1020,12 @@ export class TradeExecutionService {
           realizedPnL,
           updatedAt: now,
         })
-        .where(eq(poolPositions.id, decision.positionId!));
+        .where(
+          and(
+            eq(poolPositions.id, decision.positionId!),
+            isNull(poolPositions.closedAt)
+          )
+        );
 
       // Return capital + P&L to actor's trading balance (after fee deduction)
       const [actor] = await tx
@@ -953,13 +1035,10 @@ export class TradeExecutionService {
         .limit(1);
 
       if (actor) {
-        const currentBalance = Number.parseFloat(
-          actor.tradingBalance.toString()
-        );
         await tx
           .update(actorState)
           .set({
-            tradingBalance: String(currentBalance + netReturn),
+            tradingBalance: sql`CAST(CAST(${actorState.tradingBalance} AS DECIMAL) + ${netReturn} AS TEXT)`,
             updatedAt: new Date(),
           })
           .where(eq(actorState.id, actorId));
@@ -1026,6 +1105,7 @@ export class TradeExecutionService {
         referrerShare: FEE_CONFIG.REFERRER_SHARE,
         minFeeAmount: FEE_CONFIG.MIN_FEE_AMOUNT,
       },
+      priceImpact: createPerpPriceImpactPort(),
     });
 
     const result = await perpService.closePosition({

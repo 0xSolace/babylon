@@ -36,6 +36,12 @@ import {
   withTransaction,
 } from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
+import { formatError } from '../utils/error-utils';
+import {
+  deriveTopicFromText,
+  normalizeTopicDate,
+  normalizeTopicKey,
+} from './daily-topic-service';
 import {
   calculateEndTime,
   type SubMarketTrigger,
@@ -146,7 +152,8 @@ export class SubMarketService {
         parent,
         trigger,
         question,
-        context.eventId
+        context.eventId,
+        templateVars
       );
 
       // Log spawn
@@ -172,7 +179,7 @@ export class SubMarketService {
     } catch (error) {
       logger.error(
         `Failed to spawn sub-market`,
-        { error: error instanceof Error ? error.message : String(error) },
+        { error: formatError(error) },
         'SubMarketService'
       );
       return { spawned: false, reason: 'error' };
@@ -400,7 +407,8 @@ export class SubMarketService {
     parent: TimeframedMarket,
     trigger: SubMarketTrigger,
     question: GeneratedQuestion,
-    eventId?: string
+    eventId?: string,
+    templateVars?: Record<string, string>
   ): Promise<TimeframedMarket> {
     const now = new Date();
     const endTime = calculateEndTime(
@@ -411,12 +419,68 @@ export class SubMarketService {
 
     const id = await generateSnowflakeId();
     const arcStatesConfig = TIMEFRAME_CONFIGS[trigger.childTimeframe].arcStates;
+    const derivedTopic = deriveTopicFromText(question.text, now);
+
+    // Topic resolution priority:
+    // 1. Inherit from parent market if present
+    // 2. Use trigger.topicSourceVar resolved from templateVars
+    // 3. Fall back to deriveTopicFromText (frequency-based)
+    let inheritedTopic: {
+      topicKey: string;
+      topicLabel: string;
+      topicDate: Date;
+    };
+
+    if (parent.topicKey && parent.topicLabel) {
+      inheritedTopic = {
+        topicKey: parent.topicKey,
+        topicLabel: parent.topicLabel,
+        topicDate: parent.topicDate ?? derivedTopic.date,
+      };
+    } else if (trigger.topicSourceVar) {
+      const varValue = templateVars?.[trigger.topicSourceVar]?.trim();
+      if (varValue) {
+        const normalizedKey = normalizeTopicKey(varValue);
+        if (normalizedKey) {
+          inheritedTopic = {
+            topicKey: normalizedKey,
+            topicLabel: varValue,
+            topicDate: normalizeTopicDate(now),
+          };
+        } else {
+          // varValue was all stopwords — fall back both key and label
+          inheritedTopic = {
+            topicKey: derivedTopic.topicKey,
+            topicLabel: derivedTopic.topicLabel,
+            topicDate: normalizeTopicDate(now),
+          };
+        }
+      } else {
+        logger.warn(
+          `topicSourceVar "${trigger.topicSourceVar}" not found in templateVars for trigger ${trigger.eventType}`
+        );
+        inheritedTopic = {
+          topicKey: derivedTopic.topicKey,
+          topicLabel: derivedTopic.topicLabel,
+          topicDate: normalizeTopicDate(now),
+        };
+      }
+    } else {
+      inheritedTopic = {
+        topicKey: derivedTopic.topicKey,
+        topicLabel: derivedTopic.topicLabel,
+        topicDate: normalizeTopicDate(now),
+      };
+    }
 
     const newMarket: NewTimeframedMarket = {
       id,
       questionId: null, // Child markets don't have a pre-existing question
       timeframe: trigger.childTimeframe,
       category: parent.category,
+      topicKey: inheritedTopic.topicKey,
+      topicLabel: inheritedTopic.topicLabel,
+      topicDate: inheritedTopic.topicDate,
       parentMarketId: parent.id,
       rootMarketId: parent.rootMarketId ?? parent.id,
       startTime: now,

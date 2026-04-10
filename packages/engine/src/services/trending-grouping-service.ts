@@ -9,6 +9,7 @@
 
 import { logger } from '@babylon/shared';
 import OpenAI from 'openai';
+import { first } from '../utils/array-utils';
 import { isPromptLoggingEnabled, logPrompt } from '../utils/prompt-logger';
 
 // Configuration
@@ -24,18 +25,23 @@ const SUMMARY_MODEL =
 // Check if LLM is available
 const hasApiKey = !!(process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY);
 const useGroq = !!process.env.GROQ_API_KEY;
+const groqBaseURL =
+  process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1';
+const suppressOptionalLlmWarnings = ['1', 'true', 'yes'].includes(
+  (process.env.BABYLON_SUPPRESS_OPTIONAL_LLM_WARNINGS || '')
+    .trim()
+    .toLowerCase()
+);
 
 // Only initialize OpenAI client if we have an API key
 let openai: OpenAI | null = null;
 if (hasApiKey) {
   openai = new OpenAI({
     apiKey: process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY,
-    baseURL: useGroq
-      ? 'https://api.groq.com/openai/v1'
-      : 'https://api.openai.com/v1',
+    baseURL: useGroq ? groqBaseURL : 'https://api.openai.com/v1',
     timeout: LLM_TIMEOUT_MS,
   });
-} else {
+} else if (!suppressOptionalLlmWarnings) {
   logger.warn(
     'No LLM API key configured (GROQ_API_KEY or OPENAI_API_KEY) - trending grouping will use fallback logic',
     undefined,
@@ -222,6 +228,8 @@ async function analyzeAndSummarizeTags(
   if (!openai) {
     return { tagToGroup: fallbackGrouping(tags), groupSummaries: new Map() };
   }
+  // Store in local const after null check to help TypeScript narrow the type
+  const client = openai;
 
   const tagList = tags
     .map(
@@ -248,7 +256,7 @@ GROUPING RULES:
    - Product + company: "SMH-6" + "OpenAGI" + "Sam AIltman"
 
 ❌ DON'T group just because same category:
-   - "Bitcoin" and "Ethereum" are SEPARATE (different ecosystems)
+   - "BitcAIn" and "EtherAIum" are SEPARATE (different ecosystems)
    - "AIlon Musk" and "Jeff BAIzos" are SEPARATE (unless same story)
    - "TeslAI" and "NvidAI" are SEPARATE (different companies)
 
@@ -309,7 +317,7 @@ Return ONLY valid XML. No markdown, no explanations.`;
 
   const response = await withRetry(
     async () =>
-      await openai!.chat.completions.create({
+      await client.chat.completions.create({
         model: GROUPING_MODEL,
         messages: [
           {
@@ -444,6 +452,8 @@ export async function generateTrendingSummary(
   if (!openai) {
     return `Trending topic in ${category || 'general'} discussions`;
   }
+  // Store in local const after null check to help TypeScript narrow the type
+  const client = openai;
 
   const prompt = `Generate a ONE SENTENCE summary for the trending topic "${tagDisplayName}" (Category: ${category || 'General'}).
 
@@ -466,27 +476,41 @@ One sentence summary:`;
 
   const startTime = Date.now();
 
-  const response = await withRetry(
-    async () =>
-      await openai!.chat.completions.create({
-        model: SUMMARY_MODEL,
-        messages: [
-          {
-            role: 'system',
-            content:
-              'You are a trending topics summarization expert. Generate concise, engaging one-sentence summaries.',
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-        temperature: 0.7,
-        max_tokens: 50,
-      }),
-    LLM_MAX_RETRIES,
-    'Single trend summary generation'
-  );
+  let response;
+  try {
+    response = await withRetry(
+      async () =>
+        await client.chat.completions.create({
+          model: SUMMARY_MODEL,
+          messages: [
+            {
+              role: 'system',
+              content:
+                'You are a trending topics summarization expert. Generate concise, engaging one-sentence summaries.',
+            },
+            {
+              role: 'user',
+              content: prompt,
+            },
+          ],
+          temperature: 0.7,
+          max_tokens: 50,
+        }),
+      LLM_MAX_RETRIES,
+      'Single trend summary generation'
+    );
+  } catch (error) {
+    logger.warn(
+      'Trending summary generation failed, using fallback',
+      {
+        tagDisplayName,
+        category,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      'TrendingGroupingService'
+    );
+    return `Trending topic in ${category || 'general'} discussions`;
+  }
 
   const duration = Date.now() - startTime;
   const tokensUsed = response.usage?.total_tokens || 0;
@@ -592,7 +616,22 @@ export async function groupTrendingTags(
   );
 
   // Get grouping instructions AND summaries from LLM in single call
-  const { tagToGroup, groupSummaries } = await analyzeAndSummarizeTags(tags);
+  let tagToGroup: Map<string, number>;
+  let groupSummaries: Map<number, string>;
+  try {
+    ({ tagToGroup, groupSummaries } = await analyzeAndSummarizeTags(tags));
+  } catch (error) {
+    logger.warn(
+      'Trending tag grouping failed, using fallback grouping',
+      {
+        tagCount: tags.length,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      'TrendingGroupingService'
+    );
+    tagToGroup = fallbackGrouping(tags);
+    groupSummaries = new Map();
+  }
 
   // Build groups
   const groups = new Map<number, TrendingTag[]>();
@@ -623,7 +662,8 @@ export async function groupTrendingTags(
 
     // Sort by post count to pick primary tag
     groupTags.sort((a, b) => b.postCount - a.postCount);
-    const primaryTag = groupTags[0]!;
+    const primaryTag = first(groupTags);
+    if (!primaryTag) continue;
 
     // Use pre-generated summary from combined LLM call, or fallback
     const summary =

@@ -10,7 +10,7 @@
  */
 
 import { agentService } from '@babylon/agents';
-import { authenticateUser } from '@babylon/api';
+import { authenticateUser, withErrorHandling } from '@babylon/api';
 import {
   agentTrades,
   comments,
@@ -21,6 +21,7 @@ import {
   markets,
   posts,
 } from '@babylon/db';
+import { toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -73,7 +74,7 @@ interface CommentActivity {
 
 type AgentActivity = TradeActivity | PostActivity | CommentActivity;
 
-export async function GET(
+export const GET = withErrorHandling(async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ agentId: string }> }
 ) {
@@ -144,7 +145,7 @@ export async function GET(
       activities.push({
         type: 'trade',
         id: trade.id,
-        timestamp: trade.executedAt.toISOString(),
+        timestamp: toISO(trade.executedAt),
         data: {
           tradeId: trade.id,
           marketType: trade.marketType as 'prediction' | 'perp',
@@ -181,7 +182,7 @@ export async function GET(
       activities.push({
         type: 'post',
         id: post.id,
-        timestamp: post.createdAt.toISOString(),
+        timestamp: toISO(post.createdAt),
         data: {
           postId: post.id,
           contentPreview: post.content.substring(0, 200),
@@ -209,7 +210,7 @@ export async function GET(
       activities.push({
         type: 'comment',
         id: comment.id,
-        timestamp: comment.createdAt.toISOString(),
+        timestamp: toISO(comment.createdAt),
         data: {
           commentId: comment.id,
           postId: comment.postId,
@@ -241,4 +242,4 @@ export async function GET(
       hasMore: activities.length > limit,
     },
   });
-}
+});

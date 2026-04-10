@@ -115,7 +115,12 @@ export async function publishEvent(
     }
   );
   if (!res) {
-    throw new Error('streamAdd returned null (Redis not available)');
+    logger.warn(
+      'Realtime publish skipped because Redis stream is unavailable',
+      { channel: event.channel, type: event.type },
+      'Realtime'
+    );
+    return;
   }
   logger.info(
     'Realtime event published',

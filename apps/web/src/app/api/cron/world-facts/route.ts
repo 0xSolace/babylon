@@ -60,8 +60,11 @@ import {
 } from '@babylon/api';
 import type { ParodyHeadline } from '@babylon/db';
 import {
+  BabylonLLMClient,
   createParodyHeadlineGenerator,
+  dailyTopicService,
   rssFeedService,
+  WorldFactsConsolidator,
   worldFactsGenerator,
 } from '@babylon/engine';
 import { logger } from '@babylon/shared';
@@ -124,6 +127,13 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     logger.error('Error cleaning up old headlines', { error }, 'Cron');
   }
 
+  let dailyTopic = null;
+  try {
+    dailyTopic = await dailyTopicService.ensureTopicForDate(new Date());
+  } catch (error) {
+    logger.error('Error selecting daily topic', { error }, 'Cron');
+  }
+
   // Step 4: Generate new world facts from game activity
   // This creates fresh context based on events, markets, questions, and actor activity
   logger.info(
@@ -147,6 +157,17 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     logger.error('Error generating world facts', { error }, 'Cron');
   }
 
+  // Step 5: Consolidate similar world facts to reduce context bloat
+  let consolidationResult = { consolidated: 0, archived: 0, skipped: 0 };
+  try {
+    const llm = BabylonLLMClient.forGameTick();
+    const consolidator = new WorldFactsConsolidator(llm);
+    consolidationResult = await consolidator.consolidateFacts();
+    logger.info('World facts consolidated', consolidationResult, 'Cron');
+  } catch (error) {
+    logger.error('Error consolidating world facts', { error }, 'Cron');
+  }
+
   const duration = Date.now() - startTime;
   logger.info(
     '✅ World facts update completed',
@@ -156,8 +177,10 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       newHeadlines: feedResult.stored,
       parodiesGenerated: parodies.length,
       headlinesCleaned: cleaned,
+      dailyTopic: dailyTopic?.topicLabel ?? null,
       worldFactsGenerated: factsResult.generated,
       worldFactsArchived: factsResult.archived,
+      factsConsolidated: consolidationResult.consolidated,
     },
     'Cron'
   );
@@ -170,9 +193,11 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       newHeadlines: feedResult.stored,
       parodiesGenerated: parodies.length,
       headlinesCleaned: cleaned,
+      dailyTopic,
       worldFactsGenerated: factsResult.generated,
       worldFactsArchived: factsResult.archived,
       worldFactsSources: factsResult.sources,
+      consolidation: consolidationResult,
     },
   });
 });

@@ -4,6 +4,32 @@
  * Pure utility functions for formatting dates, times, and numbers.
  */
 
+/**
+ * Safely converts a Date or a cached ISO string to an ISO 8601 string.
+ *
+ * WHY: Drizzle returns `Date` objects from a live DB connection, but after
+ * JSON round-tripping through Redis cache, those fields come back as strings.
+ * Calling `.toISOString()` directly on a string throws a TypeError.
+ * `new Date(val)` is idempotent — works for both Date objects and ISO strings.
+ *
+ * @param val - A Date object or an ISO date string
+ * @returns ISO 8601 string representation
+ */
+export function toISO(val: Date | string): string {
+  return val instanceof Date ? val.toISOString() : new Date(val).toISOString();
+}
+
+/**
+ * Safely converts a nullable Date or cached ISO string to an ISO 8601 string,
+ * returning null if the value is null or undefined.
+ */
+export function toISOOrNull(
+  val: Date | string | null | undefined
+): string | null {
+  if (val == null) return null;
+  return toISO(val);
+}
+
 import { BABYLON_POINTS_SYMBOL } from '../constants/currency';
 
 /**
@@ -77,7 +103,6 @@ export function formatTime(date: Date | string): string {
  * Format date/timestamp to readable date and time string
  *
  * Supports both Date objects and ISO timestamp strings.
- * Returns the original string on parse failure for graceful degradation.
  *
  * @param date - Date object or ISO timestamp string
  * @returns Formatted date-time string (e.g., "Jan 16, 3:45 PM")
@@ -86,21 +111,16 @@ export function formatTime(date: Date | string): string {
  * ```typescript
  * formatDateTime(new Date()); // "Jan 16, 3:45 PM"
  * formatDateTime("2025-01-16T15:45:00Z"); // "Jan 16, 3:45 PM"
- * formatDateTime("invalid"); // "invalid"
  * ```
  */
 export function formatDateTime(date: Date | string): string {
-  try {
-    const d = typeof date === 'string' ? new Date(date) : date;
-    return new Intl.DateTimeFormat('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    }).format(d);
-  } catch {
-    return typeof date === 'string' ? date : String(date);
-  }
+  const d = typeof date === 'string' ? new Date(date) : date;
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(d);
 }
 
 /**
@@ -166,9 +186,9 @@ export function formatRelativeTime(date: Date | string): string {
 }
 
 /**
- * Format number with K/M suffixes
+ * Format number with K/M/B/T/Q suffixes
  *
- * @description Formats large numbers with K (thousands) or M (millions) suffixes.
+ * @description Formats large numbers with compact suffixes.
  * Rounds to one decimal place for readability.
  *
  * @param {number} num - Number to format
@@ -182,8 +202,17 @@ export function formatRelativeTime(date: Date | string): string {
  * ```
  */
 export function formatCompactNumber(num: number): string {
-  if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
-  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+  if (!Number.isFinite(num)) return '0';
+  if (Math.abs(num) < 1e3) return num.toString();
+
+  const sign = num < 0 ? '-' : '';
+  const abs = Math.abs(num);
+
+  if (abs >= 1e15) return `${sign}${(abs / 1e15).toFixed(1)}Q`;
+  if (abs >= 1e12) return `${sign}${(abs / 1e12).toFixed(1)}T`;
+  if (abs >= 1e9) return `${sign}${(abs / 1e9).toFixed(1)}B`;
+  if (abs >= 1e6) return `${sign}${(abs / 1e6).toFixed(1)}M`;
+  if (abs >= 1e3) return `${sign}${(abs / 1e3).toFixed(1)}K`;
   return num.toString();
 }
 
@@ -201,19 +230,19 @@ interface FormatCurrencyOptions {
  * Format number as currency
  *
  * @description Formats a number as Babylon points currency with specified decimal places.
- * Uses the ƀ symbol to represent Babylon points (not USD or Bitcoin).
+ * Uses the configured symbol (default `$`) for Babylon points — not real USD.
  * Optionally includes thousands separators for better readability of large values.
  *
  * @param {number} amount - Amount to format
  * @param {number | FormatCurrencyOptions} options - Decimal places or options object
- * @returns {string} Formatted currency string (e.g., "ƀ123.45" or "ƀ1,234.56")
+ * @returns {string} Formatted currency string (e.g., "$123.45" or "$1,234.56")
  *
  * @example
  * ```typescript
- * formatCurrency(123.456) // Returns "ƀ123.46"
- * formatCurrency(1000, 0) // Returns "ƀ1000"
- * formatCurrency(1234.56, { useThousandsSeparator: true }) // Returns "ƀ1,234.56"
- * formatCurrency(1234567.89, { decimals: 2, useThousandsSeparator: true }) // Returns "ƀ1,234,567.89"
+ * formatCurrency(123.456) // Returns "$123.46"
+ * formatCurrency(1000, 0) // Returns "$1000"
+ * formatCurrency(1234.56, { useThousandsSeparator: true }) // Returns "$1,234.56"
+ * formatCurrency(1234567.89, { decimals: 2, useThousandsSeparator: true }) // Returns "$1,234,567.89"
  * ```
  */
 export function formatCurrency(
@@ -225,7 +254,7 @@ export function formatCurrency(
   const useThousandsSeparator =
     typeof options === 'object' && options.useThousandsSeparator;
 
-  // Handle negative numbers: keep symbol prefix, then sign
+  // Handle negative numbers: sign before symbol for readability (-$100.00)
   const isNegative = amount < 0;
   const absoluteAmount = Math.abs(amount);
   const sign = isNegative ? '-' : '';
@@ -235,30 +264,30 @@ export function formatCurrency(
       minimumFractionDigits: decimals,
       maximumFractionDigits: decimals,
     });
-    return `${BABYLON_POINTS_SYMBOL}${sign}${formatted}`;
+    return `${sign}${BABYLON_POINTS_SYMBOL}${formatted}`;
   }
 
-  return `${BABYLON_POINTS_SYMBOL}${sign}${absoluteAmount.toFixed(decimals)}`;
+  return `${sign}${BABYLON_POINTS_SYMBOL}${absoluteAmount.toFixed(decimals)}`;
 }
 
 /**
  * Format number as compact currency with K/M/B suffixes
  *
  * @description Formats a number as Babylon points currency with K/M/B suffixes
- * for large values. Uses the ƀ symbol. Handles non-finite values gracefully.
+ * for large values. Uses the configured symbol. Handles non-finite values gracefully.
  *
  * @param {number} value - Amount to format
  * @param {number} decimals - Number of decimal places (default: 2)
- * @returns {string} Formatted currency string with suffix (e.g., "ƀ1.50K", "ƀ2.30M")
+ * @returns {string} Formatted currency string with suffix (e.g., "$1.50K", "$2.30M")
  *
  * @example
  * ```typescript
- * formatCompactCurrency(1500) // Returns "ƀ1.50K"
- * formatCompactCurrency(2300000) // Returns "ƀ2.30M"
- * formatCompactCurrency(1500000000) // Returns "ƀ1.50B"
- * formatCompactCurrency(500) // Returns "ƀ500.00"
- * formatCompactCurrency(-1500) // Returns "-ƀ1.50K"
- * formatCompactCurrency(NaN) // Returns "ƀ0.00"
+ * formatCompactCurrency(1500) // Returns "$1.50K"
+ * formatCompactCurrency(2300000) // Returns "$2.30M"
+ * formatCompactCurrency(1500000000) // Returns "$1.50B"
+ * formatCompactCurrency(500) // Returns "$500.00"
+ * formatCompactCurrency(-1500) // Returns "-$1.50K"
+ * formatCompactCurrency(NaN) // Returns "$0.00"
  * ```
  */
 export function formatCompactCurrency(value: number, decimals = 2): string {
@@ -381,4 +410,99 @@ export function formatNumberWithSeparators(
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   });
+}
+
+/**
+ * Format a date as relative time with "ago" suffix.
+ *
+ * @param date - Date object, ISO string, or null/undefined
+ * @returns Human-readable relative time string (e.g., "5m ago", "2h ago", "3d ago")
+ *
+ * @example
+ * ```typescript
+ * getTimeAgo(new Date(Date.now() - 300_000)) // "5m ago"
+ * getTimeAgo("2025-01-16T10:00:00Z")         // "2h ago"
+ * getTimeAgo(null)                            // "just now"
+ * ```
+ */
+export function getTimeAgo(date: Date | string | null | undefined): string {
+  if (date == null) return 'just now';
+  const d = typeof date === 'string' ? new Date(date) : date;
+  const diffMs = Date.now() - d.getTime();
+  const diffMins = Math.floor(diffMs / 60_000);
+  const diffHours = Math.floor(diffMs / 3_600_000);
+  const diffDays = Math.floor(diffMs / 86_400_000);
+
+  if (diffMins < 1) return 'just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  return `${diffDays}d ago`;
+}
+
+/**
+ * Escape a string for use in a RegExp constructor.
+ *
+ * @param str - The string to escape
+ * @returns The string with all regex special characters escaped
+ *
+ * @example
+ * ```typescript
+ * new RegExp(escapeRegex('hello.world')) // matches "hello.world" literally
+ * ```
+ */
+export function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Safely convert an unknown value to a number, returning a fallback on failure.
+ *
+ * Handles numbers (NaN/Infinity → fallback), numeric strings, and everything else.
+ *
+ * @param value - The value to convert
+ * @param fallback - Value to return when conversion fails (default: 0)
+ * @returns The numeric value, or fallback
+ *
+ * @example
+ * ```typescript
+ * toNumber("3.14")        // 3.14
+ * toNumber(42)            // 42
+ * toNumber("abc")         // 0
+ * toNumber(null, -1)      // -1
+ * toNumber(Infinity)      // 0
+ * ```
+ */
+export function toNumber(value: unknown, fallback = 0): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+  return fallback;
+}
+
+/**
+ * Type guard — checks that a value is a non-empty string (after trimming).
+ * Narrows `string | undefined | unknown` to `string`.
+ */
+export function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+/**
+ * Type guard — checks that a value is a plain object (non-null, non-array).
+ * Narrows `unknown` to `Record<string, unknown>`.
+ */
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Type guard — checks that a value is an array of strings.
+ * Narrows `unknown` to `string[]`.
+ */
+export function isStringArray(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) && value.every((item) => typeof item === 'string')
+  );
 }

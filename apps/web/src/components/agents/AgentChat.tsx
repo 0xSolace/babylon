@@ -1,9 +1,11 @@
 'use client';
 
-import { logger } from '@babylon/shared';
+import { BABYLON_POINTS_SYMBOL, logger } from '@babylon/shared';
+import { Wallet } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ChatViewHeader } from '@/components/chats/ChatViewHeader';
+import type { MentionableAgent } from '@/components/chats/MentionAutocomplete';
 import { MessageInput } from '@/components/chats/MessageInput';
 import { MessageList } from '@/components/chats/MessageList';
 import type {
@@ -56,6 +58,7 @@ interface AgentChatProps {
   agent: {
     id: string;
     name: string;
+    username?: string;
     profileImageUrl?: string;
     virtualBalance?: number;
     modelTier: 'free' | 'pro';
@@ -101,11 +104,11 @@ export function AgentChat({
   // Use pro mode based on agent's model tier
   const usePro = agent.modelTier === 'pro';
 
-  // Scroll to newest messages (scrollTop = 0 due to flex-col-reverse)
+  // Scroll to newest messages
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
     const container = chatContainerRef.current;
     if (container) {
-      container.scrollTo({ top: 0, behavior });
+      container.scrollTo({ top: container.scrollHeight, behavior });
     }
   }, []);
 
@@ -139,7 +142,7 @@ export function AgentChat({
       {
         id: agent.id,
         displayName: agent.name,
-        username: undefined,
+        username: agent.username || undefined,
         profileImageUrl: agent.profileImageUrl || undefined,
       },
     ];
@@ -152,7 +155,17 @@ export function AgentChat({
       });
     }
     return list;
-  }, [agent.id, agent.name, agent.profileImageUrl, user]);
+  }, [agent.id, agent.name, agent.username, agent.profileImageUrl, user]);
+
+  // Create mentionable members for @mention autocomplete
+  const mentionableMembers: MentionableAgent[] = useMemo(() => {
+    return participants.map((p) => ({
+      id: p.id,
+      username: p.username || null,
+      displayName: p.displayName || null,
+      profileImageUrl: p.profileImageUrl || null,
+    }));
+  }, [participants]);
 
   // Convert agent messages to ChatMessage format for MessageList
   const chatMessages: ChatMessage[] = useMemo(() => {
@@ -256,7 +269,74 @@ export function AgentChat({
     lastMessageIdRef.current = lastId;
   }, [messages, loading]);
 
-  // Load older messages when scrolling up
+  // Scroll to bottom on initial load using MutationObserver
+  const pendingInitialScrollRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (agent.id) {
+      pendingInitialScrollRef.current = agent.id;
+    }
+  }, [agent.id]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: messages.length needed to re-run effect when DOM is ready after messages load
+  useEffect(() => {
+    const container = chatContainerRef.current;
+    const endMarker = messagesEndRef.current;
+
+    if (!container || !endMarker || loading) return;
+    if (pendingInitialScrollRef.current !== agent.id) return;
+
+    let idleTimeout: ReturnType<typeof setTimeout> | null = null;
+    let observer: MutationObserver | null = null;
+    const IDLE_MS = 500;
+    const MAX_TIME = 2000;
+    const startTime = Date.now();
+
+    const scrollToEnd = () => {
+      endMarker.scrollIntoView({ behavior: 'auto', block: 'end' });
+    };
+
+    const finish = () => {
+      observer?.disconnect();
+      if (idleTimeout) clearTimeout(idleTimeout);
+      pendingInitialScrollRef.current = null;
+    };
+
+    scrollToEnd();
+
+    observer = new MutationObserver(() => {
+      if (pendingInitialScrollRef.current !== agent.id) return;
+      if (Date.now() - startTime > MAX_TIME) {
+        scrollToEnd();
+        finish();
+        return;
+      }
+      scrollToEnd();
+      if (idleTimeout) clearTimeout(idleTimeout);
+      idleTimeout = setTimeout(() => {
+        scrollToEnd();
+        finish();
+      }, IDLE_MS);
+    });
+
+    // Only observe childList and subtree - attributes/characterData are unnecessary for scroll
+    observer.observe(container, {
+      childList: true,
+      subtree: true,
+    });
+
+    idleTimeout = setTimeout(() => {
+      scrollToEnd();
+      finish();
+    }, IDLE_MS);
+
+    return () => {
+      observer?.disconnect();
+      if (idleTimeout) clearTimeout(idleTimeout);
+    };
+  }, [agent.id, loading, messages.length]);
+
+  // Load older messages when scrolling up (near top)
   useEffect(() => {
     const container = chatContainerRef.current;
     const sentinel = topSentinelRef.current;
@@ -267,8 +347,8 @@ export function AgentChat({
       (entries) => {
         const entry = entries[0];
         if (!entry) return;
-        const maxScrollTop = container.scrollHeight - container.clientHeight;
-        const nearTop = container.scrollTop >= maxScrollTop - 200;
+        // Check if user is near the top (scrollTop close to 0)
+        const nearTop = container.scrollTop <= 200;
         if (entry.isIntersecting && nearTop && hasMore && !isLoadingMore) {
           pendingScrollAdjustRef.current = {
             previousHeight: container.scrollHeight,
@@ -377,10 +457,6 @@ export function AgentChat({
 
     // Update agent balance without full page refresh
     onBalanceUpdate?.(data.balanceAfter);
-    if (data.pointsCost > 0) {
-      toast.success(`Message sent (-${data.pointsCost} points)`);
-    }
-
     // Notify parent to refresh chat list (updates sidebar with latest message)
     onMessageSent?.();
     setSending(false);
@@ -399,8 +475,27 @@ export function AgentChat({
           showBackButton={showBackButton}
           onBack={onBack}
           onManageGroup={() => {}}
-          onLeaveChat={() => {}}
         />
+
+        {/* Agent Balance Banner */}
+        {agent.virtualBalance !== undefined && (
+          <div
+            className="flex items-center justify-between border-border border-b bg-muted/30 px-4 py-2"
+            aria-label={`Agent balance: ${BABYLON_POINTS_SYMBOL}${agent.virtualBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          >
+            <div className="flex items-center gap-2 text-muted-foreground text-sm">
+              <Wallet className="h-4 w-4" aria-hidden="true" />
+              <span>Agent Balance</span>
+            </div>
+            <span className="font-medium font-mono text-sm">
+              {BABYLON_POINTS_SYMBOL}
+              {agent.virtualBalance.toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+            </span>
+          </div>
+        )}
 
         {/* Header Separator */}
         <div className="px-4">
@@ -408,10 +503,10 @@ export function AgentChat({
         </div>
       </div>
 
-      {/* Messages - Scrollable, starts at bottom via flex-col-reverse */}
+      {/* Messages - Scrollable */}
       <div
         ref={chatContainerRef}
-        className="relative flex min-h-0 flex-1 flex-col-reverse overflow-y-auto px-4 py-3"
+        className="relative min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-3"
       >
         <div className="flex flex-col space-y-4">
           <MessageList
@@ -421,7 +516,6 @@ export function AgentChat({
             loading={loading}
             isLoadingMore={isLoadingMore}
             hasMore={hasMore}
-            pullDistance={0}
             authenticated={!!user}
             topSentinelRef={topSentinelRef}
             messagesEndRef={messagesEndRef}
@@ -448,12 +542,7 @@ export function AgentChat({
           </div>
         )}
 
-        {/* Input Separator */}
-        <div className="px-4">
-          <Separator />
-        </div>
-
-        {/* Message Input - using shared component */}
+        {/* Message Input - with mention support */}
         <MessageInput
           value={input}
           onChange={setInput}
@@ -461,6 +550,7 @@ export function AgentChat({
           sending={sending}
           authenticated={!!user}
           disabled={insufficientPoints}
+          mentionableMembers={mentionableMembers}
         />
       </div>
     </div>

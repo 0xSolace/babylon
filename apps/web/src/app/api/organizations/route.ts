@@ -60,7 +60,13 @@
  * @see {@link /lib/db/context} RLS context
  */
 
+import {
+  addPublicReadHeaders,
+  publicRateLimit,
+  withErrorHandling,
+} from '@babylon/api';
 import { StaticDataRegistry } from '@babylon/engine';
+import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
 /**
@@ -68,11 +74,14 @@ import { NextResponse } from 'next/server';
  *
  * @description Get organizations, optionally filtered by IDs
  *
- * @param {Request} request - Request object
+ * @param {NextRequest} request - Request object
  *
  * @returns {Promise<NextResponse>} Organizations data
  */
-export async function GET(request: Request) {
+export const GET = withErrorHandling(async function GET(request: NextRequest) {
+  const { error, rateLimitInfo } = await publicRateLimit(request);
+  if (error) return error;
+
   const { searchParams } = new URL(request.url);
   const idsParam = searchParams.get('ids');
 
@@ -94,8 +103,10 @@ export async function GET(request: Request) {
         description: org.description ?? null,
       }));
 
-  return NextResponse.json({
+  const res = NextResponse.json({
     success: true,
     organizations,
   });
-}
+  if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
+  return res;
+});

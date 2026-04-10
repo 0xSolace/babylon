@@ -169,7 +169,7 @@ export function TrustLevelBadge({
               {label}
             </span>
             <span className="text-gray-500 text-xs">
-              {reputationPoints.toLocaleString()} pts
+              {reputationPoints.toLocaleString()} reputation
             </span>
           </div>
         </div>
@@ -188,7 +188,7 @@ export function TrustLevelBadge({
             <span>Progress to {nextLevel.label}</span>
             <span className="flex items-center gap-1">
               <TrendingUp className="h-3 w-3" />
-              {nextLevel.min - reputationPoints} pts needed
+              {nextLevel.min - reputationPoints} reputation needed
             </span>
           </div>
         </div>

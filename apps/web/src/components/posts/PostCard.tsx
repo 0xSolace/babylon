@@ -5,15 +5,13 @@ import { cn, getProfileUrl } from '@babylon/shared';
 import { Repeat2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import {
-  type KeyboardEvent,
-  type MouseEvent,
-  memo,
-  useEffect,
-  useState,
-} from 'react';
+import { type KeyboardEvent, type MouseEvent, memo } from 'react';
 import { InteractionBar } from '@/components/interactions';
 import { ModerationMenu } from '@/components/moderation/ModerationMenu';
+import {
+  CommentPreview,
+  type CommentPreviewData,
+} from '@/components/posts/CommentPreview';
 import { Avatar } from '@/components/shared/Avatar';
 import { TaggedText } from '@/components/shared/TaggedText';
 import {
@@ -87,35 +85,39 @@ export interface PostCardProps {
       authorProfileImageUrl: string | null;
       timestamp: string;
     } | null;
+    // Comment previews for inline display
+    commentPreviews?: CommentPreviewData[];
   };
   className?: string;
+  density?: 'default' | 'compact';
   onCommentClick?: () => void;
+  onOpen?: () => void;
+  onLikeChange?: (isLiked: boolean) => void;
+  onShareChange?: (isShared: boolean) => void;
   showInteractions?: boolean;
+  showCommentPreviews?: boolean;
+  showCommentInputBar?: boolean;
   isDetail?: boolean;
 }
 
 export const PostCard = memo(function PostCard({
   post,
   className,
+  density = 'default',
   onCommentClick,
+  onOpen,
+  onLikeChange,
+  onShareChange,
   showInteractions = true,
+  showCommentPreviews = true,
+  showCommentInputBar = true,
   isDetail = false,
 }: PostCardProps) {
   const router = useRouter();
   const { fontSize } = useFontSize();
-  const [isDesktop, setIsDesktop] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
   const { user } = useAuth();
-
-  useEffect(() => {
-    const checkScreenSize = () => {
-      setIsDesktop(window.innerWidth >= 1024);
-      setIsMobile(window.innerWidth < 640);
-    };
-    checkScreenSize();
-    window.addEventListener('resize', checkScreenSize);
-    return () => window.removeEventListener('resize', checkScreenSize);
-  }, []);
+  const compact = density === 'compact';
+  const densityScale = compact ? 0.9 : 1;
 
   const postDate = new Date(post.timestamp);
   const now = new Date();
@@ -188,6 +190,7 @@ export const PostCard = memo(function PostCard({
   // For simple reposts, navigate to the original post
   // For quote posts and regular posts, navigate to the post itself
   const handleCardClick = () => {
+    onOpen?.();
     // For simple reposts, go to the original post
     if (isSimpleRepost && post.originalPostId) {
       router.push(`/post/${post.originalPostId}`);
@@ -223,14 +226,27 @@ export const PostCard = memo(function PostCard({
     }
   };
 
+  const handleTaggedTextClick = (tag: string) => {
+    if (tag.startsWith('@')) {
+      const username = tag.slice(1);
+      router.push(getProfileUrl('', username));
+      return;
+    }
+
+    if (tag.startsWith('$')) {
+      const symbol = tag.slice(1);
+      router.push(`/markets?search=${encodeURIComponent(symbol)}`);
+    }
+  };
+
   // If post is deleted, show a minimal placeholder
   if (post.deletedAt) {
     return (
       <article
         className={cn(
-          'px-4 py-3',
+          compact ? 'px-3 py-2' : 'px-4 py-3',
           'w-full overflow-hidden',
-          'border-border/5 border-b',
+          'border-border border-b',
           className
         )}
       >
@@ -244,21 +260,21 @@ export const PostCard = memo(function PostCard({
   return (
     <article
       className={cn(
-        'px-4 py-3',
+        compact ? 'px-3 py-3' : 'px-4 py-4',
         !isDetail &&
           'cursor-pointer transition-all duration-200 hover:bg-muted/30',
         'w-full overflow-hidden',
-        'border-border/5 border-b',
+        !isDetail && 'border-border border-b',
         className
       )}
       style={{
-        fontSize: `${fontSize}rem`,
+        fontSize: `${fontSize * densityScale}rem`,
       }}
       onClick={!isDetail ? handleCardClick : undefined}
     >
       {/* Repost Indicator - Only show for simple reposts (not quote posts) */}
       {isSimpleRepost && (
-        <div className="mb-3 flex items-center gap-3 text-muted-foreground text-sm">
+        <div className="mb-1 flex items-center gap-2 pl-12 text-muted-foreground text-xs">
           <Repeat2 size={14} className="text-green-600" />
           <span>
             Reposted by{' '}
@@ -266,7 +282,7 @@ export const PostCard = memo(function PostCard({
               <span className="font-semibold text-foreground">you</span>
             ) : (
               <Link
-                href={getProfileUrl(post.authorId, post.authorUsername)}
+                href={getProfileUrl(post.authorId, null)}
                 className="font-semibold text-foreground hover:underline"
                 onClick={(e) => e.stopPropagation()}
               >
@@ -277,162 +293,156 @@ export const PostCard = memo(function PostCard({
         </div>
       )}
 
-      {/* Row 1: Avatar + Name/Handle/Timestamp Header */}
-      {!isSimpleRepost && (
-        <div className="mb-3 flex w-full items-start gap-3">
-          {/* Avatar - Clickable, Round - Shows original author for simple reposts, reposter for quote posts */}
-          <Link
-            href={getProfileUrl(displayAuthorId, displayAuthorUsername)}
-            className="shrink-0 transition-opacity hover:opacity-80"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <Avatar
-              id={displayAuthorId}
-              name={displayAuthorName}
-              type={post.type === 'article' ? 'business' : 'actor'}
-              size="md"
-              src={displayAuthorProfileImageUrl || undefined}
-              scaleFactor={
-                isDetail
-                  ? fontSize
-                  : fontSize * (isDesktop ? 1.4 : isMobile ? 0.8 : 1)
-              }
-            />
-          </Link>
+      <div className="space-y-3">
+        <div className="flex items-start gap-3">
+          {/* Left column: Avatar + Connecting Line */}
+          <div className="flex flex-col items-center self-stretch">
+            <Link
+              href={getProfileUrl(displayAuthorId, null)}
+              className="shrink-0 transition-opacity hover:opacity-80"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Avatar
+                id={displayAuthorId}
+                name={displayAuthorName}
+                type={post.type === 'article' ? 'business' : 'actor'}
+                size="md"
+                src={displayAuthorProfileImageUrl || undefined}
+                scaleFactor={fontSize}
+              />
+            </Link>
+            {/* Connecting line to comments */}
+            {showCommentPreviews &&
+              !isDetail &&
+              (post.commentPreviews?.length ?? 0) > 0 && (
+                <div className="mt-2 w-0.5 flex-1 bg-border" />
+              )}
+          </div>
 
-          {/* Header: Name/Handle block on left, Timestamp and Menu on right */}
-          <div className="flex min-w-0 flex-1 items-start justify-between gap-3">
-            {/* Name and Handle stacked vertically - Shows original author for simple reposts, reposter for quote posts */}
-            <div className="flex min-w-0 flex-col">
-              {/* Name row with verified badge */}
-              <div className="flex min-w-0 items-center gap-1.5">
+          {/* Header only — body text is full-width below (matches quote card alignment). */}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-3 leading-none sm:items-center sm:pt-0.5">
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <Link
+                    href={getProfileUrl(displayAuthorId, null)}
+                    className="truncate font-semibold text-[15px] text-foreground leading-tight hover:underline"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {displayAuthorName}
+                  </Link>
+                  {showVerifiedBadge && <VerifiedBadge size="sm" />}
+                </div>
                 <Link
-                  href={getProfileUrl(displayAuthorId, displayAuthorUsername)}
-                  className="truncate font-semibold text-foreground text-lg hover:underline sm:text-xl"
+                  href={getProfileUrl(displayAuthorId, null)}
+                  className="truncate text-[15px] text-muted-foreground leading-tight hover:underline"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {displayAuthorName}
+                  @{displayAuthorUsername || displayAuthorId}
                 </Link>
-                {showVerifiedBadge && (
-                  <VerifiedBadge size="md" className="sm:h-6 sm:w-6" />
+              </div>
+              <div className="flex items-start gap-2 sm:items-center">
+                <time
+                  className="text-[15px] text-muted-foreground leading-tight"
+                  title={postDate.toLocaleString()}
+                >
+                  {timeAgo}
+                </time>
+                {user && user.id !== displayAuthorId && (
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <ModerationMenu
+                      targetUserId={displayAuthorId}
+                      targetUsername={displayAuthorUsername || undefined}
+                      targetDisplayName={displayAuthorName}
+                      targetProfileImageUrl={
+                        displayAuthorProfileImageUrl || undefined
+                      }
+                      postId={post.id}
+                      isNPC={authorIsNPC}
+                    />
+                  </div>
                 )}
               </div>
-              {/* Handle row */}
-              <Link
-                href={getProfileUrl(displayAuthorId, displayAuthorUsername)}
-                className="truncate text-base text-muted-foreground hover:underline"
-                onClick={(e) => e.stopPropagation()}
-              >
-                @{displayAuthorUsername || displayAuthorId}
-              </Link>
             </div>
-            {/* Timestamp and Moderation Menu - Right aligned */}
-            <div className="flex shrink-0 items-center gap-2">
-              <time
-                className="text-base text-muted-foreground"
-                title={postDate.toLocaleString()}
-              >
-                {timeAgo}
-              </time>
-              {/* Show moderation menu only if not your own post */}
-              {user && user.id !== displayAuthorId && (
-                <div onClick={(e) => e.stopPropagation()}>
-                  <ModerationMenu
-                    targetUserId={displayAuthorId}
-                    targetUsername={displayAuthorUsername || undefined}
-                    targetDisplayName={displayAuthorName}
-                    targetProfileImageUrl={
-                      displayAuthorProfileImageUrl || undefined
-                    }
-                    postId={post.id}
-                    isNPC={authorIsNPC}
-                  />
-                </div>
+          </div>
+        </div>
+
+        {/* Primary post body — full width, same inset as quote card */}
+        {post.type === 'article' ? (
+          <div className="w-full">
+            <div className="mb-3 flex items-start justify-between gap-4">
+              <h2 className="flex-1 font-bold text-foreground text-lg leading-tight sm:text-xl">
+                {post.articleTitle || 'Untitled Article'}
+              </h2>
+              {!isDetail && (
+                <button
+                  className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg bg-primary px-3 py-2 font-semibold text-primary-foreground text-sm transition-colors hover:bg-primary/90"
+                  onClick={handleCardClick}
+                >
+                  Read Full Article →
+                </button>
               )}
             </div>
+            <div className="mb-4 flex flex-wrap items-center gap-3 text-muted-foreground text-sm">
+              {post.byline && <span>{post.byline}</span>}
+            </div>
+            <div className="whitespace-pre-wrap break-words text-[15px] text-foreground leading-normal">
+              {post.content}
+            </div>
           </div>
-        </div>
-      )}
-
-      {/* Row 2: Post Content - Full width */}
-      {post.type === 'article' ? (
-        // Article card - Show title, summary, and "Read more" button
-        <div className="mb-3 w-full">
-          {/* Article title with Read More Button */}
-          <div className="mb-3 flex items-start justify-between gap-4">
-            <h2 className="flex-1 font-bold text-foreground text-lg leading-tight sm:text-xl">
-              {post.articleTitle || 'Untitled Article'}
-            </h2>
-            {!isDetail && (
-              <button
-                className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg bg-[#0066FF] px-3 py-2 font-semibold text-primary-foreground text-sm transition-colors hover:bg-[#2952d9]"
-                onClick={handleCardClick}
-              >
-                Read Full Article →
-              </button>
+        ) : post.isRepost && isSimpleRepost ? (
+          <div className="post-content w-full whitespace-pre-wrap break-words text-[15px] text-foreground leading-normal">
+            {post.originalPost ? (
+              <TaggedText
+                text={post.originalPost.content}
+                onTagClick={handleTaggedTextClick}
+              />
+            ) : (
+              <span className="text-foreground/50 italic">
+                This post has been deleted
+              </span>
             )}
           </div>
-
-          {/* Article metadata */}
-          <div className="mb-4 flex flex-wrap items-center gap-3 text-muted-foreground text-sm">
-            {post.byline && <span>{post.byline}</span>}
-          </div>
-
-          {/* Article summary */}
-          <div className="mb-3 whitespace-pre-wrap break-words text-foreground leading-relaxed">
-            {post.content}
-          </div>
-        </div>
-      ) : post.isRepost ? (
-        // Repost (with or without quote comment) - show embedded card
-        <div className="mb-4 w-full">
-          {/* Quote comment (if present) */}
-          {post.quoteComment && (
-            <div className="post-content mb-4 whitespace-pre-wrap break-words text-foreground leading-relaxed">
+        ) : post.isRepost ? (
+          post.quoteComment ? (
+            <div className="post-content whitespace-pre-wrap break-words text-[15px] text-foreground leading-normal">
               <TaggedText
                 text={post.quoteComment}
-                onTagClick={(tag) => {
-                  if (tag.startsWith('@')) {
-                    // Handle @mentions - route to profile
-                    const username = tag.slice(1);
-                    router.push(getProfileUrl('', username));
-                  } else if (tag.startsWith('$')) {
-                    // Handle $cashtags - route to markets
-                    const symbol = tag.slice(1);
-                    router.push(
-                      `/markets?search=${encodeURIComponent(symbol)}`
-                    );
-                  }
-                }}
+                onTagClick={handleTaggedTextClick}
               />
             </div>
-          )}
+          ) : null
+        ) : (
+          <div className="post-content w-full whitespace-pre-wrap break-words text-[15px] text-foreground leading-normal">
+            <TaggedText
+              text={post.content || ''}
+              onTagClick={handleTaggedTextClick}
+            />
+          </div>
+        )}
 
-          {/* Embedded original post */}
+        {/* Quote card gets its own full-width row under the avatar lane. */}
+        {post.isRepost && !isSimpleRepost && (
           <div
             className={cn(
-              'rounded-xl border border-white/10 p-4',
-              'bg-white/5',
+              'rounded-xl border border-border p-4',
               'overflow-hidden transition-colors',
               quotedPostId
-                ? 'cursor-pointer hover:bg-white/[0.07]'
+                ? 'cursor-pointer hover:bg-muted/50'
                 : 'cursor-default'
             )}
             role={quotedPostId ? 'link' : undefined}
             tabIndex={quotedPostId ? 0 : undefined}
             aria-label={quotedPostId ? 'View quoted post' : undefined}
-            onClick={handleQuotedPostClick}
-            onKeyDown={handleQuotedPostKeyDown}
+            onClick={quotedPostId ? handleQuotedPostClick : undefined}
+            onKeyDown={quotedPostId ? handleQuotedPostKeyDown : undefined}
           >
             {post.originalPost ? (
               <>
                 {/* Original post author */}
-                <div className="mb-3 flex items-start gap-3">
+                <div className="mb-2 flex items-start gap-2">
                   <Link
-                    href={getProfileUrl(
-                      post.originalPost.authorId,
-                      post.originalPost.authorUsername
-                    )}
+                    href={getProfileUrl(post.originalPost.authorId, null)}
                     className="shrink-0 transition-opacity hover:opacity-80"
                     onClick={(e) => e.stopPropagation()}
                   >
@@ -441,17 +451,15 @@ export const PostCard = memo(function PostCard({
                       name={post.originalPost.authorName}
                       type="actor"
                       size="sm"
+                      className="!h-5 !w-5"
                       src={post.originalPost.authorProfileImageUrl || undefined}
                     />
                   </Link>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
+                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <div className="flex min-w-0 items-center gap-1">
                       <Link
-                        href={getProfileUrl(
-                          post.originalPost.authorId,
-                          post.originalPost.authorUsername
-                        )}
-                        className="truncate font-semibold text-foreground hover:underline"
+                        href={getProfileUrl(post.originalPost.authorId, null)}
+                        className="truncate font-semibold text-foreground text-sm hover:underline"
                         onClick={(e) => e.stopPropagation()}
                       >
                         {post.originalPost.authorName}
@@ -461,11 +469,8 @@ export const PostCard = memo(function PostCard({
                       )}
                     </div>
                     <Link
-                      href={getProfileUrl(
-                        post.originalPost.authorId,
-                        post.originalPost.authorUsername
-                      )}
-                      className="text-foreground/50 text-sm hover:underline"
+                      href={getProfileUrl(post.originalPost.authorId, null)}
+                      className="truncate text-foreground/50 text-sm hover:underline"
                       onClick={(e) => e.stopPropagation()}
                     >
                       @
@@ -476,22 +481,10 @@ export const PostCard = memo(function PostCard({
                 </div>
 
                 {/* Original post content */}
-                <div className="whitespace-pre-wrap break-words text-foreground/90 leading-relaxed">
+                <div className="whitespace-pre-wrap break-words text-[15px] text-foreground/90 leading-normal">
                   <TaggedText
                     text={post.originalPost.content}
-                    onTagClick={(tag) => {
-                      if (tag.startsWith('@')) {
-                        // Handle @mentions - route to profile
-                        const username = tag.slice(1);
-                        router.push(getProfileUrl('', username));
-                      } else if (tag.startsWith('$')) {
-                        // Handle $cashtags - route to markets
-                        const symbol = tag.slice(1);
-                        router.push(
-                          `/markets?search=${encodeURIComponent(symbol)}`
-                        );
-                      }
-                    }}
+                    onTagClick={handleTaggedTextClick}
                   />
                 </div>
               </>
@@ -501,37 +494,32 @@ export const PostCard = memo(function PostCard({
               </div>
             )}
           </div>
-        </div>
-      ) : (
-        // Regular post - Show content as normal
-        <div className="post-content mb-4 w-full whitespace-pre-wrap break-words text-foreground leading-relaxed">
-          <TaggedText
-            text={post.content || ''}
-            onTagClick={(tag) => {
-              if (tag.startsWith('@')) {
-                // Handle @mentions - route to profile
-                const username = tag.slice(1);
-                router.push(getProfileUrl('', username));
-              } else if (tag.startsWith('$')) {
-                // Handle $cashtags - route to markets
-                const symbol = tag.slice(1);
-                router.push(`/markets?search=${encodeURIComponent(symbol)}`);
-              }
-            }}
-          />
-        </div>
-      )}
+        )}
 
-      {/* Row 3: Interaction Bar - Full width */}
-      {showInteractions && (
-        <div onClick={(e) => e.stopPropagation()} className="w-full">
-          <InteractionBar
-            postId={post.id}
-            initialInteractions={initialInteractions}
-            onCommentClick={onCommentClick}
-            postData={post}
-          />
-        </div>
+        {/* Interaction Bar */}
+        {showInteractions && (
+          <div onClick={(e) => e.stopPropagation()}>
+            <InteractionBar
+              postId={post.id}
+              initialInteractions={initialInteractions}
+              onCommentClick={onCommentClick}
+              onLikeChange={onLikeChange}
+              onShareChange={onShareChange}
+              postData={post}
+              className="!mt-0"
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Comment Section - Outside two-column layout so avatars align */}
+      {showCommentPreviews && !isDetail && (
+        <CommentPreview
+          comments={post.commentPreviews ?? []}
+          totalCommentCount={post.commentCount ?? 0}
+          onViewAllClick={onCommentClick ?? handleCardClick}
+          showInputBar={showCommentInputBar}
+        />
       )}
     </article>
   );

@@ -1,5 +1,6 @@
 'use client';
 
+import { cn } from '@babylon/shared';
 import type { ISeriesApi, Time } from 'lightweight-charts';
 import { AreaSeries, CrosshairMode } from 'lightweight-charts';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -45,6 +46,16 @@ interface PerpPriceChartProps {
   onTimeRangeChange: (range: MarketTimeRange) => void;
   /** Whether to show brush selector (unused, for future) */
   showBrush?: boolean;
+  /** Whether to show the header (price + range controls). Defaults to true. */
+  showHeader?: boolean;
+  /**
+   * Chart sizing behavior.
+   * - fixed: uses a fixed-height chart (good for pages)
+   * - fill: stretches to the available parent height (good for flex layouts like the terminal)
+   */
+  height?: 'fixed' | 'fill';
+  /** Optional className for the container */
+  className?: string;
 }
 
 /**
@@ -68,9 +79,12 @@ interface PerpPriceChartProps {
 export function PerpPriceChart({
   data,
   currentPrice,
-  ticker,
+  ticker: _ticker,
   timeRange,
   onTimeRangeChange,
+  showHeader = true,
+  height = 'fixed',
+  className,
 }: PerpPriceChartProps) {
   const [chartInitError, setChartInitError] = useState<string | null>(null);
   const priceSeries = useRef<ISeriesApi<'Area'> | null>(null);
@@ -79,7 +93,11 @@ export function PerpPriceChart({
   > | null>(null);
   const seriesInitialized = useRef(false);
 
-  const { chartContainerRef, chart } = useLightweightChart({
+  const {
+    chartContainerRef,
+    chart,
+    error: chartBaseError,
+  } = useLightweightChart({
     crosshair: {
       mode: CrosshairMode.Normal,
     },
@@ -87,6 +105,10 @@ export function PerpPriceChart({
       priceFormatter: (price: number) => formatChartPrice(price, true),
     },
   });
+
+  const fillHeight = height === 'fill';
+  const hasData = data.length > 0;
+  const unavailableReason = chartInitError ?? chartBaseError;
 
   // Filter and prepare data based on time range
   const chartData = useMemo(() => {
@@ -271,86 +293,93 @@ export function PerpPriceChart({
     }
   }, [currentPrice]);
 
-  // Loading state when no data
-  if (!data.length) {
-    return (
-      <div className="flex h-[400px] items-center justify-center text-muted-foreground">
-        <div className="text-center">
-          <div className="text-sm">Loading chart data...</div>
-        </div>
-      </div>
-    );
-  }
-
-  if (chartInitError) {
-    return (
-      <div className="flex h-[400px] items-center justify-center text-muted-foreground">
-        <div className="text-center">
-          <div className="text-sm">Chart unavailable</div>
-          <div className="mt-1 text-xs">{chartInitError}</div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="w-full space-y-3" key={ticker}>
+    <div
+      className={cn(
+        'flex w-full',
+        fillHeight ? 'h-full min-h-0 flex-col gap-3' : 'h-full flex-col',
+        showHeader && !fillHeight ? 'space-y-3' : '',
+        className
+      )}
+    >
       {/* Header with price info and time range selector */}
-      <div className="flex flex-wrap items-center justify-between gap-3 px-1">
-        <div className="flex items-center gap-3">
-          <div>
-            <div className="font-bold text-2xl">
-              {formatChartPrice(currentPrice, true)}
-            </div>
-            <div
-              className={`font-medium text-sm ${isPositive ? 'text-green-600' : 'text-red-600'}`}
-            >
-              {isPositive ? '↑' : '↓'}{' '}
-              {formatChartPrice(Math.abs(priceChange), true)} (
-              {priceChangePercent >= 0 ? '+' : ''}
-              {priceChangePercent.toFixed(2)}%)
+      {showHeader && (
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 px-1">
+          <div className="flex items-center gap-3">
+            <div>
+              <div className="font-bold text-2xl">
+                {formatChartPrice(currentPrice, true)}
+              </div>
+              <div
+                className={cn(
+                  'font-medium text-sm',
+                  isPositive ? 'text-green-600' : 'text-red-600'
+                )}
+              >
+                {isPositive ? '↑' : '↓'}{' '}
+                {formatChartPrice(Math.abs(priceChange), true)} (
+                {priceChangePercent >= 0 ? '+' : ''}
+                {priceChangePercent.toFixed(2)}%)
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Time range selector */}
-        <div className="flex items-center gap-1 rounded-md bg-muted/30 p-1">
-          {MARKET_TIME_RANGES.map((range) => (
-            <button
-              key={range}
-              onClick={() => onTimeRangeChange(range)}
-              className={`cursor-pointer rounded px-2 py-1 text-xs transition-colors ${
-                timeRange === range
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {range}
-            </button>
-          ))}
+          {/* Time range selector */}
+          <div className="flex items-center gap-1 rounded-md bg-muted/30 p-1">
+            {MARKET_TIME_RANGES.map((range) => (
+              <button
+                key={range}
+                onClick={() => onTimeRangeChange(range)}
+                className={cn(
+                  'cursor-pointer rounded px-2 py-1 text-xs transition-colors',
+                  timeRange === range
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                {range}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Chart container */}
-      <div className="relative">
+      <div className={cn('relative', fillHeight && 'min-h-0 flex-1')}>
         <div
           ref={chartContainerRef}
-          className="h-[400px] w-full rounded-lg bg-muted/10"
+          className={cn(
+            'w-full rounded-lg bg-muted/10',
+            fillHeight ? 'h-full min-h-[240px]' : 'h-[400px]'
+          )}
         />
-        {!chart && (
+        {/* Overlay states are mutually exclusive - priority: unavailable > loading > initializing > empty */}
+        {unavailableReason ? (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div className="rounded-lg bg-card/90 px-4 py-2 text-center text-muted-foreground text-sm">
+              <div className="font-semibold">Chart unavailable</div>
+              <div className="mt-1 text-xs">{unavailableReason}</div>
+            </div>
+          </div>
+        ) : !hasData ? (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div className="rounded-lg bg-card/90 px-4 py-2 text-muted-foreground text-sm">
+              Loading chart data…
+            </div>
+          </div>
+        ) : !chart ? (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <div className="rounded-lg bg-card/90 px-4 py-2 text-muted-foreground text-sm">
               Initializing chart…
             </div>
           </div>
-        )}
-        {chartData.length === 0 && data.length > 0 && (
+        ) : chartData.length === 0 ? (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <div className="rounded-lg bg-card/90 px-4 py-2 text-muted-foreground text-sm">
               No data in selected time range
             </div>
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );

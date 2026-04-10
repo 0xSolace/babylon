@@ -32,14 +32,12 @@ export function ChatListItem({
       onKeyDown={handleKeyDown}
       className={cn(
         'cursor-pointer px-4 py-3 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset',
-        isSelected
-          ? 'border-primary border-l-4 bg-sidebar-accent/50'
-          : 'border-transparent border-l-4 hover:bg-sidebar-accent/30'
+        isSelected ? 'bg-sidebar-accent/50' : 'hover:bg-sidebar-accent/30'
       )}
     >
       <div className="flex items-center gap-3">
         {chat.isGroup ? (
-          <div className="chat-button flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sidebar-accent/50">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sidebar-accent/50">
             <Users className="h-5 w-5 text-primary" />
           </div>
         ) : (

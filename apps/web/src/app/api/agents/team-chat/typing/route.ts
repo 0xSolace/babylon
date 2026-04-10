@@ -5,7 +5,7 @@
  * @access Authenticated
  *
  * @description
- * Broadcasts typing indicator status to the user's Command Center team chat.
+ * Broadcasts typing indicator status to the user's Agents team chat.
  * This allows other participants (and agents) to see when someone is typing.
  */
 
@@ -15,6 +15,7 @@ import {
   broadcastTypingIndicator,
   checkRateLimitAsync,
   RATE_LIMIT_CONFIGS,
+  withErrorHandling,
 } from '@babylon/api';
 import { db, eq, users } from '@babylon/db';
 import type { NextRequest } from 'next/server';
@@ -26,7 +27,7 @@ const typingSchema = z.object({
   isTyping: z.boolean(),
 });
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandling(async function POST(req: NextRequest) {
   const user = await authenticateUser(req);
 
   // Rate limit typing indicators (more lenient than messages)
@@ -97,4 +98,4 @@ export async function POST(req: NextRequest) {
   );
 
   return NextResponse.json({ success: true });
-}
+});

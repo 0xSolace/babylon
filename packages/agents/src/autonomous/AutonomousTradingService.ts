@@ -28,11 +28,13 @@ import { callGroqDirect } from '../llm/direct-groq';
 import { getAgentConfig } from '../shared/agent-config';
 import { logger } from '../shared/logger';
 import { executeDirectTrade } from './DirectExecutors';
+import { trackAgentTradeExecuted } from './track-agent-trade';
+import { getPredictionMarketPrices } from './utils/prediction-pricing';
 import { resolvePerpTicker } from './utils/resolvePerpTicker';
 
-const SUGGESTED_TRADE_PERCENT = 0.1;
-const MIN_SUGGESTED_TRADE_SIZE = 10;
-const MIN_SUGGESTED_TRADE_SIZE_LABEL = MIN_SUGGESTED_TRADE_SIZE.toFixed(0);
+const SUGGESTED_TRADE_PERCENT = 0.25; // 25% of balance for more aggressive trading
+const MIN_SUGGESTED_TRADE_SIZE = 25; // $25 minimum per trade
+const MAX_SUGGESTED_TRADE_SIZE = 500; // $500 cap per trade
 
 export class AutonomousTradingService {
   /**
@@ -138,9 +140,8 @@ export class AutonomousTradingService {
       .map((m) => {
         const yesShares = Number(m.yesShares || 1);
         const noShares = Number(m.noShares || 1);
-        const total = yesShares + noShares;
-        const yesPrice = ((yesShares / total) * 100).toFixed(1);
-        return `- [${m.id}] "${m.question}" (YES: ${yesPrice}%)`;
+        const { yesPrice } = getPredictionMarketPrices(yesShares, noShares);
+        return `- [${m.id}] "${m.question}" (YES: ${(yesPrice * 100).toFixed(1)}%)`;
       })
       .join('\n');
 
@@ -159,6 +160,7 @@ export class AutonomousTradingService {
               balance.balance * SUGGESTED_TRADE_PERCENT,
               MIN_SUGGESTED_TRADE_SIZE
             ),
+            MAX_SUGGESTED_TRADE_SIZE,
             balance.balance
           )
         : 0;
@@ -184,8 +186,8 @@ ${contextString}
 
 Strategy: ${config?.tradingStrategy || 'Balanced risk/reward seeking alpha'}
 
-Suggested Trade Size (10% of balance, min $${MIN_SUGGESTED_TRADE_SIZE_LABEL}): $${suggestedTradeSizeText}
-Recommended range: invest roughly 5-20% of your balance per trade.
+Suggested Trade Size (${SUGGESTED_TRADE_PERCENT * 100}% of balance, min $${MIN_SUGGESTED_TRADE_SIZE}, max $${MAX_SUGGESTED_TRADE_SIZE}): $${suggestedTradeSizeText}
+Recommended range: invest roughly 10-50% of your balance per trade.
 
 Task: Decide on ONE trade to make, or hold if nothing looks good.
 
@@ -409,6 +411,18 @@ If holding:
       undefined,
       'AutonomousTrading'
     );
+
+    const ownerId = agent?.managedBy ?? agentUserId;
+    trackAgentTradeExecuted(agentUserId, {
+      agent_id: agentUserId,
+      market_type: marketType,
+      action: side,
+      market_id: result.marketId,
+      ticker: result.ticker,
+      side: result.side,
+      amount: normalizedAmount,
+      owner_id: ownerId,
+    });
 
     return {
       tradesExecuted: 1,

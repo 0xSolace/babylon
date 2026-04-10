@@ -1,22 +1,9 @@
 'use client';
 
-import {
-  ArrowLeft,
-  Loader2,
-  LogOut,
-  MoreVertical,
-  Settings,
-  Users,
-} from 'lucide-react';
+import { ArrowLeft, Loader2, Settings } from 'lucide-react';
 import Link from 'next/link';
 import { Avatar } from '@/components/shared/Avatar';
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import type { ChatDetails } from './types';
 import { getProfilePath } from './types';
 
@@ -26,7 +13,6 @@ interface ChatViewHeaderProps {
   showBackButton?: boolean;
   onBack?: () => void;
   onManageGroup: () => void;
-  onLeaveChat: () => void;
 }
 
 export function ChatViewHeader({
@@ -35,27 +21,22 @@ export function ChatViewHeader({
   showBackButton = false,
   onBack,
   onManageGroup,
-  onLeaveChat,
 }: ChatViewHeaderProps) {
   return (
-    <div className="bg-background px-4 py-4">
-      <div className="flex items-center gap-3">
+    <div className="overflow-hidden bg-background px-4 py-2 md:py-4">
+      <div className="flex min-w-0 items-center gap-3">
         {showBackButton && (
           <button
             onClick={onBack}
-            className="flex items-center gap-2 rounded-md px-3 py-1.5 font-medium text-foreground text-sm transition-colors hover:bg-sidebar-accent/50 lg:hidden"
+            className="rounded-md p-1.5 text-foreground transition-colors hover:bg-sidebar-accent/50 lg:hidden"
+            aria-label="Back"
           >
-            <ArrowLeft className="h-4 w-4" />
-            Back
+            <ArrowLeft className="h-5 w-5" />
           </button>
         )}
 
-        {/* Avatar */}
-        {chatDetails.chat.isGroup ? (
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-sidebar-accent/50">
-            <Users className="h-5 w-5 text-primary" />
-          </div>
-        ) : chatDetails.chat.otherUser ? (
+        {/* Avatar (DM only) */}
+        {chatDetails.chat.isGroup ? null : chatDetails.chat.otherUser ? (
           <Link
             href={getProfilePath(chatDetails.chat.otherUser)}
             className="transition-opacity hover:opacity-80"
@@ -73,23 +54,28 @@ export function ChatViewHeader({
         )}
 
         {/* Chat name and status */}
-        <div className="flex-1">
-          <div className="flex items-center gap-2">
-            {chatDetails.chat.isGroup ? (
-              <h3 className="font-bold text-foreground text-lg">
-                {chatDetails.chat.name || 'Chat'}
-              </h3>
-            ) : chatDetails.chat.otherUser ? (
-              <Link
-                href={getProfilePath(chatDetails.chat.otherUser)}
-                className="font-bold text-foreground text-lg transition-colors hover:text-primary"
-              >
-                {chatDetails.chat.otherUser.displayName || 'Chat'}
-              </Link>
-            ) : (
-              <h3 className="font-bold text-foreground text-lg">Chat</h3>
-            )}
+        <div className="min-w-0 flex-1">
+          {chatDetails.chat.isGroup ? (
+            <h3 className="truncate font-bold text-foreground text-lg">
+              {chatDetails.chat.name || 'Chat'}
+            </h3>
+          ) : chatDetails.chat.otherUser ? (
+            <Link
+              href={getProfilePath(chatDetails.chat.otherUser)}
+              className="truncate font-bold text-foreground text-lg transition-colors hover:text-primary"
+            >
+              {chatDetails.chat.otherUser.displayName || 'Chat'}
+            </Link>
+          ) : (
+            <h3 className="truncate font-bold text-foreground text-lg">Chat</h3>
+          )}
 
+          <div className="-mt-0.5 flex items-center gap-2 md:mt-0">
+            {chatDetails.chat.isGroup && (
+              <span className="text-muted-foreground text-xs">
+                {chatDetails.participants.length} participants
+              </span>
+            )}
             {/* SSE status */}
             {sseConnected ? (
               <span
@@ -109,42 +95,19 @@ export function ChatViewHeader({
               </span>
             )}
           </div>
-
-          {chatDetails.chat.isGroup && (
-            <p className="text-muted-foreground text-xs">
-              {chatDetails.participants.length} participants
-            </p>
-          )}
         </div>
 
         {/* Group actions */}
         {chatDetails.chat.isGroup && (
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onManageGroup}
-              title="Manage Group"
-            >
-              <Settings className="h-5 w-5" />
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon">
-                  <MoreVertical className="h-5 w-5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onClick={onLeaveChat}
-                  className="text-red-500"
-                >
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Leave Chat</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="shrink-0"
+            onClick={onManageGroup}
+            title="Manage Group"
+          >
+            <Settings className="h-5 w-5" />
+          </Button>
         )}
       </div>
     </div>

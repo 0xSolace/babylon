@@ -33,6 +33,10 @@ export interface SocialMetrics {
   mentionsReceived: number;
   /** Invitations sent to others */
   invitationsSent: number;
+  /** Number of unique facts gathered from group chat intel */
+  groupChatFactsGathered: number;
+  /** Average group chat responses per tick */
+  groupChatResponsesPerTick: number;
 }
 
 /**
@@ -136,6 +140,18 @@ export interface InformationMetrics {
 }
 
 /**
+ * Context efficiency metrics (token budget)
+ */
+export interface ContextEfficiencyMetrics {
+  /** Average prompt tokens used per step */
+  avgPromptTokens: number;
+  /** Average fraction of 6000-token budget used */
+  avgContextUtilization: number;
+  /** Average fraction of context devoted to group chat */
+  avgGroupChatTokenShare: number;
+}
+
+/**
  * Complete behavioral metrics combining all categories
  * Note: Named BehavioralMetrics to avoid conflict with existing TrajectoryMetrics in training/types.ts
  */
@@ -150,6 +166,8 @@ export interface BehavioralMetrics {
   behavior: BehaviorMetrics;
   /** Information gathering metrics */
   information: InformationMetrics;
+  /** Context efficiency metrics (R5 token budget) */
+  contextEfficiency?: ContextEfficiencyMetrics;
 
   /** Timestamp when metrics were extracted */
   extractedAt: Date;
@@ -181,6 +199,8 @@ export interface MetricsSummary {
   reputationDelta: number;
   /** Episode length */
   episodeLength: number;
+  /** Group chat facts gathered */
+  groupChatFactsGathered: number;
 }
 
 /**
@@ -196,5 +216,6 @@ export function getMetricsSummary(metrics: BehavioralMetrics): MetricsSummary {
     actionSuccessRate: metrics.behavior.actionSuccessRate,
     reputationDelta: metrics.influence.reputationDelta,
     episodeLength: metrics.behavior.episodeLength,
+    groupChatFactsGathered: metrics.social.groupChatFactsGathered,
   };
 }

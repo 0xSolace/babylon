@@ -1,3 +1,5 @@
+import { spawnSync } from 'node:child_process';
+import withSerwistInit from '@serwist/next';
 import { config } from 'dotenv';
 import type { NextConfig } from 'next';
 import * as path from 'path';
@@ -5,6 +7,19 @@ import * as path from 'path';
 // Use process.cwd() which works reliably in Next.js config context
 // This is the app directory (apps/web), so go up two levels to get monorepo root
 const monorepoRoot = path.resolve(process.cwd(), '../..');
+
+// Serwist PWA — service worker generation
+const revision =
+  spawnSync('git', ['rev-parse', 'HEAD'], {
+    encoding: 'utf-8',
+  }).stdout?.trim() || crypto.randomUUID();
+
+const withSerwist = withSerwistInit({
+  swSrc: 'src/app/sw.ts',
+  swDest: 'public/sw.js',
+  additionalPrecacheEntries: [{ url: '/~offline', revision }],
+  disable: process.env.NODE_ENV === 'development',
+});
 
 // Capture any Sentry auth token explicitly provided by the environment before dotenv runs.
 // We intentionally ignore tokens sourced from local `.env` files to avoid stale/invalid tokens
@@ -16,14 +31,9 @@ const sentryAuthTokenFromProcessEnv = process.env.SENTRY_AUTH_TOKEN;
 config({ path: path.join(monorepoRoot, '.env') });
 config({ path: path.join(monorepoRoot, '.env.local') });
 
-const waitlistFlag =
-  process.env.WAITLIST_MODE ?? process.env.NEXT_PUBLIC_WAITLIST_MODE ?? 'false';
-const waitlistEnabled = ['true', '1', 'yes', 'on'].includes(
-  waitlistFlag.toLowerCase()
-);
-
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  distDir: process.env.NEXT_DIST_DIR || '.next',
   // Specify workspace root for monorepo
   outputFileTracingRoot: monorepoRoot,
   // Use standalone output for dynamic routes and API endpoints
@@ -38,38 +48,43 @@ const nextConfig: NextConfig = {
     '@babylon/api',
     '@babylon/db',
     '@babylon/training',
-    '@babylon/contracts',
     '@babylon/a2a',
   ],
   experimental: {
-    optimizePackageImports: ['lucide-react'],
+    optimizePackageImports: [
+      'lucide-react',
+      'framer-motion',
+      'recharts',
+      'date-fns',
+      'ethers',
+      'viem',
+      'react-hook-form',
+      '@hookform/resolvers',
+      '@tanstack/react-query',
+      'class-variance-authority',
+      'zod',
+      'ai',
+    ],
     // instrumentationHook removed - available by default in Next.js 15+
+    // Reduce peak memory during webpack build (Next.js 15+)
+    webpackMemoryOptimizations: true,
+    // Run webpack in a worker to lower main process memory (can help with 14GB+ builds)
+    webpackBuildWorker: true,
+    // Cap parallelism to avoid dozens of jest-worker children and load average 200+
+    cpus: 4,
+    // Disable parallel worker threads so we don't spawn 50+ jest-worker processes (slower build, sane load)
+    workerThreads: false,
   },
   typescript: {
     // Ignore type errors during build - we run typecheck separately via turbo
     ignoreBuildErrors: true,
-  },
-  env: {
-    WAITLIST_MODE: process.env.WAITLIST_MODE ?? 'false',
-  },
-  async redirects() {
-    if (!waitlistEnabled) return [];
-
-    return [
-      {
-        // Redirect everything except root and static/API assets to home during waitlist
-        source:
-          '/:path((?!$|_next|api|assets|static|images|fonts|favicon\\.ico|robots\\.txt|sitemap\\.xml|manifest\\.webmanifest|\\.well-known|monitoring).*)',
-        destination: '/',
-        permanent: false,
-      },
-    ];
   },
   // Skip prerendering for feed page (client-side only)
   skipTrailingSlashRedirect: true,
   skipProxyUrlNormalize: false,
   // Farcaster Mini App manifest serving
   async rewrites() {
+    // Legacy `/assets/agent-monkeys/` and `/assets/user-profiles/` preset URLs are rewritten to `user-pfps` in middleware.ts
     return [
       {
         source: '/.well-known/farcaster.json',
@@ -78,6 +93,10 @@ const nextConfig: NextConfig = {
       {
         source: '/.well-known/agent-card.json',
         destination: '/api/game/card',
+      },
+      {
+        source: '/.well-known/assetlinks.json',
+        destination: '/assetlinks.json',
       },
     ];
   },
@@ -96,8 +115,9 @@ const nextConfig: NextConfig = {
     'drizzle-orm',
     'drizzle-orm/postgres-js',
     'ioredis', // Node.js Redis client - requires tls/net modules not available in edge runtime
-    // Avoid bundling warnings from dynamic requires in @elizaos/core (server-only usage).
-    '@elizaos/core',
+    // NOTE: @elizaos/core was removed from externals because it's ESM-only ("type": "module").
+    // Externalizing ESM packages causes require() errors at Vercel runtime (ERR_REQUIRE_ESM).
+    // Webpack now bundles it directly which resolves the ESM compatibility issue.
   ],
   images: {
     qualities: [100, 75],
@@ -122,7 +142,7 @@ const nextConfig: NextConfig = {
   // Turbopack config for monorepo
   // Explicitly set root to suppress Next.js warning about multiple lockfiles.
   // The monorepo root contains the main bun.lock at /Users/shawwalters/babylon/bun.lock.
-  // Nested packages (apps/docs, packages/examples) may have their own lockfiles, but this
+  // Nested packages (packages/examples) may have their own lockfiles, but this
   // is the correct root for the web app's workspace.
   turbopack: {
     root: monorepoRoot,
@@ -171,9 +191,16 @@ const nextConfig: NextConfig = {
       process.cwd(),
       'webpack-electron-stub.js'
     );
+    const reactDeviceDetectShimPath = path.join(
+      process.cwd(),
+      'src/lib/device/react-device-detect-shim.ts'
+    );
     config.resolve.alias = {
       ...config.resolve.alias,
       electron: electronStubPath,
+      // Privy only reads a handful of user-agent booleans from this package.
+      // Use a local shim to avoid the crashing vendor bundle on affected browsers.
+      'react-device-detect': reactDeviceDetectShimPath,
     };
 
     // Ignore electron module completely - electron-fetch will handle it at runtime
@@ -197,53 +224,22 @@ const nextConfig: NextConfig = {
       )
     );
 
-    // Also use IgnorePlugin as a fallback for any remaining cases
-    // CRITICAL: For client builds, completely ignore server-only packages
+    // Client: ignore server-only packages so they are never bundled in the browser.
+    // Server: Next.js serverExternalPackages + externals below handle runtime resolution.
     if (!isServer) {
       config.plugins.push(
-        // Ignore server-only Babylon packages in client builds
-        new webpack.IgnorePlugin({
-          resourceRegExp: /^@babylon\/(api|db|contracts|training|agents)$/,
-        }),
-        // Ignore server-only npm packages
         new webpack.IgnorePlugin({
           resourceRegExp:
-            /^(ioredis|postgres|electron-fetch|agent0-sdk|ipfs-http-client)$/,
-        }),
-        // Ignore @elizaos/core for client builds (it imports node:fs)
-        new webpack.IgnorePlugin({
-          resourceRegExp: /^@elizaos\/core$/,
+            /^@babylon\/(api|db|training|agents)(\/.*)?$|^(ioredis|postgres|electron-fetch|ipfs-http-client)$|^@elizaos\/core$/,
         })
       );
     }
 
-    // Common plugins for both server and client
+    // Common: fallbacks for electron/electron-fetch (replaced above) and optional swagger-jsdoc
     config.plugins.push(
       new webpack.IgnorePlugin({
-        resourceRegExp: /^electron$/,
-        contextRegExp: /node_modules/,
-      }),
-      // Ignore electron-fetch as a fallback if replacement doesn't work
-      new webpack.IgnorePlugin({
-        resourceRegExp: /^electron-fetch$/,
-        contextRegExp: /node_modules/,
-      }),
-      // Ignore swagger-jsdoc - it's an optional dev dependency for docs generation
-      // The code handles its absence gracefully, but webpack still tries to resolve it
-      // Don't restrict to node_modules context since it might be imported from our packages
-      new webpack.IgnorePlugin({
-        resourceRegExp: /^swagger-jsdoc$/,
-      }),
-      // Ignore postgres package for client-side builds only
-      // postgres requires Node.js built-ins (net, tls, crypto, stream) not available in browser
-      ...(isServer
-        ? []
-        : [
-            new webpack.IgnorePlugin({
-              resourceRegExp: /^postgres$/,
-              contextRegExp: /node_modules/,
-            }),
-          ])
+        resourceRegExp: /^(electron|electron-fetch|swagger-jsdoc)$/,
+      })
     );
 
     // Configure externals for optional dependencies and server-only packages
@@ -255,13 +251,13 @@ const nextConfig: NextConfig = {
       // to externalize them so they're resolved at runtime from node_modules
       // NOTE: Do NOT externalize @babylon/* packages - they are TypeScript source files
       // and must be transpiled by webpack via transpilePackages
+      // NOTE: @elizaos/core intentionally excluded - it's ESM-only and must be bundled
       const serverExternalPackagesList = [
         'postgres',
         'drizzle-orm',
         'drizzle-orm/postgres-js',
         'ioredis',
         'swagger-jsdoc',
-        '@elizaos/core',
       ];
 
       if (!Array.isArray(config.externals)) {
@@ -330,7 +326,6 @@ const nextConfig: NextConfig = {
         'ioredis',
         '@babylon/db',
         '@babylon/api',
-        '@babylon/contracts',
         'swagger-jsdoc',
       ];
 
@@ -396,15 +391,6 @@ const nextConfig: NextConfig = {
       }
     }
 
-    // Ignore postgres package completely for client-side builds
-    // postgres requires Node.js built-ins (net, tls, crypto, stream) not available in browser
-    config.plugins.push(
-      new webpack.IgnorePlugin({
-        resourceRegExp: /^postgres$/,
-        contextRegExp: /node_modules/,
-      })
-    );
-
     return config;
   },
 };
@@ -420,9 +406,9 @@ const sentryWebpackPluginOptions = {
   // For all available options, see:
   // https://www.npmjs.com/package/@sentry/webpack-plugin#options
 
-  org: 'symbaiex',
+  org: process.env.SENTRY_ORG ?? 'eliza-uv',
 
-  project: 'babylon',
+  project: process.env.SENTRY_PROJECT ?? 'babylon',
 
   // Auth token for uploading source maps and creating releases
   // Set SENTRY_AUTH_TOKEN in environment to enable source map uploads
@@ -440,8 +426,15 @@ const sentryWebpackPluginOptions = {
   // For all available options, see:
   // https://docs.sentry.io/platforms/javascript/guides/nextjs/manual-setup/
 
-  // Upload a larger set of source maps for prettier stack traces (increases build time)
-  widenClientFileUpload: true,
+  // Keep uploads narrow so Sentry source maps don't bloat Vercel build artifacts.
+  widenClientFileUpload: false,
+
+  sourcemaps: {
+    // Vercel's serverless size limit applies to deployed output, not just runtime code.
+    // Remove uploaded source maps from `.next` after Sentry has them to keep the
+    // production build path aligned with preview output size.
+    deleteSourcemapsAfterUpload: true,
+  },
 
   // Route browser requests to Sentry through a Next.js rewrite to circumvent ad-blockers.
   // This can increase your server load as well as your hosting bill.
@@ -461,7 +454,8 @@ const sentryWebpackPluginOptions = {
 
 // Wrap Sentry config in async function to handle top-level await
 async function getConfig(): Promise<NextConfig> {
-  let resolvedConfig: NextConfig = nextConfig;
+  // Apply Serwist PWA wrapper first
+  let resolvedConfig: NextConfig = withSerwist(nextConfig);
 
   // If we're not uploading sourcemaps/releases, don't wrap the config at all.
   // This prevents local builds from invoking Sentry CLI when a stale token is present.
@@ -471,7 +465,10 @@ async function getConfig(): Promise<NextConfig> {
 
   try {
     const { withSentryConfig } = await import('@sentry/nextjs');
-    resolvedConfig = withSentryConfig(nextConfig, sentryWebpackPluginOptions);
+    resolvedConfig = withSentryConfig(
+      resolvedConfig,
+      sentryWebpackPluginOptions
+    );
   } catch (error) {
     const shouldLog = process.env.CI || process.env.NODE_ENV !== 'production';
     if (shouldLog) {

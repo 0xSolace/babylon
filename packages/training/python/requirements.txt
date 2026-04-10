@@ -20,6 +20,12 @@ asyncpg>=0.29.0
 psycopg2-binary>=2.9.9
 
 # ===========================================
+# HuggingFace (for datasets and model push)
+# ===========================================
+datasets>=2.14.7  # CVE-2023-47248 fix
+huggingface-hub>=0.20.0
+
+# ===========================================
 # HTTP/API
 # ===========================================
 httpx>=0.26.0
@@ -64,11 +70,13 @@ jsonlines>=4.0.0
 # OPTIONAL: Local Training (GPU/CPU)
 # ============================================
 # Only needed if NOT using Tinker for training
-# Uncomment if you need local fallback:
+# Install `requirements-local-training.txt` if you need the full local stack:
 #
 # torch>=2.1.0
 # transformers>=4.36.0
 # peft>=0.8.0
+# bitsandbytes>=0.49.2
+# apollo-torch>=1.0.3
 # vllm>=0.3.0
 # accelerate>=1.12.0
 

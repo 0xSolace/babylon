@@ -5,6 +5,7 @@ import { cn } from '@babylon/shared';
 import { Frown, Heart, Laugh } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Skeleton } from '@/components/shared/Skeleton';
+import { useAuth } from '@/hooks/useAuth';
 import { useSocialTracking } from '@/hooks/usePostHog';
 import { useInteractionStore } from '@/stores/interactionStore';
 
@@ -91,7 +92,7 @@ type ReactionType = keyof typeof REACTION_TYPES;
  * ```
  */
 const sizeClasses = {
-  sm: 'h-8 px-2 text-xs gap-1',
+  sm: 'text-xs gap-1',
   md: 'h-10 px-3 text-sm gap-1.5',
   lg: 'h-12 px-4 text-base gap-2',
 };
@@ -117,7 +118,9 @@ export function LikeButton({
   size = 'md',
   showCount = true,
   className,
+  onLikeChange,
 }: LikeButtonProps & { initialReactionType?: ReactionType }) {
+  const { authenticated, login } = useAuth();
   // Ensure size is properly typed for index access
   const sizeKey: 'sm' | 'md' | 'lg' = size;
   const [currentReaction, setCurrentReaction] =
@@ -157,6 +160,10 @@ export function LikeButton({
   }, []);
 
   const handleClick = async () => {
+    if (!authenticated) {
+      login();
+      return;
+    }
     // Trigger animation
     setIsAnimating(true);
     setTimeout(() => setIsAnimating(false), 300);
@@ -168,12 +175,17 @@ export function LikeButton({
       if (willBeLiked) {
         trackPostLike(targetId, true);
       }
+      onLikeChange?.(willBeLiked);
     } else {
       await toggleCommentLike(targetId);
     }
   };
 
   const handleReactionSelect = async (reactionType: ReactionType) => {
+    if (!authenticated) {
+      login();
+      return;
+    }
     setShowReactionPicker(false);
     setCurrentReaction(reactionType);
 
@@ -181,8 +193,12 @@ export function LikeButton({
     setIsAnimating(true);
     setTimeout(() => setIsAnimating(false), 300);
 
+    // If already liked, changing reaction type doesn't toggle the like state
+    if (isLiked) return;
+
     if (targetType === 'post') {
       await toggleLike(targetId);
+      onLikeChange?.(true);
     } else {
       await toggleCommentLike(targetId);
     }

@@ -16,7 +16,11 @@
 import { closeDatabase, count, db, nftSnapshot, users } from '@babylon/db';
 import { nanoid } from 'nanoid';
 
-async function main(): Promise<void> {
+export async function runLocalNftSnapshotSeed(options?: {
+  closeAfter?: boolean;
+}): Promise<void> {
+  const closeAfter = options?.closeAfter ?? true;
+
   console.log('[SeedNFTSnapshot] Creating local development NFT snapshots...');
 
   // Check if snapshots already exist
@@ -25,7 +29,9 @@ async function main(): Promise<void> {
     console.log(
       `[SeedNFTSnapshot] ✅ Snapshots already exist (${existingCount?.count} entries)`
     );
-    await closeDatabase();
+    if (closeAfter) {
+      await closeDatabase();
+    }
     return;
   }
 
@@ -43,7 +49,9 @@ async function main(): Promise<void> {
     console.log(
       '[SeedNFTSnapshot] No users found in database. Run db:seed first.'
     );
-    await closeDatabase();
+    if (closeAfter) {
+      await closeDatabase();
+    }
     return;
   }
 
@@ -85,10 +93,18 @@ async function main(): Promise<void> {
   console.log(`[SeedNFTSnapshot] ✅ Created ${created} snapshot entries`);
   console.log('[SeedNFTSnapshot] All users are now eligible to mint NFTs!');
 
-  await closeDatabase();
+  if (closeAfter) {
+    await closeDatabase();
+  }
 }
 
-main().catch((error) => {
-  console.error('[SeedNFTSnapshot] Failed:', error);
-  process.exit(1);
-});
+async function main(): Promise<void> {
+  await runLocalNftSnapshotSeed({ closeAfter: true });
+}
+
+if (import.meta.main) {
+  main().catch((error) => {
+    console.error('[SeedNFTSnapshot] Failed:', error);
+    process.exit(1);
+  });
+}

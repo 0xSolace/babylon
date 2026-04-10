@@ -41,8 +41,8 @@
  * ```
  */
 
-import { verifyCronAuth } from '@babylon/api';
-import { logger } from '@babylon/shared';
+import { verifyCronAuth, withErrorHandling } from '@babylon/api';
+import { logger, toISO } from '@babylon/shared';
 import { automationPipeline, rulerScoringService } from '@babylon/training';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -53,7 +53,7 @@ export const maxDuration = 300; // 5 minutes
 /**
  * Hourly training check and RULER scoring
  */
-export async function GET(request: NextRequest) {
+export const GET = withErrorHandling(async function GET(request: NextRequest) {
   // Security: Verify cron authorization
   if (!verifyCronAuth(request, { jobName: 'TrainingCheckCron' })) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -85,7 +85,7 @@ export async function GET(request: NextRequest) {
   const now = new Date();
   for (let hoursAgo = 0; hoursAgo < 6; hoursAgo++) {
     const windowDate = new Date(now.getTime() - hoursAgo * 60 * 60 * 1000);
-    const windowId = windowDate.toISOString().slice(0, 13) + ':00';
+    const windowId = toISO(windowDate).slice(0, 13) + ':00';
 
     const scored = await rulerScoringService.scoreWindow(windowId);
     if (scored > 0) {
@@ -141,4 +141,4 @@ export async function GET(request: NextRequest) {
     duration: `${duration}ms`,
     ...results,
   });
-}
+});

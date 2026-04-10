@@ -1,6 +1,11 @@
 'use client';
 
-import { cn } from '@babylon/shared';
+import {
+  cn,
+  getAgentDefaultProfileImageUrl,
+  parseAgentPresetProfileIndex,
+  TOTAL_AGENT_DEFAULT_PROFILE_PICTURES,
+} from '@babylon/shared';
 import {
   AlertCircle,
   Check,
@@ -12,11 +17,10 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { useAuth } from '@/hooks/useAuth';
+import { uploadImage, validateImageFile } from '@/utils/upload-image';
 import type { ProfileFormData } from '../hooks/useAgentForm';
 import { useAgentUsernameCheck } from '../hooks/useAgentUsernameCheck';
 
-const TOTAL_PROFILE_PICTURES = 100;
 const TOTAL_BANNERS = 100;
 const MAX_BIO_LENGTH = 160;
 
@@ -25,6 +29,8 @@ interface AgentSetupModalProps {
   onClose: () => void;
   profileData: ProfileFormData;
   onSave: (data: ProfileFormData) => void;
+  /** When true, hides the close button to prevent no-op clicks */
+  hideCloseButton?: boolean;
 }
 
 export function AgentSetupModal({
@@ -32,8 +38,8 @@ export function AgentSetupModal({
   onClose,
   profileData,
   onSave,
+  hideCloseButton = false,
 }: AgentSetupModalProps) {
-  const { getAccessToken } = useAuth();
   const [localData, setLocalData] = useState<ProfileFormData>(profileData);
   const bioInitialized = useRef(false);
 
@@ -60,13 +66,15 @@ export function AgentSetupModal({
   // Username availability check
   const { usernameStatus, usernameSuggestion, isCheckingUsername, retryCheck } =
     useAgentUsernameCheck(localData.username);
-  const [uploadingImage, setUploadingImage] = useState<
-    'profile' | 'cover' | null
-  >(null);
+  const [uploadedProfileFile, setUploadedProfileFile] = useState<File | null>(
+    null
+  );
+  const [uploadedBannerFile, setUploadedBannerFile] = useState<File | null>(
+    null
+  );
+  const [isUploading, setIsUploading] = useState(false);
   const [profilePictureIndex, setProfilePictureIndex] = useState(() => {
-    // Extract index from URL if it's a local asset
-    const match = profileData.profileImageUrl?.match(/profile-(\d+)\.jpg/);
-    return match?.[1] ? parseInt(match[1], 10) : 1;
+    return parseAgentPresetProfileIndex(profileData.profileImageUrl) ?? 1;
   });
   const [bannerIndex, setBannerIndex] = useState(() => {
     // Extract index from URL if it's a local asset
@@ -93,7 +101,7 @@ export function AgentSetupModal({
   const currentProfileImage = useMemo(() => {
     return (
       uploadedProfileImage ||
-      `/assets/user-profiles/profile-${profilePictureIndex}.jpg`
+      getAgentDefaultProfileImageUrl(profilePictureIndex)
     );
   }, [uploadedProfileImage, profilePictureIndex]);
 
@@ -104,17 +112,19 @@ export function AgentSetupModal({
   // Cycle profile picture
   const cycleProfilePicture = useCallback((direction: 'next' | 'prev') => {
     setUploadedProfileImage(null);
+    setUploadedProfileFile(null);
     setProfilePictureIndex((prev) => {
       if (direction === 'next') {
-        return prev >= TOTAL_PROFILE_PICTURES ? 1 : prev + 1;
+        return prev >= TOTAL_AGENT_DEFAULT_PROFILE_PICTURES ? 1 : prev + 1;
       }
-      return prev <= 1 ? TOTAL_PROFILE_PICTURES : prev - 1;
+      return prev <= 1 ? TOTAL_AGENT_DEFAULT_PROFILE_PICTURES : prev - 1;
     });
   }, []);
 
   // Cycle banner
   const cycleBanner = useCallback((direction: 'next' | 'prev') => {
     setUploadedBanner(null);
+    setUploadedBannerFile(null);
     setBannerIndex((prev) => {
       if (direction === 'next') {
         return prev >= TOTAL_BANNERS ? 1 : prev + 1;
@@ -123,84 +133,45 @@ export function AgentSetupModal({
     });
   }, []);
 
-  const handleImageUpload = useCallback(
-    async (type: 'profile' | 'cover', file: File) => {
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error('Image must be smaller than 5MB');
-        return;
-      }
-
-      if (
-        !['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(
-          file.type
-        )
-      ) {
-        toast.error('Please upload a valid image file');
-        return;
-      }
-
-      setUploadingImage(type);
-
-      const token = await getAccessToken();
-      if (!token) {
-        toast.error('Authentication required');
-        setUploadingImage(null);
-        return;
-      }
-
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append(
-        'type',
-        type === 'profile' ? 'profileImage' : 'coverImage'
-      );
-
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        toast.error(errorData.error || 'Upload failed');
-        setUploadingImage(null);
-        return;
-      }
-
-      const result = await response.json();
-      if (type === 'profile') {
-        setUploadedProfileImage(result.url);
-      } else {
-        setUploadedBanner(result.url);
-      }
-      toast.success(
-        `${type === 'profile' ? 'Profile' : 'Cover'} image uploaded`
-      );
-      setUploadingImage(null);
-    },
-    [getAccessToken]
-  );
-
   const handleProfileImageUpload = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
       if (!file) return;
-      handleImageUpload('profile', file);
+      const validationError = validateImageFile(file);
+      if (validationError) {
+        toast.error(validationError);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setUploadedProfileFile(file);
+        setUploadedProfileImage(reader.result as string);
+      };
+      reader.readAsDataURL(file);
     },
-    [handleImageUpload]
+    []
   );
 
   const handleBannerUpload = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
       if (!file) return;
-      handleImageUpload('cover', file);
+      const validationError = validateImageFile(file);
+      if (validationError) {
+        toast.error(validationError);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setUploadedBannerFile(file);
+        setUploadedBanner(reader.result as string);
+      };
+      reader.readAsDataURL(file);
     },
-    [handleImageUpload]
+    []
   );
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (!localData.username.trim()) {
       toast.error('Username is required');
       return;
@@ -217,13 +188,38 @@ export function AgentSetupModal({
       toast.error('Display name is required');
       return;
     }
-    onSave({
-      ...localData,
-      profileImageUrl: currentProfileImage,
-      coverImageUrl: currentBanner,
-    });
-    // Note: onSave handler in page.tsx closes the modal via setShowProfileModal(false)
-    // Don't call onClose() here as that redirects away
+
+    setIsUploading(true);
+    try {
+      let profileImageUrl = currentProfileImage;
+      let coverImageUrl = currentBanner;
+
+      if (uploadedProfileFile) {
+        try {
+          profileImageUrl = await uploadImage(uploadedProfileFile, 'profile');
+        } catch {
+          toast.error('Failed to upload profile image');
+          return;
+        }
+      }
+
+      if (uploadedBannerFile) {
+        try {
+          coverImageUrl = await uploadImage(uploadedBannerFile, 'cover');
+        } catch {
+          toast.error('Failed to upload cover image');
+          return;
+        }
+      }
+
+      onSave({
+        ...localData,
+        profileImageUrl,
+        coverImageUrl,
+      });
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const handleUseSuggestion = useCallback(() => {
@@ -237,132 +233,159 @@ export function AgentSetupModal({
     !localData.username.trim() ||
     localData.username.length < 3 ||
     usernameStatus !== 'available' ||
-    isCheckingUsername;
+    isCheckingUsername ||
+    isUploading;
+
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  // Escape to close
+  useEffect(() => {
+    if (!isOpen || hideCloseButton) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, hideCloseButton, onClose]);
+
+  // Focus first focusable element on open
+  useEffect(() => {
+    if (!isOpen || !dialogRef.current) return;
+    const firstFocusable = dialogRef.current.querySelector<HTMLElement>(
+      'input, button:not([disabled]), textarea, select, [tabindex]:not([tabindex="-1"])'
+    );
+    firstFocusable?.focus();
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-0 backdrop-blur-sm md:p-4">
-      <div className="flex h-full w-full flex-col bg-background md:h-auto md:max-h-[90vh] md:max-w-2xl md:rounded-lg md:border md:border-border">
-        {/* Header */}
-        <div className="sticky top-0 z-10 flex items-center justify-between border-border border-b bg-background px-4 py-3">
-          <div className="flex min-w-0 flex-1 items-center gap-3">
-            <button
-              onClick={onClose}
-              className="shrink-0 rounded-full p-2 transition-colors hover:bg-muted"
-              aria-label="Close"
-            >
-              <XIcon className="h-5 w-5" />
-            </button>
-            <h2 className="truncate font-bold text-lg">Set Up Your Agent</h2>
-          </div>
-          <button
-            onClick={handleContinue}
-            disabled={isContinueDisabled}
-            className={cn(
-              'shrink-0 rounded-lg bg-[#0066FF] px-4 py-2 font-medium text-primary-foreground text-sm transition-colors hover:bg-[#2952d9]',
-              'disabled:cursor-not-allowed disabled:opacity-50'
+    <div
+      className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-0 backdrop-blur-sm md:p-4"
+      onClick={!hideCloseButton ? onClose : undefined}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="agent-setup-title"
+        className="relative flex h-full w-full flex-col bg-background md:h-auto md:max-h-[90vh] md:w-auto md:min-w-[600px] md:max-w-3xl md:rounded-lg md:border md:border-border"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header - fixed */}
+        <div className="shrink-0 border-border border-b px-4 py-3 sm:px-6 sm:py-4">
+          <div className="flex items-center justify-between">
+            <h2 id="agent-setup-title" className="font-bold text-lg">
+              Set Up Your Agent
+            </h2>
+            {!hideCloseButton && (
+              <button
+                onClick={onClose}
+                className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                aria-label="Close"
+              >
+                <XIcon className="h-5 w-5" />
+              </button>
             )}
-          >
-            Continue
-          </button>
+          </div>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto overscroll-contain">
-          {/* Cover Image Section */}
-          <div className="space-y-2 p-4">
-            <label className="block font-medium text-sm">Profile Banner</label>
-            <div className="group relative h-40 overflow-hidden rounded-lg bg-muted">
+        {/* Content - scrollable */}
+        <div className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
+          {/* Profile Images Section */}
+          <div className="relative mb-14 sm:mb-16">
+            {/* Banner */}
+            <div className="group relative h-24 overflow-hidden rounded-lg bg-muted sm:h-32">
               <img
                 src={currentBanner}
                 alt="Profile banner"
                 className="h-full w-full object-cover"
               />
-              <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
+              <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/40 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
                 <button
                   type="button"
                   onClick={() => cycleBanner('prev')}
-                  className="rounded-lg bg-background/80 p-2 hover:bg-background"
+                  aria-label="Previous banner"
+                  className="rounded-full bg-background/90 p-1.5 hover:bg-background sm:p-2"
                 >
-                  <ChevronLeft className="h-5 w-5" />
+                  <ChevronLeft className="h-4 w-4" />
                 </button>
-                <label className="cursor-pointer rounded-lg bg-background/80 p-2 hover:bg-background">
-                  <Upload className="h-5 w-5" />
+                <label
+                  className="cursor-pointer rounded-full bg-background/90 p-1.5 hover:bg-background sm:p-2"
+                  aria-label="Upload banner image"
+                >
+                  <Upload className="h-4 w-4" />
                   <input
                     ref={coverInputRef}
                     type="file"
                     accept="image/*"
                     onChange={handleBannerUpload}
                     className="hidden"
-                    disabled={uploadingImage === 'cover'}
                   />
                 </label>
                 <button
                   type="button"
                   onClick={() => cycleBanner('next')}
-                  className="rounded-lg bg-background/80 p-2 hover:bg-background"
-                >
-                  <ChevronRight className="h-5 w-5" />
-                </button>
-              </div>
-              {uploadingImage === 'cover' && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                  <span className="text-sm text-white">Uploading...</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Profile Image Section */}
-          <div className="flex items-start gap-4 px-4 pb-6">
-            <div className="group relative h-24 w-24 shrink-0 overflow-hidden rounded-full bg-muted">
-              <img
-                src={currentProfileImage}
-                alt="Profile picture"
-                className="h-full w-full object-cover"
-              />
-              <div className="absolute inset-0 flex items-center justify-center gap-1 bg-black/50 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100">
-                <button
-                  type="button"
-                  onClick={() => cycleProfilePicture('prev')}
-                  className="rounded-lg bg-background/80 p-1.5 hover:bg-background"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </button>
-                <label className="cursor-pointer rounded-lg bg-background/80 p-1.5 hover:bg-background">
-                  <Upload className="h-4 w-4" />
-                  <input
-                    ref={profileInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleProfileImageUpload}
-                    className="hidden"
-                    disabled={uploadingImage === 'profile'}
-                  />
-                </label>
-                <button
-                  type="button"
-                  onClick={() => cycleProfilePicture('next')}
-                  className="rounded-lg bg-background/80 p-1.5 hover:bg-background"
+                  aria-label="Next banner"
+                  className="rounded-full bg-background/90 p-1.5 hover:bg-background sm:p-2"
                 >
                   <ChevronRight className="h-4 w-4" />
                 </button>
               </div>
-              {uploadingImage === 'profile' && (
-                <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50">
-                  <span className="text-white text-xs">...</span>
-                </div>
-              )}
             </div>
-            <div className="flex-1 pt-2 text-muted-foreground text-xs">
-              <p>Use arrows to browse or click upload icon for custom image</p>
-              <p>Max 5MB, JPG/PNG/GIF/WebP</p>
+
+            {/* Avatar - overlapping banner */}
+            <div className="-bottom-12 sm:-bottom-14 absolute left-3 sm:left-4">
+              <div className="group relative h-24 w-24 overflow-hidden rounded-full border-4 border-background bg-muted sm:h-28 sm:w-28">
+                <img
+                  src={currentProfileImage}
+                  alt="Profile picture"
+                  className="h-full w-full object-cover"
+                />
+                <div className="absolute inset-0 flex items-center justify-center gap-1 bg-black/40 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
+                  <button
+                    type="button"
+                    onClick={() => cycleProfilePicture('prev')}
+                    aria-label="Previous avatar"
+                    className="rounded-full bg-background/90 p-1 hover:bg-background sm:p-1.5"
+                  >
+                    <ChevronLeft className="h-3 w-3 sm:h-4 sm:w-4" />
+                  </button>
+                  <label
+                    className="cursor-pointer rounded-full bg-background/90 p-1 hover:bg-background sm:p-1.5"
+                    aria-label="Upload avatar"
+                  >
+                    <Upload className="h-3 w-3 sm:h-4 sm:w-4" />
+                    <input
+                      ref={profileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleProfileImageUpload}
+                      className="hidden"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => cycleProfilePicture('next')}
+                    aria-label="Next avatar"
+                    className="rounded-full bg-background/90 p-1 hover:bg-background sm:p-1.5"
+                  >
+                    <ChevronRight className="h-3 w-3 sm:h-4 sm:w-4" />
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
+          {/* Image upload info */}
+          <p className="mb-4 text-muted-foreground text-xs">
+            Tap images to browse or upload custom.
+            <br />
+            Max 5MB, JPG/PNG/GIF/WebP.
+          </p>
+
           {/* Form Fields */}
-          <div className="space-y-5 px-4 pb-6">
+          <div className="space-y-5">
             {/* Username */}
             <div>
               <label
@@ -512,6 +535,28 @@ export function AgentSetupModal({
               </p>
             </div>
           </div>
+        </div>
+
+        {/* Footer - fixed */}
+        <div className="shrink-0 border-border border-t px-4 py-3 sm:px-6 sm:py-4">
+          <button
+            onClick={handleContinue}
+            disabled={isContinueDisabled}
+            className={cn(
+              'flex w-full items-center justify-center gap-2 rounded-xl px-4 py-4 font-semibold transition-all',
+              'bg-[#0066FF] text-primary-foreground hover:bg-[#0055DD] hover:shadow-lg active:scale-[0.98]',
+              'disabled:cursor-not-allowed disabled:opacity-50'
+            )}
+          >
+            {isUploading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Uploading…
+              </>
+            ) : (
+              'Continue'
+            )}
+          </button>
         </div>
       </div>
     </div>

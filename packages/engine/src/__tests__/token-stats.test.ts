@@ -9,7 +9,7 @@ import {
   getTokenUsageCallback,
   setTokenUsageCallback,
 } from '../llm/openai-client';
-import { TokenStatsService } from '../services/token-stats-service';
+import { tokenStatsService } from '../services/token-stats-service';
 import {
   calculateEstimatedCost,
   TOKEN_COST_PER_MILLION,
@@ -17,14 +17,18 @@ import {
 
 describe('Token Stats Types', () => {
   test('TOKEN_COST_PER_MILLION has expected models', () => {
-    expect(TOKEN_COST_PER_MILLION['qwen/qwen3-32b']).toBeDefined();
+    expect(TOKEN_COST_PER_MILLION['openai/gpt-oss-120b']).toBeDefined();
     expect(TOKEN_COST_PER_MILLION['claude-sonnet-4-5']).toBeDefined();
     expect(TOKEN_COST_PER_MILLION['gpt-5.1']).toBeDefined();
     expect(TOKEN_COST_PER_MILLION.default).toBeDefined();
   });
 
   test('calculateEstimatedCost calculates correctly', () => {
-    const result = calculateEstimatedCost('qwen/qwen3-32b', 1_000_000, 500_000);
+    const result = calculateEstimatedCost(
+      'openai/gpt-oss-120b',
+      1_000_000,
+      500_000
+    );
 
     expect(result.inputCostUSD).toBeCloseTo(0.3, 2); // $0.30 per 1M input tokens
     expect(result.outputCostUSD).toBeCloseTo(0.15, 2); // $0.30 per 1M * 0.5M
@@ -44,38 +48,38 @@ describe('Token Stats Types', () => {
   });
 });
 
-describe('TokenStatsService', () => {
+describe('tokenStatsService', () => {
   beforeEach(() => {
-    TokenStatsService.clearAll();
+    tokenStatsService.clearAll();
   });
 
   afterEach(() => {
-    TokenStatsService.clearAll();
+    tokenStatsService.clearAll();
   });
 
   test('startTick begins collection', () => {
-    expect(TokenStatsService.isTickInProgress()).toBe(false);
+    expect(tokenStatsService.isTickInProgress()).toBe(false);
 
-    const tickId = TokenStatsService.startTick('test-tick-1');
+    const tickId = tokenStatsService.startTick('test-tick-1');
 
     expect(tickId).toBe('test-tick-1');
-    expect(TokenStatsService.isTickInProgress()).toBe(true);
+    expect(tokenStatsService.isTickInProgress()).toBe(true);
   });
 
   test('endTick returns statistics', () => {
-    TokenStatsService.startTick('test-tick-2');
+    tokenStatsService.startTick('test-tick-2');
 
-    const stats = TokenStatsService.endTick();
+    const stats = tokenStatsService.endTick();
 
     expect(stats).not.toBeNull();
     expect(stats?.tickId).toBe('test-tick-2');
     expect(stats?.totalCalls).toBe(0);
     expect(stats?.totalTokens).toBe(0);
-    expect(TokenStatsService.isTickInProgress()).toBe(false);
+    expect(tokenStatsService.isTickInProgress()).toBe(false);
   });
 
   test('callback collects LLM calls', () => {
-    TokenStatsService.startTick('test-tick-3');
+    tokenStatsService.startTick('test-tick-3');
 
     // Simulate an LLM call via the callback
     const callback = getTokenUsageCallback();
@@ -83,7 +87,7 @@ describe('TokenStatsService', () => {
 
     callback?.({
       provider: 'groq',
-      model: 'qwen/qwen3-32b',
+      model: 'openai/gpt-oss-120b',
       inputTokens: 1000,
       outputTokens: 500,
       totalTokens: 1500,
@@ -92,30 +96,30 @@ describe('TokenStatsService', () => {
       success: true,
     });
 
-    const currentStats = TokenStatsService.getCurrentStats();
+    const currentStats = tokenStatsService.getCurrentStats();
     expect(currentStats).not.toBeNull();
     expect(currentStats?.totalCalls).toBe(1);
     expect(currentStats?.totalInputTokens).toBe(1000);
     expect(currentStats?.totalOutputTokens).toBe(500);
     expect(currentStats?.totalTokens).toBe(1500);
 
-    const finalStats = TokenStatsService.endTick();
+    const finalStats = tokenStatsService.endTick();
     expect(finalStats?.totalCalls).toBe(1);
     expect(finalStats?.byPromptType).toHaveLength(1);
     expect(finalStats?.byPromptType[0]?.promptType).toBe('test-prompt');
     expect(finalStats?.byModel).toHaveLength(1);
-    expect(finalStats?.byModel[0]?.model).toBe('qwen/qwen3-32b');
+    expect(finalStats?.byModel[0]?.model).toBe('openai/gpt-oss-120b');
   });
 
   test('multiple calls aggregate correctly', () => {
-    TokenStatsService.startTick('test-tick-4');
+    tokenStatsService.startTick('test-tick-4');
 
     const callback = getTokenUsageCallback();
 
     // Simulate multiple calls
     callback?.({
       provider: 'groq',
-      model: 'qwen/qwen3-32b',
+      model: 'openai/gpt-oss-120b',
       inputTokens: 1000,
       outputTokens: 500,
       totalTokens: 1500,
@@ -126,7 +130,7 @@ describe('TokenStatsService', () => {
 
     callback?.({
       provider: 'groq',
-      model: 'qwen/qwen3-32b',
+      model: 'openai/gpt-oss-120b',
       inputTokens: 2000,
       outputTokens: 800,
       totalTokens: 2800,
@@ -146,7 +150,7 @@ describe('TokenStatsService', () => {
       success: true,
     });
 
-    const stats = TokenStatsService.endTick();
+    const stats = tokenStatsService.endTick();
 
     expect(stats?.totalCalls).toBe(3);
     expect(stats?.totalInputTokens).toBe(3500);
@@ -163,17 +167,19 @@ describe('TokenStatsService', () => {
 
     // Check model aggregation
     expect(stats?.byModel).toHaveLength(2);
-    const qwen = stats?.byModel.find((m) => m.model === 'qwen/qwen3-32b');
-    expect(qwen?.callCount).toBe(2);
-    expect(qwen?.provider).toBe('groq');
+    const gptOss = stats?.byModel.find(
+      (m) => m.model === 'openai/gpt-oss-120b'
+    );
+    expect(gptOss?.callCount).toBe(2);
+    expect(gptOss?.provider).toBe('groq');
   });
 
   test('getSummary aggregates multiple ticks', () => {
     // Run first tick
-    TokenStatsService.startTick('tick-1');
+    tokenStatsService.startTick('tick-1');
     getTokenUsageCallback()?.({
       provider: 'groq',
-      model: 'qwen/qwen3-32b',
+      model: 'openai/gpt-oss-120b',
       inputTokens: 1000,
       outputTokens: 500,
       totalTokens: 1500,
@@ -181,13 +187,13 @@ describe('TokenStatsService', () => {
       durationMs: 100,
       success: true,
     });
-    TokenStatsService.endTick();
+    tokenStatsService.endTick();
 
     // Run second tick
-    TokenStatsService.startTick('tick-2');
+    tokenStatsService.startTick('tick-2');
     getTokenUsageCallback()?.({
       provider: 'groq',
-      model: 'qwen/qwen3-32b',
+      model: 'openai/gpt-oss-120b',
       inputTokens: 2000,
       outputTokens: 1000,
       totalTokens: 3000,
@@ -195,9 +201,9 @@ describe('TokenStatsService', () => {
       durationMs: 150,
       success: true,
     });
-    TokenStatsService.endTick();
+    tokenStatsService.endTick();
 
-    const summary = TokenStatsService.getSummary(10);
+    const summary = tokenStatsService.getSummary(10);
 
     expect(summary).not.toBeNull();
     expect(summary?.tickCount).toBe(2);
@@ -211,13 +217,13 @@ describe('TokenStatsService', () => {
   });
 
   test('failed calls are tracked', () => {
-    TokenStatsService.startTick('test-tick-5');
+    tokenStatsService.startTick('test-tick-5');
 
     const callback = getTokenUsageCallback();
 
     callback?.({
       provider: 'groq',
-      model: 'qwen/qwen3-32b',
+      model: 'openai/gpt-oss-120b',
       inputTokens: 0,
       outputTokens: 0,
       totalTokens: 0,
@@ -227,7 +233,7 @@ describe('TokenStatsService', () => {
       error: 'Rate limit exceeded',
     });
 
-    const stats = TokenStatsService.endTick();
+    const stats = tokenStatsService.endTick();
 
     expect(stats?.totalCalls).toBe(1);
     expect(stats?.byPromptType[0]?.successRate).toBe(0);
@@ -236,10 +242,10 @@ describe('TokenStatsService', () => {
   test('recentTicks stores history', () => {
     // Run a few ticks
     for (let i = 0; i < 5; i++) {
-      TokenStatsService.startTick(`tick-${i}`);
+      tokenStatsService.startTick(`tick-${i}`);
       getTokenUsageCallback()?.({
         provider: 'groq',
-        model: 'qwen/qwen3-32b',
+        model: 'openai/gpt-oss-120b',
         inputTokens: 100 * (i + 1),
         outputTokens: 50 * (i + 1),
         totalTokens: 150 * (i + 1),
@@ -247,10 +253,10 @@ describe('TokenStatsService', () => {
         durationMs: 100,
         success: true,
       });
-      TokenStatsService.endTick();
+      tokenStatsService.endTick();
     }
 
-    const recent = TokenStatsService.getRecentTicks(3);
+    const recent = tokenStatsService.getRecentTicks(3);
 
     expect(recent).toHaveLength(3);
     // Most recent should be first

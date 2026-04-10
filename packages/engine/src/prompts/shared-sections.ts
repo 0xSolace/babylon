@@ -13,7 +13,7 @@ export const IMPORTANT_RULES = `IMPORTANT RULES:
 
 === ABSOLUTELY NO HASHTAGS ===
 NEVER use hashtags (#). Not even one. No #crypto, #AI, #breaking, #news, or any other hashtag.
-Write naturally like real social media - real influencers don't spam hashtags.
+Write naturally — no hashtag spam.
 If you include a single hashtag, your output is INVALID and will be rejected.
 
 === NO EMOJIS ===
@@ -25,11 +25,11 @@ Do not include any emoji characters. Plain text only.
 - Use @username or parody name/nickname/alias ONLY
 
 === NAME USAGE EXAMPLES (WRONG vs RIGHT) ===
-WRONG: "Elon Musk announced a new Tesla feature..."
-RIGHT: "AIlon Musk announced a new TeslAI feature..."
-
 WRONG: "Sam Altman's OpenAI released GPT-5..."
 RIGHT: "Sam AIltman's OpenAGI released SMH-9000..."
+
+WRONG: "Jensen Huang's NVIDIA keynote..."
+RIGHT: "Jensen HuAIng's NVAIDAI keynote..."
 
 WRONG: "Trump said Bitcoin will reach $200k..."
 RIGHT: "Trump Terminal said BitcAIn will reach $200k..."
@@ -41,21 +41,51 @@ DO NOT "auto-correct" parody names back to real names. The parody names ARE corr
 
 /**
  * Standard content requirements for posts.
- * Ensures posts reference specific world entities.
+ * Ensures posts reference specific world entities without forcing market references.
  */
 export const CONTENT_REQUIREMENTS = `CONTENT REQUIREMENTS:
-- MUST reference specific actors, companies, or events from WORLD CONTEXT
-- MUST mention specific actors by name (e.g., "AIlon Musk", "@ailonmusk") or companies (e.g., "TeslAI", "OpenAGI")
-- MUST reference specific markets/predictions by their exact names when relevant
-- MUST reference specific trades or market movements when relevant
+- Reference specific actors, companies, or events from WORLD CONTEXT when relevant
 - Use @username format when mentioning users (e.g., "@ailonmusk said...")
 - Avoid generic statements - be SPECIFIC about who/what/when
-- Reference current markets, predictions, or recent trades naturally`;
+- Only mention markets or predictions if YOUR character would naturally care about them
+- You can talk about ANYTHING in your domain — not everything is about trading
+- SPREAD attention across different characters — do not always default to the same actors`;
 
 /**
- * Standard world context block header.
+ * Content requirements specifically for finance/trading-focused prompts.
+ * These prompts have full market context and should reference it.
+ */
+export const CONTENT_REQUIREMENTS_MARKET = `CONTENT REQUIREMENTS:
+- MUST reference specific actors, companies, or events from WORLD CONTEXT
+- MUST mention specific actors by name (e.g., "Jensen HuAIng", "@jensenh") or companies (e.g., "OpenAGI", "NVAIDAI")
+- MUST reference specific markets/predictions by their exact names when relevant
+- Only reference trades or market data if your character's domain is finance/trading
+- Use @username format when mentioning users (e.g., "@ailonmusk said...")
+- Avoid generic statements - be SPECIFIC about who/what/when
+- Reference current markets or predictions naturally
+- SPREAD attention across different characters — do not always default to the same actors`;
+
+/**
+ * Standard world context block header (trade-free).
+ * Most feed prompts use this — trade data is only needed for finance-specific prompts.
  */
 export const WORLD_CONTEXT_HEADER = `WORLD CONTEXT:
+{{worldActors}}
+{{currentMarkets}}
+{{activePredictions}}`;
+
+/**
+ * Minimal world context header for non-market prompts.
+ * Only includes actor names for parody name reference — no market data.
+ */
+export const WORLD_CONTEXT_HEADER_MINIMAL = `WORLD CONTEXT:
+{{worldActors}}`;
+
+/**
+ * World context header with trade data included.
+ * Use only for finance-specific prompts (stock-ticker, analyst).
+ */
+export const WORLD_CONTEXT_HEADER_WITH_TRADES = `WORLD CONTEXT:
 {{worldActors}}
 {{currentMarkets}}
 {{activePredictions}}
@@ -146,13 +176,22 @@ export function getTimeOfDayEnergy(hour: number): string {
     return 'ENERGY: Morning professional - announcements, fresh start optimism';
   }
   if (hour >= 10 && hour < 15) {
-    return 'ENERGY: Peak hours - hot takes, controversy, ratio attempts';
+    return 'ENERGY: Peak hours - bold takes, controversy, strong opinions';
   }
   if (hour >= 15 && hour < 20) {
-    return "ENERGY: Afternoon - commentary on day's events, dunks on bad takes";
+    return "ENERGY: Afternoon - commentary on day's events, challenges weak arguments";
   }
   return 'ENERGY: Night - introspective, shitposting, less corporate';
 }
+
+/**
+ * No hashtags or emojis rule for professional content (articles, etc).
+ * Defense-in-depth: prompt instructs LLM, code also strips them post-generation.
+ */
+export const NO_HASHTAGS_OR_EMOJIS = `=== FORMATTING RULES ===
+- ABSOLUTELY NO HASHTAGS anywhere (no #crypto, #AI, #breaking, or ANY #tag)
+- NO EMOJIS - plain text only
+- Write like professional journalism, not social media`;
 
 /**
  * Parody name rules for game/world prompts.
@@ -160,14 +199,14 @@ export function getTimeOfDayEnergy(hour: number): string {
  */
 export const PARODY_NAME_RULES = `IMPORTANT RULES:
 - NEVER use real-world person or organization names
-- Use ONLY the exact parody names provided in the context (e.g., AIlon Musk, Sam AIltman, Mark Zuckerborg)
+- Use ONLY the exact parody names provided in the context (e.g., Sam AIltman, Jensen HuAIng, Mark Zuckerborg)
 - NEVER "correct" or change parody names - use them exactly as shown
 
 Examples of WRONG → RIGHT:
-- "Elon Musk" → "AIlon Musk"
+- "Sam Altman" → "Sam AIltman"
 - "Trump" → "Trump Terminal"
 - "OpenAI" → "OpenAGI"
-- "Bitcoin" → "BitcAIn"`;
+- "NVIDIA" → "NVAIDAI"`;
 
 /**
  * Private vs public content guidance for group chats.
@@ -339,8 +378,8 @@ export const EVENT_CONTINUITY_RULES = `=== EVENT GENERATION CONTINUITY ===
  * Repeats critical rules at the end of prompts to use recency effect.
  */
 export const FINAL_REMINDERS = `FINAL REMINDERS:
-- Use ONLY parody names from the World Actors list (AIlon Musk, TeslAI, OpenAGI, etc.)
-- NEVER use real-world names (Elon Musk, Tesla, OpenAI, etc.)
+- Use ONLY parody names from the World Actors list (Sam AIltman, Jensen HuAIng, OpenAGI, NVAIDAI, etc.)
+- NEVER use real-world names (Sam Altman, Jensen Huang, OpenAI, NVIDIA, etc.)
 - ABSOLUTELY NO HASHTAGS - not #crypto, #AI, #news, or ANY hashtag whatsoever
 - NO emojis - plain text only
 - Match each character's postStyle, voice, and postExample EXACTLY
@@ -351,7 +390,7 @@ export const FINAL_REMINDERS = `FINAL REMINDERS:
  * Quality rules for NPC posts - prevents robotic/technical content
  * Used by both engine (if needed) and agents packages
  *
- * These rules enforce social media authenticity:
+ * These rules enforce character authenticity:
  * - No analyst-speak or hedged commentary
  * - No quoting full prediction market questions
  * - Character voice must be recognizable
@@ -375,7 +414,7 @@ NEVER start consecutive posts the same way. Vary your opening style:
 
 1. Strong declarative: "X is happening." / "This changes everything."
 2. Question hook: "Why is everyone missing this?" / "What if I told you..."
-3. Commentary: "Just saw this." / "Thread on this." / "My take:"
+3. Commentary: "Just saw this." / "More on this." / "My take:"
 4. Contrarian: "Unpopular opinion:" / "Everyone celebrating is wrong."
 5. Direct observation: "The market just told us something." / "Look at this chart."
 
@@ -426,6 +465,18 @@ GOOD: "AIlon's snow cone wager"
 === VOICE MATCHING ===
 Your post must sound like YOUR character's examples, not generic AI.
 Check: Could someone identify you without seeing your name?
+
+=== CHARACTER VOICE REALISM ===
+FINANCE/TRADING characters (traders, VCs, finance people):
+- CAN use: positions, trades, +EV, alpha, slippage
+TECH characters (founders, engineers):
+- CAN use: products, launches, shipping, building
+SPORTS characters (athletes, coaches):
+- CAN use: competition, winning, sports metaphors
+POLITICAL characters:
+- CAN use: policy, regulation, power dynamics
+RULE: If NOT a finance character, do NOT use trading jargon.
+Tom BrAIdy talks about winning, not "fading positions."
 `;
 
 /**

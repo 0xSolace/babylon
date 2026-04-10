@@ -6,6 +6,14 @@ import { LatestNewsPanel } from '@/components/feed/LatestNewsPanel';
 import { MarketsPanel } from '@/components/feed/MarketsPanel';
 import { TrendingPanel } from '@/components/feed/TrendingPanel';
 
+interface WidgetSidebarProps {
+  showPortfolio?: boolean;
+  showPositions?: boolean;
+  showLatestNews?: boolean;
+  showTrending?: boolean;
+  showMarkets?: boolean;
+}
+
 /**
  * Widget sidebar component for desktop layouts.
  *
@@ -16,14 +24,18 @@ import { TrendingPanel } from '@/components/feed/TrendingPanel';
  *
  * Features:
  * - Entity search autocomplete
- * - Latest news panel
- * - Trending panel
- * - Markets panel
+ * - Latest news panel (optional)
+ * - Trending panel (optional)
+ * - Markets panel (optional)
  * - Smart sticky scrolling on XL+ screens
  *
  * @returns Widget sidebar element (hidden on screens < XL)
  */
-export function WidgetSidebar() {
+export function WidgetSidebar({
+  showLatestNews = true,
+  showTrending = true,
+  showMarkets = true,
+}: WidgetSidebarProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
@@ -57,18 +69,19 @@ export function WidgetSidebar() {
       // Check if sidebar fits in viewport
       const fitsInViewport = sidebarHeight <= viewportHeight;
 
-      // Check if NFT promo banner is visible (not dismissed)
-      const bannerDismissed = localStorage.getItem('nft-banner-dismissed');
-      const bannerOffset = bannerDismissed ? 0 : 40;
+      // Calculate the top offset dynamically from the container's viewport
+      // position so fixed positioning stays aligned with any shell content above.
+      const containerTop = container.getBoundingClientRect().top;
+      const topOffset = Math.max(0, containerTop);
 
       if (fitsInViewport) {
-        // Sidebar fits - simple sticky to top (below banner)
+        // Sidebar fits - simple sticky to the visible top offset
         inner.style.position = 'fixed';
-        inner.style.top = `${bannerOffset}px`;
+        inner.style.top = `${topOffset}px`;
         inner.style.transform = '';
       } else {
         // Sidebar is taller than viewport
-        const effectiveViewportHeight = viewportHeight - bannerOffset;
+        const effectiveViewportHeight = viewportHeight - topOffset;
 
         if (direction === 'down') {
           // Scrolling down - sidebar bottom should stick to viewport bottom
@@ -79,7 +92,7 @@ export function WidgetSidebar() {
           translateY = Math.min(scrollTop, maxTranslate);
 
           inner.style.position = 'fixed';
-          inner.style.top = `${bannerOffset}px`;
+          inner.style.top = `${topOffset}px`;
           inner.style.transform = `translateY(-${translateY}px)`;
         } else {
           // Scrolling up - keep current translation until we scroll back up enough
@@ -87,7 +100,7 @@ export function WidgetSidebar() {
           translateY = Math.min(scrollTop, maxTranslate);
 
           inner.style.position = 'fixed';
-          inner.style.top = `${bannerOffset}px`;
+          inner.style.top = `${topOffset}px`;
           inner.style.transform = `translateY(-${translateY}px)`;
         }
       }
@@ -139,17 +152,23 @@ export function WidgetSidebar() {
           />
         </div>
 
-        <div className="flex-shrink-0">
-          <LatestNewsPanel />
-        </div>
+        {showLatestNews && (
+          <div className="flex-shrink-0">
+            <LatestNewsPanel />
+          </div>
+        )}
 
-        <div className="flex-shrink-0">
-          <TrendingPanel />
-        </div>
+        {showTrending && (
+          <div className="flex-shrink-0">
+            <TrendingPanel />
+          </div>
+        )}
 
-        <div className="flex-shrink-0">
-          <MarketsPanel />
-        </div>
+        {showMarkets && (
+          <div className="flex-shrink-0">
+            <MarketsPanel />
+          </div>
+        )}
       </div>
     </div>
   );

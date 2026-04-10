@@ -45,7 +45,7 @@ const featureToConfigField: Record<
 export const toggleAutonomyAction: Action = {
   name: 'TOGGLE_AUTONOMY',
   description:
-    'Enable or disable autonomous features for the agent (trading, posting, commenting, DMs, group chats)',
+    'Enable or disable YOUR autonomous behaviors (trading, posting, commenting, DMs, group chats). When enabled, you act independently - trading on your own analysis, creating posts, responding to comments, and engaging in conversations without needing explicit commands.',
 
   parameters: {
     feature: {
@@ -59,7 +59,7 @@ export const toggleAutonomyAction: Action = {
       description: 'Whether to enable (true) or disable (false) the feature',
       required: true,
     },
-  },
+  } as unknown as Action['parameters'],
 
   examples: [
     [

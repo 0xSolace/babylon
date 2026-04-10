@@ -1,6 +1,8 @@
 'use client';
 
-import { cn } from '@babylon/shared';
+export const dynamic = 'force-dynamic';
+
+import { cn, logger } from '@babylon/shared';
 import {
   Activity,
   Bot,
@@ -9,10 +11,10 @@ import {
   TrendingUp,
   Users,
 } from 'lucide-react';
-import dynamic from 'next/dynamic';
+import nextDynamic from 'next/dynamic';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
-import { LoginButton } from '@/components/auth/LoginButton';
 import { Avatar } from '@/components/shared/Avatar';
 import { PageContainer } from '@/components/shared/PageContainer';
 import { Skeleton } from '@/components/shared/Skeleton';
@@ -20,7 +22,7 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 
 // Lazy load activity feed for performance
-const AgentActivityFeed = dynamic(
+const AgentActivityFeed = nextDynamic(
   () =>
     import('@/components/agents/AgentActivityFeed').then((m) => ({
       default: m.AgentActivityFeed,
@@ -65,7 +67,8 @@ interface Agent {
 }
 
 export default function AgentsPage() {
-  const { authenticated, ready, getAccessToken } = useAuth();
+  const router = useRouter();
+  const { authenticated, ready, getAccessToken, login } = useAuth();
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'active' | 'idle'>('all');
@@ -75,7 +78,7 @@ export default function AgentsPage() {
     const token = await getAccessToken();
 
     if (!token) {
-      console.error('No access token available');
+      logger.error('No access token available', undefined, 'AgentsPage');
       setLoading(false);
       return;
     }
@@ -99,7 +102,11 @@ export default function AgentsPage() {
         setAgents(data.agents || []);
       }
     } catch (error) {
-      console.error('Failed to fetch agents:', error);
+      logger.error(
+        'Failed to fetch agents',
+        error instanceof Error ? error : { error },
+        'AgentsPage'
+      );
     } finally {
       setLoading(false);
     }
@@ -111,22 +118,23 @@ export default function AgentsPage() {
     }
   }, [ready, authenticated, fetchAgents]);
 
+  // Redirect to /agents/team - this page is now just a redirect
+  useEffect(() => {
+    if (ready && authenticated) {
+      router.replace('/agents/team');
+    }
+  }, [ready, authenticated, router]);
+
+  // Auth required — redirect to feed and show login
+  useEffect(() => {
+    if (!ready || authenticated) return;
+    router.push('/feed');
+    const timer = setTimeout(() => login(), 500);
+    return () => clearTimeout(timer);
+  }, [ready, authenticated, router, login]);
+
   if (ready && !authenticated) {
-    return (
-      <PageContainer noPadding className="flex flex-col">
-        <div className="flex flex-1 items-center justify-center p-8">
-          <div className="max-w-md text-center">
-            <Bot className="mx-auto mb-4 h-16 w-16 text-muted-foreground" />
-            <h2 className="mb-2 font-bold text-foreground text-xl">log in</h2>
-            <p className="mb-6 text-muted-foreground">
-              Sign in to create and manage AI agents that can chat and trade
-              autonomously
-            </p>
-            <LoginButton />
-          </div>
-        </div>
-      </PageContainer>
-    );
+    return null;
   }
 
   return (
@@ -148,7 +156,7 @@ export default function AgentsPage() {
           </Link>
         </div>
 
-        {/* Command Center Card - shown when user has agents */}
+        {/* Agents Chat Card - shown when user has agents */}
         {agents.length > 0 && (
           <div className="mb-4">
             <Link href="/agents/team" className="block">
@@ -160,7 +168,7 @@ export default function AgentsPage() {
                     </div>
                     <div>
                       <h3 className="font-semibold text-foreground text-lg">
-                        Command Center
+                        Agents Chat
                       </h3>
                       <p className="text-muted-foreground text-sm">
                         Coordinate all {agents.length} agent

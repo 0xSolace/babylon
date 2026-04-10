@@ -44,6 +44,11 @@ export {
   verifyAgentCredentials,
   verifyAgentSession,
 } from './agent-auth';
+// Agent avatar idempotency (fal pipeline)
+export {
+  executeAgentAvatarOnce,
+  getCachedAgentAvatarUrl,
+} from './agents/agent-avatar-idempotency';
 // Auth Middleware
 export {
   type AuthenticationError,
@@ -68,14 +73,22 @@ export {
   getCacheStats,
   invalidateCache,
   invalidateCachePattern,
+  invalidateMarketsApiPerpsSnapshot,
+  invalidateMarketsApiPredictionsAfterUserTrade,
+  invalidateMarketsApiPredictionsList,
+  invalidateMarketsApiPredictionsListAndAllPositions,
+  invalidateMarketsApiPredictionsPositionsForUser,
+  narrativeEnrichmentKey,
   setCache,
   warmCache,
 } from './cache';
 // Cron Authentication
 export {
+  type CronHandler,
   cronUnauthorizedResponse,
   requireCronAuth,
   verifyCronAuth,
+  withCronAuth,
 } from './cron-auth';
 // Development credentials (for local testing)
 export {
@@ -87,6 +100,12 @@ export {
   isValidDevAdminToken,
   logDevCredentials,
 } from './dev-credentials';
+// Env helpers (server-only)
+export {
+  getNotificationEmailFromEnv,
+  getPrivyAppIdFromEnv,
+  getTrimmedEnv,
+} from './env';
 // Error Handler (Next.js specific)
 export {
   asyncHandler,
@@ -94,6 +113,7 @@ export {
   errorHandler,
   errorResponse,
   type RouteContext,
+  setDefaultErrorCapture,
   successResponse,
   withErrorHandling,
 } from './error-handler';
@@ -159,6 +179,7 @@ export {
 } from './query-params';
 // Rate Limiting
 export {
+  addPublicReadHeaders,
   addRateLimitHeaders,
   applyDuplicateDetection,
   applyRateLimit,
@@ -175,6 +196,9 @@ export {
   duplicateContentError,
   getDuplicateStats,
   getRateLimitStatus,
+  type PublicRateLimitKind,
+  type PublicRateLimitResult,
+  publicRateLimit,
   RATE_LIMIT_CONFIGS,
   rateLimitError,
   resetRateLimit,
@@ -196,6 +220,7 @@ export { drainOutboxBatch, enqueueOutbox } from './realtime/outbox';
 // Redis
 export {
   closeRedis,
+  ensureRedisReady,
   getRedis,
   getRedisClient,
   isRedisAvailable,
@@ -209,11 +234,29 @@ export {
 } from './redis';
 // Services
 export * from './services';
+export {
+  type AuthedPrivyUserContext,
+  getAuthedUserContextFromPrivyToken,
+  getAuthedUserContextFromPrivyTokenBundle,
+} from './services/privy/authed-user';
+export {
+  extractPrivyApiDiagnostics,
+  type PrivyApiDiagnostics,
+  redactJwtLikeTokens,
+} from './services/privy/error-diagnostics';
+// Privy (embedded wallet server-side helpers - kept for NFT mint service)
+export {
+  type PrivyUserWalletsLite,
+  pickEmbeddedEvmWallet,
+} from './services/privy/user-wallets';
 // SSE Event Broadcasting
 export {
   type AgentActivityEvent,
   broadcastAgentActivity,
   broadcastChatMessage,
+  broadcastChatMessageReaction,
+  broadcastChatTitleUpdate,
+  broadcastThinkingIndicator,
   broadcastToChannel,
   broadcastTypingIndicator,
   type CommentActivityData,
@@ -235,6 +278,7 @@ export type { ErrorLike, JsonValue, StringRecord } from './types';
 export {
   type CanonicalUser,
   type EnsureUserOptions,
+  ensureMinimalUserByIdentifier,
   ensureUserForAuth,
   findTargetByIdentifier,
   findUserByIdentifier,
@@ -247,19 +291,39 @@ export {
 // Server-side utilities (require Node.js crypto)
 export {
   budgetTokens,
+  // Cached user API key validation
+  clearApiKeyCache,
   // Token counter utilities (moved from @babylon/shared)
   countTokens,
   countTokensSync,
+  // Deployment environment detection
+  type DeploymentEnvironment,
+  // API key lastUsedAt write-back cache flusher
+  flushLastUsedUpdates,
   generateApiKey,
   generateTestApiKey,
+  getApiKeyCacheStats,
   getClientIp,
+  getDeploymentEnvironment,
+  getFlusherStats,
   getHashedClientIp,
   getModelTokenLimit,
   getSafeContextLimit,
   hashApiKey,
   hashIpAddress,
+  invalidateCachedKey,
+  invalidateCachedKeysForUser,
   MODEL_TOKEN_LIMITS,
+  shutdownLastUsedFlusher,
+  startLastUsedFlusher,
+  stopLastUsedFlusher,
   truncateToTokenLimit,
   truncateToTokenLimitSync,
+  validateUserApiKey,
   verifyApiKey,
 } from './utils';
+// Wallet auth utilities
+export {
+  requireFreshToken,
+  type TokenFreshnessResult,
+} from './wallet-auth';

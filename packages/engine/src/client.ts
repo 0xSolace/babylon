@@ -10,18 +10,23 @@
  */
 
 // Prediction Pricing (pure math, no server dependencies)
+// IMPORTANT: Use /client path to avoid pulling in PredictionDbAdapter which imports @babylon/db
 export {
   calculateExpectedPayout,
   PredictionPricing,
   type ShareCalculation,
   type ShareCalculationWithFees,
-} from '@babylon/core/markets/prediction';
+} from '@babylon/core/markets/prediction/pricing';
 // Fee Configuration (pure constants, no dependencies)
 export {
   FEE_CONFIG,
   type FeeTransactionType,
   type FeeType,
 } from './config/fees';
+export {
+  calculatePerpPositionMarketValue,
+  toNumber,
+} from './portfolio-valuation';
 // Concentrated Liquidity (pure math)
 export {
   type AddPositionParams,
@@ -128,6 +133,7 @@ export {
 export interface PortfolioPnLSnapshot {
   lifetimePnL: number;
   netContributions: number;
+  netPeerTransfers: number;
   totalDeposited: number;
   totalWithdrawn: number;
   availableBalance: number;
@@ -136,4 +142,24 @@ export interface PortfolioPnLSnapshot {
   totalUnrealizedPnL: number;
   totalPnL: number;
   accountEquity: number;
+}
+
+export interface PortfolioBreakdownSnapshot {
+  wallet: number;
+  agents: number;
+  positions: number;
+  available: number;
+  netPeerTransfers: number;
+  originalAmount: number;
+  totalAssets: number;
+  totalPnL: number;
+  agentCount: number;
+  members?: PortfolioBreakdownMember[];
+}
+
+export interface PortfolioBreakdownMember {
+  id: string;
+  name: string;
+  wallet: number;
+  isAgent: boolean;
 }

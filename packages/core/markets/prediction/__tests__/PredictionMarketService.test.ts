@@ -94,8 +94,23 @@ class InMemoryDb implements PredictionDbPort {
       .map((m) => ({ ...m }));
   }
 
-  async listMarkets(): Promise<PredictionMarketRecord[]> {
-    return Array.from(this.markets.values()).map((m) => ({ ...m }));
+  async listMarkets(options?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<PredictionMarketRecord[]> {
+    const all = Array.from(this.markets.values())
+      .filter((m) => !m.resolved)
+      .sort(
+        (a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0)
+      )
+      .map((m) => ({ ...m }));
+    if (options?.limit == null) return all;
+    const off = options.offset ?? 0;
+    return all.slice(off, off + options.limit);
+  }
+
+  async countUnresolvedMarkets(): Promise<number> {
+    return Array.from(this.markets.values()).filter((m) => !m.resolved).length;
   }
 
   async listUserPositions(userId: string): Promise<PredictionPositionRecord[]> {
@@ -243,6 +258,37 @@ describe('PredictionMarketService', () => {
     expect(cache.keys).toContain('prediction:m1:*');
   });
 
+  it('buy should allow overriding trade attribution', async () => {
+    service = new PredictionMarketService({
+      db,
+      wallet,
+      broadcast,
+      cache,
+      clock: { now: () => new Date() },
+      fees: feeConfig,
+      feeProcessor,
+      tradeSource: 'npc_trade',
+      tradeActorType: 'npc',
+    });
+
+    await service.buy({
+      userId: 'u1',
+      marketId: 'm1',
+      side: 'yes',
+      amount: 100,
+    });
+
+    expect(db.snapshots[0]?.source).toBe('npc_trade');
+
+    const event = broadcast.events[0]?.payload as unknown as {
+      type?: string;
+      trade?: { actorType?: string; source?: string };
+    };
+    expect(event.type).toBe('prediction_trade');
+    expect(event.trade?.actorType).toBe('npc');
+    expect(event.trade?.source).toBe('npc_trade');
+  });
+
   it('sell should decrease position, compute pnl, and close when remaining small', async () => {
     await service.buy({
       userId: 'u1',
@@ -358,7 +404,7 @@ describe('PredictionMarketService', () => {
     expect(result.netProceeds).toBeGreaterThan(0);
   });
 
-  it('should block sells on resolved markets', async () => {
+  it('should block sells on resolved markets with outcome', async () => {
     // First buy a position
     await service.buy({
       userId: 'u1',
@@ -367,12 +413,69 @@ describe('PredictionMarketService', () => {
       amount: 100,
     });
 
-    // Resolve the market
-    await db.updateMarketState('m1', { resolved: true });
+    // Resolve the market with an outcome (YES wins)
+    await db.updateMarketState('m1', { resolved: true, resolution: true });
 
     await expect(
       service.sell({ userId: 'u1', marketId: 'm1', shares: 1 })
     ).rejects.toThrow(/resolved/);
+  });
+
+  it('should allow sells on cancelled markets (resolved but no outcome)', async () => {
+    // First buy a position
+    await service.buy({
+      userId: 'u1',
+      marketId: 'm1',
+      side: 'yes',
+      amount: 100,
+    });
+
+    // Cancel the market (resolved but no outcome)
+    await db.updateMarketState('m1', { resolved: true, resolution: null });
+
+    // Should be able to sell on cancelled market
+    const result = await service.sell({
+      userId: 'u1',
+      marketId: 'm1',
+      shares: 1,
+    });
+    expect(result.shares).toBe(1);
+  });
+
+  it('should block sells on cancelled positions (double-refund prevention)', async () => {
+    // Security test: Ensure users cannot sell positions that have been refunded via cancel()
+    // This prevents a double-payment exploit where user gets refund + sell proceeds
+
+    // First buy a position
+    await service.buy({
+      userId: 'u1',
+      marketId: 'm1',
+      side: 'yes',
+      amount: 100,
+    });
+
+    const balanceBeforeCancel = (await wallet.getBalance('u1')).balance;
+
+    // Cancel the market - this refunds the position and marks it 'cancelled'
+    const cancelResult = await service.cancel({
+      marketId: 'm1',
+      reason: 'Test cancel',
+    });
+    expect(cancelResult.positionsRefunded).toBe(1);
+    expect(cancelResult.totalRefunded).toBeGreaterThan(0);
+
+    const balanceAfterCancel = (await wallet.getBalance('u1')).balance;
+    expect(balanceAfterCancel).toBeGreaterThan(balanceBeforeCancel);
+
+    // Verify position is now cancelled
+    const pos = await db.getPosition('u1', 'm1', 'yes');
+    expect(pos?.status).toBe('cancelled');
+
+    // Attempt to sell the cancelled position should fail
+    // This is the critical security check - without it, user could get double payment
+    await expect(
+      service.sell({ userId: 'u1', marketId: 'm1', shares: 1 })
+    ).rejects.toThrow(/not found/);
   });
 
   it('should prevent liquidity going negative on sell', async () => {
@@ -418,15 +521,36 @@ describe('PredictionMarketService', () => {
     const pos2 = await db.getPosition('u2', 'm1', 'no');
     expect(pos1?.status).toBe('resolved');
     expect(pos2?.status).toBe('resolved');
+    expect(pos1?.outcome).toBe(true);
+    expect(pos2?.outcome).toBe(false);
     const postWinnerBalance = (await wallet.getBalance('u1')).balance;
     const postLoserBalance = (await wallet.getBalance('u2')).balance;
     expect(postWinnerBalance).toBeGreaterThan(preWinnerBalance);
     expect(postLoserBalance).toBeLessThanOrEqual(preLoserBalance);
 
+    // Pool-proportional payout: winner gets cost back + loser's deposits
+    const totalWinnerShares = pos1!.shares;
+    const totalLoserDeposits = pos2!.shares * pos2!.avgPrice;
+    const expectedWinnerPayout = PredictionPricing.calculateExpectedPayout(
+      pos1!.shares,
+      pos1!.avgPrice,
+      totalWinnerShares,
+      totalLoserDeposits
+    );
+    const expectedWinnerPnl = expectedWinnerPayout - 100;
+    const expectedLoserPnl = -100;
+
+    expect(postWinnerBalance - preWinnerBalance).toBeCloseTo(
+      expectedWinnerPayout
+    );
+    expect(pos1?.pnl).toBeCloseTo(expectedWinnerPnl);
+    expect(pos1?.pnl).toBeGreaterThan(0);
+    expect(pos2?.pnl).toBeCloseTo(expectedLoserPnl);
+
     // Liquidity should decrease by total payouts (capped at available liquidity)
     const marketAfterResolve = await service.getMarket('m1');
     expect(marketAfterResolve?.resolved).toBe(true);
-    const payout = pos1?.shares ?? 0;
+    const payout = expectedWinnerPayout;
     const expectedReduction = Math.min(payout, marketPreResolve!.liquidity);
     expect(marketAfterResolve!.liquidity).toBeCloseTo(
       marketPreResolve!.liquidity - expectedReduction,
@@ -437,8 +561,45 @@ describe('PredictionMarketService', () => {
     const pnlByUser = new Map(wallet.pnls.map((p) => [p.userId, p.pnl]));
     const winnerPnl = pnlByUser.get('u1') ?? 0;
     const loserPnl = pnlByUser.get('u2') ?? 0;
+    expect(winnerPnl).toBeCloseTo(expectedWinnerPnl);
+    expect(loserPnl).toBeCloseTo(expectedLoserPnl);
     expect(loserPnl).toBeLessThan(0);
-    expect(winnerPnl).toBeGreaterThan(loserPnl);
+    expect(winnerPnl).toBeGreaterThan(0);
+  });
+
+  it('resolve with no losers returns net cost basis minus fees', async () => {
+    await db.upsertPosition({
+      userId: 'u1',
+      marketId: 'm1',
+      side: 'yes',
+      shares: 10,
+      avgPrice: 999,
+      status: 'active',
+      pnl: 0,
+      outcome: null,
+      resolvedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const preBalance = (await wallet.getBalance('u1')).balance;
+
+    await service.resolve({
+      marketId: 'm1',
+      winningSide: 'yes',
+      resolutionDescription: 'No opposing bets — cost basis returned',
+    });
+
+    const pos = await db.getPosition('u1', 'm1', 'yes');
+    const postBalance = (await wallet.getBalance('u1')).balance;
+
+    expect(pos?.status).toBe('resolved');
+    expect(pos?.outcome).toBe(true);
+    // With no losers, payout = cost basis (net). PnL is slightly negative
+    // because the entry fee is not recovered.
+    const netCostBasis = 10 * 999; // 9990
+    expect(postBalance - preBalance).toBeCloseTo(netCostBasis);
+    expect(pos?.pnl).toBeLessThanOrEqual(0);
   });
 
   it('pricing getCurrentPrice returns 0.5 when total is zero for display', () => {
