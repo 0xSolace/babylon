@@ -85,9 +85,6 @@ import { logger } from './lib/logger.js';
 // Load environment variables
 config();
 
-// Parse CLI flags
-const forceRegenerate = process.argv.includes('--force');
-
 const ActorSchema = z.object({
   id: z.string(),
   name: z.string(),

@@ -16,6 +16,7 @@
       "!**/.turbo",
       "!**/node_modules",
       "!**/out",
+      "!**/output",
       "!**/build",
       "!**/.vercel",
       "!**/public/_pagefind",
