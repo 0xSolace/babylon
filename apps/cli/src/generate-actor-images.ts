@@ -68,7 +68,7 @@ import {
 import { config } from 'dotenv';
 import { access, mkdir, rm, writeFile } from 'fs/promises';
 import OpenAI from 'openai';
-import { join } from 'path';
+import { join, join as pathJoin } from 'path';
 import { z } from 'zod';
 import { parseFlagValue } from './cli-utils.js';
 import { logger } from './lib/logger.js';
@@ -84,8 +84,9 @@ import { logger } from './lib/logger.js';
 //   bun run images -- --actor ailon-musk
 //   bun run images -- --org org-openagi
 
-// Load environment variables
-config();
+// Load environment variables — walk up to find .env at monorepo root
+config({ path: pathJoin(import.meta.dir, '..', '..', '..', '.env') });
+config(); // also load from CWD as fallback
 
 const ActorSchema = z.object({
   id: z.string(),
