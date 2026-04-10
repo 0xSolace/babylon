@@ -960,6 +960,7 @@ async function dbRecordArcEventCoverage(
 
 /**
  * Get arc event coverage statistics from the DB.
+ * Scoped to the last 30 days to avoid unbounded growth.
  */
 export async function getArcEventCoverageStats(): Promise<{
   totalEvents: number;
@@ -967,9 +968,11 @@ export async function getArcEventCoverageStats(): Promise<{
   eventIds: string[];
 }> {
   const rawDb = getRawDrizzle();
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const rows = await rawDb
     .select({ eventId: arcEventCoverage.eventId })
-    .from(arcEventCoverage);
+    .from(arcEventCoverage)
+    .where(gte(arcEventCoverage.coveredAt, since));
 
   const eventIdSet = new Set(rows.map((r) => r.eventId));
   return {

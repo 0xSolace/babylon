@@ -293,10 +293,17 @@ export function createArticleRateLimiter(
 
 /**
  * Default breaking article rate limit per hour.
- * Breaking articles are event-triggered (scandals, leaks, revelations)
- * and have their own allocation separate from regular articles.
+ *
+ * Because the DB-backed `BreakingArticleRateLimiterService` counts ALL articles
+ * (regular + breaking) in the posts table, this threshold must be set to
+ * REGULAR_MAX + BREAKING_BUDGET to preserve the original intent:
+ *
+ *   DEFAULT_MAX_ARTICLES_PER_HOUR (2) + 1 extra breaking slot = 3
+ *
+ * Breaking articles bypass the regular rate limiter via `skipRateLimit: true`,
+ * so the breaking limiter is the only guard that prevents overflow beyond 3/hr.
  */
-const DEFAULT_BREAKING_RATE_LIMIT_PER_HOUR = 1;
+const DEFAULT_BREAKING_RATE_LIMIT_PER_HOUR = DEFAULT_MAX_ARTICLES_PER_HOUR + 1;
 
 /**
  * Parse the BREAKING_RATE_LIMIT_PER_HOUR environment variable.
