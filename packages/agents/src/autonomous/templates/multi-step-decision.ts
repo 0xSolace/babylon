@@ -1532,6 +1532,9 @@ function formatRelationships(relationships: RelationshipContext[]): string {
 function formatWorldEvents(events: WorldEventContext[]): string {
   if (events.length === 0) return 'No recent events.';
 
+  // Intentionally omits `pointsToward` — information asymmetry by design.
+  // NPCs receive signal direction at the data layer (context-gatherers.ts);
+  // user-controlled agents must INFER outcome direction from public event text only.
   return events
     .map((e) => {
       const relevance = e.isRelevantToAgent ? ' ⭐ (involves you)' : '';
