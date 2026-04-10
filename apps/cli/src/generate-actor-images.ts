@@ -53,7 +53,8 @@
  * @since v0.2.0
  *
  * **Environment Variables:**
- * @env {string} OPENAI_API_KEY - Required OpenAI API key for image generation
+ * @env {string} ELIZACLOUD_API_KEY - Preferred: ElizaCloud API key (routes through ElizaCloud)
+ * @env {string} OPENAI_API_KEY - Fallback: direct OpenAI API key (used if ELIZACLOUD_API_KEY not set)
  */
 
 import {
@@ -66,6 +67,7 @@ import {
 } from '@babylon/engine';
 import { config } from 'dotenv';
 import { access, mkdir, rm, writeFile } from 'fs/promises';
+import OpenAI from 'openai';
 import { join } from 'path';
 import { z } from 'zod';
 import { parseFlagValue } from './cli-utils.js';
@@ -458,23 +460,37 @@ async function main() {
   }
 
   logger.info('Checking actor and organization images...');
-  logger.info(`Model: gpt-image-1.5 | Quality: high | Format: jpeg`);
+  const provider = process.env.ELIZACLOUD_API_KEY
+    ? 'ElizaCloud'
+    : 'OpenAI (direct)';
+  logger.info(
+    `Model: gpt-image-1.5 | Quality: high | Format: jpeg | Provider: ${provider}`
+  );
 
   if (forceRegenerate) {
     logger.info('--force flag detected: will regenerate ALL images');
   }
 
-  // Check for OPENAI_API_KEY
-  if (!process.env.OPENAI_API_KEY) {
-    logger.error('Error: OPENAI_API_KEY not found in environment variables');
-    logger.error('Please add OPENAI_API_KEY to your .env file');
+  // Configure OpenAI-compatible client.
+  // Prefer ElizaCloud (single API key for all inference), fall back to direct OpenAI.
+  const elizacloudKey = process.env.ELIZACLOUD_API_KEY;
+  const openaiKey = process.env.OPENAI_API_KEY;
+
+  if (!elizacloudKey && !openaiKey) {
+    logger.error('No image generation API key found.');
+    logger.error(
+      'Set ELIZACLOUD_API_KEY (preferred) or OPENAI_API_KEY in your .env file.'
+    );
     process.exit(1);
   }
 
-  // Configure OpenAI client
-  const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
+  const elizacloudBase =
+    (process.env.ELIZACLOUD_API_URL?.replace(/\/$/, '') ??
+      'https://api.elizacloud.com') + '/openai/v1';
+
+  const openai = elizacloudKey
+    ? new OpenAI({ apiKey: elizacloudKey, baseURL: elizacloudBase })
+    : new OpenAI({ apiKey: openaiKey! });
 
   // Load actors database using the engine package loader
   const parsedActors = loadActorsData();
