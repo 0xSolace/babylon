@@ -68,7 +68,7 @@
     "characters:generate": "bun run scripts/generate-local-character-sheets.ts",
     "sim:generate": "bun run scripts/generate-simulation-data.ts",
     "pfp:gallery": "bun run scripts/pfp-gallery.ts",
-    "pfp:gallery:open": "bun run scripts/pfp-gallery.ts --open",
+    "pfp:serve": "bun run scripts/pfp-gallery.ts && python3 -m http.server 8899 --directory output/pfp-gallery",
     "pfp:user": "bun run scripts/generate-user-pfps.ts",
     "pfp:avatar": "bun run scripts/generate-avatar-pfps.ts",
     "sim:characters:local": "bun run scripts/run-local-character-simulation.ts",
