@@ -20,37 +20,10 @@ import { createAppClient, viemConnector } from '@farcaster/auth-client';
 import { SignJWT } from 'jose';
 import { NextRequest, NextResponse } from 'next/server';
 
-const STEWARD_API_URL = process.env.STEWARD_API_URL ?? 'http://localhost:3200';
-const STEWARD_PLATFORM_KEY =
-  (process.env.STEWARD_PLATFORM_KEYS ?? '').split(',')[0]?.trim() ?? '';
-const STEWARD_JWT_SECRET = new TextEncoder().encode(
-  process.env.STEWARD_JWT_SECRET ?? 'dev-jwt-secret-change-in-prod'
-);
-
-/** Provision a Steward user record for this FID if one doesn't exist. */
-async function ensureStewardUser(email?: string): Promise<string> {
-  if (!email || !STEWARD_PLATFORM_KEY) return crypto.randomUUID();
-
-  const res = await fetch(`${STEWARD_API_URL}/platform/users`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Steward-Platform-Key': STEWARD_PLATFORM_KEY,
-    },
-    body: JSON.stringify({ email, emailVerified: false }),
-  });
-
-  if (!res.ok)
-    throw new Error(`Failed to provision Steward user: ${res.status}`);
-  const data = (await res.json()) as {
-    ok: boolean;
-    data?: { userId?: string };
-    error?: string;
-  };
-  if (!data.ok || !data.data?.userId)
-    throw new Error(data.error ?? 'missing userId');
-  return data.data.userId;
-}
+import {
+  ensureStewardUser,
+  getStewardJwtSecret,
+} from '@/lib/auth/steward-server';
 
 /** Mint a Steward-compatible HS256 JWT for this user. */
 async function mintToken(stewardUserId: string, fid: number): Promise<string> {
@@ -58,8 +31,8 @@ async function mintToken(stewardUserId: string, fid: number): Promise<string> {
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuer('steward')
     .setIssuedAt()
-    .setExpirationTime('15m')
-    .sign(STEWARD_JWT_SECRET);
+    .setExpirationTime('24h')
+    .sign(getStewardJwtSecret());
 }
 
 export const POST = withErrorHandling(async (req: NextRequest) => {
@@ -151,6 +124,7 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
         id: newId,
         stewardId: stewardUserId,
         farcasterFid: String(fid),
+        hasFarcaster: true,
         isActor: false,
         updatedAt: new Date(),
       })
