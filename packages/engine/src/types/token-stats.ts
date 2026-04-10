@@ -15,8 +15,6 @@ export interface LLMCallTokenUsage {
   callId: string;
   /** Provider used (elizacloud, groq, claude, openai) */
   provider: LLMProviderName;
-  /** Provider used (groq, claude, openai) */
-  provider: 'elizacloud' | 'groq' | 'claude' | 'openai';
   /** Model used for the call */
   model: string;
   /** Number of input/prompt tokens */
@@ -67,7 +65,6 @@ export interface PromptTypeStats {
 export interface ModelStats {
   /** Provider */
   provider: LLMProviderName;
-  provider: 'elizacloud' | 'groq' | 'claude' | 'openai';
   /** Model name */
   model: string;
   /** Number of calls made */
