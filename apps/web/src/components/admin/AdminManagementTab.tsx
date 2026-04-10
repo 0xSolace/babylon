@@ -13,6 +13,7 @@ import {
 import { useCallback, useEffect, useState } from 'react';
 import { Avatar } from '@/components/shared/Avatar';
 import { Skeleton } from '@/components/shared/Skeleton';
+import { apiUrl } from '@/utils/api-url';
 
 /**
  * Admin user structure for admin management tab.
@@ -75,7 +76,7 @@ export function AdminManagementTab() {
 
   const fetchAdmins = useCallback(async (showRefreshing = false) => {
     if (showRefreshing) setRefreshing(true);
-    const response = await fetch('/api/admin/admins');
+    const response = await fetch(apiUrl('/api/admin/admins'));
     if (!response.ok) throw new Error('Failed to fetch admins');
     const data = await response.json();
     setAdmins(data.admins || []);
@@ -99,7 +100,7 @@ export function AdminManagementTab() {
       limit: '10',
       filter: 'users', // Only real users, not actors
     });
-    const response = await fetch(`/api/admin/users?${params}`);
+    const response = await fetch(apiUrl(`/api/admin/users?${params}`));
     if (!response.ok) {
       setAvailableUsers([]);
       setLoadingUsers(false);
@@ -119,7 +120,7 @@ export function AdminManagementTab() {
 
   const handleAddAdmin = async (userId: string) => {
     setProcessing(true);
-    const response = await fetch(`/api/admin/admins/${userId}`, {
+    const response = await fetch(apiUrl(`/api/admin/admins/${userId}`), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'promote' }),
@@ -142,11 +143,14 @@ export function AdminManagementTab() {
     if (!selectedUser) return;
 
     setProcessing(true);
-    const response = await fetch(`/api/admin/admins/${selectedUser.id}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'demote' }),
-    });
+    const response = await fetch(
+      apiUrl(`/api/admin/admins/${selectedUser.id}`),
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'demote' }),
+      }
+    );
 
     if (!response.ok) {
       const error = await response.json();

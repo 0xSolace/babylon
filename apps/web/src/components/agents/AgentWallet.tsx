@@ -12,6 +12,7 @@ import {
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
+import { apiUrl } from '@/utils/api-url';
 
 interface Transaction {
   id: string;
@@ -52,7 +53,7 @@ export function AgentWallet({ agent, onUpdate }: AgentWalletProps) {
     const token = await getAccessToken();
     if (!token) return;
 
-    const res = await fetch(`/api/agents/${agent.id}/trading-balance`, {
+    const res = await fetch(apiUrl(`/api/agents/${agent.id}/trading-balance`), {
       headers: { Authorization: `Bearer ${token}` },
     });
 
@@ -104,14 +105,17 @@ export function AgentWallet({ agent, onUpdate }: AgentWalletProps) {
     }
 
     try {
-      const res = await fetch(`/api/agents/${agent.id}/trading-balance`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ action, amount: amountNum }),
-      });
+      const res = await fetch(
+        apiUrl(`/api/agents/${agent.id}/trading-balance`),
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ action, amount: amountNum }),
+        }
+      );
 
       if (!res.ok) {
         const error = await res.json();

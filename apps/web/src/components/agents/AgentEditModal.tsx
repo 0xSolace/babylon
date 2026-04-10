@@ -33,6 +33,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useAuth } from '@/hooks/useAuth';
+import { apiUrl } from '@/utils/api-url';
 import { uploadImage, validateImageFile } from '@/utils/upload-image';
 
 const TOTAL_BANNERS = 100;
@@ -268,7 +269,7 @@ export function AgentEditModal({
         }
       }
 
-      const res = await fetch(`/api/agents/${agent.id}`, {
+      const res = await fetch(apiUrl(`/api/agents/${agent.id}`), {
         method: 'PUT',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -326,7 +327,7 @@ export function AgentEditModal({
     }
 
     try {
-      const res = await fetch(`/api/agents/${agent.id}`, {
+      const res = await fetch(apiUrl(`/api/agents/${agent.id}`), {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });

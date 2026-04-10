@@ -19,6 +19,7 @@ import { Avatar } from '@/components/shared/Avatar';
 import { Skeleton } from '@/components/shared/Skeleton';
 import { formatCurrencyCompact } from '@/lib/format';
 import { getUserDisplayName } from '@/lib/user-display';
+import { apiUrl } from '@/utils/api-url';
 
 /**
  * User schema for validation.
@@ -146,7 +147,7 @@ export function UserManagementTab() {
         });
         if (searchQuery) params.set('search', searchQuery);
 
-        const response = await fetch(`/api/admin/users?${params}`);
+        const response = await fetch(apiUrl(`/api/admin/users?${params}`));
         if (!response.ok) throw new Error('Failed to fetch users');
         const data = await response.json();
         const validation = z.array(UserSchema).safeParse(data.users);
@@ -177,7 +178,7 @@ export function UserManagementTab() {
     }
 
     startBanning(async () => {
-      const response = await fetch(`/api/admin/users/${user.id}/ban`, {
+      const response = await fetch(apiUrl(`/api/admin/users/${user.id}/ban`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -205,7 +206,7 @@ export function UserManagementTab() {
   const handleWhitelistUser = async (userId: string) => {
     setWhitelistingUserId(userId);
     try {
-      const res = await fetch('/api/admin/whitelist', {
+      const res = await fetch(apiUrl('/api/admin/whitelist'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, source: 'admin_manual' }),

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Skeleton } from '@/components/shared/Skeleton';
 import { useWidgetRefresh } from '@/contexts/WidgetRefreshContext';
 import { usePerpMarkets } from '@/stores/perpMarketsStore';
+import { apiUrl } from '@/utils/api-url';
 
 /**
  * Prediction market structure for markets panel.
@@ -54,7 +55,7 @@ export function MarketsPanel() {
 
   const fetchMarkets = useCallback(async () => {
     // Fetch prediction markets only - perps come from shared store
-    const response = await fetch('/api/feed/widgets/markets');
+    const response = await fetch(apiUrl('/api/feed/widgets/markets'));
 
     if (!response.ok) {
       logger.error(

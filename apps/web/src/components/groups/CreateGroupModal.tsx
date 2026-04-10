@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { Avatar } from '@/components/shared/Avatar';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthStore } from '@/stores/authStore';
+import { apiUrl } from '@/utils/api-url';
 
 /**
  * Member structure for group creation modal.
@@ -197,7 +198,7 @@ export function CreateGroupModal({
     };
 
     try {
-      const response = await fetch('/api/groups', {
+      const response = await fetch(apiUrl('/api/groups'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

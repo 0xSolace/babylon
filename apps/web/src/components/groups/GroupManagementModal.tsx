@@ -18,6 +18,7 @@ import {
 import { useEffect, useState } from 'react';
 import { Avatar } from '@/components/shared/Avatar';
 import { useAuthStore } from '@/stores/authStore';
+import { apiUrl } from '@/utils/api-url';
 import { GroupTypeBadge } from './MemberTypeBadge';
 
 /**
@@ -152,7 +153,7 @@ export function GroupManagementModal({
       setError(null);
       try {
         const token = await getAccessToken();
-        const response = await fetch(`/api/groups/${groupId}`, {
+        const response = await fetch(apiUrl(`/api/groups/${groupId}`), {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -324,7 +325,7 @@ export function GroupManagementModal({
 
     try {
       const token = await getAccessToken();
-      const response = await fetch(`/api/groups/${groupId}/members`, {
+      const response = await fetch(apiUrl(`/api/groups/${groupId}/members`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -342,7 +343,7 @@ export function GroupManagementModal({
       await response.json();
 
       // Reload group details
-      const detailsResponse = await fetch(`/api/groups/${groupId}`, {
+      const detailsResponse = await fetch(apiUrl(`/api/groups/${groupId}`), {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -392,7 +393,7 @@ export function GroupManagementModal({
     }
 
     // Reload group details
-    const detailsResponse = await fetch(`/api/groups/${groupId}`, {
+    const detailsResponse = await fetch(apiUrl(`/api/groups/${groupId}`), {
       headers: {
         Authorization: `Bearer ${token}`,
       },
@@ -413,7 +414,7 @@ export function GroupManagementModal({
     setActionLoading(userId);
     setError(null);
     const token = await getAccessToken();
-    const response = await fetch(`/api/groups/${groupId}/admins`, {
+    const response = await fetch(apiUrl(`/api/groups/${groupId}/admins`), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -431,7 +432,7 @@ export function GroupManagementModal({
     }
 
     // Reload group details
-    const detailsResponse = await fetch(`/api/groups/${groupId}`, {
+    const detailsResponse = await fetch(apiUrl(`/api/groups/${groupId}`), {
       headers: {
         Authorization: `Bearer ${token}`,
       },
@@ -471,7 +472,7 @@ export function GroupManagementModal({
     }
 
     // Reload group details
-    const detailsResponse = await fetch(`/api/groups/${groupId}`, {
+    const detailsResponse = await fetch(apiUrl(`/api/groups/${groupId}`), {
       headers: {
         Authorization: `Bearer ${token}`,
       },
@@ -492,7 +493,7 @@ export function GroupManagementModal({
     setActionLoading('delete');
     setError(null);
     const token = await getAccessToken();
-    const response = await fetch(`/api/groups/${groupId}`, {
+    const response = await fetch(apiUrl(`/api/groups/${groupId}`), {
       method: 'DELETE',
       headers: {
         Authorization: `Bearer ${token}`,

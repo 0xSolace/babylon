@@ -16,6 +16,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useMenuPosition } from '@/hooks/useMenuPosition';
 import { useSocialTracking } from '@/hooks/usePostHog';
 import { getAuthToken } from '@/lib/auth';
+import { apiUrl } from '@/utils/api-url';
 import { BlockUserModal } from './BlockUserModal';
 import { MuteUserModal } from './MuteUserModal';
 import { ReportModal } from './ReportModal';
@@ -124,12 +125,15 @@ export function ModerationMenu({
 
       try {
         const encodedIdentifier = encodeURIComponent(targetUserId);
-        const response = await fetch(`/api/users/${encodedIdentifier}/follow`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          signal: abortController.signal,
-        });
+        const response = await fetch(
+          apiUrl(`/api/users/${encodedIdentifier}/follow`),
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+            signal: abortController.signal,
+          }
+        );
 
         if (response.ok) {
           const data = await response.json();
@@ -175,12 +179,15 @@ export function ModerationMenu({
 
     try {
       const encodedIdentifier = encodeURIComponent(targetUserId);
-      const response = await fetch(`/api/users/${encodedIdentifier}/follow`, {
-        method,
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await fetch(
+        apiUrl(`/api/users/${encodedIdentifier}/follow`),
+        {
+          method,
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
 
       if (response.ok) {
         trackFollow(targetUserId, newFollowingState);

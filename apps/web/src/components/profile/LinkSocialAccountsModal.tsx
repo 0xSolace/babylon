@@ -8,6 +8,7 @@ import { useTelegramMiniApp } from '@/components/providers/TelegramMiniAppProvid
 import { useAuth } from '@/hooks/useAuth';
 import { getAuthToken } from '@/lib/auth';
 import { useAuthStore } from '@/stores/authStore';
+import { apiUrl } from '@/utils/api-url';
 
 /**
  * Link social accounts modal component for connecting social accounts.
@@ -112,7 +113,7 @@ export function LinkSocialAccountsModal({
 
     setUnlinkingTwitter(true);
     try {
-      const response = await fetch('/api/twitter/disconnect', {
+      const response = await fetch(apiUrl('/api/twitter/disconnect'), {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,

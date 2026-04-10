@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { Check, Loader2, Users, X } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { apiUrl } from '@/utils/api-url';
 
 /**
  * Group invite card component for displaying and responding to group invitations.
@@ -67,12 +68,15 @@ export function GroupInviteCard({
 
     try {
       const token = await getAccessToken();
-      const response = await fetch(`/api/groups/invites/${inviteId}/accept`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await fetch(
+        apiUrl(`/api/groups/invites/${inviteId}/accept`),
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
 
       if (!response.ok) {
         const data = await response.json();
@@ -98,12 +102,15 @@ export function GroupInviteCard({
 
     try {
       const token = await getAccessToken();
-      const response = await fetch(`/api/groups/invites/${inviteId}/decline`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await fetch(
+        apiUrl(`/api/groups/invites/${inviteId}/decline`),
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
 
       if (!response.ok) {
         const data = await response.json();

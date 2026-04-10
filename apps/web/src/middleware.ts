@@ -16,6 +16,13 @@ const PRODUCTION_ORIGINS = [
   'https://privy.babylon.market',
   'https://staging.babylon.market',
   'https://app.staging.babylon.market',
+  'https://play.staging.babylon.market',
+  // Capacitor mobile app origins.
+  // Capacitor iOS sets Origin: capacitor://localhost; Android sets Origin: https://localhost.
+  // These are the WebView origins for the native shell — not reachable from external browsers.
+  // Attack surface is limited: an attacker would need to already control the device.
+  'capacitor://localhost', // iOS Capacitor WebView
+  'https://localhost', // Android Capacitor WebView
 ] as const;
 
 /**
@@ -25,6 +32,9 @@ const DEV_ORIGINS = [
   'http://localhost:3000',
   'http://localhost:3001',
   'http://127.0.0.1:3000',
+  // mobile
+  'capacitor://localhost',
+  'http://localhost:3077',
 ] as const;
 
 /**

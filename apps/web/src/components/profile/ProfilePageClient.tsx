@@ -47,6 +47,7 @@ import { TradesFeed } from '@/components/trades/TradesFeed';
 import { useAuth } from '@/hooks/useAuth';
 import { useErrorToasts } from '@/hooks/useErrorToasts';
 import { useGameStore } from '@/stores/gameStore';
+import { apiUrl } from '@/utils/api-url';
 
 type ProfileRouteMode = 'auto' | 'user' | 'user_id' | 'actor' | 'org';
 
@@ -447,7 +448,7 @@ export function ProfilePageClient({
       organizations: [],
     };
     try {
-      const response = await fetch('/api/actors');
+      const response = await fetch(apiUrl('/api/actors'));
       if (response.ok) {
         actorsDb = (await response.json()) as typeof actorsDb;
       }
