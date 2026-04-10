@@ -125,6 +125,7 @@ class TickUsageCollector implements TokenUsageCollector {
       string,
       {
         provider: LLMProviderName;
+        provider: 'elizacloud' | 'groq' | 'claude' | 'openai';
         calls: LLMCallTokenUsage[];
         totalInput: number;
         totalOutput: number;
