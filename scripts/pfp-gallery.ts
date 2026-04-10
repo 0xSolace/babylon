@@ -15,7 +15,7 @@
 
 import { execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 // ─── Config ─────────────────────────────────────────────────────────────────
@@ -372,11 +372,21 @@ function escHtml(s: string): string {
     .replace(/"/g, '&quot;');
 }
 
+// Images are served via relative paths (symlinked into output/pfp-gallery/images/)
+function imgSrc(imagePath: string | undefined): string | undefined {
+  if (!imagePath) return undefined;
+  // e.g. /root/.../apps/web/public/images/actors/ailon-musk.jpg
+  // → images/actors/ailon-musk.jpg
+  const parts = imagePath.split('/images/');
+  return parts.length > 1 ? `images/${parts[parts.length - 1]}` : undefined;
+}
+
 function imgTag(imagePath: string | undefined, alt: string, cls = ''): string {
-  if (!imagePath) {
+  const src = imgSrc(imagePath);
+  if (!src) {
     return `<div class="missing-img ${cls}">NO IMAGE</div>`;
   }
-  return `<img src="file://${imagePath}" alt="${escHtml(alt)}" class="${cls}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="missing-img ${cls}" style="display:none">LOAD ERR</div>`;
+  return `<img src="${src}" alt="${escHtml(alt)}" class="${cls}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="missing-img ${cls}" style="display:none">LOAD ERR</div>`;
 }
 
 function badge(ok: boolean, label: string): string {
@@ -721,12 +731,27 @@ async function main() {
   console.log('\nGenerating HTML gallery…');
   await mkdir(OUTPUT_DIR, { recursive: true });
 
+  // Symlink image directories so they're served correctly over HTTP
+  const imageLinks: Array<[string, string]> = [
+    ['actors', PUBLIC_ACTORS],
+    ['actor-banners', PUBLIC_ACTOR_BANNERS],
+    ['organizations', PUBLIC_ORGS],
+    ['org-banners', PUBLIC_ORG_BANNERS],
+  ];
+  for (const [name, target] of imageLinks) {
+    const linkPath = join(OUTPUT_DIR, 'images', name);
+    if (!existsSync(linkPath)) {
+      await mkdir(join(OUTPUT_DIR, 'images'), { recursive: true });
+      await symlink(target, linkPath).catch(() => {/* already exists */});
+    }
+  }
+
   const html = buildHtml(actors, orgs, presets);
   const outPath = join(OUTPUT_DIR, 'index.html');
   await writeFile(outPath, html, 'utf-8');
 
   console.log(`\n✅ Gallery: ${outPath}`);
-  console.log(`   Browser: xdg-open "${outPath}"`);
+  console.log(`   Serve:   bun run pfp:serve  (then SSH tunnel: ssh -L 8899:localhost:8899 user@server)`);
 
   if (openAfter) {
     try {
