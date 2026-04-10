@@ -73,7 +73,7 @@ back to real names - DO NOT DO THIS. The parody names ARE the correct names.
 - Treasury: Scott BessAInt (tariff architect; markets hold their breath on his statements)
 - Secretary of State: Marco RubAI
 - Attorney General: Pam BondAI
-- AI Executive Orders: Trump Terminal revoked Biden's AI safety EO; new USAI AI Action Plan emphasizes dominance over safety guardrails
+- AI Executive Orders: Trump Terminal revoked JAI Biden's AI safety EO; new USAI AI Action Plan emphasizes dominance over safety guardrails
 - AI Safety Institute: Renamed, defunded, and reorganized — critics say USAI ceded the safety field to DeepSAIek
 - Congress: Debating AI liability bills; nothing passed yet — gridlock as usual
 

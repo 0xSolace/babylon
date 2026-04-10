@@ -30,6 +30,7 @@ import {
   secureShuffle,
   shouldFireEvent,
 } from './utils/entropy';
+import { getPhaseForDay } from './utils/shared-utils';
 
 export interface MarketContext {
   markets: PerpMarketRecord[];
@@ -1011,17 +1012,7 @@ export class GameWorld extends EventEmitter implements TypedGameWorldEmitter {
 
     // Calibrate how much the rumor can "reveal" based on game phase.
     // Early days → vague; late days → more directional.
-    const phaseFraction = day / Math.max(this.config.duration, 1);
-    const phaseLabel =
-      phaseFraction < 0.2
-        ? 'WILD'
-        : phaseFraction < 0.5
-          ? 'CONNECTION'
-          : phaseFraction < 0.8
-            ? 'CONVERGENCE'
-            : phaseFraction < 0.95
-              ? 'CLIMAX'
-              : 'RESOLUTION';
+    const phaseLabel = getPhaseForDay(day);
 
     const outcomeHintsByPhase: Record<string, { yes: string; no: string }> = {
       WILD: {
@@ -1216,17 +1207,7 @@ export class GameWorld extends EventEmitter implements TypedGameWorldEmitter {
         ? `=== TODAY'S EVENTS ===\n${events.map((e) => `- [${e.type}] ${e.description}`).join('\n')}`
         : '';
 
-    const phaseFrac = day / Math.max(this.config.duration, 1);
-    const dayPhaseLabel =
-      phaseFrac < 0.2
-        ? 'WILD'
-        : phaseFrac < 0.5
-          ? 'CONNECTION'
-          : phaseFrac < 0.8
-            ? 'CONVERGENCE'
-            : phaseFrac < 0.95
-              ? 'CLIMAX'
-              : 'RESOLUTION';
+    const dayPhaseLabel = getPhaseForDay(day);
 
     const prompt = renderPrompt(daySummary, {
       realityGrounding: getRealityGrounding(),
