@@ -242,8 +242,8 @@ export class PredictionPricing {
  * @param yesShares - current YES shares in pool
  * @param noShares  - current NO shares in pool
  * @param feeRate   - trading fee rate (default 0.01 = 1%)
- * @param capPpt    - max allowed odds shift in probability units (default 0.19,
- *                    which is 1ppt below the 20ppt hard cap — safety margin)
+ * @param capPpt    - max allowed odds shift in probability units (default 0.19 = 19ppt,
+ *                    leaving a 1ppt safety margin below the 20ppt per-trade hard cap)
  * @returns max gross amount (floor) the caller should place in one trade
  */
 export function maxSafeBuy(

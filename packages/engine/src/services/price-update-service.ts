@@ -248,12 +248,14 @@ export class PriceUpdateService {
           }
         }
 
-        for (const update of indexUpdates) {
-          await db
-            .update(perpMarketSnapshots)
-            .set({ indexPrice: update.indexPrice, updatedAt: now })
-            .where(eq(perpMarketSnapshots.ticker, update.ticker));
-        }
+        await Promise.all(
+          indexUpdates.map((update) =>
+            db
+              .update(perpMarketSnapshots)
+              .set({ indexPrice: update.indexPrice, updatedAt: now })
+              .where(eq(perpMarketSnapshots.ticker, update.ticker))
+          )
+        );
 
         if (indexUpdates.length > 0) {
           logger.debug(
