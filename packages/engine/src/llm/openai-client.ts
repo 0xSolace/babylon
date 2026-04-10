@@ -60,8 +60,9 @@ function resolveElizaCloudConfig():
   if (!apiKey) return undefined;
   const base =
     process.env.ELIZACLOUD_API_URL?.replace(/\/$/, '') ||
-    'https://api.elizacloud.com';
-  return { apiKey, baseURL: `${base}/openai/v1` };
+    'https://elizacloud.ai';
+  // ElizaCloud uses /api/v1 (OpenAI-compatible); the SDK appends /chat/completions
+  return { apiKey, baseURL: `${base}/api/v1` };
 }
 
 function resolveGroqBaseURL(): string {
