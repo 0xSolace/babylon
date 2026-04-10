@@ -13,6 +13,7 @@ import { Skeleton } from '@/components/shared/Skeleton';
 import { useAuth } from '@/hooks/useAuth';
 import { usePerpOpenPreview } from '@/hooks/usePerpOpenPreview';
 import { usePerpTrade } from '@/hooks/usePerpTrade';
+import { formatBalance, formatPrice } from '@/lib/market-formatters';
 import {
   getPerpRebalanceInfo,
   shouldApplyPerpBalanceGate,
@@ -27,7 +28,6 @@ import {
   useWalletBalance,
 } from '@/stores/walletBalanceStore';
 import type { PerpMarket } from '@/types/markets';
-import { formatBalance, formatPrice } from '../../_lib/formatters';
 
 interface PerpsOrderEntryPanelProps {
   market: PerpMarket | null;

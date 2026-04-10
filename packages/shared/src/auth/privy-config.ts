@@ -1,4 +1,19 @@
-import type { PrivyClientConfig } from '@privy-io/react-auth';
+type PrivyLoginMethod = string;
+
+type PrivyClientConfig = {
+  appearance?: {
+    theme?: string;
+    accentColor?: string;
+    logo?: string;
+    walletChainType?: string;
+    [key: string]: unknown;
+  };
+  loginMethodsAndOrder?: {
+    primary?: PrivyLoginMethod[];
+    overflow?: PrivyLoginMethod[];
+  };
+  [key: string]: unknown;
+};
 
 type Appearance = Omit<
   NonNullable<PrivyClientConfig['appearance']>,

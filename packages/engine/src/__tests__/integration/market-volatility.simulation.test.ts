@@ -396,12 +396,15 @@ describe('Market Volatility Simulation', () => {
 
   describe('Scenario 5: Fee Redistribution Economy', () => {
     it('should prevent NPCs from going bankrupt', () => {
+      const cTierThreshold =
+        5000 * STABILITY_FUND_CONFIG.TOP_UP_THRESHOLD_RATIO;
+      const cTierTarget = 5000 * STABILITY_FUND_CONFIG.TOP_UP_TARGET_RATIO;
       const npcs = [
         { id: 'npc-1', tier: 'S_TIER', balance: 100000 },
         { id: 'npc-2', tier: 'A_TIER', balance: 50000 },
         { id: 'npc-3', tier: 'B_TIER', balance: 15000 },
-        { id: 'npc-4', tier: 'C_TIER', balance: 3000 }, // Below threshold!
-        { id: 'npc-5', tier: 'C_TIER', balance: 500 }, // Very low!
+        { id: 'npc-4', tier: 'C_TIER', balance: cTierThreshold - 100 },
+        { id: 'npc-5', tier: 'C_TIER', balance: cTierThreshold - 700 },
       ];
 
       const economy = new NPCEconomySimulator(npcs);
@@ -416,8 +419,8 @@ describe('Market Volatility Simulation', () => {
       console.log('\nSimulating 100 trades...');
       let totalFees = 0;
       for (let i = 0; i < 100; i++) {
-        const npcId = npcs[i % npcs.length]!.id;
-        const isWin = Math.random() > 0.5;
+        const npcId = npcs[i % 3]!.id;
+        const isWin = i % 2 === 0;
         const result = economy.executeTrade(npcId, 10000, isWin);
         totalFees += result.feePaid;
       }
@@ -453,8 +456,8 @@ describe('Market Volatility Simulation', () => {
       });
 
       // NPC-4 and NPC-5 should have been topped up
-      expect(economy.getBalance('npc-4')).toBeGreaterThan(3000);
-      expect(economy.getBalance('npc-5')).toBeGreaterThan(500);
+      expect(economy.getBalance('npc-4')).toBe(cTierTarget);
+      expect(economy.getBalance('npc-5')).toBe(cTierTarget);
 
       // No NPC should be at zero
       npcs.forEach((npc) => {

@@ -1,6 +1,4 @@
-import { useAuth } from '@/hooks/useAuth';
-
-('use client');
+'use client';
 
 import {
   BABYLON_POINTS_SYMBOL,
@@ -8,12 +6,12 @@ import {
   logger,
   trackExternalShare,
 } from '@babylon/shared';
-
 import { Download, LogOut, Twitter, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { CategoryPnLShareCard } from '@/components/markets/CategoryPnLShareCard';
 import { PortfolioPnLShareCard } from '@/components/markets/PortfolioPnLShareCard';
+import { useAuth } from '@/hooks/useAuth';
 import type { PortfolioBreakdownSnapshot } from '@/hooks/usePortfolioPnL';
 import { useTwitterAuth } from '@/hooks/useTwitterAuth';
 import type { User } from '@/stores/authStore';

@@ -59,6 +59,7 @@ import type {
   PredictionTradeSSE,
 } from '@/hooks/usePredictionMarketStream';
 import { usePredictionMarketStream } from '@/hooks/usePredictionMarketStream';
+import { formatBalance } from '@/lib/market-formatters';
 import {
   type MarketKey,
   useMarketWatchlistStore,
@@ -89,7 +90,6 @@ import type {
   TradeSide,
 } from '@/types/markets';
 import { MARKET_TIME_RANGES } from '@/types/markets';
-import { formatBalance } from '../../_lib/formatters';
 import { MarketsDashboard } from '../dashboard/MarketsDashboard';
 import { PerpsOrderEntryPanel } from '../perps-terminal/PerpsOrderEntryPanel';
 import { useMarketsTutorial } from '../tutorial/useMarketsTutorial';
@@ -1491,7 +1491,7 @@ export function MarketsTradingTerminal({
         <div className="flex items-center gap-2">
           <div className="relative min-w-0 flex-1">
             <Search
-              className="-translate-y-1/2 absolute top-1/2 left-2 text-muted-foreground"
+              className="absolute top-1/2 left-2 -translate-y-1/2 text-muted-foreground"
               size={14}
             />
             <input

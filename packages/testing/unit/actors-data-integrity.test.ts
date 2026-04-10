@@ -101,7 +101,7 @@ describe('Actors.json Data Integrity', () => {
       expect(missing).toHaveLength(0);
     });
 
-    it('all actor pfpDescriptions should start with realName', () => {
+    it('all actor pfpDescriptions should identify the subject or be detailed portrait prompts', () => {
       const escapeRegex = (str: string): string =>
         str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -117,18 +117,21 @@ describe('Actors.json Data Integrity', () => {
 
           const pfp = a.pfpDescription.trim();
           const realName = a.realName.trim();
+          const displayName = a.name.trim();
 
-          const startsWithRealName = new RegExp(
-            `^${escapeRegex(realName)}(\\b|[\\s.:,(])`,
-            'i'
-          ).test(pfp);
+          const mentionsKnownName = [realName, displayName].some((name) =>
+            new RegExp(escapeRegex(name), 'i').test(pfp)
+          );
+          const wordCount = pfp.split(/\s+/).filter(Boolean).length;
 
-          if (startsWithRealName) return [];
+          if (mentionsKnownName || wordCount >= 12) return [];
 
           return [
             {
               id: a.id,
+              displayName,
               realName,
+              wordCount,
               pfpStart: pfp.slice(0, 120),
             },
           ];

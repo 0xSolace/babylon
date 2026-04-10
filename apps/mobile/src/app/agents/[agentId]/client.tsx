@@ -1,2 +1,7 @@
 'use client';
-export { default as PageContent } from '@web/app/agents/[agentId]/page';
+
+import AgentPage from '@web/app/agents/[agentId]/page';
+
+export function PageContent() {
+  return <AgentPage />;
+}

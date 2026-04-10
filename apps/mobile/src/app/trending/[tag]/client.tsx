@@ -1,2 +1,7 @@
 'use client';
-export { default as PageContent } from '@web/app/trending/[tag]/page';
+
+import TrendingPage from '@web/app/trending/[tag]/page';
+
+export function PageContent() {
+  return <TrendingPage />;
+}

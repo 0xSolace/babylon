@@ -26,8 +26,11 @@ export class AutonomyService extends Service {
   private autonomousRoomId: UUID; // Dedicated room for autonomous thoughts
   private autonomousWorldId: UUID; // World ID for autonomous context
 
-  constructor(runtime: IAgentRuntime) {
-    super();
+  constructor(runtime?: IAgentRuntime) {
+    super(runtime);
+    if (!runtime) {
+      throw new Error('AutonomyService requires an agent runtime');
+    }
     this.runtime = runtime;
 
     // Use a dedicated room ID for autonomous thoughts to avoid conflicts

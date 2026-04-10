@@ -1,10 +1,9 @@
-import { useAuth } from '@/hooks/useAuth';
-
-('use client');
+'use client';
 
 import { Check, Loader2, Users, X } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { useAuth } from '@/hooks/useAuth';
 import { apiUrl } from '@/utils/api-url';
 
 /**

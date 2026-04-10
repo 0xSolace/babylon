@@ -10,6 +10,7 @@
 import { broadcastTypingIndicator } from '@babylon/api';
 import {
   and,
+  chats,
   db,
   desc,
   eq,
@@ -17,7 +18,6 @@ import {
   inArray,
   messages,
   userAgentConfigs,
-  userAgentTeamChats,
   users,
 } from '@babylon/db';
 import { executeDirectMessage } from '../autonomous/DirectExecutors';
@@ -638,14 +638,13 @@ Generate ONLY the response text:`;
     // Get team chat info to find other agents
     const [chatWithGroup] = await db
       .select({
-        groupId: userAgentTeamChats.groupId,
-        userId: userAgentTeamChats.userId,
+        groupId: chats.groupId,
       })
-      .from(userAgentTeamChats)
-      .where(eq(userAgentTeamChats.chatId, chatId))
+      .from(chats)
+      .where(eq(chats.id, chatId))
       .limit(1);
 
-    if (!chatWithGroup) {
+    if (!chatWithGroup?.groupId) {
       return;
     }
 

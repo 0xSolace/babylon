@@ -23,7 +23,7 @@ export const DEFAULT_LIMITS: ResourceLimits = {
 
 export class ResourceLimiter {
   private limits: ResourceLimits;
-  private checkInterval: Timer | null = null;
+  private checkInterval: ReturnType<typeof setInterval> | null = null;
   private activeRequests = 0;
   private stopped = false;
   private onStopCallback?: () => void;

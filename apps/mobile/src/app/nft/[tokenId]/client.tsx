@@ -1,2 +1,7 @@
 'use client';
-export { default as PageContent } from '@web/app/nft/[tokenId]/page';
+
+import NftPage from '@web/app/nft/[tokenId]/page';
+
+export function PageContent() {
+  return <NftPage />;
+}

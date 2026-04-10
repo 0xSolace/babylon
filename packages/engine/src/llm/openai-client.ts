@@ -85,7 +85,6 @@ function resolveGroqDefaultModel(): string {
 export class BabylonLLMClient {
   private client: OpenAI | null = null;
   private provider: LLMProvider = 'openai';
-  private elizacloudKey: string | undefined;
   private groqKey: string | undefined;
   private claudeKey: string | undefined;
   private openaiKey: string | undefined;
@@ -139,7 +138,6 @@ export class BabylonLLMClient {
 
     // Priority: ElizaCloud > Groq > Claude > OpenAI (unless forceProvider is set)
     const elizaCloud = resolveElizaCloudConfig();
-    this.elizacloudKey = elizaCloud?.apiKey;
     this.groqKey = process.env.GROQ_API_KEY;
     this.claudeKey = process.env.ANTHROPIC_API_KEY;
     this.openaiKey = apiKey || process.env.OPENAI_API_KEY;

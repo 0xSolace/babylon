@@ -24,10 +24,10 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { formatPrice } from '@/app/markets/_lib/formatters';
 import { FollowButton } from '@/components/interactions';
 import { useAuth } from '@/hooks/useAuth';
 import { usePredictionTrading } from '@/hooks/usePredictionTrading';
+import { formatPrice } from '@/lib/market-formatters';
 import { usePerpMarketsStore } from '@/stores/perpMarketsStore';
 
 /**

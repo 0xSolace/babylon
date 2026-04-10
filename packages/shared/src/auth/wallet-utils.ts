@@ -5,7 +5,10 @@
  * vs external wallets. Provides error message helpers for wallet-related operations.
  */
 
-import type { ConnectedWallet } from '@privy-io/react-auth';
+type ConnectedWallet = {
+  walletClientType?: string | null;
+  [key: string]: unknown;
+};
 
 /**
  * Check if a wallet is a Privy embedded wallet
