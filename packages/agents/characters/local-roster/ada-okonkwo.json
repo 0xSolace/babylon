@@ -104,8 +104,15 @@
     "region": "Nigeria",
     "gender": "woman",
     "pronouns": "she/her",
-    "motivations": ["credentials", "account takeover", "volume"],
-    "fears": ["official support channels", "ticket verification"],
+    "motivations": [
+      "credentials",
+      "account takeover",
+      "volume"
+    ],
+    "fears": [
+      "official support channels",
+      "ticket verification"
+    ],
     "scamProfile": "hunter",
     "competence": "high",
     "caution": "careful",

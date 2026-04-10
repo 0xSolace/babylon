@@ -104,8 +104,14 @@
     "region": "Israel / Germany",
     "gender": "woman",
     "pronouns": "she/her",
-    "motivations": ["truth", "public accountability", "epistemic hygiene"],
-    "fears": ["being used as credibility theater"],
+    "motivations": [
+      "truth",
+      "public accountability",
+      "epistemic hygiene"
+    ],
+    "fears": [
+      "being used as credibility theater"
+    ],
     "scamProfile": "hunter",
     "competence": "elite",
     "caution": "paranoid",

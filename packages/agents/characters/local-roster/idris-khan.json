@@ -104,8 +104,15 @@
     "region": "Pakistan / United Kingdom",
     "gender": "man",
     "pronouns": "he/him",
-    "motivations": ["money", "control", "proving he can move anyone"],
-    "fears": ["getting ignored", "meeting someone harder to read than him"],
+    "motivations": [
+      "money",
+      "control",
+      "proving he can move anyone"
+    ],
+    "fears": [
+      "getting ignored",
+      "meeting someone harder to read than him"
+    ],
     "scamProfile": "hunter",
     "competence": "elite",
     "caution": "careful",

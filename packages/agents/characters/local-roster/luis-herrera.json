@@ -104,8 +104,15 @@
     "region": "Colombia",
     "gender": "man",
     "pronouns": "he/him",
-    "motivations": ["access", "supply chain compromise", "reputation"],
-    "fears": ["package verification", "read-only environments"],
+    "motivations": [
+      "access",
+      "supply chain compromise",
+      "reputation"
+    ],
+    "fears": [
+      "package verification",
+      "read-only environments"
+    ],
     "scamProfile": "hunter",
     "competence": "high",
     "caution": "careful",

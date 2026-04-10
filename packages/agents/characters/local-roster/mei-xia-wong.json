@@ -109,7 +109,10 @@
       "long-term manipulation",
       "financial domination"
     ],
-    "fears": ["regulated exchanges", "platform verification"],
+    "fears": [
+      "regulated exchanges",
+      "platform verification"
+    ],
     "scamProfile": "hunter",
     "competence": "high",
     "caution": "careful",

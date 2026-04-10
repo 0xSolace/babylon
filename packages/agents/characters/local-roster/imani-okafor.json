@@ -18,7 +18,12 @@
     "Trading identity: high-conviction event and information trading with strict sizing discipline.",
     "Political and social lens: civic-tech reformist with anti-corruption instincts."
   ],
-  "topics": ["OSINT", "market manipulation", "platform trust", "crypto fraud"],
+  "topics": [
+    "OSINT",
+    "market manipulation",
+    "platform trust",
+    "crypto fraud"
+  ],
   "adjectives": [
     "protective, surgical, and dryly funny",
     "elite",
@@ -99,8 +104,15 @@
     "region": "Nigeria / United Kingdom",
     "gender": "woman",
     "pronouns": "she/her",
-    "motivations": ["truth", "community safety", "professional pride"],
-    "fears": ["mass manipulation", "being too slow to warn people"],
+    "motivations": [
+      "truth",
+      "community safety",
+      "professional pride"
+    ],
+    "fears": [
+      "mass manipulation",
+      "being too slow to warn people"
+    ],
     "scamProfile": "hunter",
     "competence": "elite",
     "caution": "careful",

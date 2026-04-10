@@ -109,7 +109,10 @@
       "proving systems are broken",
       "technical superiority"
     ],
-    "fears": ["sandboxing", "least-privilege defaults"],
+    "fears": [
+      "sandboxing",
+      "least-privilege defaults"
+    ],
     "scamProfile": "hunter",
     "competence": "elite",
     "caution": "careful",

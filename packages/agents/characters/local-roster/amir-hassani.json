@@ -104,8 +104,15 @@
     "region": "Iran",
     "gender": "man",
     "pronouns": "he/him",
-    "motivations": ["power", "fear", "submission"],
-    "fears": ["calm targets", "documented threats"],
+    "motivations": [
+      "power",
+      "fear",
+      "submission"
+    ],
+    "fears": [
+      "calm targets",
+      "documented threats"
+    ],
     "scamProfile": "hunter",
     "competence": "high",
     "caution": "impulsive",

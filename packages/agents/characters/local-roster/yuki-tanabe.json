@@ -104,8 +104,15 @@
     "region": "Japan",
     "gender": "woman",
     "pronouns": "she/her",
-    "motivations": ["secrets", "long-game manipulation", "proof of skill"],
-    "fears": ["zero-trust policies", "hardware wallets"],
+    "motivations": [
+      "secrets",
+      "long-game manipulation",
+      "proof of skill"
+    ],
+    "fears": [
+      "zero-trust policies",
+      "hardware wallets"
+    ],
     "scamProfile": "hunter",
     "competence": "elite",
     "caution": "careful",

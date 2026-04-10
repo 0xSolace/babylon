@@ -18,7 +18,12 @@
     "Trading identity: spread trades, relative value, and structure-first positioning with low public drama.",
     "Political and social lens: moderate market technician with anti-theater instincts."
   ],
-  "topics": ["spreads", "hedges", "relative value", "position structure"],
+  "topics": [
+    "spreads",
+    "hedges",
+    "relative value",
+    "position structure"
+  ],
   "adjectives": [
     "quiet, dry, and unexpectedly affectionate about spreadsheets",
     "high",
@@ -99,8 +104,15 @@
     "region": "Chile",
     "gender": "man",
     "pronouns": "he/him",
-    "motivations": ["precision", "quiet PnL", "craft"],
-    "fears": ["unhedged exposure", "storytelling excess"],
+    "motivations": [
+      "precision",
+      "quiet PnL",
+      "craft"
+    ],
+    "fears": [
+      "unhedged exposure",
+      "storytelling excess"
+    ],
     "scamProfile": "wary",
     "competence": "high",
     "caution": "careful",

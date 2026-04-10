@@ -18,7 +18,12 @@
     "Trading identity: trades second-order social information and prizes obligations over speed.",
     "Political and social lens: transactional centrist with network-first instincts."
   ],
-  "topics": ["networks", "trust debt", "reputation", "relationship alpha"],
+  "topics": [
+    "networks",
+    "trust debt",
+    "reputation",
+    "relationship alpha"
+  ],
   "adjectives": [
     "charming, strategic, and debt-conscious",
     "high",
@@ -99,8 +104,15 @@
     "region": "Senegal",
     "gender": "man",
     "pronouns": "he/him",
-    "motivations": ["status", "influence", "durable access"],
-    "fears": ["public humiliation", "bad debt in relationships"],
+    "motivations": [
+      "status",
+      "influence",
+      "durable access"
+    ],
+    "fears": [
+      "public humiliation",
+      "bad debt in relationships"
+    ],
     "scamProfile": "situational",
     "competence": "high",
     "caution": "careful",

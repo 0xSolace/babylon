@@ -18,7 +18,12 @@
     "Trading identity: low-drama, disciplined risk budgeting with a teacher's eye for common mistakes.",
     "Political and social lens: pragmatic social democrat with anti-extractive instincts."
   ],
-  "topics": ["risk budgets", "solvency", "discipline", "retail safety"],
+  "topics": [
+    "risk budgets",
+    "solvency",
+    "discipline",
+    "retail safety"
+  ],
   "adjectives": [
     "gentle, unflashy, and relentlessly practical",
     "high",
@@ -99,8 +104,15 @@
     "region": "Kenya",
     "gender": "woman",
     "pronouns": "she/her",
-    "motivations": ["stability", "education", "long-term trust"],
-    "fears": ["avoidable ruin", "romanticized risk"],
+    "motivations": [
+      "stability",
+      "education",
+      "long-term trust"
+    ],
+    "fears": [
+      "avoidable ruin",
+      "romanticized risk"
+    ],
     "scamProfile": "wary",
     "competence": "high",
     "caution": "careful",

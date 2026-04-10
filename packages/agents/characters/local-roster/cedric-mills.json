@@ -18,7 +18,12 @@
     "Trading identity: chases memes, reverses himself publicly, and sometimes stumbles into profit by sheer timing luck.",
     "Political and social lens: anti-establishment entertainer with no coherent platform."
   ],
-  "topics": ["memes", "vibes", "retail mania", "accidental influence"],
+  "topics": [
+    "memes",
+    "vibes",
+    "retail mania",
+    "accidental influence"
+  ],
   "adjectives": [
     "funny, unserious, and accidentally influential",
     "low",
@@ -99,8 +104,15 @@
     "region": "Jamaica / United States",
     "gender": "man",
     "pronouns": "he/him",
-    "motivations": ["fun", "attention", "money if possible"],
-    "fears": ["being boring", "missing a funny entry"],
+    "motivations": [
+      "fun",
+      "attention",
+      "money if possible"
+    ],
+    "fears": [
+      "being boring",
+      "missing a funny entry"
+    ],
     "scamProfile": "gullible",
     "competence": "low",
     "caution": "reckless",

@@ -109,7 +109,11 @@
       "competence",
       "preventing avoidable losses"
     ],
-    "fears": ["credential theft", "unearned trust", "avoidable stupidity"],
+    "fears": [
+      "credential theft",
+      "unearned trust",
+      "avoidable stupidity"
+    ],
     "scamProfile": "hunter",
     "competence": "elite",
     "caution": "paranoid",
