@@ -21,12 +21,10 @@ import { generateSnowflakeId } from '@babylon/shared';
 import { SignJWT } from 'jose';
 import { NextRequest, NextResponse } from 'next/server';
 
-const STEWARD_API_URL = process.env.STEWARD_API_URL ?? 'http://localhost:3200';
-const STEWARD_PLATFORM_KEY =
-  (process.env.STEWARD_PLATFORM_KEYS ?? '').split(',')[0]?.trim() ?? '';
-const STEWARD_JWT_SECRET = new TextEncoder().encode(
-  process.env.STEWARD_JWT_SECRET ?? 'dev-jwt-secret-change-in-prod'
-);
+import {
+  ensureStewardUser,
+  getStewardJwtSecret,
+} from '@/lib/auth/steward-server';
 
 function verifyTelegramInitData(initData: string, botToken: string): boolean {
   const params = new URLSearchParams(initData);
@@ -49,34 +47,6 @@ function verifyTelegramInitData(initData: string, botToken: string): boolean {
   return computed === hash;
 }
 
-async function ensureStewardUser(email?: string): Promise<string> {
-  if (!STEWARD_PLATFORM_KEY) return crypto.randomUUID();
-
-  const body: Record<string, unknown> = {};
-  if (email) body.email = email;
-
-  if (!email) {
-    // No email for Telegram users — generate synthetic ID
-    return crypto.randomUUID();
-  }
-
-  const res = await fetch(`${STEWARD_API_URL}/platform/users`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Steward-Platform-Key': STEWARD_PLATFORM_KEY,
-    },
-    body: JSON.stringify({ email, emailVerified: false }),
-  });
-
-  if (!res.ok) return crypto.randomUUID();
-  const data = (await res.json()) as {
-    ok: boolean;
-    data?: { userId?: string };
-  };
-  return data.data?.userId ?? crypto.randomUUID();
-}
-
 async function mintToken(
   stewardUserId: string,
   telegramId: string
@@ -85,8 +55,8 @@ async function mintToken(
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuer('steward')
     .setIssuedAt()
-    .setExpirationTime('15m')
-    .sign(STEWARD_JWT_SECRET);
+    .setExpirationTime('24h')
+    .sign(getStewardJwtSecret());
 }
 
 export const POST = withErrorHandling(async (req: NextRequest) => {
@@ -159,11 +129,16 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
       stewardUserId = existing.stewardId;
     } else {
       stewardUserId = await ensureStewardUser(existing.email ?? undefined);
-      await db
-        .update(users)
-        .set({ stewardId: stewardUserId })
-        .where(eq(users.id, existing.id));
     }
+    // Always refresh mutable Telegram fields (username can change)
+    await db
+      .update(users)
+      .set({
+        stewardId: stewardUserId,
+        telegramUsername: telegramUser.username ?? null,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, existing.id));
   } else {
     stewardUserId = await ensureStewardUser();
     const newId = await generateSnowflakeId();

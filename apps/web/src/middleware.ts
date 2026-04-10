@@ -227,7 +227,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.next({ request: { headers: requestHeaders } });
   }
 
-  // User signup onboarding: full-bleed page without sidebar/nav (Privy still enabled).
+  // User signup onboarding: full-bleed page without sidebar/nav.
   if (pathname === '/onboarding' || pathname.startsWith('/onboarding/')) {
     const requestHeaders = new Headers(request.headers);
     requestHeaders.set('x-hide-app-chrome', '1');
