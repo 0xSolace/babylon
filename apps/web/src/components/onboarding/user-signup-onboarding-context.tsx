@@ -10,6 +10,8 @@ export interface UserSignupOnboardingContextValue {
   phase: OnboardingFlowPhase;
   isReplayGuide: boolean;
   shouldShowOnboarding: boolean;
+  /** True once the provider has finished initialising and shouldShowOnboarding is stable. */
+  isOnboardingResolved: boolean;
   isSubmitting: boolean;
   guideSubmitting: boolean;
   error: string | null;

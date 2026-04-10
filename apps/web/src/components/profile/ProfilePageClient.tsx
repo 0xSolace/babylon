@@ -1016,9 +1016,9 @@ export function ProfilePageClient({
                   )}
                 </div>
 
-                {(actorInfo.profileDescription || actorInfo.description) && (
+                {actorInfo.description && (
                   <p className="mb-3 whitespace-pre-wrap text-[15px] text-foreground">
-                    {actorInfo.profileDescription || actorInfo.description}
+                    {actorInfo.description}
                   </p>
                 )}
 

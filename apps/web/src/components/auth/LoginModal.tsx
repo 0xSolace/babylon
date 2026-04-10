@@ -139,7 +139,7 @@ export function LoginModal({
         if (!open) onClose();
       }}
     >
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent className="p-8 sm:max-w-sm">
         <DialogHeader>
           <DialogTitle className="text-center text-xl">
             {title ?? 'Sign in to Babylon'}

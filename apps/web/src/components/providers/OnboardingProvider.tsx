@@ -589,6 +589,7 @@ export function OnboardingProvider({
       phase,
       isReplayGuide: replayGuide,
       shouldShowOnboarding,
+      isOnboardingResolved: isReadyToShow,
       isSubmitting,
       guideSubmitting,
       error,

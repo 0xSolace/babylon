@@ -27,6 +27,9 @@ export default function OnboardingPage() {
     if (!ready || !authenticated || loadingProfile) return;
     if (profileFetchStatus !== 'done') return;
     if (!flow) return;
+    // Wait for the provider to finish initialising — avoids a one-tick race where
+    // loadingProfile is already false but isReadyToShow hasn't been set yet.
+    if (!flow.isOnboardingResolved) return;
     if (flow.shouldShowOnboarding) return;
     router.replace('/feed');
   }, [ready, authenticated, loadingProfile, profileFetchStatus, flow, router]);

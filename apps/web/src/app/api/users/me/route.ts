@@ -382,19 +382,19 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     'GET /api/users/me'
   );
 
-  // Phase 2: Look up user by stewardId first, fall back to privyId for legacy users
-  const stewardId =
-    authUser.userId !== authUser.privyId ? authUser.userId : undefined;
+  // Phase 2: Look up by primary key (fastest, works for both Steward and legacy Privy users).
+  // auth-middleware already resolved the correct Babylon user ID into authUser.dbUserId
+  // via ensureUserFromSteward / email-bridge / fast-path, so we trust it directly.
   let [dbUser] = await db
     .select(userSelectFields)
     .from(users)
-    .where(
-      stewardId ? eq(users.stewardId, stewardId) : eq(users.privyId, privyId)
-    )
+    .where(eq(users.id, canonicalUserId))
     .limit(1);
 
-  // Fallback: try the other identifier if first lookup missed
-  if (!dbUser && stewardId) {
+  // Fallback: legacy Privy users whose row predates the stewardId column —
+  // find them by privyId in case canonicalUserId resolved to the Steward UUID
+  // rather than the Babylon snowflake on an older session.
+  if (!dbUser) {
     [dbUser] = await db
       .select(userSelectFields)
       .from(users)
