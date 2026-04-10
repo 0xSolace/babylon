@@ -226,6 +226,61 @@ export class PredictionPricing {
   }
 }
 
+/**
+ * Maximum safe single-trade gross amount (inclusive of fees) that keeps the
+ * odds shift within `capPpt` probability points on EITHER side (YES or NO).
+ *
+ * Uses the closed-form CPMM solution:
+ *   For a YES buy of net amount `a`:
+ *     new_yes_price = (N+a)² / (k + (N+a)²)
+ *   Solving for `a` given target yes_price:
+ *     a = sqrt(target * k / (1 - target)) - N
+ *
+ * The binding constraint is the cheaper side (less room to move before
+ * hitting the cap), so we return min(maxYesBuy, maxNoBuy) / (1 - feeRate).
+ *
+ * @param yesShares - current YES shares in pool
+ * @param noShares  - current NO shares in pool
+ * @param feeRate   - trading fee rate (default 0.01 = 1%)
+ * @param capPpt    - max allowed odds shift in probability units (default 0.19,
+ *                    which is 1ppt below the 20ppt hard cap — safety margin)
+ * @returns max gross amount (floor) the caller should place in one trade
+ */
+export function maxSafeBuy(
+  yesShares: number,
+  noShares: number,
+  feeRate = 0.01,
+  capPpt = 0.19
+): number {
+  const k = yesShares * noShares;
+  if (k <= 0 || !Number.isFinite(k)) return 0;
+
+  const HARD_CEILING = 0.97;
+
+  // Max YES buy net amount before shift > capPpt (or hard ceiling)
+  const currentYes = noShares / (yesShares + noShares);
+  const targetYes = Math.min(currentYes + capPpt, HARD_CEILING);
+  const maxYesNet =
+    targetYes < 1
+      ? Math.max(0, Math.sqrt((targetYes * k) / (1 - targetYes)) - noShares)
+      : Number.POSITIVE_INFINITY;
+
+  // Max NO buy net amount before shift > capPpt (or hard ceiling)
+  const currentNo = yesShares / (yesShares + noShares);
+  const targetNo = Math.min(currentNo + capPpt, HARD_CEILING);
+  const maxNoNet =
+    targetNo < 1
+      ? Math.max(0, Math.sqrt((targetNo * k) / (1 - targetNo)) - yesShares)
+      : Number.POSITIVE_INFINITY;
+
+  const maxNet = Math.min(maxYesNet, maxNoNet);
+  if (!Number.isFinite(maxNet) || maxNet <= 0) return 0;
+
+  // Convert net → gross and floor to nearest dollar
+  const divisor = 1 - feeRate;
+  return Math.floor(maxNet / (divisor > 0 ? divisor : 1));
+}
+
 export function calculateExpectedPayout(
   shares: number,
   avgPrice: number,
