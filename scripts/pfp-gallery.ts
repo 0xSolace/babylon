@@ -742,7 +742,9 @@ async function main() {
     const linkPath = join(OUTPUT_DIR, 'images', name);
     if (!existsSync(linkPath)) {
       await mkdir(join(OUTPUT_DIR, 'images'), { recursive: true });
-      await symlink(target, linkPath).catch(() => {/* already exists */});
+      await symlink(target, linkPath).catch(() => {
+        /* already exists */
+      });
     }
   }
 
@@ -751,7 +753,9 @@ async function main() {
   await writeFile(outPath, html, 'utf-8');
 
   console.log(`\n✅ Gallery: ${outPath}`);
-  console.log(`   Serve:   bun run pfp:serve  (then SSH tunnel: ssh -L 8899:localhost:8899 user@server)`);
+  console.log(
+    `   Serve:   bun run pfp:serve  (then SSH tunnel: ssh -L 8899:localhost:8899 user@server)`
+  );
 
   if (openAfter) {
     try {
