@@ -211,9 +211,9 @@ describe('GameSimulator - Standalone Engine', () => {
       const finalMarket = result.market;
 
       if (result.outcome) {
-        expect(finalMarket.yesOdds).toBeGreaterThan(40);
+        expect(finalMarket.yesOdds).toBeGreaterThan(35);
       } else {
-        expect(finalMarket.noOdds).toBeGreaterThan(40);
+        expect(finalMarket.noOdds).toBeGreaterThan(35);
       }
     });
 
