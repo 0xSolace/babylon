@@ -38,7 +38,9 @@ describe('ArticleRateLimiterService', () => {
     mockDb.from.mockClear();
     mockDb.where.mockClear();
     // Default to 0 articles
-    mockDb.where.mockImplementation(() => Promise.resolve([{ count: mockDbCount }]));
+    mockDb.where.mockImplementation(() =>
+      Promise.resolve([{ count: mockDbCount }])
+    );
   });
 
   describe('constructor', () => {
