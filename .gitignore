@@ -46,6 +46,8 @@ apps/web/public/sw.js.map
 # local env files
 .env*.local
 .env
+.env.staging
+.env.production
 .staging-cookies.txt
 
 # Symlinked env files in apps
