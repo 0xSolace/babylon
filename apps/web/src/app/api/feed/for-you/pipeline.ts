@@ -1637,8 +1637,16 @@ export async function buildForYouFeed(userId?: string | null) {
     (s) => !existingPostIds.has(s.posts[0]?.id ?? '')
   );
 
+  // Cap total stories to prevent Redis cache size limits (Upstash 10MB max).
+  // 200 stories is ~20 pages at PAGE_SIZE=20 — more than enough for a session.
+  const MAX_STORIES = 200;
+  const allStories = [...rankedStories, ...discoveryStories];
+
   return {
-    stories: [...rankedStories, ...discoveryStories],
+    stories:
+      allStories.length > MAX_STORIES
+        ? allStories.slice(0, MAX_STORIES)
+        : allStories,
     generatedAt: baseResult.generatedAt,
   };
 }
