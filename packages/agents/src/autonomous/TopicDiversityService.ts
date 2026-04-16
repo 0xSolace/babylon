@@ -13,6 +13,7 @@
  */
 
 import { db, desc, gte, posts } from '@babylon/db';
+import { jaccardSimilarity } from '@babylon/shared';
 import { StaticDataRegistry } from '@babylon/engine';
 import { logger } from '../shared/logger';
 
@@ -268,27 +269,7 @@ export class TopicDiversityService {
    * Uses Jaccard similarity on word sets
    */
   calculateSimilarity(content1: string, content2: string): number {
-    const words1 = new Set(
-      content1
-        .toLowerCase()
-        .replace(/[^\w\s]/g, '')
-        .split(/\s+/)
-        .filter((w) => w.length > 3)
-    );
-    const words2 = new Set(
-      content2
-        .toLowerCase()
-        .replace(/[^\w\s]/g, '')
-        .split(/\s+/)
-        .filter((w) => w.length > 3)
-    );
-
-    if (words1.size === 0 || words2.size === 0) return 0;
-
-    const intersection = new Set([...words1].filter((w) => words2.has(w)));
-    const union = new Set([...words1, ...words2]);
-
-    return intersection.size / union.size;
+    return jaccardSimilarity(content1, content2);
   }
 
   /**

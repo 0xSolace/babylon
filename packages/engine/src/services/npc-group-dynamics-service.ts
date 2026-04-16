@@ -39,7 +39,12 @@ import {
   userInteractions,
   users,
 } from '@babylon/db';
-import { GROUP_CONFIG, generateSnowflakeId, logger } from '@babylon/shared';
+import {
+  GROUP_CONFIG,
+  generateSnowflakeId,
+  jaccardSimilarity,
+  logger,
+} from '@babylon/shared';
 import { NPC_GROUP_DYNAMICS_CONFIG } from '../config/npc-activity';
 import { BabylonLLMClient } from '../llm/openai-client';
 import { generateWorldContext, validateNoRealNames } from '../prompts';
@@ -776,6 +781,44 @@ Return your response as XML:
             violations: realNameViolations,
             message: messageContent,
           },
+          'NPCGroupDynamicsService'
+        );
+        continue;
+      }
+
+      // Minimum length guard: reject one-word or very short messages
+      if (
+        messageContent.length < 20 ||
+        messageContent.trim().split(/\s+/).length < 3
+      ) {
+        logger.warn(
+          'NPC group message too short, skipping',
+          {
+            npcId: randomNpc.id,
+            length: messageContent.length,
+            message: messageContent,
+          },
+          'NPCGroupDynamicsService'
+        );
+        continue;
+      }
+
+      // Similarity guard: reject if too similar to any recent message in this chat (5-min window)
+      const recentChatWindow = new Date(Date.now() - 5 * 60 * 1000);
+      const recentChatMsgs = recentMsgs.filter(
+        (m) => m.createdAt >= recentChatWindow
+      );
+      let tooSimilar = false;
+      for (const recent of recentChatMsgs) {
+        if (jaccardSimilarity(messageContent, recent.content) >= 0.5) {
+          tooSimilar = true;
+          break;
+        }
+      }
+      if (tooSimilar) {
+        logger.warn(
+          'NPC group message too similar to recent message, skipping',
+          { npcId: randomNpc.id, chatId: group.id },
           'NPCGroupDynamicsService'
         );
         continue;

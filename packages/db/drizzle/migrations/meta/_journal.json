@@ -477,6 +477,13 @@
       "when": 1775710454009,
       "tag": "0067_add_steward_id",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1744262400000,
+      "tag": "0068_add_arc_event_coverage",
+      "breakpoints": true
     }
   ]
 }
