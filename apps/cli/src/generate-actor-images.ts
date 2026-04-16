@@ -53,7 +53,7 @@
  * @since v0.2.0
  *
  * **Environment Variables:**
- * @env {string} OPENAI_API_KEY - Required OpenAI API key for image generation
+ * @env {string} OPENAI_API_KEY - Required: direct OpenAI API key (gpt-image-1.5 is OpenAI-only)
  */
 
 import {
@@ -64,18 +64,28 @@ import {
   organizationLogo,
   renderPrompt,
 } from '@babylon/engine';
+import { fal } from '@fal-ai/client';
 import { config } from 'dotenv';
-import { access, mkdir, writeFile } from 'fs/promises';
-import OpenAI from 'openai';
-import { join } from 'path';
+import { access, mkdir, rm, writeFile } from 'fs/promises';
+import { join, join as pathJoin } from 'path';
 import { z } from 'zod';
+import { parseFlagValue } from './cli-utils.js';
 import { logger } from './lib/logger.js';
 
-// Load environment variables
-config();
+// ─── CLI flags ────────────────────────────────────────────────────────────────
+//
+// --force           Delete existing images and regenerate everything
+// --actor <id>      Only process images for a single actor (partial regeneration)
+// --org <id>        Only process images for a single organization
+//
+// Examples:
+//   bun run images -- --force
+//   bun run images -- --actor ailon-musk
+//   bun run images -- --org org-openagi
 
-// Parse CLI flags
-const forceRegenerate = process.argv.includes('--force');
+// Load environment variables — walk up to find .env at monorepo root
+config({ path: pathJoin(import.meta.dir, '..', '..', '..', '.env') });
+config(); // also load from CWD as fallback
 
 const ActorSchema = z.object({
   id: z.string(),
@@ -186,20 +196,54 @@ function getOriginalCompanyName(satiricalName: string, orgId: string): string {
   return mappings[orgId] || satiricalName;
 }
 
+// ─── fal.ai image generation ─────────────────────────────────────────────────
+// Uses fal-ai/flux-pro for high-fidelity portrait generation.
+// Returns a Buffer (JPEG) downloaded from the fal CDN URL.
+
+const FAL_PORTRAIT_MODEL = 'fal-ai/flux-pro/v1.1';
+const FAL_BANNER_MODEL = 'fal-ai/flux-pro/v1.1';
+
+interface FalImageOutput {
+  images?: Array<{ url: string; content_type?: string }>;
+  image?: { url: string; content_type?: string };
+}
+
+async function falGenerate(
+  prompt: string,
+  aspectRatio: '1:1' | '3:2' | '16:9',
+  model = FAL_PORTRAIT_MODEL
+): Promise<Buffer> {
+  const result = await fal.subscribe(model, {
+    input: {
+      prompt,
+      num_images: 1,
+      aspect_ratio: aspectRatio,
+      output_format: 'jpeg',
+      safety_tolerance: '5',
+    },
+    logs: false,
+  });
+
+  const output = result.data as FalImageOutput;
+  const imageUrl = output?.images?.[0]?.url ?? output?.image?.url;
+
+  if (!imageUrl) {
+    throw new Error(`fal.ai returned no image URL (model: ${model})`);
+  }
+
+  const resp = await fetch(imageUrl);
+  if (!resp.ok)
+    throw new Error(`Failed to download image from fal CDN: ${resp.status}`);
+  return Buffer.from(await resp.arrayBuffer());
+}
+
 /**
- * Generates a profile picture for an actor using OpenAI's gpt-image-1.5
- *
- * Creates a high-quality square portrait based on the actor's physical description
- * and personality traits. Uses template-based prompts for consistent results.
+ * Generates a portrait PFP for an actor via fal.ai flux-pro.
  */
-async function generateActorImage(
-  openai: OpenAI,
-  actor: Actor
-): Promise<string> {
+async function generateActorImage(actor: Actor): Promise<Buffer> {
   logger.info(`Generating profile picture for ${actor.name}...`);
 
   const descriptionParts = actor.description.split('.').slice(0, 3).join('. ');
-
   const prompt = renderPrompt(actorPortrait, {
     actorName: actor.name,
     realName: actor.realName || actor.name,
@@ -208,31 +252,15 @@ async function generateActorImage(
     personality: actor.personality || 'satirical',
   });
 
-  const result = await openai.images.generate({
-    model: 'gpt-image-1.5',
-    prompt,
-    size: '1024x1024',
-    quality: 'high',
-    output_format: 'jpeg',
-    n: 1,
-  });
-
-  const imageBase64 = result.data?.[0]?.b64_json;
-  if (!imageBase64) {
-    throw new Error(`No image data returned for actor ${actor.name}`);
-  }
-
+  const buf = await falGenerate(prompt, '1:1');
   logger.info(`Generated profile picture for ${actor.name}`);
-  return imageBase64;
+  return buf;
 }
 
 /**
- * Generates a banner for an actor using OpenAI's gpt-image-1.5
+ * Generates a banner for an actor via fal.ai flux-pro.
  */
-async function generateActorBannerImage(
-  openai: OpenAI,
-  actor: Actor
-): Promise<string> {
+async function generateActorBannerImage(actor: Actor): Promise<Buffer> {
   logger.info(`Generating banner for ${actor.name}...`);
 
   if (!actor.profileBanner) {
@@ -245,31 +273,15 @@ async function generateActorBannerImage(
     profileBanner: actor.profileBanner,
   });
 
-  const result = await openai.images.generate({
-    model: 'gpt-image-1.5',
-    prompt,
-    size: '1536x1024',
-    quality: 'high',
-    output_format: 'jpeg',
-    n: 1,
-  });
-
-  const imageBase64 = result.data?.[0]?.b64_json;
-  if (!imageBase64) {
-    throw new Error(`No image data returned for ${actor.name} banner`);
-  }
-
+  const buf = await falGenerate(prompt, '3:2', FAL_BANNER_MODEL);
   logger.info(`Generated banner for ${actor.name}`);
-  return imageBase64;
+  return buf;
 }
 
 /**
- * Generates a logo for an organization using OpenAI's gpt-image-1.5
+ * Generates a logo for an organization via fal.ai flux-pro.
  */
-async function generateOrganizationImage(
-  openai: OpenAI,
-  org: Organization
-): Promise<string> {
+async function generateOrganizationImage(org: Organization): Promise<Buffer> {
   logger.info(`Generating logo for ${org.name}...`);
 
   if (!org.pfpDescription) {
@@ -277,7 +289,6 @@ async function generateOrganizationImage(
   }
 
   const originalCompany = getOriginalCompanyName(org.name, org.id);
-
   const prompt = renderPrompt(organizationLogo, {
     organizationName: org.name,
     originalCompany,
@@ -286,31 +297,17 @@ async function generateOrganizationImage(
     organizationDescription: org.description,
   });
 
-  const result = await openai.images.generate({
-    model: 'gpt-image-1.5',
-    prompt,
-    size: '1024x1024',
-    quality: 'high',
-    output_format: 'jpeg',
-    n: 1,
-  });
-
-  const imageBase64 = result.data?.[0]?.b64_json;
-  if (!imageBase64) {
-    throw new Error(`No image data returned for ${org.name}`);
-  }
-
+  const buf = await falGenerate(prompt, '1:1');
   logger.info(`Generated logo for ${org.name}`);
-  return imageBase64;
+  return buf;
 }
 
 /**
- * Generates a banner for an organization using OpenAI's gpt-image-1.5
+ * Generates a banner for an organization via fal.ai flux-pro.
  */
 async function generateOrganizationBannerImage(
-  openai: OpenAI,
   org: Organization
-): Promise<string> {
+): Promise<Buffer> {
   logger.info(`Generating banner for ${org.name}...`);
 
   if (!org.bannerDescription) {
@@ -320,40 +317,22 @@ async function generateOrganizationBannerImage(
   }
 
   const originalCompany = getOriginalCompanyName(org.name, org.id);
-
   const prompt = renderPrompt(organizationBanner, {
     organizationName: org.name,
     originalCompany,
     bannerDescription: org.bannerDescription,
   });
 
-  const result = await openai.images.generate({
-    model: 'gpt-image-1.5',
-    prompt,
-    size: '1536x1024',
-    quality: 'high',
-    output_format: 'jpeg',
-    n: 1,
-  });
-
-  const imageBase64 = result.data?.[0]?.b64_json;
-  if (!imageBase64) {
-    throw new Error(`No image data returned for ${org.name} banner`);
-  }
-
+  const buf = await falGenerate(prompt, '3:2', FAL_BANNER_MODEL);
   logger.info(`Generated banner for ${org.name}`);
-  return imageBase64;
+  return buf;
 }
 
 /**
- * Saves base64 image data to a file
+ * Saves a Buffer to a file
  */
-async function saveBase64Image(
-  base64Data: string,
-  filepath: string
-): Promise<void> {
-  const buffer = Buffer.from(base64Data, 'base64');
-  await writeFile(filepath, buffer);
+async function saveImageBuffer(buf: Buffer, filepath: string): Promise<void> {
+  await writeFile(filepath, buf);
   logger.info(`Saved image to ${filepath}`);
 }
 
@@ -391,8 +370,8 @@ async function processQueue(
       );
       await job
         .generator()
-        .then(async (base64Data) => {
-          await saveBase64Image(base64Data, job.outputPath);
+        .then(async (buf) => {
+          await saveImageBuffer(buf, job.outputPath);
           generated++;
           logger.info(
             `✅ [${generated}/${jobs.length}] Generated ${job.type} for ${job.name}`
@@ -424,25 +403,50 @@ async function processQueue(
  * 5. Processes jobs concurrently (max 3)
  * 6. Reports statistics
  */
+async function deleteIfExists(filePath: string): Promise<void> {
+  try {
+    await rm(filePath, { force: true });
+  } catch {
+    // ignore
+  }
+}
+
 async function main() {
+  // Parse CLI flags
+  const args = process.argv.slice(2);
+  const forceRegenerate = args.includes('--force');
+  const filterActorId = parseFlagValue(args, '--actor');
+  const filterOrgId = parseFlagValue(args, '--org');
+
+  if (filterActorId) {
+    logger.info(`Filtering to single actor: ${filterActorId}`);
+  }
+  if (filterOrgId) {
+    logger.info(`Filtering to single organization: ${filterOrgId}`);
+  }
+  if (forceRegenerate) {
+    logger.info('--force: existing images will be deleted and regenerated');
+  }
+
   logger.info('Checking actor and organization images...');
-  logger.info(`Model: gpt-image-1.5 | Quality: high | Format: jpeg`);
+  logger.info(
+    'Model: fal-ai/flux-pro | Quality: high | Format: jpeg | Provider: fal.ai'
+  );
 
   if (forceRegenerate) {
     logger.info('--force flag detected: will regenerate ALL images');
   }
 
-  // Check for OPENAI_API_KEY
-  if (!process.env.OPENAI_API_KEY) {
-    logger.error('Error: OPENAI_API_KEY not found in environment variables');
-    logger.error('Please add OPENAI_API_KEY to your .env file');
+  // Image generation uses fal.ai (flux-pro). Set FAL_KEY in your .env.
+  const falKey = process.env.FAL_KEY;
+  if (!falKey) {
+    logger.error('FAL_KEY is required for image generation.');
+    logger.error('Add FAL_KEY to your .env file (get one at fal.ai).');
     process.exit(1);
   }
 
-  // Configure OpenAI client
-  const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
+  // Configure fal.ai client
+  fal.config({ credentials: falKey });
 
   // Load actors database using the engine package loader
   const parsedActors = loadActorsData();
@@ -466,12 +470,52 @@ async function main() {
   let skippedCount = 0;
   const jobs: ImageJob[] = [];
 
+  // Determine which actors/orgs to process
+  const actorsToProcess = filterActorId
+    ? actorsDb.actors.filter((a) => a.id === filterActorId)
+    : actorsDb.actors;
+  const orgsToProcess = filterOrgId
+    ? actorsDb.organizations.filter((o) => o.id === filterOrgId)
+    : filterActorId
+      ? [] // --actor implies skip orgs unless --org also specified
+      : actorsDb.organizations;
+
+  if (filterActorId && actorsToProcess.length === 0) {
+    logger.error(`No actor found with id "${filterActorId}"`);
+    logger.info(
+      'Available actor ids: ' +
+        actorsDb.actors
+          .map((a) => a.id)
+          .slice(0, 10)
+          .join(', ') +
+        '...'
+    );
+    process.exit(1);
+  }
+
+  if (filterOrgId && orgsToProcess.length === 0) {
+    logger.error(`No organization found with id "${filterOrgId}"`);
+    logger.info(
+      'Available org ids: ' +
+        actorsDb.organizations
+          .map((o) => o.id)
+          .slice(0, 10)
+          .join(', ') +
+        '...'
+    );
+    process.exit(1);
+  }
+
   // Build job queue for actor profile pictures
-  logger.info(`Checking ${actorsDb.actors.length} actor profile pictures...`);
-  for (const actor of actorsDb.actors) {
+  logger.info(`Checking ${actorsToProcess.length} actor profile pictures...`);
+  for (const actor of actorsToProcess) {
     const imagePath = join(actorsImagesDir, `${actor.id}.jpg`);
 
-    if (!forceRegenerate && (await fileExists(imagePath))) {
+    if (forceRegenerate) {
+      await deleteIfExists(imagePath);
+    }
+
+    if (await fileExists(imagePath)) {
       skippedCount++;
     } else {
       jobs.push({
@@ -479,17 +523,21 @@ async function main() {
         id: actor.id,
         name: actor.name,
         outputPath: imagePath,
-        generator: () => generateActorImage(openai, actor),
+        generator: () => generateActorImage(actor),
       });
     }
   }
 
   // Build job queue for actor banners
-  logger.info(`Checking ${actorsDb.actors.length} actor banners...`);
-  for (const actor of actorsDb.actors) {
+  logger.info(`Checking ${actorsToProcess.length} actor banners...`);
+  for (const actor of actorsToProcess) {
     const bannerPath = join(actorsBannersDir, `${actor.id}.jpg`);
 
-    if (!forceRegenerate && (await fileExists(bannerPath))) {
+    if (forceRegenerate) {
+      await deleteIfExists(bannerPath);
+    }
+
+    if (await fileExists(bannerPath)) {
       skippedCount++;
     } else {
       jobs.push({
@@ -497,19 +545,21 @@ async function main() {
         id: actor.id,
         name: actor.name,
         outputPath: bannerPath,
-        generator: () => generateActorBannerImage(openai, actor),
+        generator: () => generateActorBannerImage(actor),
       });
     }
   }
 
   // Build job queue for organization logos
-  logger.info(
-    `Checking ${actorsDb.organizations.length} organization logos...`
-  );
-  for (const org of actorsDb.organizations) {
+  logger.info(`Checking ${orgsToProcess.length} organization logos...`);
+  for (const org of orgsToProcess) {
     const imagePath = join(orgsImagesDir, `${org.id}.jpg`);
 
-    if (!forceRegenerate && (await fileExists(imagePath))) {
+    if (forceRegenerate) {
+      await deleteIfExists(imagePath);
+    }
+
+    if (await fileExists(imagePath)) {
       skippedCount++;
     } else {
       jobs.push({
@@ -517,19 +567,21 @@ async function main() {
         id: org.id,
         name: org.name,
         outputPath: imagePath,
-        generator: () => generateOrganizationImage(openai, org),
+        generator: () => generateOrganizationImage(org),
       });
     }
   }
 
   // Build job queue for organization banners
-  logger.info(
-    `Checking ${actorsDb.organizations.length} organization banners...`
-  );
-  for (const org of actorsDb.organizations) {
+  logger.info(`Checking ${orgsToProcess.length} organization banners...`);
+  for (const org of orgsToProcess) {
     const bannerPath = join(orgsBannersDir, `${org.id}.jpg`);
 
-    if (!forceRegenerate && (await fileExists(bannerPath))) {
+    if (forceRegenerate) {
+      await deleteIfExists(bannerPath);
+    }
+
+    if (await fileExists(bannerPath)) {
       skippedCount++;
     } else {
       jobs.push({
@@ -537,7 +589,7 @@ async function main() {
         id: org.id,
         name: org.name,
         outputPath: bannerPath,
-        generator: () => generateOrganizationBannerImage(openai, org),
+        generator: () => generateOrganizationBannerImage(org),
       });
     }
   }
@@ -547,7 +599,7 @@ async function main() {
   );
 
   if (jobs.length === 0) {
-    logger.info('All images already exist!');
+    logger.info('All images already exist! Use --force to regenerate.');
     return;
   }
 
@@ -561,10 +613,8 @@ async function main() {
     generated: result.generated,
     failed: result.failed,
     skipped: skippedCount,
-    totalActors: actorsDb.actors.length,
-    totalOrganizations: actorsDb.organizations.length,
-    totalPossibleImages:
-      actorsDb.actors.length * 2 + actorsDb.organizations.length * 2,
+    totalActors: actorsToProcess.length,
+    totalOrganizations: orgsToProcess.length,
   });
 }
 

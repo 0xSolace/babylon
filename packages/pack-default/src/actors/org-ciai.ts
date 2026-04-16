@@ -96,7 +96,7 @@ const actor = {
   profileDescription:
     'Multi-ethnic cyborg handler with chameleon skin that shifts from light to dark, icy gray augmented eyes, and a matte black nose bridge implant; short cropped hair and an unreadable face. Wears a shadowy suit with a glowing seal pin and a wrist console encrypted with redacted files. Background: a minimalist operations room lit by maps, redactions, and a hotline labeled "COUP SUPPORT."',
   pfpDescription:
-    'Portrait of a chameleon-skinned cyborg handler with shifting skin tones, icy gray HUD eyes, and a matte black nose bridge implant. Short cropped hair, minimal expression, and a shadowy suit with a glowing seal pin.',
+    'Portrait of a white male cyborg handler with pale skin and icy gray HUD eyes, and a matte black nose bridge implant. Short cropped dark brown hair, minimal expression, and a shadowy black suit with a glowing seal pin.',
   profileBanner:
     'A sleek HQ where regime changes are pitched like startups. PowerPoint slides say "PLAUSIBLE DENIABILITY," and a hotline sign reads "COUP SUPPORT." The background is mostly redacted, but the margins are immaculate.',
   babylon: {

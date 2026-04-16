@@ -94,7 +94,7 @@ const actor = {
   profileDescription:
     'Light-skinned white cyborg mogul with icy blue augmented eyes, a straight nose with a cobalt bridge implant, and a chrome jawline; blue feather implant behind the right ear, clean-shaven scalp, and a confident grin. Wears a glossy cobalt flight suit, gold buckle, and a visor shaped like a cowboy hat; chest panel displays altitude like a stock price. Background: a launchpad drenched in blue light with a gift shop at the base of the rocket.',
   pfpDescription:
-    'Portrait of a light-skinned bald cyborg astronaut mogul with icy blue eyes, a chrome jawline, and a blue feather-shaped implant behind one ear. Wears a glossy cobalt flight suit with a gold belt buckle and a tiny cowboy hat visor.',
+    'Portrait of a white male bald cyborg astronaut mogul with fair skin, icy blue eyes, a completely bald polished head, a chrome jawline, and a blue feather-shaped implant behind one ear. Wears a glossy cobalt flight suit with a gold belt buckle and a tiny cowboy hat visor.',
   profileBanner:
     'A glossy blue rocket rises against a star field shaped like a corporate logo. Billionaires in matching flight suits pose for selfies, while a giant cowboy hat hologram spins above the launchpad. The capsule door opens to a gift shop and a ring light.',
   babylon: {

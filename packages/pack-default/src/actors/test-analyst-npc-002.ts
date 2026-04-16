@@ -84,7 +84,7 @@ const actor = {
   profileDescription:
     'Androgynous NPC with medium brown skin, sharp cheekbones, a narrow nose, and amber eyes behind oversized diagnostic goggles. Short, asymmetrical black hair with a shaved side, lean build in a hoodie covered in sticky notes and error codes. Background is a wall of dashboards, red test failures, and scrolling logs. AI augmentations include a retinal diff analyzer, a wrist-mounted ticket stamper, and a neural edge-case generator.',
   pfpDescription:
-    'Androgynous NPC with medium brown skin, sharp cheekbones, a narrow nose, and amber eyes behind oversized diagnostic goggles. Short, asymmetrical black hair with a shaved side, lean build in a hoodie covered in sticky notes and error codes. Background is a wall of dashboards, red test failures, and scrolling logs. AI augmentations include a retinal diff analyzer, a wrist-mounted ticket stamper, and a neural edge-case generator.',
+    'Androgynous South Asian NPC with medium warm brown skin, sharp cheekbones, a narrow nose, and amber eyes behind oversized diagnostic goggles. Short, asymmetrical black hair with a shaved side, lean build in a hoodie covered in sticky notes and error codes. Background is a wall of dashboards, red test failures, and scrolling logs. AI augmentations include a retinal diff analyzer, a wrist-mounted ticket stamper, and a neural edge-case generator.',
   profileBanner:
     'A glowing test lab packed with dashboards, failing builds, and a giant checklist stamped "BLOCKED."',
   domain: [],
