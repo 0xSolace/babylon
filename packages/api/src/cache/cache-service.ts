@@ -354,10 +354,27 @@ export async function setCache<T>(
   const serialized = serializeCacheValue(value);
   const client = getRedisClient();
 
+  // Upstash free/standard tier enforces a 10MB max request size.
+  // Fall back to in-memory cache for oversized payloads instead of crashing.
+  const MAX_REDIS_PAYLOAD_BYTES = 8 * 1024 * 1024; // 8MB with safety margin
+
   if (client) {
-    await client.set(fullKey, serialized, 'EX', ttl);
-    logger.debug('Cache set (Redis)', { key: fullKey, ttl }, 'CacheService');
-    return;
+    if (serialized.length > MAX_REDIS_PAYLOAD_BYTES) {
+      logger.warn(
+        'Cache payload too large for Redis, falling back to memory cache',
+        {
+          key: fullKey,
+          sizeBytes: serialized.length,
+          maxBytes: MAX_REDIS_PAYLOAD_BYTES,
+        },
+        'CacheService'
+      );
+      // Fall through to in-memory cache below
+    } else {
+      await client.set(fullKey, serialized, 'EX', ttl);
+      logger.debug('Cache set (Redis)', { key: fullKey, ttl }, 'CacheService');
+      return;
+    }
   }
 
   const expiresAt = Date.now() + ttl * 1000;
