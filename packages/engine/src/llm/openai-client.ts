@@ -161,6 +161,7 @@ export class BabylonLLMClient {
       this.client = new OpenAI({
         apiKey: elizaCloud.apiKey,
         baseURL: elizaCloud.baseURL,
+        defaultHeaders: { 'X-API-Key': elizaCloud.apiKey },
         timeout: timeoutMs,
         maxRetries: sdkMaxRetries,
         // elizacloud.ai validates via X-API-Key header (route handler checks this before Bearer)
@@ -202,6 +203,7 @@ export class BabylonLLMClient {
       this.client = new OpenAI({
         apiKey: elizaCloud.apiKey,
         baseURL: elizaCloud.baseURL,
+        defaultHeaders: { 'X-API-Key': elizaCloud.apiKey },
         timeout: timeoutMs,
         maxRetries: sdkMaxRetries,
         // elizacloud.ai validates via X-API-Key header (route handler checks this before Bearer)

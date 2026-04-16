@@ -43,9 +43,9 @@ function resolveGroqBaseURL(runtime: IAgentRuntime | undefined): string {
     const base = (
       getRuntimeSetting(runtime, 'ELIZACLOUD_API_URL') ||
       process.env.ELIZACLOUD_API_URL ||
-      'https://api.elizacloud.com'
+      'https://www.elizacloud.ai'
     ).replace(/\/$/, '');
-    return `${base}/openai/v1`;
+    return `${base}/api/v1`;
   }
   return (
     getRuntimeSetting(runtime, 'GROQ_BASE_URL') ||
@@ -115,9 +115,15 @@ export async function callGroqDirect(params: {
     );
   }
 
+  const elizacloudKey =
+    getRuntimeSetting(params.runtime, 'ELIZACLOUD_API_KEY') ||
+    process.env.ELIZACLOUD_API_KEY;
+  const isElizaCloud = !!elizacloudKey;
+
   const groq = createGroq({
     apiKey,
     baseURL: resolveGroqBaseURL(params.runtime),
+    ...(isElizaCloud ? { headers: { 'X-API-Key': apiKey } } : {}),
   });
 
   const model = resolveGroqModel({
