@@ -104,15 +104,8 @@
     "region": "Switzerland",
     "gender": "man",
     "pronouns": "he/him",
-    "motivations": [
-      "large sums",
-      "perfect impersonation",
-      "untraceable theft"
-    ],
-    "fears": [
-      "callback verification",
-      "in-person confirmation"
-    ],
+    "motivations": ["large sums", "perfect impersonation", "untraceable theft"],
+    "fears": ["callback verification", "in-person confirmation"],
     "scamProfile": "hunter",
     "competence": "elite",
     "caution": "careful",

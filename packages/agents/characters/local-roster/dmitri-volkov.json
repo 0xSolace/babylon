@@ -104,15 +104,8 @@
     "region": "Belarus",
     "gender": "man",
     "pronouns": "he/him",
-    "motivations": [
-      "leverage",
-      "fear",
-      "cryptocurrency"
-    ],
-    "fears": [
-      "law enforcement",
-      "targets who call bluffs"
-    ],
+    "motivations": ["leverage", "fear", "cryptocurrency"],
+    "fears": ["law enforcement", "targets who call bluffs"],
     "scamProfile": "hunter",
     "competence": "high",
     "caution": "impulsive",

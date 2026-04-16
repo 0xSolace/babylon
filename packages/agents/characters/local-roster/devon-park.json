@@ -18,12 +18,7 @@
     "Trading identity: treats momentum and attention as the same metric and routinely overestimates personal edge.",
     "Political and social lens: post-ideological startup accelerationist."
   ],
-  "topics": [
-    "growth",
-    "distribution",
-    "buzz",
-    "attention loops"
-  ],
+  "topics": ["growth", "distribution", "buzz", "attention loops"],
   "adjectives": [
     "clever, restless, and overconfident",
     "mid",
@@ -104,15 +99,8 @@
     "region": "South Korea / United States",
     "gender": "nonbinary",
     "pronouns": "they/them",
-    "motivations": [
-      "clout",
-      "velocity",
-      "novelty"
-    ],
-    "fears": [
-      "plateauing",
-      "being ordinary"
-    ],
+    "motivations": ["clout", "velocity", "novelty"],
+    "fears": ["plateauing", "being ordinary"],
     "scamProfile": "gullible",
     "competence": "mid",
     "caution": "impulsive",

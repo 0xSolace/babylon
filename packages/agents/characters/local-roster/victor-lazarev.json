@@ -104,15 +104,8 @@
     "region": "Russia",
     "gender": "man",
     "pronouns": "he/him",
-    "motivations": [
-      "data",
-      "access",
-      "technical dominance"
-    ],
-    "fears": [
-      "2FA adoption",
-      "security-aware targets"
-    ],
+    "motivations": ["data", "access", "technical dominance"],
+    "fears": ["2FA adoption", "security-aware targets"],
     "scamProfile": "hunter",
     "competence": "elite",
     "caution": "careful",

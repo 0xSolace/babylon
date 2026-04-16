@@ -13,8 +13,8 @@
  */
 
 import { db, desc, gte, posts } from '@babylon/db';
-import { jaccardSimilarity } from '@babylon/shared';
 import { StaticDataRegistry } from '@babylon/engine';
+import { jaccardSimilarity } from '@babylon/shared';
 import { logger } from '../shared/logger';
 
 // =============================================================================
