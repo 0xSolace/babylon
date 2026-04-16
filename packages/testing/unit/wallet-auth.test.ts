@@ -61,7 +61,9 @@ describe('requireFreshToken — fresh tokens', () => {
   });
 
   test('token issued exactly at the 300-second boundary is fresh', () => {
-    const token = buildJwt({ ...BASE_PAYLOAD, iat: NOW - 300 });
+    // Use NOW captured at call time to avoid clock drift between module load and test execution
+    const now = Math.floor(Date.now() / 1000);
+    const token = buildJwt({ ...BASE_PAYLOAD, iat: now - 300 });
     const result = requireFreshToken(token);
     // age <= maxAgeSeconds, so 300 <= 300 should be fresh
     expect(result.fresh).toBe(true);
@@ -115,7 +117,8 @@ describe('requireFreshToken — stale tokens', () => {
 
 describe('requireFreshToken — custom maxAgeSeconds', () => {
   test('token at 120s is fresh with maxAge=120', () => {
-    const token = buildJwt({ ...BASE_PAYLOAD, iat: NOW - 120 });
+    const now = Math.floor(Date.now() / 1000);
+    const token = buildJwt({ ...BASE_PAYLOAD, iat: now - 120 });
     const result = requireFreshToken(token, 120);
     expect(result.fresh).toBe(true);
   });
@@ -127,7 +130,8 @@ describe('requireFreshToken — custom maxAgeSeconds', () => {
   });
 
   test('maxAge of 0 means only NOW tokens are fresh', () => {
-    const token = buildJwt({ ...BASE_PAYLOAD, iat: NOW });
+    const now = Math.floor(Date.now() / 1000);
+    const token = buildJwt({ ...BASE_PAYLOAD, iat: now });
     const result = requireFreshToken(token, 0);
     expect(result.fresh).toBe(true);
   });
