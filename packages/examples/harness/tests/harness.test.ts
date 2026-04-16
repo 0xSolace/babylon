@@ -5,7 +5,7 @@
  * Requires the local A2A server to be running on localhost:3001.
  */
 
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { HarnessA2AClient } from '../src/a2a-client';
 import { archetypeAgent } from '../src/agents/archetype-agent';
 import { randomAgent } from '../src/agents/random-agent';
@@ -18,26 +18,23 @@ import { runHarness } from '../src/harness';
 
 const A2A_URL = 'http://localhost:3001';
 
-// Check if A2A server is running
-async function isServerRunning(): Promise<boolean> {
+// Top-level await: evaluated before test.skipIf() so the skip condition is correct
+const serverAvailable = await (async () => {
   try {
-    const response = await fetch(`${A2A_URL}/health`);
-    return response.ok;
+    const r = await fetch(`${A2A_URL}/health`);
+    return r.ok;
   } catch {
     return false;
   }
+})();
+
+if (!serverAvailable) {
+  console.log(
+    '⚠️  A2A server not running on :3001 — integration tests will be skipped'
+  );
 }
 
 describe('Agent Harness', () => {
-  let serverAvailable = false;
-
-  beforeAll(async () => {
-    serverAvailable = await isServerRunning();
-    if (!serverAvailable) {
-      console.log('⚠️ A2A server not running - some tests will be skipped');
-    }
-  });
-
   describe('Archetypes', () => {
     test('should have all 12 archetypes', () => {
       const ids = getArchetypeIds();
