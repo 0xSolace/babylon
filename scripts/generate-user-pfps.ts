@@ -176,7 +176,7 @@ function shuffle<T>(arr: T[], rand: () => number): T[] {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(rand() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
+    [a[i], a[j]] = [a[j]!, a[i]!];
   }
   return a;
 }
@@ -198,10 +198,10 @@ function generateSpecs(): PfpSpec[] {
     sti = 0;
 
   while (specs.length < 150) {
-    const subject = subjects[si % subjects.length];
-    const background = backgrounds[bi % backgrounds.length];
-    const theme = themes[ti % themes.length];
-    const style = styles[sti % styles.length];
+    const subject = subjects[si % subjects.length]!;
+    const background = backgrounds[bi % backgrounds.length]!;
+    const theme = themes[ti % themes.length]!;
+    const style = styles[sti % styles.length]!;
 
     const key = `${subject}|${background}|${theme}|${style}`;
     if (!seen.has(key)) {

@@ -105,8 +105,7 @@ export function EmbedModeProvider({ children }: { children: ReactNode }) {
 
       const secret =
         typeof data.authToken === 'string' ? data.authToken.trim() : null;
-      const id =
-        typeof data.agentId === 'string' ? data.agentId.trim() : null;
+      const id = typeof data.agentId === 'string' ? data.agentId.trim() : null;
 
       if (id) {
         setAgentId(id);

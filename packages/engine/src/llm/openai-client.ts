@@ -164,8 +164,6 @@ export class BabylonLLMClient {
         defaultHeaders: { 'X-API-Key': elizaCloud.apiKey },
         timeout: timeoutMs,
         maxRetries: sdkMaxRetries,
-        // elizacloud.ai validates via X-API-Key header (route handler checks this before Bearer)
-        defaultHeaders: { 'X-API-Key': elizaCloud.apiKey },
       });
       this.provider = 'elizacloud';
     } else if (forceProvider === 'groq' && this.groqKey) {
@@ -206,8 +204,6 @@ export class BabylonLLMClient {
         defaultHeaders: { 'X-API-Key': elizaCloud.apiKey },
         timeout: timeoutMs,
         maxRetries: sdkMaxRetries,
-        // elizacloud.ai validates via X-API-Key header (route handler checks this before Bearer)
-        defaultHeaders: { 'X-API-Key': elizaCloud.apiKey },
       });
       this.provider = 'elizacloud';
     } else if (this.groqKey) {

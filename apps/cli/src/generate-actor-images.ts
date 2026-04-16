@@ -341,7 +341,7 @@ interface ImageJob {
   id: string;
   name: string;
   outputPath: string;
-  generator: () => Promise<string>;
+  generator: () => Promise<Buffer>;
 }
 
 /**
