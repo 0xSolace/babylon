@@ -110,7 +110,7 @@ let cursor: string | undefined;
 
 do {
   const url = new URL('https://auth.privy.io/api/v1/users');
-  url.searchParams.set('limit', '500');
+  url.searchParams.set('limit', '100');
   if (cursor) url.searchParams.set('cursor', cursor);
 
   const res = await fetch(url.toString(), {
