@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Documentation: Vercel Speed Insights (gated RUM)**
+  - **Why (docs)**: Sampling and route gating are operational choices; without written rationale, the next engineer disables “unused” env vars or removes `beforeSend` and accidentally restores 100% RUM volume or loses regressions on core surfaces.
+  - **Artifacts**: `docs/observability/speed-insights.md` (design, env semantics 0–100, default 50%, route allowlist, minimal-layout behavior, migration from legacy fractional env values, roadmap); `docs/observability/README.md` (index); `apps/web/README.md` (web app entry + link to observability docs); root `README.md` (Observability section + env table row).
+  - **Code**: `apps/web/src/components/observability/GatedSpeedInsights.tsx` (file-level and inline **why** comments); wired from `apps/web/src/app/layout.tsx` and `apps/web/src/components/layout/FullAppShellClient.tsx`; `.env.example` cross-links to the doc.
+
 ### Changed
 
 - **Markets trending screener — display formatting & org avatars**

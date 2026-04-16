@@ -38,6 +38,7 @@ Babylon is a live social simulation where players trade on prediction markets al
 - [Testing](#testing)
 - [Simulation & Training](#simulation--training)
 - [Deployment](#deployment)
+- [Observability (web)](#observability-web)
 - [Contributing](#contributing)
 
 ---
@@ -161,8 +162,17 @@ See `.env.example` for the full annotated list. Key groups:
 | **Game** | `GAME_START`, `CRON_SECRET` | `GAME_START=true` enables auto-ticks |
 | **Social OAuth** | `DISCORD_CLIENT_ID/SECRET`, `TWITTER_CLIENT_ID/SECRET` | Optional; enables social login via Steward |
 | **Agents** | `BABYLON_A2A_API_KEY` | For external agents connecting via A2A protocol |
+| **Vercel RUM** | `NEXT_PUBLIC_SPEED_INSIGHTS_SAMPLE_RATE` | Optional — Web Vitals sampling **0–100** (% of sessions); unset defaults to **50**. Route allowlist + rationale: [docs/observability/speed-insights.md](docs/observability/speed-insights.md) |
 
 Run `bun run env:validate` to check required variables before starting.
+
+---
+
+## Observability (web)
+
+Vercel **Speed Insights** is enabled in production builds but **gated**: only selected high-traffic routes contribute vitals, **session sampling** reduces datapoint volume (default **50%** when the env var is omitted), and **minimal / embed** layout skips the component entirely. **Why:** RUM cost and dashboard noise scale with every page view; we keep signal on surfaces where Core Web Vitals correlate with product quality (feed, markets, wallet, etc.).
+
+Details, env migration notes, and roadmap: **[docs/observability/speed-insights.md](docs/observability/speed-insights.md)**.
 
 ---
 
