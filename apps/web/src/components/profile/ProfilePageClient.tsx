@@ -47,6 +47,7 @@ import { TradesFeed } from '@/components/trades/TradesFeed';
 import { useAuth } from '@/hooks/useAuth';
 import { useErrorToasts } from '@/hooks/useErrorToasts';
 import { useGameStore } from '@/stores/gameStore';
+import { apiUrl } from '@/utils/api-url';
 
 type ProfileRouteMode = 'auto' | 'user' | 'user_id' | 'actor' | 'org';
 
@@ -245,7 +246,6 @@ export function ProfilePageClient({
               isAgent: boolean;
               managedBy: string | null;
               stats: unknown;
-              onChainRegistered?: boolean | null;
               nftTokenId?: number | null;
             } | null;
           };
@@ -264,7 +264,6 @@ export function ProfilePageClient({
               profileImageUrl: foundUser.profileImageUrl ?? undefined,
               coverImageUrl: foundUser.coverImageUrl ?? undefined,
               stats: foundUser.stats as ProfileInfo['stats'],
-              onChainRegistered: foundUser.onChainRegistered ?? undefined,
               nftTokenId: foundUser.nftTokenId ?? undefined,
             });
             setLoading(false);
@@ -299,7 +298,6 @@ export function ProfilePageClient({
             isAgent: boolean;
             managedBy: string | null;
             stats: unknown;
-            onChainRegistered?: boolean | null;
             nftTokenId?: number | null;
           } | null;
         };
@@ -327,7 +325,6 @@ export function ProfilePageClient({
             profileImageUrl: foundUser.profileImageUrl ?? undefined,
             coverImageUrl: foundUser.coverImageUrl ?? undefined,
             stats: foundUser.stats as ProfileInfo['stats'],
-            onChainRegistered: foundUser.onChainRegistered ?? undefined,
             nftTokenId: foundUser.nftTokenId ?? undefined,
           });
 
@@ -380,7 +377,6 @@ export function ProfilePageClient({
                 isAgent: boolean;
                 managedBy: string | null;
                 stats: unknown;
-                onChainRegistered?: boolean | null;
                 nftTokenId?: number | null;
               } | null;
             };
@@ -400,7 +396,6 @@ export function ProfilePageClient({
                 profileImageUrl: foundUser.profileImageUrl ?? undefined,
                 coverImageUrl: foundUser.coverImageUrl ?? undefined,
                 stats: foundUser.stats as ProfileInfo['stats'],
-                onChainRegistered: foundUser.onChainRegistered ?? undefined,
                 nftTokenId: foundUser.nftTokenId ?? undefined,
               });
 
@@ -447,7 +442,7 @@ export function ProfilePageClient({
       organizations: [],
     };
     try {
-      const response = await fetch('/api/actors');
+      const response = await fetch(apiUrl('/api/actors'));
       if (response.ok) {
         actorsDb = (await response.json()) as typeof actorsDb;
       }
@@ -1003,7 +998,7 @@ export function ProfilePageClient({
                     )}
                     {actorInfo.type === 'user' && (
                       <OnChainBadge
-                        isRegistered={actorInfo.onChainRegistered ?? false}
+                        isRegistered={Boolean(actorInfo.nftTokenId)}
                         nftTokenId={actorInfo.nftTokenId ?? null}
                         size="md"
                       />
@@ -1016,9 +1011,9 @@ export function ProfilePageClient({
                   )}
                 </div>
 
-                {(actorInfo.profileDescription || actorInfo.description) && (
+                {actorInfo.description && (
                   <p className="mb-3 whitespace-pre-wrap text-[15px] text-foreground">
-                    {actorInfo.profileDescription || actorInfo.description}
+                    {actorInfo.description}
                   </p>
                 )}
 

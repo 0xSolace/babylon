@@ -24,7 +24,6 @@
     "@babylon/a2a": "workspace:*",
     "@babylon/agents": "workspace:*",
     "@babylon/api": "workspace:*",
-    "@babylon/contracts": "workspace:*",
     "@babylon/db": "workspace:*",
     "@babylon/engine": "workspace:*",
     "@babylon/shared": "workspace:*",

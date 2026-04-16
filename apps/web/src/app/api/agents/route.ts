@@ -18,7 +18,7 @@
  *     summary: List user agents
  *     description: Returns all agents owned by the authenticated user with performance statistics and autonomous action status.
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: query
  *         name: autonomousTrading
@@ -47,7 +47,7 @@
  *     summary: Create new agent
  *     description: Creates a new autonomous agent with AI capabilities, trading permissions, and points-based resource management.
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -249,7 +249,6 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
       modelTier: config?.modelTier === 'pro' ? 'pro' : 'free',
       lifetimePnL: agentUser.lifetimePnL.toString(),
       walletAddress: agentUser.walletAddress,
-      onChainRegistered: agentUser.onChainRegistered,
       createdAt: toISO(agentUser.createdAt),
     },
   });

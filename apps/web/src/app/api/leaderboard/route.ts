@@ -68,6 +68,7 @@ import {
 import { and, db, eq, follows, inArray } from '@babylon/db';
 import { type LeaderboardMetric, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+import { sanitizeForJson } from '@/lib/json/sanitize';
 import { parseLeaderboardQuery } from './query';
 
 const CACHE_KEY_NAMESPACE = 'leaderboard';
@@ -227,7 +228,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   );
 
   return successResponse(
-    {
+    sanitizeForJson({
       leaderboard: leaderboardData.users,
       pagination: {
         page: leaderboardData.page,
@@ -241,7 +242,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       followingUserIds,
       followingUserIdsResolved,
       generatedAt,
-    },
+    }),
     200,
     {
       'x-cache': cacheHit ? 'leaderboard-hit' : 'leaderboard-miss',

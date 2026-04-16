@@ -27,6 +27,7 @@ import {
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import type { SQL } from 'drizzle-orm';
 import { FEE_CONFIG, type FeeType } from '../config/fees';
+import { FeeRedistributionService } from './fee-redistribution-service';
 
 /**
  * Transaction context type - either an existing transaction or the db client
@@ -268,6 +269,25 @@ export class FeeService {
     // Use existing transaction if provided, otherwise create a new one
     const result = await runInTransaction(existingTx, processFee);
 
+    // Divert portion of platform fees to stability fund for NPC liquidity
+    // This happens outside the transaction to avoid blocking on fund updates
+    const stabilityFundDiversion =
+      FeeRedistributionService.calculateDiversionAmount(
+        result.platformReceived
+      );
+    if (stabilityFundDiversion > 0) {
+      // Fire and forget - don't block fee processing on fund updates
+      FeeRedistributionService.addToFund(stabilityFundDiversion).catch(
+        (err) => {
+          logger.warn(
+            'Failed to add to stability fund',
+            { error: err instanceof Error ? err.message : String(err) },
+            'FeeService'
+          );
+        }
+      );
+    }
+
     logger.info(
       'Trading fee processed',
       {
@@ -276,6 +296,7 @@ export class FeeService {
         feeCharged: result.feeCharged,
         referrerPaid: result.referrerPaid,
         referrerId: result.referrerId,
+        stabilityFundDiversion,
       },
       'FeeService'
     );

@@ -16,7 +16,7 @@
  *     summary: Promote/demote admin
  *     description: Promotes user to admin or demotes admin to user (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: userId
@@ -165,7 +165,6 @@ export const POST = withErrorHandling(
         walletAddress: true,
         profileImageUrl: true,
         isAdmin: true,
-        onChainRegistered: true,
         hasFarcaster: true,
         hasTwitter: true,
         createdAt: true,

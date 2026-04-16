@@ -307,6 +307,8 @@ class TestNoGhostVariables:
         # Government post
         "govDescription",
         "govName",
+        # Trading — passed by MarketDecisionEngine
+        "momentumAlerts",
     }
 
     # =========================================================================

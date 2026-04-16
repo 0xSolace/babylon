@@ -16,7 +16,7 @@
  *     summary: Debug user DM chats
  *     description: Returns all DM chats for a user (admin only, bypasses RLS)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: query
  *         name: userId

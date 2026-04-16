@@ -22,7 +22,7 @@
  *     summary: Get current user profile
  *     description: Returns the authenticated user complete profile including onboarding status, social connections, and reputation.
  *     security:
- *       - PrivyAuth: []
+ *       - StewardAuth: []
  *     responses:
  *       200:
  *         description: User profile
@@ -49,8 +49,6 @@
  *                       type: string
  *                     profileImageUrl:
  *                       type: string
- *                     walletAddress:
- *                       type: string
  *                     reputationPoints:
  *                       type: number
  *                     isAdmin:
@@ -64,7 +62,6 @@
  * - **Identity:** username, display name, bio, avatar, cover image
  * - **Onboarding Status:** profile completion
  * - **Social Links:** Farcaster, Twitter connections and visibility settings
- * - **Blockchain:** wallet address, NFT token ID, on-chain status
  * - **Reputation:** reputation points, referral code, referral source
  * - **Stats:** cached profile statistics (posts, followers, following)
  * - **Permissions:** admin status, actor/agent flag
@@ -91,15 +88,12 @@
  *
  * **User Object Fields:**
  * @property {string} user.id - User ID
- * @property {string} user.privyId - Privy authentication ID
+ * @property {string} user.privyId - Legacy Privy ID (deprecated, kept for migration compatibility)
  * @property {string} user.username - Unique username
  * @property {string} user.displayName - Display name
  * @property {string} user.bio - User biography
  * @property {string} user.profileImageUrl - Profile image URL
  * @property {string} user.coverImageUrl - Cover image URL
- * @property {string} user.walletAddress - Blockchain wallet address
- * @property {boolean} user.onChainRegistered - On-chain registration status
- * @property {string} user.nftTokenId - Associated NFT token ID
  * @property {string} user.referralCode - User's referral code
  * @property {string} user.referredBy - Referrer's code (if referred)
  * @property {number} user.reputationPoints - Reputation score
@@ -139,50 +133,24 @@ import {
   authenticateWithDbUser,
   ConflictError,
   cachedDb,
-  ensureOfflineWalletReady,
-  getPrivyClient,
   InternalServerError,
-  type PrivyUserWalletsLite,
-  pickEmbeddedEvmWallet,
-  ReputationService,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, db, eq, ne, or, sql, users } from '@babylon/db';
-import {
-  checkForAdminEmail,
-  getAllVerifiedEmails,
-  logger,
-  type PrivyUserWithEmails,
-  toISO,
-  toISOOrNull,
-} from '@babylon/shared';
-import type { User as PrivyUser } from '@privy-io/server-auth';
+import { db, eq, or, sql, users } from '@babylon/db';
+import { logger, toISO, toISOOrNull } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
-import {
-  extractPrivyIdentitySnapshot,
-  type PrivyIdentitySnapshot,
-  shouldSyncMissingPrivyIdentity,
-} from '@/lib/auth/privyIdentitySync';
 import { getOptionalProfileStats } from '@/lib/users/profile-stats';
 import { POST as updateProfilePOST } from '../[userId]/update-profile/route';
-
-type PrivyUserWithWallets = PrivyUser &
-  PrivyUserWithEmails &
-  PrivyUserWalletsLite;
 
 const userSelectFields = {
   id: users.id,
   privyId: users.privyId,
-  privyWalletId: users.privyWalletId,
-  offlineWalletReady: users.offlineWalletReady,
-  offlineWalletReadyAt: users.offlineWalletReadyAt,
   username: users.username,
   displayName: users.displayName,
   bio: users.bio,
   profileImageUrl: users.profileImageUrl,
   coverImageUrl: users.coverImageUrl,
-  walletAddress: users.walletAddress,
   email: users.email, // For displaying pending referrals
   emailVerified: users.emailVerified,
   emailNotificationsEnabled: users.emailNotificationsEnabled,
@@ -194,9 +162,6 @@ const userSelectFields = {
   hasUsername: users.hasUsername,
   hasBio: users.hasBio,
   hasProfileImage: users.hasProfileImage,
-  onChainRegistered: users.onChainRegistered,
-  nftTokenId: users.nftTokenId,
-  agent0TokenId: users.agent0TokenId,
   referralCode: users.referralCode,
   referredBy: users.referredBy,
   reputationPoints: users.reputationPoints,
@@ -230,15 +195,11 @@ const userSelectFields = {
 type UserSelectResult = {
   id: string;
   privyId: string | null;
-  privyWalletId: string | null;
-  offlineWalletReady: boolean;
-  offlineWalletReadyAt: Date | null;
   username: string | null;
   displayName: string | null;
   bio: string | null;
   profileImageUrl: string | null;
   coverImageUrl: string | null;
-  walletAddress: string | null;
   email: string | null;
   emailVerified: boolean;
   emailNotificationsEnabled: boolean;
@@ -250,9 +211,6 @@ type UserSelectResult = {
   hasUsername: boolean;
   hasBio: boolean;
   hasProfileImage: boolean;
-  onChainRegistered: boolean;
-  nftTokenId: number | null;
-  agent0TokenId: number | null;
   referralCode: string | null;
   referredBy: string | null;
   reputationPoints: number;
@@ -283,203 +241,6 @@ type UserSelectResult = {
   gameGuideCompletedAt: Date | null;
 };
 
-async function syncMissingPrivyIdentityFields(
-  dbUser: UserSelectResult,
-  privyIdentity: PrivyIdentitySnapshot
-): Promise<{
-  user: UserSelectResult;
-  newlyLinked: Array<'farcaster' | 'twitter' | 'telegram'>;
-}> {
-  const updateData: Partial<typeof users.$inferInsert> = {};
-  const newlyLinked: Array<'farcaster' | 'twitter' | 'telegram'> = [];
-
-  if ((!dbUser.email || !dbUser.emailVerified) && privyIdentity.email) {
-    updateData.email = privyIdentity.email;
-    updateData.emailVerified = true;
-  }
-
-  if (!dbUser.hasFarcaster && privyIdentity.farcasterFid) {
-    const [existingFarcasterUser] = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(
-        and(
-          eq(users.farcasterFid, privyIdentity.farcasterFid),
-          ne(users.id, dbUser.id)
-        )
-      )
-      .limit(1);
-
-    if (existingFarcasterUser) {
-      logger.warn(
-        'Privy Farcaster identity already linked to another user, skipping sync',
-        {
-          userId: dbUser.id,
-          farcasterFid: privyIdentity.farcasterFid,
-          conflictingUserId: existingFarcasterUser.id,
-        },
-        'GET /api/users/me'
-      );
-    } else {
-      updateData.hasFarcaster = true;
-      updateData.farcasterFid = privyIdentity.farcasterFid;
-      if (privyIdentity.farcasterUsername) {
-        updateData.farcasterUsername = privyIdentity.farcasterUsername;
-      }
-      newlyLinked.push('farcaster');
-    }
-  }
-
-  if (!dbUser.hasTwitter && privyIdentity.twitterId) {
-    const [existingTwitterUser] = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(
-        and(
-          eq(users.twitterId, privyIdentity.twitterId),
-          ne(users.id, dbUser.id)
-        )
-      )
-      .limit(1);
-
-    if (existingTwitterUser) {
-      logger.warn(
-        'Privy X identity already linked to another user, skipping sync',
-        {
-          userId: dbUser.id,
-          twitterId: privyIdentity.twitterId,
-          conflictingUserId: existingTwitterUser.id,
-        },
-        'GET /api/users/me'
-      );
-    } else {
-      updateData.hasTwitter = true;
-      updateData.twitterId = privyIdentity.twitterId;
-      if (privyIdentity.twitterUsername) {
-        updateData.twitterUsername = privyIdentity.twitterUsername;
-      }
-      newlyLinked.push('twitter');
-    }
-  }
-
-  if (!dbUser.hasTelegram && privyIdentity.telegramUserId) {
-    const [existingTelegramUser] = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(
-        and(
-          eq(users.telegramId, privyIdentity.telegramUserId),
-          ne(users.id, dbUser.id)
-        )
-      )
-      .limit(1);
-
-    if (existingTelegramUser) {
-      logger.warn(
-        'Privy Telegram identity already linked to another user, skipping sync',
-        {
-          userId: dbUser.id,
-          telegramUserId: privyIdentity.telegramUserId,
-          conflictingUserId: existingTelegramUser.id,
-        },
-        'GET /api/users/me'
-      );
-    } else {
-      updateData.hasTelegram = true;
-      updateData.telegramId = privyIdentity.telegramUserId;
-      updateData.telegramVerifiedAt = new Date();
-      if (privyIdentity.telegramUsername) {
-        updateData.telegramUsername = privyIdentity.telegramUsername;
-      }
-      newlyLinked.push('telegram');
-    }
-  }
-
-  if (Object.keys(updateData).length === 0) {
-    return { user: dbUser, newlyLinked };
-  }
-
-  const oldPrivyId = dbUser.privyId;
-
-  const [updatedUser] = await db
-    .update(users)
-    .set({
-      ...updateData,
-      updatedAt: new Date(),
-    })
-    .where(eq(users.id, dbUser.id))
-    .returning(userSelectFields);
-
-  const finalUser = updatedUser ?? dbUser;
-
-  // Refresh identifier + user caches after any Privy identity sync (email/social fields).
-  // Always invalidate: privyId may be unchanged while other cached user fields change.
-  await cachedDb.invalidateUserIdentifierCaches(
-    {
-      id: finalUser.id,
-      privyId: finalUser.privyId,
-      username: finalUser.username,
-    },
-    oldPrivyId !== finalUser.privyId && oldPrivyId
-      ? { privyId: oldPrivyId }
-      : undefined
-  );
-
-  return {
-    user: finalUser,
-    newlyLinked,
-  };
-}
-
-async function awardPointsForNewPrivyIdentityLinks(
-  userId: string,
-  newlyLinked: Array<'farcaster' | 'twitter' | 'telegram'>,
-  privyIdentity: PrivyIdentitySnapshot
-): Promise<void> {
-  for (const platform of newlyLinked) {
-    let pointsResult: Awaited<
-      ReturnType<typeof ReputationService.awardFarcasterLink>
-    >;
-    if (platform === 'farcaster') {
-      pointsResult = await ReputationService.awardFarcasterLink(
-        userId,
-        privyIdentity.farcasterUsername ?? undefined
-      );
-    } else if (platform === 'telegram') {
-      pointsResult = await ReputationService.awardTelegramLink(
-        userId,
-        privyIdentity.telegramUsername ?? undefined
-      );
-    } else {
-      pointsResult = await ReputationService.awardTwitterLink(
-        userId,
-        privyIdentity.twitterUsername ?? undefined
-      );
-    }
-
-    if (!pointsResult.success) {
-      logger.warn(
-        'Points service did not award points for Privy identity link',
-        { userId, platform },
-        'GET /api/users/me'
-      );
-      continue;
-    }
-
-    await ReputationService.checkAndQualifyReferral(userId).catch((error) => {
-      logger.warn(
-        'Failed to check referral qualification after Privy identity sync',
-        {
-          userId,
-          platform,
-          error: error instanceof Error ? error.message : String(error),
-        },
-        'GET /api/users/me'
-      );
-    });
-  }
-}
-
 function buildUserResponse(
   dbUser: UserSelectResult,
   stats: Awaited<ReturnType<typeof getOptionalProfileStats>>
@@ -487,15 +248,11 @@ function buildUserResponse(
   return {
     id: dbUser.id,
     privyId: dbUser.privyId,
-    privyWalletId: dbUser.privyWalletId,
-    offlineWalletReady: dbUser.offlineWalletReady,
-    offlineWalletReadyAt: toISOOrNull(dbUser.offlineWalletReadyAt),
     username: dbUser.username,
     displayName: dbUser.displayName,
     bio: dbUser.bio,
     profileImageUrl: dbUser.profileImageUrl,
     coverImageUrl: dbUser.coverImageUrl,
-    walletAddress: dbUser.walletAddress,
     email: dbUser.email,
     emailVerified: dbUser.emailVerified,
     emailNotificationsEnabled: dbUser.emailNotificationsEnabled,
@@ -507,9 +264,6 @@ function buildUserResponse(
     hasUsername: dbUser.hasUsername,
     hasBio: dbUser.hasBio,
     hasProfileImage: dbUser.hasProfileImage,
-    onChainRegistered: dbUser.onChainRegistered,
-    nftTokenId: dbUser.nftTokenId,
-    agent0TokenId: dbUser.agent0TokenId,
     referralCode: dbUser.referralCode,
     referredBy: dbUser.referredBy,
     reputationPoints: dbUser.reputationPoints,
@@ -617,16 +371,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const authUser = await authenticate(request);
   const privyId = authUser.privyId ?? authUser.userId;
   const canonicalUserId = authUser.dbUserId ?? authUser.userId;
-  const clientEmbeddedWalletAddressRaw = request.headers.get(
-    'x-embedded-wallet-address'
-  );
-  const clientEmbeddedWalletAddress =
-    typeof clientEmbeddedWalletAddressRaw === 'string' &&
-    /^0x[a-fA-F0-9]{40}$/.test(clientEmbeddedWalletAddressRaw.trim())
-      ? clientEmbeddedWalletAddressRaw.trim().toLowerCase()
-      : null;
-  const shouldForcePrivyIdentitySync =
-    request.headers.get('x-sync-privy-identities') === '1';
 
   // Extract referralCode from query params (passed from frontend)
   const { searchParams } = new URL(request.url);
@@ -638,69 +382,42 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     'GET /api/users/me'
   );
 
+  // Phase 2: Look up by primary key (fastest, works for both Steward and legacy Privy users).
+  // auth-middleware already resolved the correct Babylon user ID into authUser.dbUserId
+  // via ensureUserFromSteward / email-bridge / fast-path, so we trust it directly.
   let [dbUser] = await db
     .select(userSelectFields)
     .from(users)
-    .where(eq(users.privyId, privyId))
+    .where(eq(users.id, canonicalUserId))
     .limit(1);
 
-  // Create minimal user record on first authentication
+  // Fallback: legacy Privy users whose row predates the stewardId column —
+  // find them by privyId in case canonicalUserId resolved to the Steward UUID
+  // rather than the Babylon snowflake on an older session.
   if (!dbUser) {
-    // Fetch user data from Privy to get email and social accounts
-    let email: string | null = null;
-    let farcasterUsername: string | null = null;
-    let farcasterFid: string | null = null;
-    let twitterUsername: string | null = null;
-    let twitterId: string | null = null;
-    let telegramUserId: string | null = null;
-    let telegramUsername: string | null = null;
-    let embeddedWalletAddress: string | null = null;
-    let embeddedWalletId: string | null = null;
+    [dbUser] = await db
+      .select(userSelectFields)
+      .from(users)
+      .where(eq(users.privyId, privyId))
+      .limit(1);
+  }
 
-    const privyClient = getPrivyClient();
-    const privyUser = (await privyClient.getUser(
-      privyId
-    )) as PrivyUserWithWallets;
-
-    email = getAllVerifiedEmails(privyUser)[0] ?? null;
-
-    // Extract Farcaster info
-    if (privyUser.farcaster) {
-      farcasterUsername = privyUser.farcaster.username ?? null;
-      farcasterFid = privyUser.farcaster.fid
-        ? String(privyUser.farcaster.fid)
-        : null;
-    }
-
-    // Extract Twitter info
-    if (privyUser.twitter) {
-      twitterUsername = privyUser.twitter.username ?? null;
-      twitterId = privyUser.twitter.subject ?? null;
-    }
-
-    // Extract Telegram info
-    if (privyUser.telegram) {
-      telegramUserId = privyUser.telegram.telegramUserId ?? null;
-      telegramUsername = privyUser.telegram.username ?? null;
-    }
-
-    const embedded = pickEmbeddedEvmWallet(privyUser);
-    if (embedded) {
-      embeddedWalletId = embedded.walletId;
-      embeddedWalletAddress = embedded.address.toLowerCase();
-      authUser.walletAddress = embeddedWalletAddress;
-    }
+  // Create minimal user record on first authentication
+  // Phase 2: auth-middleware creates the user via ensureUserFromSteward before
+  // this route runs, so this block should rarely be hit for Steward users.
+  if (!dbUser) {
+    // Use only data available from the authenticated session — no Privy call
+    const email: string | null = authUser.email ?? null;
+    const farcasterUsername: string | null = null;
+    const farcasterFid: string | null = null;
+    const twitterUsername: string | null = null;
+    const twitterId: string | null = null;
+    const telegramUserId: string | null = null;
+    const telegramUsername: string | null = null;
 
     logger.info(
-      'Fetched Privy user data for new user',
-      {
-        privyId,
-        hasEmail: !!email,
-        hasFarcaster: !!farcasterUsername,
-        hasTwitter: !!twitterUsername,
-        hasTelegram: !!telegramUserId,
-        hasEmbeddedWallet: !!embeddedWalletAddress,
-      },
+      'Creating minimal user for new Steward user',
+      { privyId, email },
       'GET /api/users/me'
     );
 
@@ -870,7 +587,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           userId: linkedUser.id,
           username: linkedUser.username,
           profileComplete: linkedUser.profileComplete,
-          onChainRegistered: linkedUser.onChainRegistered,
           needsOnboarding,
         },
         'GET /api/users/me'
@@ -956,7 +672,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       {
         privyId,
         userId: canonicalUserId,
-        walletAddress: authUser.walletAddress,
         referredBy: resolvedReferrerId,
         email,
         emailVerified: !!email,
@@ -966,22 +681,16 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       'GET /api/users/me'
     );
 
-    const dbWalletAddress = embeddedWalletAddress?.toLowerCase() ?? null;
-
-    // Check if user should be auto-promoted to admin based on email domain
-    // SECURITY: Requires email verification (Privy emails are verified by design)
-    // Check ALL linked emails, not just the primary one (handles users who linked admin email later)
-    const { adminEmail, allVerifiedEmails } = checkForAdminEmail(privyUser);
+    // Phase 2: Admin check uses the email from auth session (Steward verifies email ownership)
+    const adminDomain = process.env.ADMIN_EMAIL_DOMAIN?.trim();
+    const adminEmail: string | null =
+      email && adminDomain && email.endsWith(`@${adminDomain}`) ? email : null;
     const shouldBeAdmin = adminEmail !== null;
 
     if (shouldBeAdmin) {
       logger.info(
         'Auto-promoting user to admin based on verified email domain',
-        {
-          privyId,
-          emailDomain: adminEmail?.split('@')[1] ?? null,
-          emailCount: allVerifiedEmails.length,
-        },
+        { privyId, emailDomain: adminEmail?.split('@')[1] ?? null },
         'GET /api/users/me'
       );
     }
@@ -991,8 +700,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       .values({
         id: canonicalUserId,
         privyId,
-        privyWalletId: embeddedWalletId,
-        walletAddress: dbWalletAddress,
         referredBy: resolvedReferrerId,
         email,
         farcasterUsername,
@@ -1066,162 +773,27 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     throw new InternalServerError('Failed to create or find user record');
   }
 
-  // =====================================================================================
-  // EMBEDDED WALLET BACKFILL
-  // =====================================================================================
-  //
-  // This section handles backfilling/syncing embedded wallet information (privyWalletId
-  // and walletAddress) from Privy. This is necessary because:
-  //
-  // 1. Users created before the embedded wallet refactor may not have privyWalletId stored.
-  // 2. The wallet address may need to be synced if the user's embedded wallet changed
-  //    (e.g., after account deletion/recreation or session relink).
-  //
-  // BEHAVIOR:
-  // - On each request where wallet data is missing or mismatched, we call Privy's getUser API.
-  // - This is intentional for the backfill phase and ensures eventual consistency.
-  //
-  // PERFORMANCE NOTE:
-  // - The Privy API call adds ~100-200ms latency per request when backfill is needed.
-  // - Once wallet data is persisted, subsequent requests skip the backfill.
-  // - If this becomes a bottleneck in production, consider:
-  //   1. Adding a Redis-based cooldown (skip backfill for N minutes after failure)
-  //   2. Rate limiting backfill attempts per user session
-  //   3. Moving backfill to a background job
-  //
-  // =====================================================================================
-  const dbWalletLower = dbUser.walletAddress?.toLowerCase() ?? null;
-  const shouldResyncWallet =
-    !!clientEmbeddedWalletAddress &&
-    clientEmbeddedWalletAddress !== dbWalletLower;
-  const shouldEnsureOfflineWallet =
-    !dbWalletLower ||
-    !dbUser.privyWalletId ||
-    !dbUser.offlineWalletReady ||
-    shouldResyncWallet;
-
-  if (shouldEnsureOfflineWallet) {
-    try {
-      const offlineWallet = await ensureOfflineWalletReady({ privyId });
-      const resolvedAddress = offlineWallet.walletAddress.toLowerCase();
-
-      if (
-        shouldResyncWallet &&
-        resolvedAddress &&
-        resolvedAddress !== clientEmbeddedWalletAddress
-      ) {
-        logger.warn(
-          'Client embedded wallet address mismatch; using Privy embedded wallet address',
-          {
-            userId: dbUser.id,
-            dbWalletAddress: dbUser.walletAddress,
-            clientEmbeddedWalletAddress,
-            privyEmbeddedWalletAddress: resolvedAddress,
-          },
-          'GET /api/users/me'
-        );
-      }
-
-      const [updated] = await db
-        .update(users)
-        .set({
-          privyWalletId: offlineWallet.privyWalletId,
-          walletAddress: resolvedAddress,
-          offlineWalletReady: true,
-          offlineWalletReadyAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(eq(users.id, dbUser.id))
-        .returning(userSelectFields);
-      if (updated) dbUser = updated;
-    } catch (error) {
-      logger.warn(
-        'Offline wallet provisioning failed during profile fetch; returning profile without blocking',
-        {
-          userId: dbUser.id,
-          privyId,
-          hasPrivyWalletId: !!dbUser.privyWalletId,
-          hasWalletAddress: !!dbUser.walletAddress,
-          shouldResyncWallet,
-          error: error instanceof Error ? error.message : String(error),
-        },
-        'GET /api/users/me'
-      );
-    }
-  }
-
-  const needsPrivyIdentitySync =
-    shouldForcePrivyIdentitySync &&
-    shouldSyncMissingPrivyIdentity({
-      hasFarcaster: dbUser.hasFarcaster,
-      hasTwitter: dbUser.hasTwitter,
-      hasTelegram: dbUser.hasTelegram,
-      email: dbUser.email,
-      emailVerified: dbUser.emailVerified,
-    });
+  // Phase 2: Privy identity sync removed. Social identities are synced at login time.
   const needsAdminPromotionCheck = !dbUser.isAdmin;
 
-  if (needsPrivyIdentitySync || needsAdminPromotionCheck) {
-    const privyClient = getPrivyClient();
-    const privyUser = (await privyClient.getUser(
-      privyId
-    )) as PrivyUserWithWallets;
-    const privyIdentity = extractPrivyIdentitySnapshot(privyUser);
-
-    if (needsPrivyIdentitySync) {
-      const syncResult = await syncMissingPrivyIdentityFields(
-        dbUser,
-        privyIdentity
+  if (needsAdminPromotionCheck) {
+    const adminDomain = process.env.ADMIN_EMAIL_DOMAIN?.trim();
+    if (
+      adminDomain &&
+      dbUser.email &&
+      dbUser.email.endsWith(`@${adminDomain}`)
+    ) {
+      logger.info(
+        'Auto-promoting existing user to admin based on verified email domain',
+        { userId: dbUser.id, emailDomain: adminDomain },
+        'GET /api/users/me'
       );
-      dbUser = syncResult.user;
-
-      if (syncResult.newlyLinked.length > 0) {
-        logger.info(
-          'Synced missing social identities from Privy',
-          {
-            userId: dbUser.id,
-            newlyLinked: syncResult.newlyLinked,
-            farcasterFid: privyIdentity.farcasterFid,
-            twitterId: privyIdentity.twitterId,
-          },
-          'GET /api/users/me'
-        );
-      }
-
-      await awardPointsForNewPrivyIdentityLinks(
-        dbUser.id,
-        syncResult.newlyLinked,
-        privyIdentity
-      );
-    }
-
-    // Auto-promote existing users to admin if they have a verified admin domain email.
-    // This ensures users who later link/verify a company email get admin access.
-    if (needsAdminPromotionCheck) {
-      const { adminEmail, allVerifiedEmails } = checkForAdminEmail(privyUser);
-      const shouldBeAdmin = adminEmail !== null;
-
-      if (shouldBeAdmin) {
-        logger.info(
-          'Auto-promoting existing user to admin based on verified email domain',
-          {
-            userId: dbUser.id,
-            emailDomain: adminEmail?.split('@')[1] ?? null,
-            emailCount: allVerifiedEmails.length,
-          },
-          'GET /api/users/me'
-        );
-
-        const [updatedUser] = await db
-          .update(users)
-          .set({ isAdmin: true, updatedAt: new Date() })
-          .where(eq(users.id, dbUser.id))
-          .returning(userSelectFields);
-
-        if (updatedUser) {
-          dbUser = updatedUser;
-        }
-      }
+      const [updatedUser] = await db
+        .update(users)
+        .set({ isAdmin: true, updatedAt: new Date() })
+        .where(eq(users.id, dbUser.id))
+        .returning(userSelectFields);
+      if (updatedUser) dbUser = updatedUser;
     }
   }
 
@@ -1237,8 +809,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       userId: dbUser.id,
       username: dbUser.username,
       profileComplete: dbUser.profileComplete,
-      onChainRegistered: dbUser.onChainRegistered,
-      nftTokenId: dbUser.nftTokenId,
       needsOnboarding,
     },
     'GET /api/users/me'

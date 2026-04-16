@@ -17,7 +17,7 @@
  *     summary: Rollback endpoint (currently disabled)
  *     description: Returns 503 until runtime model routing is wired to deployed model records
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     requestBody:
  *       required: true
  *       content:

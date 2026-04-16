@@ -49,19 +49,6 @@ export {
   executeAgentAvatarOnce,
   getCachedAgentAvatarUrl,
 } from './agents/agent-avatar-idempotency';
-// SIWE Authentication
-export {
-  consumeNonce,
-  createSiweMessage,
-  generateNonce,
-  getAppUrl,
-  getExpectedDomain,
-  type NonceResponse,
-  type SiweVerifyFailure,
-  type SiweVerifyResult,
-  type SiweVerifySuccess,
-  verifySiweMessage,
-} from './auth';
 // Auth Middleware
 export {
   type AuthenticationError,
@@ -150,7 +137,13 @@ export {
   ValidationError,
 } from './errors';
 // Fetch utilities
-export { type ApiFetchOptions, apiFetch, getPrivyAccessToken } from './fetch';
+export {
+  type ApiFetchOptions,
+  apiFetch,
+  getAccessToken,
+  /** @deprecated Use `getAccessToken` instead. */
+  getPrivyAccessToken,
+} from './fetch';
 // Linear Integration
 export {
   type CreateIssueInput,
@@ -248,11 +241,6 @@ export {
 // Services
 export * from './services';
 export {
-  type ProvisionAgentPrivyWalletInput,
-  type ProvisionAgentPrivyWalletResult,
-  provisionAgentPrivyWallet,
-} from './services/privy/agent-wallet-provisioning';
-export {
   type AuthedPrivyUserContext,
   getAuthedUserContextFromPrivyToken,
   getAuthedUserContextFromPrivyTokenBundle,
@@ -262,16 +250,7 @@ export {
   type PrivyApiDiagnostics,
   redactJwtLikeTokens,
 } from './services/privy/error-diagnostics';
-export {
-  safeDecodeJwtPayload,
-  sendSponsoredEvmTransaction,
-  signPrivyEvmTransaction,
-} from './services/privy/evm-send-transaction';
-export { assertPrivyOfflineConfig } from './services/privy/offline-config';
-export { ensureOfflineWalletReady } from './services/privy/offline-wallet-provisioning';
-// Keep Solana-specific Privy helpers off the root barrel to avoid pulling them
-// into every route that imports @babylon/api.
-// Privy (embedded wallet server-side helpers)
+// Privy (embedded wallet server-side helpers - kept for NFT mint service)
 export {
   type PrivyUserWalletsLite,
   pickEmbeddedEvmWallet,

@@ -107,7 +107,6 @@ async function createTestUser(
     displayName: `Test NFT Mint User ${userId.slice(0, 8)}`,
     isActor: false,
     isBanned: false,
-    onChainRegistered: false,
     updatedAt: new Date(),
   });
 

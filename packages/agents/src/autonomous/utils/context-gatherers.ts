@@ -8,6 +8,7 @@
 import {
   actorRelationships,
   actorState,
+  agentLogs as agentLogsTable,
   agentTrades,
   and,
   chatParticipants,
@@ -42,6 +43,7 @@ import {
 import { StaticDataRegistry } from '@babylon/engine';
 import { logger } from '../../shared/logger';
 import type {
+  AgentMemoryEntry,
   AgentOwnPostContext,
   AgentSocialConnection,
   AgentTradeHistoryEntry,
@@ -1151,4 +1153,57 @@ async function getAgentSocialGraphInner(
   });
 
   return connections.slice(0, 15);
+}
+
+// =============================================================================
+// Agent Memory (user-controlled agents)
+// =============================================================================
+
+/**
+ * Get recent activity log entries for a user-controlled agent to use as memory.
+ * Queries the agentLogs table for the agent's recent actions, re-surfacing
+ * the LLM's reasoning (thinking field) from previous ticks.
+ *
+ * Uses the existing compound index on (agentUserId, createdAt).
+ *
+ * @param excludeTypes - Log types to exclude (e.g., ['trade'] when trade
+ *   history section already provides that data, avoiding duplication)
+ */
+export async function getAgentMemory(
+  agentUserId: string,
+  excludeTypes: string[] = []
+): Promise<AgentMemoryEntry[]> {
+  const allTypes = ['trade', 'post', 'comment', 'chat', 'dm'];
+  const types = allTypes.filter((t) => !excludeTypes.includes(t));
+  if (types.length === 0) return [];
+
+  const rows = await db
+    .select({
+      type: agentLogsTable.type,
+      message: agentLogsTable.message,
+      thinking: agentLogsTable.thinking,
+      createdAt: agentLogsTable.createdAt,
+    })
+    .from(agentLogsTable)
+    .where(
+      and(
+        eq(agentLogsTable.agentUserId, agentUserId),
+        inArray(agentLogsTable.type, types),
+        eq(agentLogsTable.level, 'info')
+      )
+    )
+    .orderBy(desc(agentLogsTable.createdAt))
+    .limit(12);
+
+  return rows.map((r) => ({
+    type: r.type,
+    message:
+      r.message.length > 100 ? `${r.message.slice(0, 100)}...` : r.message,
+    thinking: r.thinking
+      ? r.thinking.length > 120
+        ? `${r.thinking.slice(0, 120)}...`
+        : r.thinking
+      : null,
+    createdAt: r.createdAt,
+  }));
 }

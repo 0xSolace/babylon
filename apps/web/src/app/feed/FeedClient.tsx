@@ -22,6 +22,7 @@ import { useFeedSignalCards } from '@/hooks/useFeedSignalCards';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { useFeedStore } from '@/stores/feedStore';
 import { useGameStore } from '@/stores/gameStore';
+import { apiUrl } from '@/utils/api-url';
 import {
   DailyTopicBanner,
   EmptyFeed,
@@ -240,7 +241,7 @@ export function FeedClient() {
   useEffect(() => {
     const loadActorNames = async () => {
       try {
-        const response = await fetch('/api/actors');
+        const response = await fetch(apiUrl('/api/actors'));
         if (!response.ok) {
           logger.warn(
             'Failed to load actor names',

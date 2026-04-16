@@ -5,11 +5,9 @@
  */
 
 export * from './achievements';
-export * from './chains';
 export * from './constants';
 export * from './coordinator';
 export * from './currency';
-export * from './identity';
 export * from './markets';
 export * from './models';
 export * from './onboarding';

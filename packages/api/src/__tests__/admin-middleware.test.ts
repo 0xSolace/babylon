@@ -34,9 +34,6 @@ mock.module('@babylon/shared', () => ({
 
 mock.module('../auth-middleware', () => ({
   authenticate: mock(),
-  getPrivyClient: () => ({
-    getUser: mock(),
-  }),
 }));
 
 import { ROLE_PERMISSIONS } from '@babylon/db';

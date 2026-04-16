@@ -232,7 +232,10 @@ export class TradeExecutionService {
           /exceed(?:s)? market limit/i.test(errorMessage) || // Handles all variants
           errorMessage.includes('Position already closed') ||
           errorMessage.includes('Position not found') ||
-          errorMessage.includes('Already have an open');
+          errorMessage.includes('Already have an open') ||
+          // Prediction market price impact guards — expected for oversized trades
+          errorMessage.includes('move odds by') ||
+          errorMessage.includes('market is too thin for this trade size');
         const logLevel = isExpectedFailure ? 'warn' : 'error';
 
         logger[logLevel](

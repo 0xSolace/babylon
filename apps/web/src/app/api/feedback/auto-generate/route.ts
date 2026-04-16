@@ -73,7 +73,6 @@
  * ```
  */
 
-import { submitFeedbackToAgent0 } from '@babylon/agents';
 import {
   InternalServerError,
   requireCronAuth,
@@ -84,7 +83,6 @@ import {
   generateGameCompletionFeedback,
   generateTradeCompletionFeedback,
 } from '@babylon/engine';
-import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -149,16 +147,6 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       throw new InternalServerError('Failed to create game feedback');
     }
 
-    // Submit to Agent0 network (fire-and-forget with error handling)
-    submitFeedbackToAgent0(feedback.id).catch((error) => {
-      logger.error('Failed to submit auto-generated game feedback to Agent0', {
-        feedbackId: feedback.id,
-        agentId: agent.id,
-        gameId: body.gameId,
-        error,
-      });
-    });
-
     return NextResponse.json(
       {
         success: true,
@@ -179,16 +167,6 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   if (!feedback) {
     throw new InternalServerError('Failed to create trade feedback');
   }
-
-  // Submit to Agent0 network (fire-and-forget with error handling)
-  submitFeedbackToAgent0(feedback.id).catch((error) => {
-    logger.error('Failed to submit auto-generated trade feedback to Agent0', {
-      feedbackId: feedback.id,
-      agentId: agent.id,
-      tradeId: body.tradeId,
-      error,
-    });
-  });
 
   return NextResponse.json(
     {

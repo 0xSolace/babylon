@@ -28,7 +28,6 @@ export interface WalletTradingPerformanceRow {
   effectiveCapitalBase: string;
   tradingReturn: string;
   createdAt: Date | string;
-  onChainRegistered: boolean;
   nftTokenId: number | null;
   isAgent: boolean;
   managedBy: string | null;
@@ -48,7 +47,6 @@ export interface TeamTradingPerformanceRow {
   teamEffectiveCapitalBase: string;
   teamTradingReturn: string;
   createdAt: Date | string;
-  onChainRegistered: boolean;
   nftTokenId: number | null;
   agentCount: number;
 }
@@ -138,7 +136,6 @@ export class TradingPerformanceService {
           )
         )::numeric AS "tradingReturn",
         u."createdAt",
-        u."onChainRegistered",
         u."nftTokenId",
         u."isAgent",
         u."managedBy"
@@ -178,7 +175,6 @@ export class TradingPerformanceService {
           )
         )::numeric AS "tradingReturn",
         u."createdAt",
-        u."onChainRegistered",
         u."nftTokenId",
         u."isAgent",
         u."managedBy"
@@ -269,7 +265,6 @@ export class TradingPerformanceService {
           )
         )::numeric AS "teamTradingReturn",
         u."createdAt",
-        u."onChainRegistered",
         u."nftTokenId",
         COALESCE(ta."agentCount", 0)::int AS "agentCount"
       FROM "User" u
@@ -316,7 +311,6 @@ export class TradingPerformanceService {
           )
         )::numeric AS "teamTradingReturn",
         u."createdAt",
-        u."onChainRegistered",
         u."nftTokenId",
         COALESCE(ta."agentCount", 0)::int AS "agentCount"
       FROM "User" u

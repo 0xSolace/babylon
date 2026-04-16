@@ -2,13 +2,13 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 import { Analytics } from '@vercel/analytics/react';
-import { SpeedInsights } from '@vercel/speed-insights/next';
 import { headers } from 'next/headers';
 import { Suspense } from 'react';
 import { Toaster } from 'sonner';
 import { AchievementToastListener } from '@/components/achievements';
 import { FeedAuthBanner } from '@/components/auth/FeedAuthBanner';
 import { GlobalLoginModal } from '@/components/auth/GlobalLoginModal';
+import { GatedSpeedInsights } from '@/components/observability/GatedSpeedInsights';
 import { Providers } from '@/components/providers/Providers';
 import { BottomNav } from '@/components/shared/BottomNav';
 import { MobileHeader } from '@/components/shared/MobileHeader';
@@ -95,6 +95,7 @@ export default async function RootLayout({
 }) {
   const requestHeaders = await headers();
   const isMinimalLayout = requestHeaders.get('x-minimal-layout') === '1';
+  const hideAppChrome = requestHeaders.get('x-hide-app-chrome') === '1';
 
   return (
     <html lang="en" suppressHydrationWarning className="overscroll-none">
@@ -126,6 +127,15 @@ export default async function RootLayout({
 
             {isMinimalLayout ? (
               children
+            ) : hideAppChrome ? (
+              <>
+                <div className="min-h-dvh min-w-0 bg-background">
+                  {children}
+                </div>
+                <Suspense fallback={null}>
+                  <FeedAuthBanner />
+                </Suspense>
+              </>
             ) : (
               <>
                 <Suspense fallback={null}>
@@ -155,7 +165,7 @@ export default async function RootLayout({
           </div>
         </Providers>
         <Analytics />
-        <SpeedInsights />
+        <GatedSpeedInsights disabled={isMinimalLayout} />
       </body>
     </html>
   );

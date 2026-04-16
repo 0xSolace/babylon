@@ -16,7 +16,7 @@
  *     summary: Get upcoming events
  *     description: Returns upcoming events for feed widget (optional auth for RLS)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: query
  *         name: limit

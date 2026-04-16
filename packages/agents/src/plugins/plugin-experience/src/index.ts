@@ -1,5 +1,5 @@
 import type { JsonValue } from '@babylon/shared';
-import type { IAgentRuntime, Plugin, ServiceClass } from '@elizaos/core';
+import type { IAgentRuntime, Plugin } from '@elizaos/core';
 import { logger } from '@elizaos/core';
 import { experienceEvaluator } from './evaluators/experienceEvaluator';
 import { marketOutcomeEvaluator } from './evaluators/marketOutcomeEvaluator';
@@ -12,7 +12,7 @@ export const experiencePlugin: Plugin = {
   description:
     'Self-learning experience system that records experiences, learns from agent interactions, and tracks NPC trust & performance',
 
-  services: [ExperienceService as unknown as ServiceClass],
+  services: [ExperienceService],
 
   providers: [experienceProvider],
 

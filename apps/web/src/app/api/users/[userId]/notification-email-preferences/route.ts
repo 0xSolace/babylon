@@ -10,19 +10,12 @@ import {
   AuthorizationError,
   authenticate,
   BadRequestError,
-  getPrivyClient,
   requireUserByIdentifier,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
 import { db, eq, users } from '@babylon/db';
-import {
-  getAllVerifiedEmails,
-  logger,
-  type PrivyUserWithEmails,
-  UserIdParamSchema,
-} from '@babylon/shared';
-import type { User as PrivyUser } from '@privy-io/server-auth';
+import { logger, UserIdParamSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 
@@ -46,16 +39,15 @@ const UpdateNotificationEmailPreferencesSchema = z
     }
   );
 
-type PrivyUserWithOptionalEmail = PrivyUser & PrivyUserWithEmails;
-
-async function getVerifiedEmailFromPrivy(
-  privyId: string
-): Promise<string | null> {
-  const privyClient = getPrivyClient();
-  const privyUser = (await privyClient.getUser(
-    privyId
-  )) as PrivyUserWithOptionalEmail;
-  return getAllVerifiedEmails(privyUser)[0] ?? null;
+// Phase 2: Privy email lookup removed. Email comes from Babylon's users.email
+// column which is populated by Steward at login time.
+async function getVerifiedEmailFromDb(userId: string): Promise<string | null> {
+  const [user] = await db
+    .select({ email: users.email, emailVerified: users.emailVerified })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  return user?.emailVerified ? (user.email ?? null) : null;
 }
 
 export const GET = withErrorHandling(
@@ -155,12 +147,11 @@ export const POST = withErrorHandling(
       isEnablingEmailNotifications &&
       (!effectiveEmail || !effectiveEmailVerified)
     ) {
-      const privyId = authUser.privyId ?? authUser.userId;
-      const verifiedEmail = await getVerifiedEmailFromPrivy(privyId);
+      const verifiedEmail = await getVerifiedEmailFromDb(canonicalUserId);
 
       if (!verifiedEmail) {
         throw new BadRequestError(
-          'No verified email was found on your account. Please link and verify an email in Privy first.'
+          'No verified email was found on your account. Please link and verify an email address first.'
         );
       }
 

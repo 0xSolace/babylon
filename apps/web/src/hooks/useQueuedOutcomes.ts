@@ -1,7 +1,7 @@
 'use client';
 
 import { logger } from '@babylon/shared';
-import { usePrivy } from '@privy-io/react-auth';
+
 import { useEffect, useRef } from 'react';
 import type { OutcomeNotification } from '@/components/notifications/OutcomeNotificationPopup';
 import { useOutcomeNotification } from '@/components/providers/OutcomeNotificationProvider';
@@ -32,7 +32,7 @@ interface NotificationsApiResponse {
  */
 export function useQueuedOutcomes(): void {
   const { authenticated, user } = useAuth();
-  const { getAccessToken } = usePrivy();
+  const { getAccessToken } = useAuth();
   const { showOutcome, showBatchOutcomes } = useOutcomeNotification();
   const deliveredRef = useRef(false);
 

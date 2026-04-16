@@ -55,7 +55,7 @@ class KondoSFTConfig:
 
     # Kondo gate parameters
     gate_rate: float = 0.10  # Top 10% of examples get backprop
-    gate_warmup_steps: int = 50  # Train on everything for first N steps
+    gate_warmup_steps: int = 500  # Train on everything for first N steps
     use_hard_gate: bool = True  # Binary gate (vs soft weighting)
 
     # What counts as "delight"

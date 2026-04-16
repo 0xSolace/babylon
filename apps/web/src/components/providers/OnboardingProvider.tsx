@@ -7,52 +7,43 @@ import {
   POINTS,
   sanitizeOnboardingUsername,
 } from '@babylon/shared';
-import { useIdentityToken, usePrivy } from '@privy-io/react-auth';
+// Phase 2: Privy replaced by Steward — no more usePrivy or useIdentityToken
+import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  type ImportedProfileData,
-  OnboardingModal,
-} from '@/components/onboarding/OnboardingModal';
+import type { ImportedProfileData } from '@/components/onboarding/UserOnboardingFlow';
+import { UserSignupOnboardingContextProvider } from '@/components/onboarding/user-signup-onboarding-context';
 import { useAuth } from '@/hooks/useAuth';
 import { useSignupTracking } from '@/hooks/usePostHog';
+import {
+  hasCompletedGameGuide,
+  markGameGuideCompletedLocal,
+} from '@/lib/game-guide-completion';
 import { useAuthStore } from '@/stores/authStore';
 import { apiFetch } from '@/utils/api-fetch';
 
 import { clearReferralCode, getReferralCode } from './ReferralCaptureProvider';
 
-/**
- * Onboarding stage type for multi-step onboarding flow.
- */
-type OnboardingStage = 'PROFILE' | 'COMPLETED';
+function getSafeReturnTo(): string {
+  if (typeof window === 'undefined') return '/feed';
+  const raw = new URLSearchParams(window.location.search).get('returnTo');
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//')) {
+    return '/feed';
+  }
+  return raw;
+}
 
 /**
- * Onboarding provider component for managing user onboarding flow.
- *
- * Manages the complete onboarding process including profile creation and social
- * account linking. Handles full-screen onboarding display, form submission,
- * error handling, and progress tracking.
- * Integrates with Privy authentication and smart wallet registration.
- *
- * Features:
- * - Multi-stage onboarding (PROFILE, COMPLETED)
- * - Full-screen blocking onboarding (user cannot access app until complete)
- * - Profile creation form (simplified: username + picture + terms)
- * - Social account import (Farcaster, Twitter) - skips PROFILE stage
- * - Referral code handling
- * - Error handling and retry logic
- *
- * Flow:
- * - Wallet users: PROFILE → COMPLETED
- * - Social (Farcaster/Twitter) users: COMPLETED (profile auto-imported)
- *
- * @param props - OnboardingProvider component props
- * @returns Onboarding provider element
+ * Unified first-run flow: profile signup + game guide on `/onboarding` (full page).
+ * Optional `?replayGuide=1` re-opens the tour from the user menu.
  */
 export function OnboardingProvider({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const router = useRouter();
+  const pathname = usePathname();
+
   const {
     authenticated,
     user,
@@ -62,28 +53,18 @@ export function OnboardingProvider({
     logout,
   } = useAuth();
 
-  const { user: privyUser } = usePrivy();
-
-  // Detect if user authenticated via social login (Farcaster or Twitter)
-  // These users skip the PROFILE stage - their data is auto-imported
+  // Phase 2: isSocialLogin derived from the Babylon user record (populated at login)
   const isSocialLogin = useMemo(() => {
-    if (!privyUser) return false;
-    const userWithSocial = privyUser as typeof privyUser & {
-      farcaster?: { username?: string };
-      twitter?: { username?: string };
-    };
-    return !!(
-      userWithSocial.farcaster?.username || userWithSocial.twitter?.username
-    );
-  }, [privyUser]);
+    return !!(user?.hasFarcaster || user?.hasTwitter);
+  }, [user]);
 
   const { setUser, setNeedsOnboarding } = useAuthStore();
-  const { identityToken } = useIdentityToken();
   const { trackSignupStarted, trackSignupCompleted, trackOnboardingStep } =
     useSignupTracking();
 
-  const [stage, setStage] = useState<OnboardingStage>('PROFILE');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [guideSubmitting, setGuideSubmitting] = useState(false);
+  const guideCompleteInFlight = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [_submittedProfile, setSubmittedProfile] =
     useState<OnboardingProfilePayload | null>(null);
@@ -91,18 +72,27 @@ export function OnboardingProvider({
     useState<ImportedProfileData | null>(null);
   const [_hasProgressedPastSocialImport, setHasProgressedPastSocialImport] =
     useState(false);
-  // Track if social user auto-submit is currently in-flight (prevents StrictMode double-invoke)
   const socialAutoSubmitRef = useRef(false);
-  // Persistent flag to prevent repeated auto-submit attempts after failure
-  // (only reset on explicit logout/cleanup, NOT on failure)
   const [socialAutoSubmitAttempted, setSocialAutoSubmitAttempted] =
     useState(false);
 
-  // Delay onboarding display to prevent flickering
   const [isReadyToShow, setIsReadyToShow] = useState(false);
   const [hasInitialized, setHasInitialized] = useState(false);
 
-  // Wait for app to stabilize before showing onboarding
+  const [replayGuide, setReplayGuide] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    setReplayGuide(
+      pathname === '/onboarding' &&
+        new URLSearchParams(window.location.search).get('replayGuide') === '1'
+    );
+  }, [pathname]);
+
+  const guideDone = useMemo(
+    () => hasCompletedGameGuide(user?.id, user?.gameGuideCompletedAt),
+    [user?.id, user?.gameGuideCompletedAt]
+  );
+
   useEffect(() => {
     if (!authenticated || loadingProfile) {
       setIsReadyToShow(false);
@@ -110,14 +100,13 @@ export function OnboardingProvider({
       return;
     }
 
-    // If already initialized and conditions change, show immediately
     if (hasInitialized) {
       setIsReadyToShow(true);
       return;
     }
 
-    // First time: wait 1 second for app to load (shorter delay for blocking UI)
-    const delay = 1000; // Fixed 1 second delay for consistent UX
+    // Shorter delay in dev avoids a sluggish redirect while Turbopack compiles.
+    const delay = process.env.NODE_ENV === 'development' ? 0 : 1000;
     const timer = setTimeout(() => {
       setIsReadyToShow(true);
       setHasInitialized(true);
@@ -126,7 +115,6 @@ export function OnboardingProvider({
     return () => clearTimeout(timer);
   }, [authenticated, loadingProfile, hasInitialized]);
 
-  // If the server confirmed needsOnboarding, skip the 1-second delay
   useEffect(() => {
     if (
       needsOnboarding &&
@@ -139,12 +127,7 @@ export function OnboardingProvider({
     }
   }, [needsOnboarding, authenticated, loadingProfile, profileFetchStatus]);
 
-  /**
-   * Determines if onboarding should be shown (full-screen blocking).
-   * Unlike before, this is NOT dismissible - users must complete onboarding.
-   */
   const shouldShowOnboarding = useMemo(() => {
-    // Check if dev mode is enabled via URL parameter
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const isDevMode = params.get('dev') === 'true';
@@ -152,14 +135,11 @@ export function OnboardingProvider({
       const isHomePage = window.location.pathname === '/';
       const isWaitlistFlow = params.get('waitlist') === 'true';
 
-      // Hide onboarding on production (babylon.market) on home page unless ?dev=true
-      // BUT allow it if user is in waitlist flow (coming from waitlist signup)
       if (isProduction && isHomePage && !isDevMode && !isWaitlistFlow) {
         return false;
       }
     }
 
-    // Don't show until ready (prevents flickering)
     if (!isReadyToShow) {
       return false;
     }
@@ -168,34 +148,66 @@ export function OnboardingProvider({
       return false;
     }
 
-    // Don't show onboarding if user has completed their profile
-    // On-chain registration is opt-in and not required for onboarding
-    if (user?.profileComplete) {
-      return false;
-    }
-
-    // Show briefly after completion to display success message
-    if (stage === 'COMPLETED') {
-      return true;
-    }
-
-    // Never show onboarding based on stale localStorage data. The server must
-    // have confirmed needsOnboarding in THIS session (profileFetchStatus === 'done').
-    // If the fetch failed or hasn't happened yet, render children instead.
     if (profileFetchStatus !== 'done') {
       return false;
     }
 
-    return Boolean(needsOnboarding);
+    if (user?.isActor) {
+      return false;
+    }
+
+    if (replayGuide) {
+      return true;
+    }
+
+    if (needsOnboarding) {
+      return true;
+    }
+
+    if (!guideDone) {
+      return true;
+    }
+
+    return false;
   }, [
     isReadyToShow,
     authenticated,
     loadingProfile,
-    needsOnboarding,
     profileFetchStatus,
-    stage,
     user,
+    replayGuide,
+    needsOnboarding,
+    guideDone,
   ]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!shouldShowOnboarding) return;
+    if (pathname === '/onboarding' || pathname.startsWith('/onboarding/')) {
+      return;
+    }
+
+    const currentParams = new URLSearchParams(window.location.search);
+    const next = new URLSearchParams();
+    const returnPath = `${pathname}${window.location.search}`;
+    if (returnPath && returnPath !== '/onboarding') {
+      next.set('returnTo', returnPath);
+    }
+    if (currentParams.get('waitlist') === 'true') {
+      next.set('waitlist', 'true');
+    }
+    if (currentParams.get('dev') === 'true') {
+      next.set('dev', 'true');
+    }
+    const q = next.toString();
+    router.replace(`/onboarding${q ? `?${q}` : ''}`);
+  }, [shouldShowOnboarding, pathname, router]);
+
+  const phase = useMemo<'profile' | 'guide'>(() => {
+    if (replayGuide) return 'guide';
+    if (needsOnboarding) return 'profile';
+    return 'guide';
+  }, [replayGuide, needsOnboarding]);
 
   const handleProfileSubmit = useCallback(
     async (payload: OnboardingProfilePayload) => {
@@ -205,17 +217,6 @@ export function OnboardingProvider({
 
       const referralCode = getReferralCode();
 
-      logger.info(
-        'Identity token state during signup',
-        {
-          present: Boolean(identityToken),
-          tokenPreview: identityToken
-            ? `${identityToken.slice(0, 12)}...`
-            : null,
-        },
-        'OnboardingProvider'
-      );
-
       try {
         const response = await apiFetch('/api/users/signup', {
           method: 'POST',
@@ -223,7 +224,6 @@ export function OnboardingProvider({
           body: JSON.stringify({
             ...payload,
             referralCode: referralCode ?? undefined,
-            identityToken: identityToken ?? undefined,
           }),
         });
 
@@ -237,29 +237,43 @@ export function OnboardingProvider({
         }
 
         if (data.user) {
+          const u = data.user as {
+            id: string;
+            walletAddress?: string;
+            displayName?: string;
+            username?: string;
+            bio?: string;
+            profileImageUrl?: string;
+            coverImageUrl?: string;
+            profileComplete?: boolean;
+            reputationPoints?: number;
+            hasFarcaster?: boolean;
+            hasTwitter?: boolean;
+            farcasterUsername?: string;
+            twitterUsername?: string;
+            nftTokenId?: number;
+            createdAt?: string;
+            gameGuideCompletedAt?: string | null;
+          };
           setUser({
-            id: data.user.id,
-            walletAddress: data.user.walletAddress ?? undefined,
-            displayName: data.user.displayName ?? payload.displayName,
+            id: u.id,
+            displayName:
+              u.displayName ?? payload.displayName ?? payload.username,
             email: user?.email,
-            username: data.user.username ?? payload.username,
-            bio: data.user.bio ?? payload.bio,
+            username: u.username ?? payload.username,
+            bio: u.bio ?? payload.bio,
             profileImageUrl:
-              data.user.profileImageUrl ?? payload.profileImageUrl ?? undefined,
+              u.profileImageUrl ?? payload.profileImageUrl ?? undefined,
             coverImageUrl:
-              data.user.coverImageUrl ?? payload.coverImageUrl ?? undefined,
-            profileComplete: data.user.profileComplete ?? true,
-            reputationPoints:
-              data.user.reputationPoints ?? user?.reputationPoints,
-            hasFarcaster: data.user.hasFarcaster ?? user?.hasFarcaster,
-            hasTwitter: data.user.hasTwitter ?? user?.hasTwitter,
-            farcasterUsername:
-              data.user.farcasterUsername ?? user?.farcasterUsername,
-            twitterUsername: data.user.twitterUsername ?? user?.twitterUsername,
-            nftTokenId: data.user.nftTokenId ?? undefined,
-            createdAt: data.user.createdAt ?? user?.createdAt,
-            onChainRegistered:
-              data.user.onChainRegistered ?? user?.onChainRegistered,
+              u.coverImageUrl ?? payload.coverImageUrl ?? undefined,
+            profileComplete: u.profileComplete ?? true,
+            reputationPoints: u.reputationPoints ?? user?.reputationPoints,
+            hasFarcaster: u.hasFarcaster ?? user?.hasFarcaster,
+            hasTwitter: u.hasTwitter ?? user?.hasTwitter,
+            farcasterUsername: u.farcasterUsername ?? user?.farcasterUsername,
+            twitterUsername: u.twitterUsername ?? user?.twitterUsername,
+            createdAt: u.createdAt ?? user?.createdAt,
+            gameGuideCompletedAt: u.gameGuideCompletedAt ?? null,
           });
         }
         setNeedsOnboarding(false);
@@ -272,11 +286,9 @@ export function OnboardingProvider({
           hasFarcaster: data.user?.hasFarcaster ?? false,
           hasTwitter: data.user?.hasTwitter ?? false,
         });
-        setStage('COMPLETED');
         setIsSubmitting(false);
       } catch (err) {
         setIsSubmitting(false);
-        // Re-throw to let caller handle the error
         throw err;
       }
     },
@@ -284,7 +296,6 @@ export function OnboardingProvider({
       user,
       setUser,
       setNeedsOnboarding,
-      identityToken,
       trackSignupStarted,
       trackSignupCompleted,
       trackOnboardingStep,
@@ -293,7 +304,6 @@ export function OnboardingProvider({
 
   useEffect(() => {
     if (!authenticated) {
-      setStage('PROFILE');
       setSubmittedProfile(null);
       setError(null);
       setImportedProfileData(null);
@@ -308,17 +318,13 @@ export function OnboardingProvider({
     }
 
     if (needsOnboarding) {
-      // For social login users (Farcaster/Twitter), skip PROFILE and auto-submit
-      // Check both: socialAutoSubmitRef (in-flight) and socialAutoSubmitAttempted (persistent)
       if (
         isSocialLogin &&
         importedProfileData &&
         !socialAutoSubmitRef.current &&
         !socialAutoSubmitAttempted
       ) {
-        // Mark as attempted BEFORE submission to prevent retries on failure
         setSocialAutoSubmitAttempted(true);
-        // Mark as in-flight to prevent StrictMode double-invoke
         socialAutoSubmitRef.current = true;
         logger.info(
           'Social login user - auto-submitting profile',
@@ -341,15 +347,14 @@ export function OnboardingProvider({
             'OnboardingProvider'
           );
           socialAutoSubmitRef.current = false;
-          setStage('PROFILE');
           return;
         }
         const autoProfile: OnboardingProfilePayload = {
           username: sanitizedUsername,
           displayName: importedProfileData.displayName,
-          bio: '', // Empty bio by default
+          bio: '',
           profileImageUrl: importedProfileData.profileImageUrl ?? undefined,
-          coverImageUrl: undefined, // Auto-populated by backend
+          coverImageUrl: undefined,
           importedFrom: importedProfileData.platform,
           twitterId: importedProfileData.twitterId ?? null,
           twitterUsername:
@@ -361,7 +366,7 @@ export function OnboardingProvider({
             importedProfileData.platform === 'farcaster'
               ? importedProfileData.username
               : null,
-          tosAccepted: true, // Social login implies acceptance
+          tosAccepted: true,
           privacyPolicyAccepted: true,
         };
         handleProfileSubmit(autoProfile).catch((submitError: Error) => {
@@ -375,18 +380,10 @@ export function OnboardingProvider({
           );
           setError(submitError.message);
           socialAutoSubmitRef.current = false;
-          setStage('PROFILE');
         });
         return;
       }
-      // Non-social users: start at profile setup
-      setStage('PROFILE');
-      return;
     }
-
-    // User has completed onboarding - don't reset stage or show onboarding
-    // The handleProfileSubmit dependency is intentional - the socialAutoSubmitAttempted
-    // and socialAutoSubmitRef guards prevent infinite loops and repeated retries.
   }, [
     authenticated,
     loadingProfile,
@@ -397,62 +394,28 @@ export function OnboardingProvider({
     socialAutoSubmitAttempted,
   ]);
 
-  // Automatically extract social profile data from Privy user when authenticating
+  // Phase 2: Auto-import social profile from Babylon user record
+  // Social data (farcasterUsername, twitterUsername, etc.) is populated at login
+  // by the Farcaster/Twitter auth routes before this effect runs.
   useEffect(() => {
-    if (!authenticated || !privyUser || !needsOnboarding) return;
-    if (importedProfileData) return; // Already have imported data
-    if (loadingProfile) return; // Wait for profile to load
+    if (!authenticated || !needsOnboarding || !user) return;
+    if (importedProfileData) return;
+    if (loadingProfile) return;
 
-    const userWithFarcaster = privyUser as typeof privyUser & {
-      farcaster?: {
-        username?: string;
-        displayName?: string;
-        bio?: string;
-        pfp?: string;
-        pfpUrl?: string;
-        fid?: number;
-        url?: string;
-        ownerAddress?: string;
-        verifications?: string[];
-      };
-    };
-    const userWithTwitter = privyUser as typeof privyUser & {
-      twitter?: {
-        username?: string;
-        name?: string;
-        profilePictureUrl?: string;
-        subject?: string; // Twitter user ID
-      };
-    };
-
-    // Check if user authenticated with Farcaster
-    if (userWithFarcaster.farcaster) {
-      const fc = userWithFarcaster.farcaster;
-
-      // Use pfpUrl or pfp, whichever is available
-      const profileImage = fc.pfpUrl || fc.pfp || null;
-
+    if (user.hasFarcaster && user.farcasterUsername) {
       const profileData: ImportedProfileData = {
         platform: 'farcaster',
-        username:
-          fc.username ||
-          fc.displayName?.toLowerCase().replace(/\s+/g, '_') ||
-          'farcaster_user',
-        displayName: fc.displayName || fc.username || 'Farcaster User',
-        bio: fc.bio || undefined,
-        profileImageUrl: profileImage,
-        farcasterFid: fc.fid?.toString(),
+        username: user.farcasterUsername,
+        displayName: user.displayName || user.farcasterUsername,
+        bio: user.bio || undefined,
+        profileImageUrl: user.profileImageUrl || null,
+        farcasterFid: undefined,
       };
 
       logger.info(
-        'Auto-imported Farcaster profile from Privy - will award points on signup',
+        'Auto-imported Farcaster profile from Babylon user record',
         {
           username: profileData.username,
-          displayName: profileData.displayName,
-          fid: fc.fid,
-          hasBio: !!profileData.bio,
-          hasProfileImage: !!profileImage,
-          rewardEligible: true,
           expectedPoints: POINTS.FARCASTER_LINK,
         },
         'OnboardingProvider'
@@ -463,58 +426,33 @@ export function OnboardingProvider({
       return;
     }
 
-    // Check if user authenticated with Twitter
-    if (userWithTwitter.twitter) {
-      const tw = userWithTwitter.twitter;
-
-      // Upgrade Twitter profile image to higher resolution if available
-      let profileImageUrl = tw.profilePictureUrl;
-      if (profileImageUrl && profileImageUrl.includes('_normal')) {
-        profileImageUrl = profileImageUrl.replace('_normal', '_400x400');
-      }
-
+    if (user.hasTwitter && user.twitterUsername) {
       const profileData: ImportedProfileData = {
         platform: 'twitter',
-        username: tw.username || 'twitter_user',
-        displayName: tw.name || tw.username || 'Twitter User',
-        bio: undefined, // Twitter bio not directly available from Privy, would need separate API call
-        profileImageUrl: profileImageUrl || null,
-        twitterId: tw.subject || tw.username, // Use subject (Twitter user ID) if available
+        username: user.twitterUsername,
+        displayName: user.displayName || user.twitterUsername,
+        bio: undefined,
+        profileImageUrl: user.profileImageUrl || null,
+        twitterId: undefined,
       };
 
       logger.info(
-        'Auto-imported Twitter profile from Privy - will award points on signup',
-        {
-          username: profileData.username,
-          displayName: profileData.displayName,
-          twitterId: profileData.twitterId,
-          hasProfileImage: !!profileImageUrl,
-          rewardEligible: true,
-          expectedPoints: POINTS.TWITTER_LINK,
-        },
+        'Auto-imported Twitter profile from Babylon user record',
+        { username: profileData.username, expectedPoints: POINTS.TWITTER_LINK },
         'OnboardingProvider'
       );
 
       setImportedProfileData(profileData);
       setHasProgressedPastSocialImport(true);
-      return;
     }
-
-    // For wallet-only logins, don't set imported data - let the generated profile flow handle it
-    logger.info(
-      'User authenticated with wallet only - will use generated profile',
-      { userId: privyUser.id },
-      'OnboardingProvider'
-    );
   }, [
     authenticated,
-    privyUser,
+    user,
     needsOnboarding,
     importedProfileData,
     loadingProfile,
   ]);
 
-  // Listen for social import callbacks from URL parameters (for manual social linking)
   useEffect(() => {
     if (typeof window === 'undefined' || !authenticated) return;
 
@@ -526,7 +464,6 @@ export function OnboardingProvider({
       try {
         const parsed = JSON.parse(decodeURIComponent(dataParam)) as unknown;
 
-        // Validate the imported data structure
         if (
           typeof parsed !== 'object' ||
           parsed === null ||
@@ -554,17 +491,14 @@ export function OnboardingProvider({
 
         setImportedProfileData(profileData);
         setHasProgressedPastSocialImport(true);
-        setStage('PROFILE');
       } catch (parseError) {
         logger.warn(
           'Failed to parse social profile data from URL',
           { error: parseError },
           'OnboardingProvider'
         );
-        // Clean up malformed URL params and continue without imported data
       }
 
-      // Clean up URL
       const newUrl = new URL(window.location.href);
       newUrl.searchParams.delete('social_import');
       newUrl.searchParams.delete('data');
@@ -572,38 +506,105 @@ export function OnboardingProvider({
     }
   }, [authenticated]);
 
-  // Handler for completion - closes the onboarding screen
-  const handleComplete = useCallback(() => {
-    logger.info(
-      'User completed onboarding',
-      {
-        stage,
-        userId: user?.id,
-        onChainRegistered: user?.onChainRegistered,
-      },
-      'OnboardingProvider'
-    );
-    // Reset stage to allow re-entry if needed (defensive)
-    setStage('PROFILE');
-  }, [stage, user]);
+  const handleGuideComplete = useCallback(
+    async (options?: { nextHref?: string }) => {
+      if (guideCompleteInFlight.current) return;
+      const uid = user?.id;
+      const dest = options?.nextHref ?? getSafeReturnTo();
 
-  // Full-screen blocking onboarding - user cannot access app until complete
-  if (shouldShowOnboarding) {
-    return (
-      <OnboardingModal
-        isOpen
-        stage={stage}
-        isSubmitting={isSubmitting}
-        error={error}
-        onSubmitProfile={handleProfileSubmit}
-        onComplete={handleComplete}
-        onLogout={logout}
-        user={user}
-        importedData={importedProfileData}
-      />
-    );
-  }
+      if (!uid) {
+        router.replace(dest);
+        return;
+      }
 
-  // User has completed onboarding - render children (the app)
-  return <>{children}</>;
+      guideCompleteInFlight.current = true;
+      setGuideSubmitting(true);
+      markGameGuideCompletedLocal(uid);
+
+      try {
+        const res = await apiFetch('/api/users/me/game-guide', {
+          method: 'POST',
+        });
+        if (res.ok) {
+          const { gameGuideCompletedAt } = (await res.json()) as {
+            gameGuideCompletedAt: string;
+          };
+          const fresh = useAuthStore.getState().user;
+          if (fresh) {
+            setUser({ ...fresh, gameGuideCompletedAt });
+          }
+          logger.info(
+            'Unified onboarding: game guide marked complete',
+            { userId: uid },
+            'OnboardingProvider'
+          );
+        } else {
+          logger.error(
+            'Game guide API failed (localStorage backup saved)',
+            { status: res.status, userId: uid },
+            'OnboardingProvider'
+          );
+        }
+      } catch (err) {
+        logger.error(
+          'Game guide API error',
+          {
+            error: err instanceof Error ? err.message : String(err),
+            userId: uid,
+          },
+          'OnboardingProvider'
+        );
+      } finally {
+        setGuideSubmitting(false);
+        guideCompleteInFlight.current = false;
+      }
+
+      trackOnboardingStep('guide', true);
+      router.replace(dest);
+    },
+    [user?.id, router, setUser, trackOnboardingStep]
+  );
+
+  const onLogout = useCallback(async () => {
+    if (logout) {
+      await logout();
+    }
+  }, [logout]);
+
+  const flowContextValue = useMemo(
+    () => ({
+      phase,
+      isReplayGuide: replayGuide,
+      shouldShowOnboarding,
+      isOnboardingResolved: isReadyToShow,
+      isSubmitting,
+      guideSubmitting,
+      error,
+      onSubmitProfile: handleProfileSubmit,
+      onGuideComplete: handleGuideComplete,
+      onLogout,
+      user,
+      importedData: importedProfileData,
+    }),
+    [
+      phase,
+      replayGuide,
+      shouldShowOnboarding,
+      isReadyToShow,
+      isSubmitting,
+      guideSubmitting,
+      error,
+      handleProfileSubmit,
+      handleGuideComplete,
+      onLogout,
+      user,
+      importedProfileData,
+    ]
+  );
+
+  return (
+    <UserSignupOnboardingContextProvider value={flowContextValue}>
+      {children}
+    </UserSignupOnboardingContextProvider>
+  );
 }

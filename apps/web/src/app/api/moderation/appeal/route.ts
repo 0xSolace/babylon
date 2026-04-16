@@ -17,7 +17,7 @@
  *     summary: Appeal ban
  *     description: Submits ban appeal with optional stake for faster review
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     requestBody:
  *       required: true
  *       content:

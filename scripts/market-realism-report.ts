@@ -95,6 +95,7 @@ async function main() {
   const perpRows = await db
     .select({
       ticker: perpMarketSnapshots.ticker,
+      currentPrice: perpMarketSnapshots.currentPrice,
       openInterest: perpMarketSnapshots.openInterest,
       volume24h: perpMarketSnapshots.volume24h,
       bidPrice: perpMarketSnapshots.bidPrice,
@@ -128,6 +129,7 @@ async function main() {
   const perpMetrics = computePerpRealismMetrics({
     markets: perpRows.map((row) => ({
       ticker: row.ticker,
+      currentPrice: Number(row.currentPrice),
       openInterest: Number(row.openInterest),
       volume24h: Number(row.volume24h),
       bidPrice: row.bidPrice ? Number(row.bidPrice) : undefined,
@@ -194,6 +196,14 @@ async function main() {
   console.log(`- Active markets: ${perpMetrics.activeMarkets}`);
   console.log(
     `- Quote coverage: ${(perpMetrics.quoteCoverageRate * 100).toFixed(1)}%`
+  );
+  console.log(
+    `- Invalid quote states: ${perpMetrics.invalidQuoteCount} (${(
+      perpMetrics.invalidQuoteRate * 100
+    ).toFixed(1)}%)`
+  );
+  console.log(
+    `- Invalid currentPrice values: ${perpMetrics.invalidCurrentPriceCount}`
   );
   console.log(`- Spread bps: ${formatStat(perpMetrics.spreadBps, 1)}`);
   console.log(`- Bid depth: ${formatStat(perpMetrics.bidDepth, 0)}`);

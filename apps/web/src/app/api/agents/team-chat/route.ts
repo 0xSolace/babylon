@@ -20,7 +20,7 @@
  *     summary: Get team chat info
  *     description: Returns the user's Agents team chat with member list.
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     responses:
  *       200:
  *         description: Team chat info with members
@@ -50,7 +50,7 @@
  *     summary: Ensure team chat exists
  *     description: Creates team chat if it doesn't exist, returns existing if it does.
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     responses:
  *       200:
  *         description: Team chat info

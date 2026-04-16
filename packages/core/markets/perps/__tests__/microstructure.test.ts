@@ -89,6 +89,20 @@ describe('getSyntheticPerpExecutionPrice', () => {
     expect(thin.askDepth).toBeLessThan(liquid.askDepth);
   });
 
+  it('caps quote depth for pathological OI and volume inputs', () => {
+    const quote = getSyntheticPerpQuoteState(
+      createMarket({
+        openInterest: 1e18,
+        volume24h: 1e18,
+      })
+    );
+
+    expect(quote.bidDepth).toBeLessThanOrEqual(580_000);
+    expect(quote.askDepth).toBeLessThanOrEqual(580_000);
+    expect(quote.bidDepth).toBeGreaterThan(0);
+    expect(quote.askDepth).toBeGreaterThan(0);
+  });
+
   it('exposes a stable quote state with bid below ask', () => {
     const quote = getSyntheticPerpQuoteState(createMarket());
 

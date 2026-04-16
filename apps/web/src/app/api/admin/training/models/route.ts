@@ -16,7 +16,7 @@
  *     summary: Get trained models
  *     description: Returns all trained model versions with metadata (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     responses:
  *       200:
  *         description: Models retrieved successfully

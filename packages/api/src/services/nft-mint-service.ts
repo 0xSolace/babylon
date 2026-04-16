@@ -19,7 +19,6 @@ import {
   nftCollection,
   nftOwnership,
   nftSnapshot,
-  users,
 } from '@babylon/db';
 import {
   hardhat,
@@ -41,12 +40,7 @@ import {
   keccak256,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { getPrivyClient } from '../auth-middleware';
 import { getNftChainId } from './nft/nft-chain';
-import {
-  listEmbeddedEvmWallets,
-  type PrivyUserWalletsLite,
-} from './privy/user-wallets';
 
 // ============================================================================
 // Types
@@ -265,73 +259,21 @@ function validateConfig(): {
   return { contractAddress, chainId, signerPrivateKey };
 }
 
-async function getDbUserForMint(dbUserId: string): Promise<{
-  privyId: string;
-  privyWalletId: string | null;
-}> {
-  const [user] = await db
-    .select({
-      privyId: users.privyId,
-      privyWalletId: users.privyWalletId,
-    })
-    .from(users)
-    .where(eq(users.id, dbUserId))
-    .limit(1);
-
-  if (!user?.privyId) {
-    throw new ValidationError(
-      'User profile not found',
-      ['userId'],
-      [{ field: 'userId', message: 'User not found in database' }]
-    );
-  }
-
-  return {
-    privyId: user.privyId,
-    privyWalletId: user.privyWalletId,
-  };
-}
-
 async function resolveUserEmbeddedWalletAddress(
-  userId: string
+  _userId: string
 ): Promise<Address> {
-  const { privyId, privyWalletId } = await getDbUserForMint(userId);
-
-  if (!privyWalletId) {
-    throw new ValidationError(
-      'Embedded wallet not ready',
-      ['privyWalletId'],
-      [
-        {
-          field: 'privyWalletId',
-          message:
-            'Embedded wallet ID not available. Please re-login and try again.',
-        },
-      ]
-    );
-  }
-
-  const privyClient = getPrivyClient();
-  const privyUser = (await privyClient.getUser(
-    privyId
-  )) as PrivyUserWalletsLite;
-  const wallets = listEmbeddedEvmWallets(privyUser);
-  const matched = wallets.find((wallet) => wallet.walletId === privyWalletId);
-  if (!matched?.address || !isAddress(matched.address)) {
-    throw new ValidationError(
-      'Embedded wallet mismatch',
-      ['privyWalletId'],
-      [
-        {
-          field: 'privyWalletId',
-          message:
-            'Configured embedded wallet is not available. Please refresh session and retry.',
-        },
-      ]
-    );
-  }
-
-  return matched.address.toLowerCase() as Address;
+  // Phase 2: Privy embedded wallets removed. NFT minting is currently disabled.
+  // This path should not be reached (NFT feature flag prevents it).
+  throw new ValidationError(
+    'NFT minting unavailable',
+    ['wallet'],
+    [
+      {
+        field: 'wallet',
+        message: 'NFT minting is not available in this version.',
+      },
+    ]
+  );
 }
 
 /**
@@ -628,13 +570,10 @@ export async function checkEligibility(
   try {
     const { contractAddress, chainId } = getConfig();
     if (contractAddress && isAddress(contractAddress)) {
-      const [dbUser] = await db
-        .select({ privyWalletId: users.privyWalletId })
-        .from(users)
-        .where(eq(users.id, userId))
-        .limit(1);
+      // Phase 2: Privy embedded wallets removed. On-chain verification disabled.
+      const hasEmbeddedWallet = false;
 
-      if (dbUser?.privyWalletId) {
+      if (hasEmbeddedWallet) {
         const embeddedWallet = await resolveUserEmbeddedWalletAddress(userId);
         const hasMintedOnChain = await checkHasMintedOnChain(
           embeddedWallet,

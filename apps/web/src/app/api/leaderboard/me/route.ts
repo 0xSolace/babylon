@@ -8,6 +8,7 @@ import {
 } from '@babylon/api';
 import { type LeaderboardMetric, type LeaderboardScope } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+import { sanitizeForJson } from '@/lib/json/sanitize';
 import { parseLeaderboardQuery } from '../query';
 
 /**
@@ -46,10 +47,12 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     pageSize
   );
 
-  return successResponse({
-    success: true,
-    leaderboardType,
-    leaderboardMetric,
-    currentUser,
-  });
+  return successResponse(
+    sanitizeForJson({
+      success: true,
+      leaderboardType,
+      leaderboardMetric,
+      currentUser,
+    })
+  );
 });

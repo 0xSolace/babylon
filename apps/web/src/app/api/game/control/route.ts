@@ -43,7 +43,7 @@
  *     summary: Start/pause game
  *     description: Controls game engine (admin only, uses requireAdmin middleware)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     requestBody:
  *       required: true
  *       content:

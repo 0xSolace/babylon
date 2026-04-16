@@ -16,7 +16,7 @@
  *     summary: Get game statistics
  *     description: Returns comprehensive game simulation statistics (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     responses:
  *       200:
  *         description: Statistics retrieved successfully

@@ -19,7 +19,7 @@ import {
 import type { LLMJsonSchema as JSONSchema } from './types';
 import { parseXML } from './xml-parser';
 
-type LLMProvider = 'groq' | 'claude' | 'openai';
+type LLMProvider = 'elizacloud' | 'groq' | 'claude' | 'openai';
 type LLMDisabledContext = 'default' | 'gameTick';
 
 /**
@@ -53,6 +53,18 @@ export function getTokenUsageCallback(): TokenUsageCallback | null {
   return globalTokenUsageCallback;
 }
 
+function resolveElizaCloudConfig():
+  | { apiKey: string; baseURL: string }
+  | undefined {
+  const apiKey = process.env.ELIZACLOUD_API_KEY;
+  if (!apiKey) return undefined;
+  const base =
+    process.env.ELIZACLOUD_API_URL?.replace(/\/$/, '') ||
+    'https://elizacloud.ai';
+  // ElizaCloud uses /api/v1 (OpenAI-compatible); the SDK appends /chat/completions
+  return { apiKey, baseURL: `${base}/api/v1` };
+}
+
 function resolveGroqBaseURL(): string {
   return process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1';
 }
@@ -80,7 +92,14 @@ export class BabylonLLMClient {
   private missingKeyContext: LLMDisabledContext = 'default';
 
   /**
-   * Create a BabylonLLMClient configured to use Groq provider (Priority #1)
+   * Create a BabylonLLMClient configured to use ElizaCloud (Priority #1)
+   */
+  static forElizaCloud(): BabylonLLMClient {
+    return new BabylonLLMClient('', 'elizacloud');
+  }
+
+  /**
+   * Create a BabylonLLMClient configured to use Groq provider (Priority #2)
    * This is a convenience factory method for forcing Groq without passing undefined parameters
    */
   static forGroq(): BabylonLLMClient {
@@ -88,7 +107,7 @@ export class BabylonLLMClient {
   }
 
   /**
-   * Create a BabylonLLMClient configured to use Anthropic/Claude provider (Priority #2)
+   * Create a BabylonLLMClient configured to use Anthropic/Claude provider (Priority #3)
    * This is a convenience factory method for forcing Claude without passing undefined parameters
    */
   static forClaude(): BabylonLLMClient {
@@ -96,7 +115,7 @@ export class BabylonLLMClient {
   }
 
   /**
-   * Create a BabylonLLMClient configured to use OpenAI provider (Priority #3 - fallback)
+   * Create a BabylonLLMClient configured to use OpenAI provider (Priority #4 - fallback)
    * This is a convenience factory method for forcing OpenAI without passing undefined parameters
    */
   static forOpenAI(apiKey?: string): BabylonLLMClient {
@@ -105,7 +124,7 @@ export class BabylonLLMClient {
 
   /**
    * Create a BabylonLLMClient for game tick operations
-   * Priority: Groq > Claude > OpenAI
+   * Priority: ElizaCloud > Groq > Claude > OpenAI
    */
   static forGameTick(): BabylonLLMClient {
     return new BabylonLLMClient('', undefined, 'gameTick');
@@ -118,7 +137,8 @@ export class BabylonLLMClient {
   ) {
     this.missingKeyContext = missingKeyContext;
 
-    // Priority: Groq > Claude > OpenAI (unless forceProvider is set)
+    // Priority: ElizaCloud > Groq > Claude > OpenAI (unless forceProvider is set)
+    const elizaCloud = resolveElizaCloudConfig();
     this.groqKey = process.env.GROQ_API_KEY;
     this.claudeKey = process.env.ANTHROPIC_API_KEY;
     this.openaiKey = apiKey || process.env.OPENAI_API_KEY;
@@ -136,7 +156,17 @@ export class BabylonLLMClient {
     const sdkMaxRetries = 2;
 
     // Force specific provider if requested
-    if (forceProvider === 'groq' && this.groqKey) {
+    if (forceProvider === 'elizacloud' && elizaCloud) {
+      logger.info('Using ElizaCloud (forced)', undefined, 'BabylonLLMClient');
+      this.client = new OpenAI({
+        apiKey: elizaCloud.apiKey,
+        baseURL: elizaCloud.baseURL,
+        defaultHeaders: { 'X-API-Key': elizaCloud.apiKey },
+        timeout: timeoutMs,
+        maxRetries: sdkMaxRetries,
+      });
+      this.provider = 'elizacloud';
+    } else if (forceProvider === 'groq' && this.groqKey) {
       logger.info('Using Groq (forced)', undefined, 'BabylonLLMClient');
       this.client = new OpenAI({
         apiKey: this.groqKey,
@@ -162,6 +192,20 @@ export class BabylonLLMClient {
         maxRetries: sdkMaxRetries,
       });
       this.provider = 'openai';
+    } else if (elizaCloud) {
+      logger.info(
+        'Using ElizaCloud (unified inference)',
+        undefined,
+        'BabylonLLMClient'
+      );
+      this.client = new OpenAI({
+        apiKey: elizaCloud.apiKey,
+        baseURL: elizaCloud.baseURL,
+        defaultHeaders: { 'X-API-Key': elizaCloud.apiKey },
+        timeout: timeoutMs,
+        maxRetries: sdkMaxRetries,
+      });
+      this.provider = 'elizacloud';
     } else if (this.groqKey) {
       logger.info('Using Groq (fast inference)', undefined, 'BabylonLLMClient');
       this.client = new OpenAI({
@@ -216,20 +260,22 @@ export class BabylonLLMClient {
       throw new Error(
         '❌ No API key found for game tick operations!\n' +
           '   Set one of these environment variables:\n' +
-          '   - GROQ_API_KEY (recommended for game tick)\n' +
+          '   - ELIZACLOUD_API_KEY (recommended — single key for all inference)\n' +
+          '   - GROQ_API_KEY (direct Groq)\n' +
           '   - ANTHROPIC_API_KEY\n' +
           '   - OPENAI_API_KEY\n' +
-          '   Example: export GROQ_API_KEY=your_key_here'
+          '   Example: export ELIZACLOUD_API_KEY=elc_...'
       );
     }
 
     throw new Error(
       '❌ No API key found!\n' +
         '   Set one of these environment variables (in priority order):\n' +
-        '   - GROQ_API_KEY (fast inference)\n' +
+        '   - ELIZACLOUD_API_KEY (recommended — single key for all inference)\n' +
+        '   - GROQ_API_KEY (direct Groq, fast inference)\n' +
         '   - ANTHROPIC_API_KEY (Claude)\n' +
         '   - OPENAI_API_KEY (fallback)\n' +
-        '   Example: export GROQ_API_KEY=your_key_here'
+        '   Example: export ELIZACLOUD_API_KEY=elc_...'
     );
   }
 

@@ -35,6 +35,7 @@ import { Skeleton } from '@/components/shared/Skeleton';
 import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthStore } from '@/stores/authStore';
+import { apiUrl } from '@/utils/api-url';
 import { uploadImage, validateImageFile } from '@/utils/upload-image';
 
 /**
@@ -264,7 +265,7 @@ export default function SettingsPage() {
     }
 
     const response = await fetch(
-      `/api/users/${encodeURIComponent(user.id)}/update-visibility`,
+      apiUrl(`/api/users/${encodeURIComponent(user.id)}/update-visibility`),
       {
         method: 'POST',
         headers,
@@ -447,7 +448,7 @@ export default function SettingsPage() {
     let response: Response;
     try {
       response = await fetch(
-        `/api/users/${encodeURIComponent(user.id)}/update-profile`,
+        apiUrl(`/api/users/${encodeURIComponent(user.id)}/update-profile`),
         {
           method: 'POST',
           headers,
@@ -496,8 +497,6 @@ export default function SettingsPage() {
         coverImageUrl: payload.user.coverImageUrl ?? user.coverImageUrl,
         usernameChangedAt: payload.user.usernameChangedAt,
         referralCode: payload.user.referralCode,
-        onChainRegistered:
-          payload.user.onChainRegistered ?? user.onChainRegistered,
       });
     }
 
@@ -798,23 +797,6 @@ export default function SettingsPage() {
                           disabled={!user?.hasFarcaster}
                         />
                       </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="font-medium text-sm">Wallet</div>
-                          <div className="truncate text-muted-foreground text-xs">
-                            {user?.walletAddress
-                              ? 'Connected'
-                              : 'Not connected'}
-                          </div>
-                        </div>
-                        <Switch
-                          checked={socialVisibility.wallet}
-                          onCheckedChange={(checked) =>
-                            void updateSocialVisibility('wallet', checked)
-                          }
-                          disabled={!user?.walletAddress}
-                        />
-                      </div>
                     </div>
                   </div>
 
@@ -837,7 +819,7 @@ export default function SettingsPage() {
                         <div className="space-y-2">
                           <p>
                             No email linked yet. Enabling email notifications
-                            requires a verified email in Privy.
+                            requires a verified email.
                           </p>
                           <button
                             type="button"
@@ -845,7 +827,7 @@ export default function SettingsPage() {
                             className="inline-flex min-h-[36px] items-center gap-1 rounded-md border border-border px-2.5 py-1.5 font-medium text-xs transition-colors hover:bg-muted/30"
                           >
                             <LinkIcon className="h-3.5 w-3.5" />
-                            <span>Link my email to Privy</span>
+                            <span>Link my email</span>
                           </button>
                         </div>
                       )}

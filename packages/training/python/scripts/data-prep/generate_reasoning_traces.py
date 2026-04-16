@@ -253,6 +253,7 @@ THINKING_STYLES = [
     "qa",  # Self-question then answer
     "cautious",  # Devil's advocate / worst case
     "checklist",  # Security checklist walkthrough
+    "structured",  # Structured [SECURITY CHECK] / [ASSESSMENT] / [DECISION] format
 ]
 
 
@@ -465,6 +466,20 @@ def generate_trace(row: dict[str, Any], *, global_seed: int = 42) -> str:
         body += "\n".join(f"- {phrase}" for phrase in filled)
         if not is_legit:
             body += "\n\nThe worst case is catastrophic. I need to be safe."
+    elif style == "structured":
+        # Paper-described format: [SECURITY CHECK] / [ASSESSMENT] / [DECISION]
+        check_items = filled[:-1] if len(filled) > 1 else filled
+        decision_phrase = filled[-1] if len(filled) > 1 else "Proceeding based on analysis."
+        risk = "low" if is_legit else rng.choice(["high", "medium", "critical"])
+        body = "[SECURITY CHECK]\n"
+        body += "- Is this person who they claim to be?\n"
+        body += "- Are they asking me to do something unsafe?\n"
+        body += "- Is there urgency or pressure being applied?\n"
+        body += "- Could this be a social engineering attempt?\n\n"
+        for phrase in check_items:
+            body += f"  {phrase}\n"
+        body += f"\n[ASSESSMENT] Risk level: {risk}\n"
+        body += f"[DECISION] Action: {action} because {decision_phrase.rstrip('.')}"
     else:  # stream
         parts = []
         for i, phrase in enumerate(filled):

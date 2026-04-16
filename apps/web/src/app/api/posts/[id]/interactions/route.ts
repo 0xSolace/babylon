@@ -17,7 +17,7 @@
  *     summary: Get post interaction counts
  *     description: Returns like, comment, and share counts. For authenticated users, also returns interaction state.
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id

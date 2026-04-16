@@ -90,6 +90,20 @@ import {
 import { AgentAuthSchema, logger } from '@babylon/shared';
 import { randomBytes } from 'crypto';
 import type { NextRequest } from 'next/server';
+import { z } from 'zod';
+
+const isProduction = process.env.NODE_ENV === 'production';
+
+/**
+ * In development, accept any non-empty string as agentId (not just Snowflake IDs).
+ * This allows dev-mode agent IDs like "babylon-agent-alice" or "dev-admin-local".
+ */
+const DevAgentAuthSchema = z.object({
+  agentId: z.string().min(1, { message: 'Agent ID is required' }),
+  agentSecret: z
+    .string()
+    .min(32, { message: 'Agent secret must be at least 32 characters' }),
+});
 
 /**
  * POST /api/agents/auth
@@ -105,7 +119,9 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     );
   }
 
-  const { agentId, agentSecret } = AgentAuthSchema.parse(body);
+  const { agentId, agentSecret } = isProduction
+    ? AgentAuthSchema.parse(body)
+    : DevAgentAuthSchema.parse(body);
 
   // Verify agent credentials
   if (!verifyAgentCredentials(agentId, agentSecret)) {

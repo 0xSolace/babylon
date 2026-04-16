@@ -6,8 +6,8 @@
  *
  * @description
  * Completes off-chain user onboarding with profile creation, referral handling,
- * social account linking, and points awards. Supports waitlist users, legal
- * acceptance tracking, and identity token verification from Privy.
+ * social account linking, and points awards. Supports waitlist users and legal
+ * acceptance tracking.
  *
  * @openapi
  * /api/users/signup:
@@ -17,7 +17,7 @@
  *     summary: Complete user signup
  *     description: Completes off-chain onboarding with profile creation and points awards
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -42,7 +42,7 @@
  *                 type: string
  *               identityToken:
  *                 type: string
- *                 description: Privy identity token for social account linking
+ *                 description: Deprecated legacy field accepted for backwards compatibility
  *               isWaitlist:
  *                 type: boolean
  *                 default: false
@@ -91,9 +91,7 @@ import {
   authenticate,
   ConflictError,
   cachedDb,
-  ensureOfflineWalletReady,
   getHashedClientIp,
-  getPrivyClient,
   InternalServerError,
   isReferralCodeAvailableForUser,
   notifyNewAccount,
@@ -118,15 +116,12 @@ import {
 import { UserAlphaGroupAssignmentService } from '@babylon/engine';
 import type { OnboardingProfilePayload } from '@babylon/shared';
 import {
-  checkForAdminEmail,
   generateSnowflakeId,
   logger,
   OnboardingProfileSchema,
   POINTS,
-  type PrivyUserWithEmails,
   toISO,
 } from '@babylon/shared';
-import type { User as PrivyUser } from '@privy-io/server-auth';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { trackServerEvent } from '@/lib/posthog/server';
@@ -143,8 +138,6 @@ interface SignupRequestBody {
   tosAccepted?: boolean;
   privacyPolicyAccepted?: boolean;
 }
-
-type PrivyIdentityUser = PrivyUser & PrivyUserWithEmails;
 
 const SignupSchema = OnboardingProfileSchema.extend({
   identityToken: z
@@ -165,7 +158,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
   const parsedBody = SignupSchema.parse(body);
   const {
-    identityToken,
+    identityToken: _identityToken,
     referralCode: rawReferralCode,
     isWaitlist,
     ...profileData
@@ -174,49 +167,22 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   const referralCode = rawReferralCode?.trim() || null;
 
   const canonicalUserId = authUser.dbUserId ?? authUser.userId;
-  // Embedded-wallet-only: persist the embedded wallet (EOA) as the user's onchain identity.
-  let walletAddress = authUser.walletAddress?.toLowerCase() ?? null;
-  let privyWalletId: string | null = null;
 
   // Capture and hash IP address for self-referral detection
   const registrationIpHash = getHashedClientIp(request.headers);
 
-  // Fetch identity data from Privy if token provided
+  // Phase 2: Privy identity token replaced by Steward. Social usernames come
+  // from the user's profile payload or are populated at social login time.
   let identityFarcasterUsername: string | undefined;
   let identityTwitterUsername: string | undefined;
-  let adminEmailResult: ReturnType<typeof checkForAdminEmail> = {
-    adminEmail: null,
-    allVerifiedEmails: [],
+  const adminEmailResult = {
+    adminEmail: null as string | null,
+    allVerifiedEmails: [] as string[],
   };
-
-  if (identityToken) {
-    const privyClient = getPrivyClient();
-    const identityUser = (await privyClient.getUserFromIdToken(
-      identityToken
-    )) as PrivyIdentityUser;
-
-    identityFarcasterUsername = identityUser.farcaster?.username ?? undefined;
-    identityTwitterUsername = identityUser.twitter?.username ?? undefined;
-    // SECURITY: Get verified emails from Privy, not from user input
-    // Check ALL linked emails to support users who linked admin email after initial signup
-    adminEmailResult = checkForAdminEmail(identityUser);
-  } else {
-    logger.info(
-      'Signup received no identity token; proceeding with provided payload only',
-      undefined,
-      'POST /api/users/signup'
-    );
-  }
 
   // Check for imported social data from onboarding flow
   const importedTwitter = parsedProfile.importedFrom === 'twitter';
   const importedFarcaster = parsedProfile.importedFrom === 'farcaster';
-
-  const offlineWallet = await ensureOfflineWalletReady({
-    privyId,
-  });
-  privyWalletId = offlineWallet.privyWalletId;
-  walletAddress = offlineWallet.walletAddress;
 
   // Wrap transaction with retry logic for connection errors
   const result = await withRetry(
@@ -233,22 +199,6 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
         if (existingUsername && existingUsername.id !== canonicalUserId) {
           throw new ConflictError('Username is already taken', 'User.username');
-        }
-
-        // Check if wallet address is already linked to another user
-        if (walletAddress) {
-          const [existingWallet] = await tx
-            .select({ id: users.id })
-            .from(users)
-            .where(eq(users.walletAddress, walletAddress))
-            .limit(1);
-
-          if (existingWallet && existingWallet.id !== canonicalUserId) {
-            throw new ConflictError(
-              'Wallet address is already linked to another account',
-              'User.walletAddress'
-            );
-          }
         }
 
         // Resolve referral (if provided AND not already set)
@@ -319,10 +269,6 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
           bio: parsedProfile.bio ?? '',
           profileImageUrl: parsedProfile.profileImageUrl ?? null,
           coverImageUrl: parsedProfile.coverImageUrl ?? null,
-          privyWalletId,
-          walletAddress,
-          offlineWalletReady: offlineWallet.offlineWalletReady,
-          offlineWalletReadyAt: new Date(),
           profileComplete: true,
           profileSetupCompletedAt: new Date(), // Track when profile was completed
           hasUsername: true,
@@ -692,23 +638,6 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       );
     }
   }
-  if (walletAddress) {
-    const pointsResult = await ReputationService.awardWalletConnect(
-      result.user.id,
-      walletAddress
-    );
-    reputationBreakdown.wallet = pointsResult.reputationAwarded;
-    logger.info(
-      'Awarded wallet connection reputation',
-      {
-        userId: result.user.id,
-        address: walletAddress,
-        reputation: pointsResult.reputationAwarded,
-      },
-      'POST /api/users/signup'
-    );
-  }
-
   if (!result.user.pointsAwardedForProfile) {
     const pointsResult = await ReputationService.awardProfileCompletion(
       result.user.id
@@ -749,7 +678,6 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     hasTwitter: result.user.hasTwitter,
     hasProfileImage: result.user.hasProfileImage,
     hasBio: result.user.hasBio,
-    onChainRegistered: result.user.onChainRegistered,
     reputationAwarded: totalReputationAwarded,
     reputationBreakdown,
     importedFrom: parsedProfile.importedFrom || null,
@@ -846,7 +774,6 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       hasUsername: result.user.hasUsername,
       hasBio: result.user.hasBio,
       hasProfileImage: result.user.hasProfileImage,
-      onChainRegistered: result.user.onChainRegistered,
       nftTokenId: result.user.nftTokenId,
       referralCode: result.user.referralCode,
       referredBy: result.user.referredBy,

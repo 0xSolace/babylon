@@ -93,7 +93,6 @@
  * ```
  */
 
-import { submitFeedbackToAgent0 } from '@babylon/agents';
 import {
   authenticate,
   BusinessLogicError,
@@ -170,14 +169,6 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   await updateFeedbackMetrics(toAgent.id, body.score, {
     category: body.category,
     interactionType: body.interactionType ?? 'user_to_agent',
-  });
-
-  // Submit to Agent0 network (fire-and-forget with error handling)
-  submitFeedbackToAgent0(feedback.id).catch((error) => {
-    logger.error('Failed to submit feedback to Agent0', {
-      feedbackId: feedback.id,
-      error,
-    });
   });
 
   const metrics = await db.agentPerformanceMetrics.findUnique({

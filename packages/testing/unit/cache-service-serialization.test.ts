@@ -8,9 +8,9 @@ describe('cache-service bigint serialization', () => {
   test('round-trips nested bigint values through cache serialization', () => {
     const payload = {
       id: 'user-1',
-      registrationBlockNumber: 1234567890123456789n,
+      largeNumber: 1234567890123456789n,
       nested: {
-        registrationGasUsed: 21000n,
+        gasUsed: 21000n,
       },
       values: [1n, 2n, 3n],
     };
@@ -19,8 +19,8 @@ describe('cache-service bigint serialization', () => {
     const parsed = parseCacheValue<typeof payload>(serialized);
 
     expect(parsed).toEqual(payload);
-    expect(typeof parsed.registrationBlockNumber).toBe('bigint');
-    expect(typeof parsed.nested.registrationGasUsed).toBe('bigint');
+    expect(typeof parsed.largeNumber).toBe('bigint');
+    expect(typeof parsed.nested.gasUsed).toBe('bigint');
     expect(typeof parsed.values[0]).toBe('bigint');
   });
 

@@ -11,13 +11,10 @@
       "@babylon/core/*": ["../core/*"],
       "@babylon/engine": ["../engine/src/index.ts"],
       "@babylon/engine/*": ["../engine/src/*"],
-      "@babylon/agents/agent0": ["../api/src/agent0.d.ts"],
       "@babylon/shared": ["../shared/src/index.ts"],
       "@babylon/shared/*": ["../shared/src/*"],
       "@babylon/db": ["../db/src/index.ts"],
-      "@babylon/db/*": ["../db/src/*"],
-      "@babylon/contracts": ["../contracts/src/index.ts"],
-      "@babylon/contracts/*": ["../contracts/src/*"]
+      "@babylon/db/*": ["../db/src/*"]
     }
   },
   "include": ["src/**/*"],
@@ -26,7 +23,6 @@
     { "path": "../core" },
     { "path": "../engine" },
     { "path": "../shared" },
-    { "path": "../db" },
-    { "path": "../contracts" }
+    { "path": "../db" }
   ]
 }

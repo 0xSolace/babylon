@@ -18,7 +18,7 @@
  *     summary: List user chats
  *     description: Returns all chats (group and DMs) the authenticated user participates in. Use ?all=true for public game chats.
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: query
  *         name: all
@@ -56,7 +56,7 @@
  *     summary: Create new chat
  *     description: Creates a new chat (group or DM) and adds participants.
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     requestBody:
  *       content:
  *         application/json:

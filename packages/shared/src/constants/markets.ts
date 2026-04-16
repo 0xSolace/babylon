@@ -8,7 +8,7 @@
  * Trades shift reserves along the constant-product curve.
  * Larger trades get worse prices (natural slippage).
  * Locked base liquidity prevents price from reaching zero.
- * No artificial clamps, no dampeners, no per-tick limits.
+ * Runtime callers may still apply conservative safety limits on top.
  */
 
 /**
@@ -34,12 +34,39 @@ export const PERP_MARKET_CONFIG = {
    *   $50K buy → ~10% impact
    */
   INITIAL_BASE_RESERVE: 5000,
+  SYNTHETIC_SUPPLY: 10_000,
+  LIQUIDITY_FACTOR: 50,
+  MAX_CHANGE_PER_TRADE: 0.3,
+  PRICE_FLOOR_RATIO: 0.05,
+  /**
+   * Maximum price as a multiple of initialPrice. Reduced from 10.0 to 4.0 to
+   * align with the volatility simulation ceiling (SIMULATED_PRICE_CEILING_RATIO
+   * = 4.0 in game-tick.ts). Prices above 4× initialPrice are unreachable via
+   * the volatility simulation anyway, so this prevents the position-imbalance
+   * AMM from creating a wider band than the sim can generate.
+   */
+  PRICE_CEILING_RATIO: 4.0,
+} as const;
+
+/**
+ * Legacy bonding-curve config kept for backwards-compatible tests and tools.
+ */
+export const BONDING_CURVE_CONFIG = {
+  EXPONENT: 2,
+  RESERVE_DEPTH: 100_000,
+  USE_BONDING_CURVE: true,
 } as const;
 
 export type PerpMarketConfig = {
   [K in keyof typeof PERP_MARKET_CONFIG]: (typeof PERP_MARKET_CONFIG)[K] extends number
     ? number
     : (typeof PERP_MARKET_CONFIG)[K];
+};
+
+export type BondingCurveConfig = {
+  [K in keyof typeof BONDING_CURVE_CONFIG]: (typeof BONDING_CURVE_CONFIG)[K] extends number
+    ? number
+    : (typeof BONDING_CURVE_CONFIG)[K];
 };
 
 // =============================================================================
@@ -56,6 +83,37 @@ export function getInitialReserves(
   const baseReserve = config.INITIAL_BASE_RESERVE;
   const quoteReserve = baseReserve * initialPrice;
   return { baseReserve, quoteReserve, k: baseReserve * quoteReserve };
+}
+
+/**
+ * Legacy effective-supply helper kept for older tests.
+ */
+export function getEffectiveSupply(
+  config: PerpMarketConfig = PERP_MARKET_CONFIG
+): number {
+  return config.SYNTHETIC_SUPPLY / config.LIQUIDITY_FACTOR;
+}
+
+/**
+ * Legacy bonding-curve helper kept for older tests.
+ */
+export function calculateBondingCurvePrice(
+  basePrice: number,
+  netHoldings: number,
+  bondingConfig: BondingCurveConfig = BONDING_CURVE_CONFIG
+): number {
+  const { EXPONENT, RESERVE_DEPTH } = bondingConfig;
+  const ratio = netHoldings / RESERVE_DEPTH;
+  const base = 1 + ratio;
+
+  let multiplier: number;
+  if (base >= 0) {
+    multiplier = Math.pow(base, EXPONENT);
+  } else {
+    multiplier = 1 / (1 + Math.abs(base) * EXPONENT);
+  }
+
+  return basePrice * Math.max(0.01, multiplier);
 }
 
 /**
@@ -89,11 +147,26 @@ export function getReservesFromHoldings(
  */
 export function calculatePriceFromHoldings(
   initialPrice: number,
-  _currentPrice: number,
+  currentPrice: number,
   netHoldings: number,
-  config: PerpMarketConfig = PERP_MARKET_CONFIG
+  config: PerpMarketConfig = PERP_MARKET_CONFIG,
+  _bondingConfig: BondingCurveConfig = BONDING_CURVE_CONFIG
 ): number {
-  return getReservesFromHoldings(initialPrice, netHoldings, config).spotPrice;
+  const rawPrice = getReservesFromHoldings(
+    initialPrice,
+    netHoldings,
+    config
+  ).spotPrice;
+
+  const maxChange = currentPrice * config.MAX_CHANGE_PER_TRADE;
+  const minFromChange = currentPrice - maxChange;
+  const maxFromChange = currentPrice + maxChange;
+  const absoluteMin = initialPrice * config.PRICE_FLOOR_RATIO;
+  const absoluteMax = initialPrice * config.PRICE_CEILING_RATIO;
+  const minPrice = Math.max(absoluteMin, minFromChange);
+  const maxPrice = Math.min(absoluteMax, maxFromChange);
+
+  return Math.min(maxPrice, Math.max(minPrice, rawPrice));
 }
 
 /**

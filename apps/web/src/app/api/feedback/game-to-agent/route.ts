@@ -62,7 +62,6 @@
  * ```
  */
 
-import { submitFeedbackToAgent0 } from '@babylon/agents';
 import {
   requireCronAuth,
   requireUserByIdentifier,
@@ -148,13 +147,12 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     interactionType: 'game_to_agent',
   });
 
-  // Submit to Agent0 network (fire-and-forget with error handling)
-  submitFeedbackToAgent0(feedback.id).catch((error) => {
-    logger.error('Failed to submit game feedback to Agent0', {
+  // Agent0 feedback submission removed (Agent0 deleted in Phase 1)
+  void (() => {
+    logger.debug('Agent0 feedback submission skipped (Agent0 removed)', {
       feedbackId: feedback.id,
       agentId: agent.id,
       gameId: body.gameId,
-      error,
     });
   });
 

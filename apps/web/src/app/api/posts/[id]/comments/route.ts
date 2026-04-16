@@ -36,7 +36,7 @@
  *     summary: Add comment to post
  *     description: Creates a new comment on a post. Supports mentions and replies. Creates notifications.
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id

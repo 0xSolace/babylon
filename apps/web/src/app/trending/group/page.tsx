@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { PostCard } from '@/components/posts/PostCard';
 import { PageContainer } from '@/components/shared/PageContainer';
 import { Skeleton } from '@/components/shared/Skeleton';
+import { apiUrl } from '@/utils/api-url';
 
 const WidgetSidebar = nextDynamic(
   () =>
@@ -64,7 +65,7 @@ export default function GroupedTrendingPage() {
     setLoading(true);
 
     const response = await fetch(
-      `/api/trending/group?tags=${tagsParam}&limit=50`
+      apiUrl(`/api/trending/group?tags=${tagsParam}&limit=50`)
     );
 
     if (!response.ok) {

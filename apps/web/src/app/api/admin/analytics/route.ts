@@ -16,7 +16,7 @@
  *     summary: Get analytics data
  *     description: Returns time-series analytics data for charts (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - name: period
  *         in: query

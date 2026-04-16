@@ -16,7 +16,7 @@
  *     summary: Get report statistics
  *     description: Returns comprehensive report statistics (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     responses:
  *       200:
  *         description: Statistics retrieved successfully

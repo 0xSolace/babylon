@@ -126,7 +126,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       COUNT(*) FILTER (WHERE "createdAt" >= ${lastWeekIso})::text as users_this_week,
       COUNT(*) FILTER (WHERE "createdAt" >= ${lastMonthIso})::text as users_this_month,
       COUNT(*) FILTER (WHERE "profileComplete" = true)::text as profile_complete,
-      COUNT(*) FILTER (WHERE "onChainRegistered" = true)::text as on_chain_registered,
       COUNT(*) FILTER (WHERE "hasFarcaster" = true)::text as with_farcaster,
       COUNT(*) FILTER (WHERE "hasTwitter" = true)::text as with_twitter,
       COUNT(*) FILTER (WHERE "hasDiscord" = true)::text as with_discord,
@@ -149,7 +148,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const usersThisWeek = Number(statsRow?.users_this_week ?? 0);
   const usersThisMonth = Number(statsRow?.users_this_month ?? 0);
   const profileComplete = Number(statsRow?.profile_complete ?? 0);
-  const onChainRegistered = Number(statsRow?.on_chain_registered ?? 0);
   const withFarcaster = Number(statsRow?.with_farcaster ?? 0);
   const withTwitter = Number(statsRow?.with_twitter ?? 0);
   const withDiscord = Number(statsRow?.with_discord ?? 0);
@@ -240,7 +238,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       displayName: true,
       profileImageUrl: true,
       createdAt: true,
-      onChainRegistered: true,
       hasFarcaster: true,
       hasTwitter: true,
       hasDiscord: true,
@@ -281,11 +278,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       profileCompletionRate:
         baseCount > 0
           ? Math.round((profileComplete / baseCount) * 1000) / 10
-          : 0,
-      onChainRegistered,
-      onChainRate:
-        baseCount > 0
-          ? Math.round((onChainRegistered / baseCount) * 1000) / 10
           : 0,
     },
     socialConnections: {

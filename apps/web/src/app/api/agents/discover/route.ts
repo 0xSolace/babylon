@@ -99,12 +99,9 @@
 import type { AgentDiscoveryFilter } from '@babylon/agents';
 import {
   AgentStatus,
-  type AgentSummary,
   AgentType,
   agentRegistry,
-  getAgent0SDK,
   npcBootstrapService,
-  type SearchFilters,
 } from '@babylon/agents';
 import { withErrorHandling } from '@babylon/api';
 import { getBaseUrl, logger } from '@babylon/shared';
@@ -184,84 +181,11 @@ export const GET = withErrorHandling(async function GET(req: NextRequest) {
     'AgentDiscovery'
   );
 
+  void includeExternal; // External agent discovery (Agent0) removed in Phase 1.
+
   const baseUrl = getBaseUrl();
 
-  // If includeExternal is true, use AgentDiscoveryService for merged results
-  if (includeExternal) {
-    const sdk = getAgent0SDK();
-
-    const searchFilters: SearchFilters = {
-      keyword: filter.search,
-      oasfSkills: filter.requiredSkills,
-      oasfDomains: filter.requiredDomains,
-      active: true,
-    };
-
-    const summaries = await sdk.searchAgents(searchFilters);
-    const pagedSummaries = summaries.slice(offset, offset + limit);
-
-    const externalAgentCards = pagedSummaries.map((agent: AgentSummary) => {
-      const agentId = agent.agentId;
-      const tokenId = Number.parseInt(agentId.split(':')[1] ?? '0', 10);
-      const externalId = `agent0-${tokenId}`;
-
-      return {
-        version: '1.0' as const,
-        agentId,
-        name: agent.name,
-        description: agent.description,
-        type: 'EXTERNAL',
-        status: agent.active ? 'ACTIVE' : 'INACTIVE',
-        trustLevel: agent.averageValue ?? 0,
-        endpoints: {
-          a2a: agent.a2a ?? `${baseUrl}/api/agents/${externalId}/a2a`,
-          mcp: agent.mcp ?? `${baseUrl}/api/agents/${externalId}/mcp`,
-          card: agent.web ?? `${baseUrl}/api/agents/${externalId}/card`,
-        },
-        capabilities: {
-          supportedTrusts: agent.supportedTrusts,
-          a2aSkills: agent.a2aSkills,
-          mcpTools: agent.mcpTools,
-          mcpPrompts: agent.mcpPrompts,
-          mcpResources: agent.mcpResources,
-          oasfSkills: agent.oasfSkills,
-          oasfDomains: agent.oasfDomains,
-          x402support: agent.x402support,
-        },
-        authentication: {
-          required: false,
-          methods: [],
-        },
-      };
-    });
-
-    logger.info(
-      `Discovered ${externalAgentCards.length} agents (including external)`,
-      {
-        totalFound: externalAgentCards.length,
-      },
-      'AgentDiscovery'
-    );
-
-    return NextResponse.json(
-      {
-        agents: externalAgentCards,
-        total: summaries.length,
-        offset,
-        limit,
-        filter: {
-          types: filter.types,
-          skills: filter.requiredSkills,
-          domains: filter.requiredDomains,
-          matchMode: filter.matchMode,
-          includeExternal,
-        },
-      },
-      { status: 200 }
-    );
-  }
-
-  // Default: local registry only
+  // Local registry only
   let agents = await agentRegistry.discoverAgents(filter);
   if (agents.length === 0 && shouldBootstrapLocalRegistry) {
     await npcBootstrapService.bootstrapAllNpcs();

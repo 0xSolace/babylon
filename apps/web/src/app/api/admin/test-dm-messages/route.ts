@@ -17,7 +17,7 @@
  *     summary: Send test DM messages
  *     description: Sends bulk test messages between users for testing (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     requestBody:
  *       required: true
  *       content:

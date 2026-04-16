@@ -35,6 +35,7 @@ import {
 import { useCallback, useEffect, useState } from 'react';
 import { Avatar } from '@/components/shared/Avatar';
 import { Skeleton } from '@/components/shared/Skeleton';
+import { apiUrl } from '@/utils/api-url';
 
 /**
  * Feedback item structure from API
@@ -174,7 +175,7 @@ export function FeedbackTab() {
         params.set('search', debouncedSearch.trim());
       }
 
-      const response = await fetch(`/api/admin/feedback?${params}`);
+      const response = await fetch(apiUrl(`/api/admin/feedback?${params}`));
       if (!response.ok) {
         logger.error(
           'Failed to fetch feedback',

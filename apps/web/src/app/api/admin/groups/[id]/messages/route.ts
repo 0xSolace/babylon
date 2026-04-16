@@ -16,7 +16,7 @@
  *     summary: Get group messages
  *     description: Returns all messages in a group chat (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id

@@ -4,7 +4,6 @@ import { cn, formatDate } from '@babylon/shared';
 import {
   Ban,
   CheckCircle,
-  DollarSign,
   RefreshCw,
   Search,
   Shield,
@@ -14,13 +13,13 @@ import {
 import { useCallback, useEffect, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { z } from 'zod';
-import { AdminSendMoneyModal } from '@/components/admin/AdminSendMoneyModal';
 import { BlockUserModal } from '@/components/moderation/BlockUserModal';
 import { MuteUserModal } from '@/components/moderation/MuteUserModal';
 import { Avatar } from '@/components/shared/Avatar';
 import { Skeleton } from '@/components/shared/Skeleton';
 import { formatCurrencyCompact } from '@/lib/format';
 import { getUserDisplayName } from '@/lib/user-display';
+import { apiUrl } from '@/utils/api-url';
 
 /**
  * User schema for validation.
@@ -29,7 +28,6 @@ const UserSchema = z.object({
   id: z.string(),
   username: z.string().nullable(),
   displayName: z.string().nullable(),
-  walletAddress: z.string().nullable(),
   profileImageUrl: z.string().nullable(),
   isActor: z.boolean(),
   isAdmin: z.boolean(),
@@ -44,7 +42,6 @@ const UserSchema = z.object({
   lifetimePnL: z.string(),
   reputationPoints: z.number(),
   referralCount: z.number(),
-  onChainRegistered: z.boolean(),
   nftTokenId: z.number().nullable(),
   hasFarcaster: z.boolean(),
   hasTwitter: z.boolean(),
@@ -128,7 +125,6 @@ export function UserManagementTab() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showBanModal, setShowBanModal] = useState(false);
-  const [showSendMoneyModal, setShowSendMoneyModal] = useState(false);
   const [showMuteModal, setShowMuteModal] = useState(false);
   const [showBlockModal, setShowBlockModal] = useState(false);
   const [banReason, setBanReason] = useState('');
@@ -150,7 +146,7 @@ export function UserManagementTab() {
         });
         if (searchQuery) params.set('search', searchQuery);
 
-        const response = await fetch(`/api/admin/users?${params}`);
+        const response = await fetch(apiUrl(`/api/admin/users?${params}`));
         if (!response.ok) throw new Error('Failed to fetch users');
         const data = await response.json();
         const validation = z.array(UserSchema).safeParse(data.users);
@@ -181,7 +177,7 @@ export function UserManagementTab() {
     }
 
     startBanning(async () => {
-      const response = await fetch(`/api/admin/users/${user.id}/ban`, {
+      const response = await fetch(apiUrl(`/api/admin/users/${user.id}/ban`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -209,7 +205,7 @@ export function UserManagementTab() {
   const handleWhitelistUser = async (userId: string) => {
     setWhitelistingUserId(userId);
     try {
-      const res = await fetch('/api/admin/whitelist', {
+      const res = await fetch(apiUrl('/api/admin/whitelist'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, source: 'admin_manual' }),
@@ -271,11 +267,6 @@ export function UserManagementTab() {
                 <span className="flex items-center gap-1 rounded bg-red-500/20 px-2 py-0.5 text-red-500 text-xs">
                   <Ban className="h-3 w-3" />
                   Banned
-                </span>
-              )}
-              {user.onChainRegistered && (
-                <span className="rounded bg-green-500/20 px-2 py-0.5 text-green-500 text-xs">
-                  On-chain
                 </span>
               )}
               {user.isWhitelisted && (
@@ -385,13 +376,6 @@ export function UserManagementTab() {
                 </div>
               )}
 
-            {/* Wallet Address */}
-            {user.walletAddress && (
-              <div className="font-mono text-muted-foreground text-xs">
-                {user.walletAddress}
-              </div>
-            )}
-
             {/* Ban Info */}
             {user.isBanned && user.bannedReason && (
               <div className="rounded border border-red-500/20 bg-red-500/10 p-2 text-sm">
@@ -411,17 +395,6 @@ export function UserManagementTab() {
           {/* Actions */}
           {!user.isActor && (
             <div className="flex flex-col gap-2">
-              <button
-                onClick={() => {
-                  setSelectedUser(user);
-                  setShowSendMoneyModal(true);
-                }}
-                className="flex items-center gap-1 rounded bg-green-500/20 px-3 py-1.5 font-medium text-green-500 text-sm transition-colors hover:bg-green-500/30"
-                title="Send money via escrow"
-              >
-                <DollarSign className="h-4 w-4" />
-                Cash
-              </button>
               <button
                 onClick={() => {
                   setSelectedUser(user);
@@ -584,26 +557,6 @@ export function UserManagementTab() {
             <UserRow key={user.id} user={user} />
           ))}
         </div>
-      )}
-
-      {/* Send Money Modal */}
-      {showSendMoneyModal && selectedUser && (
-        <AdminSendMoneyModal
-          isOpen={showSendMoneyModal}
-          onClose={() => {
-            setShowSendMoneyModal(false);
-            setSelectedUser(null);
-          }}
-          recipientId={selectedUser.id}
-          recipientName={
-            selectedUser.displayName || selectedUser.username || 'User'
-          }
-          recipientUsername={selectedUser.username}
-          recipientWalletAddress={selectedUser.walletAddress}
-          onSuccess={() => {
-            fetchUsers(true);
-          }}
-        />
       )}
 
       {/* Block Modal */}

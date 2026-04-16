@@ -4,10 +4,25 @@ Strong, validated types - no Any, no unknown casts
 """
 
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 from pydantic.alias_generators import to_camel
+
+
+def _coerce_timestamp(value: object) -> int:
+    """Accept int epoch or ISO datetime string for timestamp fields."""
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp())
+        except (ValueError, OSError):
+            return 0
+    return 0
+
+
+FlexibleTimestamp = Annotated[int, BeforeValidator(_coerce_timestamp)]
 
 # Type alias for JSON-serializable values
 JsonDict = dict[str, object]
@@ -114,7 +129,7 @@ class TrajectoryStep(BaseModel):
     model_config = camel_case_config
 
     step_number: int
-    timestamp: int
+    timestamp: FlexibleTimestamp
     environment_state: EnvironmentState
     provider_accesses: list[ProviderAccess] = Field(default_factory=list)
     llm_calls: list[LLMCall] = Field(default_factory=list)

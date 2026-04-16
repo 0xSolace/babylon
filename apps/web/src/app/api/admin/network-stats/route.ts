@@ -16,7 +16,7 @@
  *     summary: Get network statistics
  *     description: Returns real-time network and database statistics (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     responses:
  *       200:
  *         description: Statistics retrieved successfully

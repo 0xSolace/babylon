@@ -46,6 +46,8 @@ apps/web/public/sw.js.map
 # local env files
 .env*.local
 .env
+.env.staging
+.env.production
 .staging-cookies.txt
 
 # Symlinked env files in apps
@@ -138,6 +140,9 @@ scripts/cleanup-excess-markets.ts
 .env.hook-test
 /thoughts
 
+# tmp
+apps/mobile-poc/
+
 # START Ruler Generated Files
 /.agent/rules/ruler.md
 /.agent/rules/ruler.md.bak
@@ -172,3 +177,4 @@ packages/training/python/*.logpackages/training/python/shared_model_checkpoints/
 
 # Model checkpoints
 packages/training/python/shared_model_checkpoints/
+output/

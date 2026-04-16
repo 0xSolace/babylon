@@ -16,7 +16,7 @@
  *     summary: Get training system status
  *     description: Returns complete training system status (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     responses:
  *       200:
  *         description: Status retrieved successfully

@@ -1854,8 +1854,10 @@ async function generateNPCReplyToPost(
   timestamp: Date,
   currentDay?: number
 ): Promise<boolean> {
+  const realName = StaticDataRegistry.getActor(replier.id)?.realName;
   const voiceContext = formatActorVoiceContext({
     name: replier.name,
+    realName,
     personality: replier.personality ?? undefined,
     voice: replier.voice ?? undefined,
     postStyle: replier.postStyle ?? undefined,
@@ -1907,7 +1909,9 @@ async function generateNPCReplyToPost(
         )
       : '';
 
-  const prompt = `You ARE ${replier.name}. You're jumping into a public conversation${isThread ? ' thread' : ''} started by ${originalPost.authorName}.
+  const prompt = `${realName ? `REAL PERSON: ${realName} (PARODY: ${replier.name})` : `PARODY CHARACTER: ${replier.name}`}
+
+You ARE ${replier.name}. You're jumping into a public conversation${isThread ? ' thread' : ''} started by ${originalPost.authorName}.
 
 === YOUR CHARACTER ===
 ${replier.description || ''}
@@ -2071,8 +2075,10 @@ async function generateNPCQuotePost(
   timestamp: Date,
   currentDay?: number
 ): Promise<boolean> {
+  const realName = StaticDataRegistry.getActor(quoter.id)?.realName;
   const voiceContext = formatActorVoiceContext({
     name: quoter.name,
+    realName,
     personality: quoter.personality ?? undefined,
     voice: quoter.voice ?? undefined,
     postStyle: quoter.postStyle ?? undefined,
@@ -2116,7 +2122,9 @@ async function generateNPCQuotePost(
         )
       : '';
 
-  const prompt = `You ARE ${quoter.name}. You're quote-posting ${originalPost.authorName}'s post to share it with YOUR take.
+  const prompt = `${realName ? `REAL PERSON: ${realName} (PARODY: ${quoter.name})` : `PARODY CHARACTER: ${quoter.name}`}
+
+You ARE ${quoter.name}. You're quote-posting ${originalPost.authorName}'s post to share it with YOUR take.
 
 === YOUR CHARACTER ===
 ${quoter.description || ''}

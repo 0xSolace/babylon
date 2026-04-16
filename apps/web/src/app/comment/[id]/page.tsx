@@ -25,6 +25,7 @@ import {
 } from '@/components/shared/VerifiedBadge';
 import { useAuth } from '@/hooks/useAuth';
 import { MAX_REPLY_COUNT } from '@/lib/constants';
+import { apiUrl } from '@/utils/api-url';
 
 const WidgetSidebar = nextDynamic(
   () =>
@@ -509,7 +510,7 @@ export default function CommentPage({ params }: CommentPageProps) {
     setIsLoading(true);
     setError(null);
 
-    const response = await fetch(`/api/comments/${commentId}`);
+    const response = await fetch(apiUrl(`/api/comments/${commentId}`));
 
     if (!response.ok) {
       setError('Comment not found');

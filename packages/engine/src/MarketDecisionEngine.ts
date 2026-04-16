@@ -101,6 +101,7 @@ import {
 } from './prompts';
 import { EventMarketLinkerService } from './services/event-market-linker';
 import type { MarketContextService } from './services/market-context-service';
+import { MarketMomentumService } from './services/market-momentum-service';
 import { NpcMemoryService } from './services/npc-memory-service';
 import { StaticDataRegistry } from './services/static-data-registry';
 import { isSimulationMode } from './storage-bridge';
@@ -186,6 +187,10 @@ export class MarketDecisionEngine {
   } | null = null;
   private eventMarketSignalsCache: {
     signals: string;
+    timestamp: number;
+  } | null = null;
+  private momentumAlertsCache: {
+    alerts: string;
     timestamp: number;
   } | null = null;
   private readonly CACHE_TTL_MS = 60000; // 1 minute TTL for caches
@@ -587,6 +592,7 @@ export class MarketDecisionEngine {
 
     // Get event-market signals for trading context (BAB-5)
     const eventMarketSignals = await this.getCachedEventMarketSignals();
+    const momentumAlerts = await this.getCachedMomentumAlerts();
 
     // Get resolved questions and previous trades (formerly ghost variables)
     const resolvedQuestionsContext = await this.getCachedResolvedQuestions();
@@ -649,6 +655,7 @@ export class MarketDecisionEngine {
       recentEvents: recentEventsText,
       richGameContext: worldContext.richGameContext || '',
       eventMarketSignals,
+      momentumAlerts,
       resolvedQuestionsContext,
       previousTrades,
       marketSignalAnalysis,
@@ -694,6 +701,7 @@ export class MarketDecisionEngine {
         recentEvents: recentEventsText,
         richGameContext: worldContext.richGameContext || '',
         eventMarketSignals,
+        momentumAlerts,
         resolvedQuestionsContext,
         previousTrades,
         marketSignalAnalysis,
@@ -720,6 +728,7 @@ export class MarketDecisionEngine {
         recentEvents: recentEventsText,
         richGameContext: worldContext.richGameContext || '',
         eventMarketSignals,
+        momentumAlerts,
         resolvedQuestionsContext,
         previousTrades,
         marketSignalAnalysis,
@@ -2468,6 +2477,40 @@ ${prompt}`
   }
 
   /**
+   * Get cached momentum alerts or fetch if expired.
+   * Provides cascade/herd behavior context for trading decisions.
+   */
+  private async getCachedMomentumAlerts(): Promise<string> {
+    const now = Date.now();
+    const FALLBACK_ALERTS = '(No active momentum alerts - markets stable)';
+
+    if (
+      this.momentumAlertsCache &&
+      now - this.momentumAlertsCache.timestamp < this.CACHE_TTL_MS
+    ) {
+      return this.momentumAlertsCache.alerts;
+    }
+
+    let alerts: string;
+    try {
+      alerts = await MarketMomentumService.getMomentumPromptContext();
+      if (!alerts || alerts.trim().length === 0) {
+        alerts = FALLBACK_ALERTS;
+      }
+    } catch (error) {
+      logger.warn(
+        'Failed to fetch momentum alerts, using fallback',
+        { error: formatError(error) },
+        'MarketDecisionEngine'
+      );
+      alerts = FALLBACK_ALERTS;
+    }
+
+    this.momentumAlertsCache = { alerts, timestamp: now };
+    return alerts;
+  }
+
+  /**
    * Clear all caches
    * Call this when you want to force fresh data on next query
    */
@@ -2478,6 +2521,7 @@ ${prompt}`
     this.resolvedQuestionsCache = null;
     this.previousTradesCache = null;
     this.eventMarketSignalsCache = null;
+    this.momentumAlertsCache = null;
     logger.debug('Cleared all caches', {}, 'MarketDecisionEngine');
   }
 

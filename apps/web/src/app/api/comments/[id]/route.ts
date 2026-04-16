@@ -20,7 +20,7 @@
  *     summary: Edit comment
  *     description: Updates comment content (author only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -71,7 +71,7 @@
  *     summary: Delete comment
  *     description: Deletes comment and all replies (author only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id

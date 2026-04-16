@@ -43,10 +43,6 @@ describe('migrateAuthStoreState', () => {
           displayName: 'Test User',
           username: 'test-user',
         },
-        wallet: {
-          address: '0x123',
-          chainId: 'eip155:8453',
-        },
         loadedUserId: 'did:privy:test-user',
         isLoadingProfile: true,
         needsOnboarding: true,
@@ -61,10 +57,6 @@ describe('migrateAuthStoreState', () => {
         displayName: 'Test User',
         username: 'test-user',
       },
-      wallet: {
-        address: '0x123',
-        chainId: 'eip155:8453',
-      },
       loadedUserId: 'did:privy:test-user',
     });
   });
@@ -72,7 +64,6 @@ describe('migrateAuthStoreState', () => {
   test('falls back to the default state for malformed persisted payloads', () => {
     expect(migrateAuthStoreState('invalid', 1)).toEqual({
       user: null,
-      wallet: null,
       loadedUserId: null,
     });
   });
@@ -84,10 +75,6 @@ describe('migrateAuthStoreState', () => {
           id: 'did:privy:test-user',
           displayName: 'Test User',
         },
-        wallet: {
-          address: '0xabc',
-          chainId: 'eip155:1',
-        },
         needsOnboarding: true,
       },
       0
@@ -98,26 +85,18 @@ describe('migrateAuthStoreState', () => {
         id: 'did:privy:test-user',
         displayName: 'Test User',
       },
-      wallet: {
-        address: '0xabc',
-        chainId: 'eip155:1',
-      },
       loadedUserId: null,
     });
   });
 
-  test('migrates version 2 and 3 payloads and strips ephemeral fields', () => {
-    for (const version of [2, 3]) {
+  test('migrates version 2, 3, and 4 payloads and strips ephemeral fields', () => {
+    for (const version of [2, 3, 4]) {
       const migrated = migrateAuthStoreState(
         {
           user: {
             id: 'did:privy:test-user',
             displayName: 'Test User',
             username: 'test-user',
-          },
-          wallet: {
-            address: '0x123',
-            chainId: 'eip155:8453',
           },
           loadedUserId: 'did:privy:test-user',
           isLoadingProfile: true,
@@ -132,10 +111,6 @@ describe('migrateAuthStoreState', () => {
           displayName: 'Test User',
           username: 'test-user',
         },
-        wallet: {
-          address: '0x123',
-          chainId: 'eip155:8453',
-        },
         loadedUserId: 'did:privy:test-user',
       });
     }
@@ -145,32 +120,11 @@ describe('migrateAuthStoreState', () => {
     const migrated = migrateAuthStoreState(
       {
         user: { id: 'did:privy:test-user' },
-        wallet: { address: '0x123', chainId: 'eip155:8453' },
       },
       1
     );
 
     expect(migrated.user).toBeNull();
-    expect(migrated.wallet).toEqual({
-      address: '0x123',
-      chainId: 'eip155:8453',
-    });
-  });
-
-  test('drops partial wallet objects that do not satisfy the persisted wallet guard', () => {
-    const migrated = migrateAuthStoreState(
-      {
-        user: { id: 'did:privy:test-user', displayName: 'Test' },
-        wallet: { address: '0x123' },
-      },
-      1
-    );
-
-    expect(migrated.user).toEqual({
-      id: 'did:privy:test-user',
-      displayName: 'Test',
-    });
-    expect(migrated.wallet).toBeNull();
   });
 
   test('drops unsupported future-version payloads instead of hydrating unknown state', () => {
@@ -182,12 +136,11 @@ describe('migrateAuthStoreState', () => {
         },
         needsOnboarding: true,
       },
-      5
+      6
     );
 
     expect(migrated).toEqual({
       user: null,
-      wallet: null,
       loadedUserId: null,
     });
   });

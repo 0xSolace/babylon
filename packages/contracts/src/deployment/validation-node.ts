@@ -13,33 +13,6 @@ import type { DeploymentEnv } from './env-detection';
 import { logger } from './logger';
 import type { ContractAddresses, DeploymentInfo } from './validation';
 
-const deploymentPaths: Record<DeploymentEnv, string> = {
-  localnet: 'packages/contracts/deployments/local',
-  testnet: 'packages/contracts/deployments/base-sepolia',
-  mainnet: 'packages/contracts/deployments/base',
-};
-
-function getDeploymentFilePath(env: DeploymentEnv): string {
-  return path.join(process.cwd(), deploymentPaths[env], 'index.json');
-}
-
-export async function loadDeploymentFromDisk(
-  env: DeploymentEnv
-): Promise<DeploymentInfo | null> {
-  if (typeof process === 'undefined' || typeof process.cwd !== 'function') {
-    throw new Error(
-      'loadDeploymentFromDisk requires Node.js environment with file system access. Not available in edge runtime.'
-    );
-  }
-
-  const filepath = getDeploymentFilePath(env);
-  if (!fs.existsSync(filepath)) {
-    return null;
-  }
-
-  return JSON.parse(fs.readFileSync(filepath, 'utf-8')) as DeploymentInfo;
-}
-
 /**
  * Save deployment information to JSON file.
  *
@@ -60,8 +33,14 @@ export async function saveDeployment(
     );
   }
 
-  const filepath = getDeploymentFilePath(env);
-  const dirpath = path.dirname(filepath);
+  const deploymentPaths = {
+    localnet: 'packages/contracts/deployments/local',
+    testnet: 'packages/contracts/deployments/base-sepolia',
+    mainnet: 'packages/contracts/deployments/base',
+  };
+
+  const dirpath = path.join(process.cwd(), deploymentPaths[env]);
+  const filepath = path.join(dirpath, 'index.json');
 
   if (!fs.existsSync(dirpath)) {
     fs.mkdirSync(dirpath, { recursive: true });
@@ -105,11 +84,26 @@ export async function updateEnvFile(
   }
 
   const updates: Record<string, string | undefined> = {
+    NEXT_PUBLIC_DIAMOND_ADDRESS: contracts.diamond,
     NEXT_PUBLIC_IDENTITY_REGISTRY: contracts.identityRegistry,
     NEXT_PUBLIC_REPUTATION_SYSTEM: contracts.reputationSystem,
+    NEXT_PUBLIC_PREDICTION_MARKET_FACET: contracts.predictionMarketFacet,
+    NEXT_PUBLIC_ORACLE_FACET: contracts.oracleFacet,
+    NEXT_PUBLIC_LIQUIDITY_POOL_FACET: contracts.liquidityPoolFacet,
+    NEXT_PUBLIC_PERPETUAL_MARKET_FACET: contracts.perpetualMarketFacet,
+    NEXT_PUBLIC_REFERRAL_SYSTEM_FACET: contracts.referralSystemFacet,
     NEXT_PUBLIC_BAN_MANAGER: contracts.banManager,
+    NEXT_PUBLIC_BABYLON_ORACLE: contracts.babylonOracle,
     NEXT_PUBLIC_TEST_TOKEN: contracts.testToken,
   };
+
+  if (contracts.chainlinkOracle) {
+    updates.NEXT_PUBLIC_CHAINLINK_ORACLE = contracts.chainlinkOracle;
+  }
+
+  if (contracts.mockOracle) {
+    updates.NEXT_PUBLIC_MOCK_ORACLE = contracts.mockOracle;
+  }
 
   for (const [key, value] of Object.entries(updates)) {
     if (value) {

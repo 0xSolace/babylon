@@ -19,7 +19,7 @@
  *     summary: Create Stripe Checkout Session for trading balance funding
  *     description: Creates a Stripe Checkout Session and returns the URL for redirect
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     requestBody:
  *       required: true
  *       content:

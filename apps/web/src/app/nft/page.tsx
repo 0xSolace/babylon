@@ -11,6 +11,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useNftMint } from '@/hooks/useNftMint';
 import type { NftGalleryResponse, NftSummary } from '@/types/nft';
 import { apiFetch } from '@/utils/api-fetch';
+import { apiUrl } from '@/utils/api-url';
 
 type ViewTab = 'all' | 'mine';
 
@@ -70,7 +71,9 @@ export default function NftGalleryPage() {
       params.set('search', debouncedSearch.trim());
     }
 
-    const response = await fetch(`/api/nft/collection?${params.toString()}`);
+    const response = await fetch(
+      apiUrl(`/api/nft/collection?${params.toString()}`)
+    );
 
     if (!response.ok) {
       setError('Failed to load NFT collection');
@@ -94,12 +97,6 @@ export default function NftGalleryPage() {
   const isMyNft = (nft: NftSummary) => {
     if (!user) return false;
     if (nft.owner?.user?.id === user.id) return true;
-    if (
-      user.walletAddress &&
-      nft.owner?.walletAddress?.toLowerCase() ===
-        user.walletAddress.toLowerCase()
-    )
-      return true;
     return false;
   };
 

@@ -31,7 +31,6 @@ export interface SelectedUser {
   rank: number;
   isAgent?: boolean;
   managedBy?: string | null;
-  onChainRegistered?: boolean;
   nftTokenId?: number | null;
   teamReputationPoints?: number;
   userReputationPoints?: number;
@@ -231,7 +230,7 @@ export function LeaderboardWidgetSidebar({
                     </span>
                   ) : (
                     <OnChainBadge
-                      isRegistered={selectedUser.onChainRegistered ?? false}
+                      isRegistered={Boolean(selectedUser.nftTokenId)}
                       nftTokenId={selectedUser.nftTokenId ?? null}
                       size="sm"
                     />

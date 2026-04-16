@@ -17,7 +17,7 @@
  *     summary: Get fee statistics
  *     description: Returns comprehensive fee statistics and analytics (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: query
  *         name: startDate

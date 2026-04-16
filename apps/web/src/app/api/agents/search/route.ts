@@ -34,7 +34,7 @@
  *     summary: Search for agents and NPCs
  *     description: Search for agents/NPCs by username or display name (min 2 chars, max 20 results)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: query
  *         name: q

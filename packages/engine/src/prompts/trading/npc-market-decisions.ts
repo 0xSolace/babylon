@@ -69,7 +69,7 @@ const TRADING_EXAMPLES: TradingExample[] = [
     ticker: 'null',
     marketId: '123456789',
     positionId: 'null',
-    amount: 3000,
+    amount: 1200,
     confidence: 0.65,
   },
   {
@@ -109,7 +109,7 @@ const TRADING_EXAMPLES: TradingExample[] = [
     ticker: 'null',
     marketId: '987654321',
     positionId: 'null',
-    amount: 2500,
+    amount: 900,
     confidence: 0.6,
   },
   {
@@ -238,6 +238,7 @@ RULES:
 - Prediction SELL actions (sell_yes/sell_no): marketType=prediction, marketId required, amount=0 (closes entire position)
 - close_position: positionId required (exact UUID), amount=0
 - hold: all fields null, amount=0
+- PREDICTION SLIPPAGE LIMIT: The last column of the market table shows "max $Xk" for each prediction market. Your trade amount MUST stay at or below that value — larger trades are rejected. For thin markets, bet $200-$500; for balanced, up to the listed max.
 
 DECISION FACTORS:
 - Posts/insider info/events inform trades
@@ -245,6 +246,16 @@ DECISION FACTORS:
 - Aggressive=larger trades, Conservative=smaller/hold
 - RESOLVED QUESTIONS inform ongoing market dynamics
 - ONGOING NARRATIVES suggest future movements
+
+MARKET MOMENTUM ALERTS (CRITICAL for cascade behavior):
+{{momentumAlerts}}
+- PANIC ALERTS (🚨/⚠️): Markets crashing - triggers panic selling cascade
+  * Herd personalities: MORE likely to sell, LESS likely to buy
+  * Contrarian personalities: See buying opportunity ("buy the dip")
+- FOMO ALERTS (🚀/📈): Markets pumping - triggers FOMO buying cascade
+  * Herd personalities: MORE likely to buy, LESS likely to sell
+  * Contrarian personalities: Take profits, fade the pump
+- If no alerts shown, markets are stable - trade based on fundamentals
 
 CONTRARIAN BEHAVIOR (avoid herding):
 - At least 20-30% of traders should take contrarian (NO) positions

@@ -73,9 +73,6 @@
  *                     profileComplete:
  *                       type: boolean
  *                       description: Whether profile setup is complete
- *                     onChainRegistered:
- *                       type: boolean
- *                       description: Whether registered on blockchain
  *                     hasFarcaster:
  *                       type: boolean
  *                       description: Whether Farcaster is linked
@@ -121,6 +118,7 @@ import {
 } from '@babylon/api';
 import { logger, toISO, toISOOrNull, UserIdParamSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+import { sanitizeForJson } from '@/lib/json/sanitize';
 import { getOptionalProfileStats } from '@/lib/users/profile-stats';
 
 /**
@@ -184,9 +182,11 @@ export const GET = withErrorHandling(
         { userId },
         'GET /api/users/[userId]/profile'
       );
-      return successResponse({
-        user: null,
-      });
+      return successResponse(
+        sanitizeForJson({
+          user: null,
+        })
+      );
     }
 
     // Get cached profile stats (followers, following, posts, etc.)
@@ -201,47 +201,42 @@ export const GET = withErrorHandling(
       'GET /api/users/[userId]/profile'
     );
 
-    const res = successResponse({
-      user: {
-        id: dbUser.id,
-        walletAddress: dbUser.walletAddress,
-        username: dbUser.username,
-        displayName: dbUser.displayName,
-        bio: dbUser.bio,
-        profileImageUrl: dbUser.profileImageUrl,
-        coverImageUrl: dbUser.coverImageUrl,
-        isActor: dbUser.isActor,
-        isAgent: dbUser.isAgent,
-        managedBy: dbUser.managedBy,
-        profileComplete: dbUser.profileComplete,
-        hasUsername: dbUser.hasUsername,
-        hasBio: dbUser.hasBio,
-        hasProfileImage: dbUser.hasProfileImage,
-        onChainRegistered: dbUser.onChainRegistered,
-        nftTokenId: dbUser.nftTokenId,
-        // WHY Number() conversion? virtualBalance and lifetimePnL are decimal types
-        // stored as strings in the database. We convert to numbers for JSON response.
-        // WHY ?? 0 fallback? Defensive programming - if somehow null, default to 0
-        virtualBalance: Number(dbUser.virtualBalance ?? 0),
-        lifetimePnL: Number(dbUser.lifetimePnL ?? 0),
-        reputationPoints: dbUser.reputationPoints,
-        earnedPoints: dbUser.earnedPoints,
-        invitePoints: dbUser.invitePoints,
-        bonusPoints: dbUser.bonusPoints,
-        referralCount: dbUser.referralCount,
-        referralCode: dbUser.referralCode,
-        hasFarcaster: dbUser.hasFarcaster,
-        hasTwitter: dbUser.hasTwitter,
-        farcasterUsername: dbUser.farcasterUsername,
-        twitterUsername: dbUser.twitterUsername,
-        // WHY optional chaining for usernameChangedAt? Field is nullable (only set when username changes)
-        // WHY || null? If toISOString() somehow returns empty string, return null instead
-        usernameChangedAt: toISOOrNull(dbUser.usernameChangedAt),
-        // WHY no optional chaining for createdAt? Field is NOT NULL in schema (always present)
-        createdAt: toISO(dbUser.createdAt),
-        stats,
-      },
-    });
+    const res = successResponse(
+      sanitizeForJson({
+        user: {
+          id: dbUser.id,
+          walletAddress: dbUser.walletAddress,
+          username: dbUser.username,
+          displayName: dbUser.displayName,
+          bio: dbUser.bio,
+          profileImageUrl: dbUser.profileImageUrl,
+          coverImageUrl: dbUser.coverImageUrl,
+          isActor: dbUser.isActor,
+          isAgent: dbUser.isAgent,
+          managedBy: dbUser.managedBy,
+          profileComplete: dbUser.profileComplete,
+          hasUsername: dbUser.hasUsername,
+          hasBio: dbUser.hasBio,
+          hasProfileImage: dbUser.hasProfileImage,
+          nftTokenId: dbUser.nftTokenId,
+          virtualBalance: Number(dbUser.virtualBalance ?? 0),
+          lifetimePnL: Number(dbUser.lifetimePnL ?? 0),
+          reputationPoints: dbUser.reputationPoints,
+          earnedPoints: dbUser.earnedPoints,
+          invitePoints: dbUser.invitePoints,
+          bonusPoints: dbUser.bonusPoints,
+          referralCount: dbUser.referralCount,
+          referralCode: dbUser.referralCode,
+          hasFarcaster: dbUser.hasFarcaster,
+          hasTwitter: dbUser.hasTwitter,
+          farcasterUsername: dbUser.farcasterUsername,
+          twitterUsername: dbUser.twitterUsername,
+          usernameChangedAt: toISOOrNull(dbUser.usernameChangedAt),
+          createdAt: toISO(dbUser.createdAt),
+          stats,
+        },
+      })
+    );
     if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
     return res;
   }

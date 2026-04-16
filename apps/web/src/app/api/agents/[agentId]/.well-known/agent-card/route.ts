@@ -55,7 +55,7 @@
 import { generateAgentCardSync } from '@babylon/a2a';
 import { getAgentConfig } from '@babylon/agents';
 import { withErrorHandling } from '@babylon/api';
-import { db } from '@babylon/db';
+import { agentRegistries, db, eq } from '@babylon/db';
 import { toISOOrNull } from '@babylon/shared';
 import { NextResponse } from 'next/server';
 
@@ -100,13 +100,6 @@ export const GET = withErrorHandling(async function GET(
       bio: true,
       profileImageUrl: true,
       isAgent: true,
-      // Agent0 fields for on-chain identity and reputation
-      agent0TokenId: true,
-      agent0MetadataCID: true,
-      onChainRegistered: true,
-      agent0RegisteredAt: true,
-      agent0TrustScore: true,
-      agent0FeedbackCount: true,
     },
   });
 
@@ -134,24 +127,29 @@ export const GET = withErrorHandling(async function GET(
 
   let responseCard: ExtendedAgentCard = agentCard;
 
-  // Add Agent0 metadata if agent is registered on-chain
-  if (agent.onChainRegistered && agent.agent0TokenId) {
-    const tokenId = String(agent.agent0TokenId);
+  // Add Agent0 metadata if agent is registered on-chain (via AgentRegistry)
+  const [registry] = await db
+    .select({
+      agent0TokenId: agentRegistries.agent0TokenId,
+      agent0MetadataCID: agentRegistries.agent0MetadataCID,
+      registeredAt: agentRegistries.registeredAt,
+    })
+    .from(agentRegistries)
+    .where(eq(agentRegistries.userId, agentId))
+    .limit(1);
+
+  if (registry?.agent0TokenId) {
+    const tokenId = String(registry.agent0TokenId);
 
     responseCard = {
       ...agentCard,
       onChain: {
         registered: true,
         tokenId,
-        metadataCID: agent.agent0MetadataCID,
-        registeredAt: toISOOrNull(agent.agent0RegisteredAt) ?? undefined,
+        metadataCID: registry.agent0MetadataCID ?? null,
+        registeredAt: toISOOrNull(registry.registeredAt) ?? undefined,
         chainId: 1, // Ethereum mainnet
         agentId: `1:${tokenId}`,
-      },
-      reputation: {
-        trustScore: agent.agent0TrustScore,
-        feedbackCount: agent.agent0FeedbackCount,
-        verifiedIdentity: true,
       },
       discovery: {
         discoverable: true,

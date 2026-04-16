@@ -13,9 +13,16 @@ const PRODUCTION_ORIGINS = [
   'https://babylon.market',
   'https://www.babylon.market',
   'https://app.babylon.market',
-  'https://privy.babylon.market',
+  // 'https://privy.babylon.market', // DEPRECATED — Privy removed in Phase 2
   'https://staging.babylon.market',
   'https://app.staging.babylon.market',
+  'https://play.staging.babylon.market',
+  // Capacitor mobile app origins.
+  // Capacitor iOS sets Origin: capacitor://localhost; Android sets Origin: https://localhost.
+  // These are the WebView origins for the native shell — not reachable from external browsers.
+  // Attack surface is limited: an attacker would need to already control the device.
+  'capacitor://localhost', // iOS Capacitor WebView
+  'https://localhost', // Android Capacitor WebView
 ] as const;
 
 /**
@@ -25,6 +32,9 @@ const DEV_ORIGINS = [
   'http://localhost:3000',
   'http://localhost:3001',
   'http://127.0.0.1:3000',
+  // mobile
+  'capacitor://localhost',
+  'http://localhost:3077',
 ] as const;
 
 /**
@@ -163,6 +173,23 @@ export function middleware(request: NextRequest) {
     }
   }
 
+  // NFT features are disabled — block both API routes and page routes.
+  if (
+    pathname.startsWith('/api/nft') ||
+    pathname.startsWith('/api/wallet/nfts') ||
+    pathname === '/nft' ||
+    pathname.startsWith('/nft/')
+  ) {
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json(
+        { error: 'NFT features are currently disabled.' },
+        { status: 503 }
+      );
+    }
+    // Redirect page routes to home
+    return NextResponse.redirect(new URL('/', request.url));
+  }
+
   // Skip CORS handling for agent routes - handled in vercel.json with wildcard
   // Agent routes use Bearer token auth (not cookies), so they can use wildcard CORS
   if (isAgentApiRequest(pathname)) {
@@ -197,6 +224,13 @@ export function middleware(request: NextRequest) {
   if (pathname === '/research' || pathname.startsWith('/research/')) {
     const requestHeaders = new Headers(request.headers);
     requestHeaders.set('x-minimal-layout', '1');
+    return NextResponse.next({ request: { headers: requestHeaders } });
+  }
+
+  // User signup onboarding: full-bleed page without sidebar/nav.
+  if (pathname === '/onboarding' || pathname.startsWith('/onboarding/')) {
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set('x-hide-app-chrome', '1');
     return NextResponse.next({ request: { headers: requestHeaders } });
   }
 

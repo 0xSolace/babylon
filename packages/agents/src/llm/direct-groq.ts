@@ -35,6 +35,18 @@ function getRuntimeSetting(
 }
 
 function resolveGroqBaseURL(runtime: IAgentRuntime | undefined): string {
+  // When ElizaCloud is configured, route through its OpenAI-compatible proxy
+  const elizacloudKey =
+    getRuntimeSetting(runtime, 'ELIZACLOUD_API_KEY') ||
+    process.env.ELIZACLOUD_API_KEY;
+  if (elizacloudKey) {
+    const base = (
+      getRuntimeSetting(runtime, 'ELIZACLOUD_API_URL') ||
+      process.env.ELIZACLOUD_API_URL ||
+      'https://www.elizacloud.ai'
+    ).replace(/\/$/, '');
+    return `${base}/api/v1`;
+  }
   return (
     getRuntimeSetting(runtime, 'GROQ_BASE_URL') ||
     process.env.GROQ_BASE_URL ||
@@ -91,17 +103,27 @@ export async function callGroqDirect(params: {
     }
   }
 
-  // Use Groq models
+  // Resolve API key: prefer GROQ_API_KEY, fall back to ELIZACLOUD_API_KEY
   const apiKey =
     getRuntimeSetting(params.runtime, 'GROQ_API_KEY') ||
-    process.env.GROQ_API_KEY;
+    process.env.GROQ_API_KEY ||
+    getRuntimeSetting(params.runtime, 'ELIZACLOUD_API_KEY') ||
+    process.env.ELIZACLOUD_API_KEY;
   if (!apiKey) {
-    throw new Error('GROQ_API_KEY not set');
+    throw new Error(
+      'No API key for inference — set GROQ_API_KEY or ELIZACLOUD_API_KEY'
+    );
   }
+
+  const elizacloudKey =
+    getRuntimeSetting(params.runtime, 'ELIZACLOUD_API_KEY') ||
+    process.env.ELIZACLOUD_API_KEY;
+  const isElizaCloud = !!elizacloudKey;
 
   const groq = createGroq({
     apiKey,
     baseURL: resolveGroqBaseURL(params.runtime),
+    ...(isElizaCloud ? { headers: { 'X-API-Key': apiKey } } : {}),
   });
 
   const model = resolveGroqModel({

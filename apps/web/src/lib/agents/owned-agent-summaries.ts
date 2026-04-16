@@ -31,7 +31,6 @@ export interface OwnedAgentSummary {
   lastTickAt: string | null;
   lastChatAt: string | null;
   walletAddress: string | null;
-  onChainRegistered: boolean;
   agent0TokenId: number | null;
   createdAt: string;
   updatedAt: string;
@@ -121,8 +120,7 @@ export async function listOwnedAgentSummaries(
         lastTickAt: toISOOrNull(config?.lastTickAt),
         lastChatAt: toISOOrNull(config?.lastChatAt),
         walletAddress: agent.walletAddress,
-        onChainRegistered: agent.onChainRegistered ?? false,
-        agent0TokenId: agent.agent0TokenId,
+        agent0TokenId: null, // TODO: source from AgentRegistry table
         createdAt: toISO(agent.createdAt),
         updatedAt: toISO(agent.updatedAt),
       };

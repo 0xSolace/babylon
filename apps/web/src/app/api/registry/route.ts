@@ -89,8 +89,6 @@
  *                         type: string
  *                       walletAddress:
  *                         type: string
- *                       onChainRegistered:
- *                         type: boolean
  *                       nftTokenId:
  *                         type: string
  *                       virtualBalance:
@@ -176,7 +174,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   if (error) return error;
 
   // Build where clause
-  const where = filters.onChainOnly ? { onChainRegistered: true } : {};
+  void filters.onChainOnly; // onChainOnly filter removed (column dropped)
+  const where = {};
 
   // Build order by clause
   const orderBy = filters.sortBy
@@ -231,7 +230,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const usersWithReputation = await Promise.all(
     users.map(async (user) => {
       let reputation: number | null = null;
-      if (user.onChainRegistered && user.nftTokenId) {
+      if (user.nftTokenId) {
         reputation = await MarketReputationService.getOnChainReputation(
           user.id
         );
@@ -245,9 +244,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         profileImageUrl: user.profileImageUrl,
         walletAddress: user.walletAddress,
         isActor: user.isActor,
-        onChainRegistered: user.onChainRegistered,
         nftTokenId: user.nftTokenId,
-        registrationTxHash: user.registrationTxHash,
         createdAt: user.createdAt,
         virtualBalance: user.virtualBalance.toString(),
         lifetimePnL: user.lifetimePnL.toString(),

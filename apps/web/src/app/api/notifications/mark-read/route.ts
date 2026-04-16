@@ -16,7 +16,7 @@
  *     summary: Mark notifications as read
  *     description: Marks notifications as read (authenticated user only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     requestBody:
  *       content:
  *         application/json:

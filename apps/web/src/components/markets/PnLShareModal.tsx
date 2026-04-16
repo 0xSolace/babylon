@@ -6,16 +6,17 @@ import {
   logger,
   trackExternalShare,
 } from '@babylon/shared';
-import { usePrivy } from '@privy-io/react-auth';
 import { Download, LogOut, Twitter, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { CategoryPnLShareCard } from '@/components/markets/CategoryPnLShareCard';
 import { PortfolioPnLShareCard } from '@/components/markets/PortfolioPnLShareCard';
+import { useAuth } from '@/hooks/useAuth';
 import type { PortfolioBreakdownSnapshot } from '@/hooks/usePortfolioPnL';
 import { useTwitterAuth } from '@/hooks/useTwitterAuth';
 import type { User } from '@/stores/authStore';
 import type { MarketCategory } from '@/types/markets';
+import { apiUrl } from '@/utils/api-url';
 
 /**
  * Category PnL data structure for PnL share modal.
@@ -112,7 +113,7 @@ export function PnLShareModal({
   category = 'perps',
   user,
 }: PnLShareModalProps) {
-  const { getAccessToken } = usePrivy();
+  const { getAccessToken } = useAuth();
   const [isDownloading, setIsDownloading] = useState(false);
   const [sharing, setSharing] = useState<'twitter' | 'farcaster' | null>(null);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
@@ -276,7 +277,7 @@ export function PnLShareModal({
     toast.info('Posting to X...');
 
     try {
-      const tweetResponse = await fetch('/api/twitter/tweet', {
+      const tweetResponse = await fetch(apiUrl('/api/twitter/tweet'), {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,

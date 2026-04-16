@@ -16,6 +16,7 @@ import { setTokenUsageCallback } from '../llm/openai-client';
 import {
   calculateEstimatedCost,
   type LLMCallTokenUsage,
+  type LLMProviderName,
   type ModelStats,
   type PromptTypeStats,
   type TickTokenStats,
@@ -123,7 +124,7 @@ class TickUsageCollector implements TokenUsageCollector {
     const modelMap = new Map<
       string,
       {
-        provider: 'groq' | 'claude' | 'openai';
+        provider: LLMProviderName;
         calls: LLMCallTokenUsage[];
         totalInput: number;
         totalOutput: number;

@@ -20,7 +20,7 @@
  *     summary: Get all registry entities
  *     description: Returns all entities from ERC8004 registry and database (optional auth for RLS)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     responses:
  *       200:
  *         description: Entities retrieved successfully
@@ -48,11 +48,6 @@
  */
 
 import {
-  type AgentSummary,
-  getAgent0SDK,
-  type SearchFilters,
-} from '@babylon/agents';
-import {
   addPublicReadHeaders,
   publicRateLimit,
   successResponse,
@@ -64,21 +59,12 @@ import { StaticDataRegistry } from '@babylon/engine';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
-function parseAgent0TokenId(agentId: string): number {
-  const tokenIdPart = agentId.split(':')[1];
-  const parsed = tokenIdPart ? Number.parseInt(tokenIdPart, 10) : NaN;
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
 function mapAgent0SummaryToEntity(
-  summary: AgentSummary,
-  entityType: 'agent' | 'app'
+  summary: Record<string, unknown>,
+  _entityType: 'agent' | 'app'
 ): Record<string, unknown> {
-  const tokenId = parseAgent0TokenId(summary.agentId);
   return {
-    type: entityType,
-    id: `${entityType}-${tokenId}`,
-    tokenId,
+    type: _entityType,
     name: summary.name,
     description: summary.description,
     imageUrl: summary.image,
@@ -119,9 +105,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     const dbOperation = async (db: DrizzleClient) => {
       const conditions: Record<string, unknown>[] = [];
 
-      if (onChainOnly) {
-        conditions.push({ onChainRegistered: true });
-      }
+      void onChainOnly; // onChainOnly filter (Agent0/on-chain) removed in Phase 1.
 
       if (search) {
         conditions.push({
@@ -188,16 +172,10 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           username: user.username,
           bio: user.bio,
           imageUrl: user.profileImageUrl,
-          walletAddress: user.walletAddress,
           isActor: user.isActor,
           isBanned: user.isBanned,
           isScammer: user.isScammer,
           isCSAM: user.isCSAM,
-          onChainRegistered: user.onChainRegistered,
-          nftTokenId: user.nftTokenId,
-          agent0TokenId: user.agent0TokenId,
-          agent0MetadataCID: user.agent0MetadataCID,
-          registrationTxHash: user.registrationTxHash,
           registrationTimestamp: user.registrationTimestamp,
           createdAt: user.createdAt,
           balance: user.virtualBalance.toString(),
@@ -305,37 +283,11 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     return await asPublic(dbOperation);
   };
 
-  const fetchAgents = async () => {
-    if (process.env.AGENT0_ENABLED !== 'true') return [];
-
-    const sdk = getAgent0SDK();
-    const filters: SearchFilters = {
-      keyword: search || undefined,
-      metadataValue: { key: 'userType', value: 'agent' },
-      active: onChainOnly ? true : undefined,
-    };
-
-    const results = await sdk.searchAgents(filters);
-    return results
-      .slice(0, 100)
-      .map((agent) => mapAgent0SummaryToEntity(agent, 'agent'));
-  };
-
-  const fetchApps = async () => {
-    if (process.env.AGENT0_ENABLED !== 'true') return [];
-
-    const sdk = getAgent0SDK();
-    const filters: SearchFilters = {
-      keyword: search || undefined,
-      metadataValue: { key: 'type', value: 'game-platform' },
-      active: onChainOnly ? true : undefined,
-    };
-
-    const results = await sdk.searchAgents(filters);
-    return results
-      .slice(0, 100)
-      .map((app) => mapAgent0SummaryToEntity(app, 'app'));
-  };
+  // Agent0 external agent/app discovery removed in Phase 1.
+  const fetchAgents = async () =>
+    [] as ReturnType<typeof mapAgent0SummaryToEntity>[];
+  const fetchApps = async () =>
+    [] as ReturnType<typeof mapAgent0SummaryToEntity>[];
 
   // Fetch based on entity type
   // Note: When searching for 'users', we also include static actors (AI NPCs)

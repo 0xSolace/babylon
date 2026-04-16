@@ -13,7 +13,6 @@
  * @packageDocumentation
  */
 
-import { assertPrivyOfflineConfig } from '@babylon/api';
 import {
   agentLogs,
   agentMessages,
@@ -33,14 +32,8 @@ import {
   withTransaction,
 } from '@babylon/db';
 import type { AgentCapabilities } from '@babylon/shared';
-import {
-  BABYLON_POINTS_SYMBOL,
-  getCurrentChainId,
-  IDENTITY_REGISTRY_BASE_SEPOLIA,
-  REPUTATION_SYSTEM_BASE_SEPOLIA,
-} from '@babylon/shared';
+import { BABYLON_POINTS_SYMBOL } from '@babylon/shared';
 import { AuthorizationError } from '../errors';
-import { agentIdentityService } from '../identity/AgentIdentityService';
 import { agentRuntimeManager } from '../runtime/AgentRuntimeManager';
 import { logger } from '../shared/logger';
 import { generateSnowflakeId } from '../shared/snowflake';
@@ -311,11 +304,6 @@ export class AgentServiceV2 {
         x402Support: true,
         platform: 'babylon',
         userType: 'user_controlled',
-        gameNetwork: {
-          chainId: getCurrentChainId(),
-          registryAddress: IDENTITY_REGISTRY_BASE_SEPOLIA,
-          reputationAddress: REPUTATION_SYSTEM_BASE_SEPOLIA,
-        },
         skills: [],
         domains: [],
       };
@@ -333,19 +321,6 @@ export class AgentServiceV2 {
         undefined,
         'AgentService'
       );
-    }
-
-    if (this.shouldAutoSetupAgentIdentity()) {
-      void this.setupAgentIdentity(agentUserId).catch((error) => {
-        logger.error(
-          'Agent identity setup failed',
-          {
-            agentUserId,
-            error: error instanceof Error ? error.message : String(error),
-          },
-          'AgentService'
-        );
-      });
     }
 
     // Add agent to Agents (team chat)
@@ -1080,45 +1055,6 @@ export class AgentServiceV2 {
       .returning();
 
     return result[0]!;
-  }
-
-  private shouldAutoSetupAgentIdentity(): boolean {
-    if (process.env.AUTO_CREATE_AGENT_WALLETS === 'false') {
-      return false;
-    }
-
-    try {
-      assertPrivyOfflineConfig();
-      return true;
-    } catch (error) {
-      logger.warn(
-        'Skipping automatic agent identity setup - Privy offline configuration is incomplete',
-        {
-          error: error instanceof Error ? error.message : String(error),
-        },
-        'AgentService'
-      );
-      return false;
-    }
-  }
-
-  private async setupAgentIdentity(agentUserId: string): Promise<void> {
-    const skipAgent0Registration = process.env.AGENT0_ENABLED !== 'true';
-
-    const agent = await agentIdentityService.setupAgentIdentity(agentUserId, {
-      skipAgent0Registration,
-    });
-
-    logger.info(
-      'Agent identity setup complete',
-      {
-        agentUserId,
-        walletProvisioned: Boolean(agent.walletAddress),
-        agent0TokenId: agent.agent0TokenId,
-        skippedAgent0: skipAgent0Registration,
-      },
-      'AgentService'
-    );
   }
 }
 

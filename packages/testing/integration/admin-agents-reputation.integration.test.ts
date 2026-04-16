@@ -77,7 +77,6 @@ describe('Admin Agents Reputation Integration', () => {
       username: `rep-agent-${testAgentUserId}`,
       displayName: 'Test Agent for Reputation',
       isAgent: true,
-      agent0TokenId: 99999,
       updatedAt: new Date(),
     });
 

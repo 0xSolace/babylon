@@ -18,7 +18,7 @@
  *     summary: Get verified shares
  *     description: Retrieves verified and earned shares for a user
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: userId
@@ -40,7 +40,7 @@
  *     summary: Track share action
  *     description: Tracks share and awards points (authenticated user only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: userId

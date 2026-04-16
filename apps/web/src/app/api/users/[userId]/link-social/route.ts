@@ -5,7 +5,7 @@
  * @access Authenticated
  *
  * @description
- * Links a social account (Farcaster, Twitter, or wallet) to user profile.
+ * Links a social account (Farcaster, Twitter) to user profile.
  * Awards points if this is the first time linking this platform.
  *
  * @openapi
@@ -16,7 +16,7 @@
  *     summary: Link social account
  *     description: Links social account and awards points if first time (authenticated user only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: userId
@@ -35,14 +35,10 @@
  *             properties:
  *               platform:
  *                 type: string
- *                 enum: [farcaster, twitter, wallet]
+ *                 enum: [farcaster, twitter]
  *               username:
  *                 type: string
  *                 description: Username for social platform
- *               address:
- *                 type: string
- *                 pattern: '^0x[a-fA-F0-9]{40}$'
- *                 description: Wallet address (for wallet platform)
  *     responses:
  *       200:
  *         description: Account linked successfully
@@ -85,12 +81,8 @@ import { z } from 'zod';
 import { trackServerEvent } from '@/lib/posthog/server';
 
 const LinkSocialRequestSchema = z.object({
-  platform: z.enum(['farcaster', 'twitter', 'wallet']),
+  platform: z.enum(['farcaster', 'twitter']),
   username: z.string().optional(),
-  address: z
-    .string()
-    .regex(/^0x[a-fA-F0-9]{40}$/)
-    .optional(),
 });
 
 /**
@@ -125,14 +117,13 @@ export const POST = withErrorHandling(
 
     // Parse and validate request body
     const body = await request.json();
-    const { platform, username, address } = LinkSocialRequestSchema.parse(body);
+    const { platform, username } = LinkSocialRequestSchema.parse(body);
 
     // Get current user state
     const [user] = await db
       .select({
         hasFarcaster: users.hasFarcaster,
         hasTwitter: users.hasTwitter,
-        walletAddress: users.walletAddress,
         farcasterFid: users.farcasterFid,
         twitterId: users.twitterId,
       })
@@ -191,25 +182,6 @@ export const POST = withErrorHandling(
           }
         }
         break;
-      case 'wallet':
-        alreadyLinked = !!user.walletAddress;
-        break;
-    }
-
-    // Check if wallet address is already in use by another user
-    if (platform === 'wallet' && address) {
-      const [existingWalletUser] = await db
-        .select({ id: users.id })
-        .from(users)
-        .where(eq(users.walletAddress, address.toLowerCase()))
-        .limit(1);
-
-      if (existingWalletUser && existingWalletUser.id !== canonicalUserId) {
-        throw new ConflictError(
-          'Wallet address already linked to another account',
-          'User.walletAddress'
-        );
-      }
     }
 
     // Update user with social connection
@@ -222,9 +194,6 @@ export const POST = withErrorHandling(
       case 'twitter':
         updateData.hasTwitter = true;
         if (username) updateData.twitterUsername = username;
-        break;
-      case 'wallet':
-        if (address) updateData.walletAddress = address.toLowerCase();
         break;
     }
 
@@ -244,12 +213,6 @@ export const POST = withErrorHandling(
           pointsResult = await ReputationService.awardTwitterLink(
             canonicalUserId,
             username
-          );
-          break;
-        case 'wallet':
-          pointsResult = await ReputationService.awardWalletConnect(
-            canonicalUserId,
-            address
           );
           break;
       }
@@ -272,7 +235,7 @@ export const POST = withErrorHandling(
 
     logger.info(
       `User ${canonicalUserId} linked ${platform} account`,
-      { userId: canonicalUserId, platform, username, address, alreadyLinked },
+      { userId: canonicalUserId, platform, username, alreadyLinked },
       'POST /api/users/[userId]/link-social'
     );
 
@@ -280,7 +243,6 @@ export const POST = withErrorHandling(
     trackServerEvent(canonicalUserId, 'social_account_linked', {
       platform,
       ...(username && { username }),
-      ...(address && { address }),
       wasAlreadyLinked: alreadyLinked,
       reputationAwarded: pointsResult?.reputationAwarded || 0,
     }).catch((error) => {

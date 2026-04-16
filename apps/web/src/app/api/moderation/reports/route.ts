@@ -17,7 +17,7 @@
  *     summary: Get user's reports
  *     description: Returns reports created by current user
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: query
  *         name: limit
@@ -51,7 +51,7 @@
  *     summary: Create report
  *     description: Creates a new report with AI evaluation
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     requestBody:
  *       required: true
  *       content:

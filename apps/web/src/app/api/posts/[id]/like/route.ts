@@ -10,7 +10,7 @@
  *     summary: Like a post
  *     description: Adds a like reaction to a post. Creates notification for post author.
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -33,7 +33,7 @@
  *     summary: Unlike a post
  *     description: Removes a like reaction from a post.
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id

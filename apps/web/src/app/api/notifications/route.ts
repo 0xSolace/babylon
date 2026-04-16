@@ -19,7 +19,7 @@
  *     summary: Get user notifications
  *     description: Returns paginated notifications with filtering support. Cached for 10 seconds.
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: query
  *         name: limit
@@ -61,7 +61,7 @@
  *     summary: Mark notifications as read
  *     description: Marks specific notifications or all notifications as read.
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     requestBody:
  *       content:
  *         application/json:
@@ -87,7 +87,7 @@
  *     summary: Clear notifications
  *     description: Deletes specific notifications or clears all notifications for the authenticated user.
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     responses:
  *       200:
  *         description: Notifications cleared

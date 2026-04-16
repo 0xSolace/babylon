@@ -157,39 +157,6 @@ export interface IPredictionPricing {
 }
 
 /**
- * Agent0 Client Interface
- */
-export interface IAgent0Client {
-  /**
-   * Register agent with Agent0
-   */
-  registerAgent(params: {
-    name: string;
-    description: string;
-    endpoint: string;
-    capabilities: AgentCapabilities;
-  }): Promise<{
-    tokenId: string;
-    metadataCID: string;
-  }>;
-
-  /**
-   * Get agent info from Agent0
-   */
-  getAgentInfo(tokenId: string): Promise<{
-    name: string;
-    description: string;
-    endpoint: string;
-    reputation: number;
-  } | null>;
-
-  /**
-   * Sync reputation with Agent0
-   */
-  syncReputation(agentId: string): Promise<number>;
-}
-
-/**
  * Database Context Interface
  * For running queries as a specific user
  */
@@ -245,7 +212,6 @@ export interface IServiceContainer {
   characterMappingService?: ICharacterMappingService;
   trajectoryRecorder?: ITrajectoryRecorder;
   predictionPricing?: IPredictionPricing;
-  agent0Client?: IAgent0Client;
   dbContext?: IDbContext;
   redisClient?: IRedisClient;
 }

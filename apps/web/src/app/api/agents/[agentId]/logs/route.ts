@@ -17,7 +17,7 @@
  *     summary: Get agent logs
  *     description: Returns activity logs for agent (owner only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: agentId

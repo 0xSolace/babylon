@@ -17,7 +17,7 @@
  *     summary: Reply to a post
  *     description: Creates a reply comment with quality checks, rate limiting, and game mechanics (following, invites)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id

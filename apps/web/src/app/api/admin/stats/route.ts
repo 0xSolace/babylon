@@ -17,7 +17,7 @@
  *     summary: Get system statistics
  *     description: Returns comprehensive system-wide statistics (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     responses:
  *       200:
  *         description: Statistics retrieved successfully
@@ -228,7 +228,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       profileImageUrl: true,
       walletAddress: true,
       createdAt: true,
-      onChainRegistered: true,
       hasFarcaster: true,
       hasTwitter: true,
     },

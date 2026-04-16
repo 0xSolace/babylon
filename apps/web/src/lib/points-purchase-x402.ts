@@ -2,7 +2,7 @@ import 'server-only';
 
 import { type RedisClient, X402Manager } from '@babylon/a2a';
 import { ensureRedisReady, type RedisInstance } from '@babylon/api';
-import { RPC_URL } from '@babylon/shared';
+import { getCurrentRpcUrl } from '@babylon/shared';
 
 function ioredisToX402Redis(redis: RedisInstance): RedisClient {
   return {
@@ -33,7 +33,7 @@ export function getPointsPurchaseX402Manager(): Promise<X402Manager> {
     managerPromise = (async () => {
       const redis = await ensureRedisReady();
       return new X402Manager({
-        rpcUrl: RPC_URL,
+        rpcUrl: getCurrentRpcUrl(),
         paymentTimeout: 15 * 60 * 1000,
         redis: redis ? ioredisToX402Redis(redis) : undefined,
       });

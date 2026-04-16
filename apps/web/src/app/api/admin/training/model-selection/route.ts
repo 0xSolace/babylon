@@ -16,7 +16,7 @@
  *     summary: Get model selection information
  *     description: Returns model selection summary and recommendations (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     responses:
  *       200:
  *         description: Selection information retrieved successfully

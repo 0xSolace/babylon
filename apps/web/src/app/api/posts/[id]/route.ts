@@ -44,7 +44,7 @@
  *     summary: Delete post
  *     description: Soft deletes a post (author only). Post is marked as deleted but data is retained.
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -288,6 +288,21 @@ export const GET = withErrorHandling(
 
             if (originalAuthor) {
               const isQuote = gamePost.content && gamePost.content.length > 0;
+              const authorName =
+                originalUser?.displayName ??
+                originalActor?.name ??
+                originalOrg?.name ??
+                originalPost.authorId;
+              const authorUsername =
+                originalUser?.username ??
+                originalActor?.username ??
+                originalOrg?.id ??
+                originalPost.authorId;
+              const authorProfileImageUrl =
+                originalUser?.profileImageUrl ??
+                originalActor?.profileImageUrl ??
+                originalOrg?.imageUrl ??
+                null;
               repostMetadata = {
                 isRepost: true,
                 isQuote,
@@ -297,20 +312,9 @@ export const GET = withErrorHandling(
                   id: originalPostIdFromGame,
                   content: originalPost.content,
                   authorId: originalPost.authorId,
-                  authorName:
-                    'name' in originalAuthor
-                      ? originalAuthor.name
-                      : originalAuthor.displayName,
-                  authorUsername:
-                    'username' in originalAuthor
-                      ? originalAuthor.username
-                      : originalAuthor.id,
-                  authorProfileImageUrl:
-                    'profileImageUrl' in originalAuthor
-                      ? originalAuthor.profileImageUrl
-                      : 'imageUrl' in originalAuthor
-                        ? originalAuthor.imageUrl
-                        : null,
+                  authorName,
+                  authorUsername,
+                  authorProfileImageUrl,
                   timestamp: new Date().toISOString(),
                 },
               };
@@ -678,6 +682,21 @@ export const GET = withErrorHandling(
         const originalAuthor = originalUser || originalActor || originalOrg;
 
         if (originalAuthor) {
+          const authorName =
+            originalUser?.displayName ??
+            originalActor?.name ??
+            originalOrg?.name ??
+            originalPost.authorId;
+          const authorUsername =
+            originalUser?.username ??
+            originalActor?.username ??
+            originalOrg?.id ??
+            originalPost.authorId;
+          const authorProfileImageUrl =
+            originalUser?.profileImageUrl ??
+            originalActor?.profileImageUrl ??
+            originalOrg?.imageUrl ??
+            null;
           repostMetadata = {
             isRepost: true,
             isQuote,
@@ -687,20 +706,9 @@ export const GET = withErrorHandling(
               id: originalPost.id,
               content: originalPost.content,
               authorId: originalPost.authorId,
-              authorName:
-                'name' in originalAuthor
-                  ? originalAuthor.name
-                  : originalAuthor.displayName,
-              authorUsername:
-                'username' in originalAuthor
-                  ? originalAuthor.username
-                  : originalAuthor.id,
-              authorProfileImageUrl:
-                'profileImageUrl' in originalAuthor
-                  ? originalAuthor.profileImageUrl
-                  : 'imageUrl' in originalAuthor
-                    ? originalAuthor.imageUrl
-                    : null,
+              authorName,
+              authorUsername,
+              authorProfileImageUrl,
               timestamp:
                 originalPost.timestamp?.toISOString?.() ||
                 new Date().toISOString(),

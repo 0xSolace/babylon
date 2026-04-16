@@ -33,8 +33,11 @@ export class ExperienceService extends Service {
   private decayManager: ConfidenceDecayManager;
   private relationshipManager: ExperienceRelationshipManager;
 
-  constructor(runtime: IAgentRuntime) {
+  constructor(runtime?: IAgentRuntime) {
     super(runtime);
+    if (!runtime) {
+      throw new Error('ExperienceService requires an agent runtime');
+    }
     this.decayManager = new ConfidenceDecayManager();
     this.relationshipManager = new ExperienceRelationshipManager();
     this.loadExperiences();

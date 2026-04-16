@@ -14,9 +14,7 @@
       "@babylon/api": ["../api/src/index.ts"],
       "@babylon/api/*": ["../api/src/*"],
       "@babylon/a2a": ["../a2a/src/index.ts"],
-      "@babylon/a2a/*": ["../a2a/src/*"],
-      "@babylon/contracts": ["../contracts/src/index.ts"],
-      "@babylon/contracts/*": ["../contracts/src/*"]
+      "@babylon/a2a/*": ["../a2a/src/*"]
     }
   },
   "include": ["src/**/*"],
@@ -25,7 +23,6 @@
     { "path": "../shared" },
     { "path": "../db" },
     { "path": "../api" },
-    { "path": "../a2a" },
-    { "path": "../contracts" }
+    { "path": "../a2a" }
   ]
 }

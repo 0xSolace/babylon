@@ -2,11 +2,16 @@
  * Client-side API Fetch Utility
  *
  * Lightweight wrapper around fetch that decorates requests with authentication.
- * Uses Privy's HTTP-only cookie authentication.
+ * Uses Steward JWT authentication (via HTTP-only cookie or Bearer token).
+ *
+ * Resolves relative API paths via `apiUrl()` so the same code works for both
+ * web (same-origin) and mobile (cross-origin via NEXT_PUBLIC_API_URL).
  */
 
 import { extractErrorMessage, logger } from '@babylon/shared';
 import { getBrowserDevAuthSession } from '@/lib/auth/dev-auth';
+
+import { apiUrl } from './api-url';
 
 /**
  * API Fetch Options
@@ -15,7 +20,7 @@ import { getBrowserDevAuthSession } from '@/lib/auth/dev-auth';
  */
 export interface ApiFetchOptions extends RequestInit {
   /**
-   * When true (default), credentials are included to send the privy-token cookie.
+   * When true (default), credentials are included to send the auth cookie.
    */
   auth?: boolean;
   /**
@@ -25,32 +30,34 @@ export interface ApiFetchOptions extends RequestInit {
 }
 
 /**
- * Get a fresh Privy access token
+ * Get a fresh access token
  *
- * Retrieves a fresh Privy access token by calling Privy's getAccessToken().
- * Per Privy best practices, this function ALWAYS calls getAccessToken() on-demand
- * which automatically refreshes tokens nearing expiration.
+ * Retrieves a fresh Steward access token via the `__privyGetAccessToken` compat shim
+ * (set by StewardAuthProvider). Always calls getAccessToken() on-demand which
+ * automatically refreshes tokens nearing expiration.
  *
  * @returns Access token or null if unavailable
  */
-export async function getPrivyAccessToken(): Promise<string | null> {
+export async function getAccessToken(): Promise<string | null> {
   if (typeof window === 'undefined') return null;
   const devSession = getBrowserDevAuthSession();
   if (devSession?.accessToken) {
     return devSession.accessToken;
   }
-  const privyWindow = window as Window & {
+
+  // TODO: Phase 3 — rename window.__privyGetAccessToken to window.__getAccessToken
+  const authWindow = window as Window & {
     __privyGetAccessToken?: () => Promise<string | null>;
   };
 
   // ALWAYS call getAccessToken() on-demand - it auto-refreshes expired tokens
-  if (privyWindow.__privyGetAccessToken) {
+  if (authWindow.__privyGetAccessToken) {
     try {
-      const token = await privyWindow.__privyGetAccessToken();
+      const token = await authWindow.__privyGetAccessToken();
       return token;
     } catch (error) {
       logger.warn(
-        'Failed to retrieve Privy access token',
+        'Failed to retrieve access token',
         {
           error: extractErrorMessage(error),
         },
@@ -60,9 +67,14 @@ export async function getPrivyAccessToken(): Promise<string | null> {
     }
   }
 
-  // No token available - user not authenticated via Privy hook
+  // No token available - user not authenticated
   return null;
 }
+
+/**
+ * @deprecated Use `getAccessToken` instead. Kept for backward compatibility.
+ */
+export const getPrivyAccessToken = getAccessToken;
 
 /**
  * Lightweight wrapper around fetch that decorates requests with authentication
@@ -98,20 +110,29 @@ export async function apiFetch(
   // This provides a fallback when HTTP-only cookies aren't available
   // (e.g., initial login, cross-origin requests, or cookie misconfiguration).
   if (auth && !finalHeaders.has('Authorization')) {
-    const token = await getPrivyAccessToken();
+    const token = await getAccessToken();
     if (token) {
       finalHeaders.set('Authorization', `Bearer ${token}`);
     } else if (typeof window !== 'undefined') {
-      // Log when we can't get a token - helps debug auth issues
-      logger.warn(
-        'No access token available for authenticated request',
-        { url: typeof input === 'string' ? input : (input as Request).url },
-        'apiFetch'
-      );
+      // Check for embed token from Milady desktop/web host
+      const embedToken = (window as Window & { __babylonEmbedToken?: string })
+        .__babylonEmbedToken;
+      if (embedToken) {
+        finalHeaders.set('Authorization', `Bearer ${embedToken}`);
+      } else {
+        logger.warn(
+          'No access token available for authenticated request',
+          { url: typeof input === 'string' ? input : (input as Request).url },
+          'apiFetch'
+        );
+      }
     }
   }
 
-  let response = await fetch(input, {
+  // Resolve relative API paths to absolute URLs when NEXT_PUBLIC_API_URL is set
+  const resolvedInput = typeof input === 'string' ? apiUrl(input) : input;
+
+  let response = await fetch(resolvedInput, {
     ...rest,
     headers: finalHeaders,
     credentials: auth ? 'include' : (rest.credentials ?? 'same-origin'),
@@ -120,14 +141,14 @@ export async function apiFetch(
   // If we get a 401 and auto-retry is enabled, refresh the token and retry
   if (response.status === 401 && auth && autoRetryOn401) {
     // Get a fresh token (this also refreshes the cookie if HTTP-only cookies are enabled)
-    const freshToken = await getPrivyAccessToken();
+    const freshToken = await getAccessToken();
 
     if (freshToken) {
       // Update the Authorization header with the fresh token
       finalHeaders.set('Authorization', `Bearer ${freshToken}`);
 
       // Retry with the refreshed token
-      response = await fetch(input, {
+      response = await fetch(resolvedInput, {
         ...rest,
         headers: finalHeaders,
         credentials: 'include',

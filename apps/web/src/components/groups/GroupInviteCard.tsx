@@ -1,9 +1,10 @@
 'use client';
 
-import { usePrivy } from '@privy-io/react-auth';
 import { Check, Loader2, Users, X } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { useAuth } from '@/hooks/useAuth';
+import { apiUrl } from '@/utils/api-url';
 
 /**
  * Group invite card component for displaying and responding to group invitations.
@@ -55,7 +56,7 @@ export function GroupInviteCard({
   onAccepted,
   onDeclined,
 }: GroupInviteCardProps) {
-  const { getAccessToken } = usePrivy();
+  const { getAccessToken } = useAuth();
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<'pending' | 'accepted' | 'declined'>(
     'pending'
@@ -66,12 +67,15 @@ export function GroupInviteCard({
 
     try {
       const token = await getAccessToken();
-      const response = await fetch(`/api/groups/invites/${inviteId}/accept`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await fetch(
+        apiUrl(`/api/groups/invites/${inviteId}/accept`),
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
 
       if (!response.ok) {
         const data = await response.json();
@@ -97,12 +101,15 @@ export function GroupInviteCard({
 
     try {
       const token = await getAccessToken();
-      const response = await fetch(`/api/groups/invites/${inviteId}/decline`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await fetch(
+        apiUrl(`/api/groups/invites/${inviteId}/decline`),
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
 
       if (!response.ok) {
         const data = await response.json();

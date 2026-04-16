@@ -48,11 +48,6 @@
     // Path aliases for shared code and Next.js
     "baseUrl": ".",
     "paths": {
-      "@babylon/contracts": ["../../packages/contracts/src/index.ts"],
-      "@babylon/contracts/deployments/*": [
-        "../../packages/contracts/deployments/*"
-      ],
-      "@babylon/contracts/*": ["../../packages/contracts/src/*"],
       "@babylon/db": ["../../packages/db/src/index.ts"],
       "@babylon/db/*": ["../../packages/db/src/*"],
       "@babylon/api": ["../../packages/api/src/index.ts"],

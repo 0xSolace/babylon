@@ -6,8 +6,12 @@
  */
 
 import type { Address } from 'viem';
-import { sepolia } from 'viem/chains';
+import { base, baseSepolia, hardhat, mainnet, sepolia } from 'viem/chains';
 import configData from './public-config.json';
+
+// Re-export viem chain objects for NFT services (chains.ts was removed in Phase 1).
+// TODO: Remove these exports once NFT code is fully deleted in a future phase.
+export { base, baseSepolia, hardhat, mainnet, sepolia };
 
 // =============================================================================
 // Types
@@ -79,6 +83,9 @@ export function getCurrentChainId(): number {
   if (process.env.NODE_ENV === 'test') return 84532;
   return 31337;
 }
+
+/** Numeric chain ID for the current environment. Used by NFT services. */
+export const CHAIN_ID = getCurrentChainId();
 
 function getCurrentNetwork(): NetworkConfig | EthereumNetworkConfig {
   const networkId = CHAIN_ID_TO_NETWORK[getCurrentChainId()] || 'local';

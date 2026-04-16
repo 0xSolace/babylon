@@ -16,7 +16,7 @@
  *     summary: Get muted users
  *     description: Returns list of users muted by current user
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: query
  *         name: limit

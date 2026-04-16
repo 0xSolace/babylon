@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { apiUrl } from '@/utils/api-url';
 import { useAuth } from './useAuth';
 
 /**
@@ -76,7 +77,7 @@ export function useOwnedAgents(): UseOwnedAgentsReturn {
         return;
       }
 
-      const response = await fetch('/api/agents', {
+      const response = await fetch(apiUrl('/api/agents'), {
         headers: {
           Authorization: `Bearer ${token}`,
         },

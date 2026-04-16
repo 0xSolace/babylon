@@ -17,7 +17,7 @@
  *     summary: Get admin audit logs
  *     description: Returns admin audit logs with pagination (admin only). Supports both offset-based and cursor-based pagination.
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - name: limit
  *         in: query

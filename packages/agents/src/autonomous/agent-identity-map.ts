@@ -89,9 +89,9 @@ export async function populateIdentityMapOnRuntime(
 
   // Store this agent's own alignment for downstream use
   if (isNpc) {
-    const babylon = (runtime.character as Record<string, unknown>)?.babylon as
-      | Record<string, unknown>
-      | undefined;
+    const babylon = (
+      runtime.character as unknown as { babylon?: Record<string, unknown> }
+    ).babylon;
     (runtime as { _agentTeam?: string })._agentTeam =
       (babylon?.team as string) ?? 'gray';
     (runtime as { _agentAlignment?: string })._agentAlignment =

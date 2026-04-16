@@ -7,7 +7,6 @@ const ROOT = resolve(import.meta.dir, '..');
 
 const WORKSPACES = [
   'packages/shared',
-  'packages/contracts',
   'packages/db',
   'packages/core',
   'packages/pack-default',

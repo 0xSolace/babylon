@@ -37,7 +37,7 @@
  *     summary: Upload image
  *     description: Upload and optimize images for profiles, covers, or posts
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     requestBody:
  *       required: true
  *       content:

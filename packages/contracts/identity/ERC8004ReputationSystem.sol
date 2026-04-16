@@ -60,8 +60,8 @@ contract ERC8004ReputationSystem is Ownable {
         _;
     }
 
-    constructor(address identityRegistryAddress) Ownable(msg.sender) {
-        identityRegistry = ERC8004IdentityRegistry(identityRegistryAddress);
+    constructor(address _identityRegistry) Ownable(msg.sender) {
+        identityRegistry = ERC8004IdentityRegistry(_identityRegistry);
     }
     
     /// @notice Authorize a reporter to record bets/wins/losses
@@ -77,98 +77,92 @@ contract ERC8004ReputationSystem is Ownable {
     }
 
     /// @notice Record a bet made by an agent
-    /// @param tokenId Agent token ID
-    /// @param amount Bet amount
-    function recordBet(uint256 tokenId, uint256 amount) external onlyReporter {
-        require(identityRegistry.ownerOf(tokenId) != address(0), "Agent not registered");
-        require(amount > 0, "Amount must be positive");
+    /// @param _tokenId Agent token ID
+    /// @param _amount Bet amount
+    function recordBet(uint256 _tokenId, uint256 _amount) external onlyReporter {
+        require(identityRegistry.ownerOf(_tokenId) != address(0), "Agent not registered");
+        require(_amount > 0, "Amount must be positive");
 
         // Track agent if first interaction
-        _trackAgent(tokenId);
+        _trackAgent(_tokenId);
 
-        Reputation storage rep = reputations[tokenId];
+        Reputation storage rep = reputations[_tokenId];
         rep.totalBets++;
-        rep.totalVolume += amount;
+        rep.totalVolume += _amount;
         rep.lastUpdated = block.timestamp;
 
-        _updateTrustScore(tokenId);
+        _updateTrustScore(_tokenId);
     }
 
     /// @notice Record a winning bet
-    /// @param tokenId Agent token ID
-    /// @param profit Profit amount
-    function recordWin(uint256 tokenId, uint256 profit) external onlyReporter {
-        require(identityRegistry.ownerOf(tokenId) != address(0), "Agent not registered");
-        require(profit > 0, "Profit must be positive");
+    /// @param _tokenId Agent token ID
+    /// @param _profit Profit amount
+    function recordWin(uint256 _tokenId, uint256 _profit) external onlyReporter {
+        require(_profit > 0, "Profit must be positive");
         
-        _trackAgent(tokenId);
-
-        Reputation storage rep = reputations[tokenId];
+        Reputation storage rep = reputations[_tokenId];
         rep.winningBets++;
-        rep.profitLoss += profit;
+        rep.profitLoss += _profit;
         rep.lastUpdated = block.timestamp;
 
-        _updateAccuracyScore(tokenId);
-        _updateTrustScore(tokenId);
+        _updateAccuracyScore(_tokenId);
+        _updateTrustScore(_tokenId);
 
-        emit ReputationUpdated(tokenId, rep.accuracyScore, rep.trustScore);
+        emit ReputationUpdated(_tokenId, rep.accuracyScore, rep.trustScore);
     }
 
     /// @notice Record a losing bet
-    /// @param tokenId Agent token ID
-    /// @param loss Loss amount
-    function recordLoss(uint256 tokenId, uint256 loss) external onlyReporter {
-        require(identityRegistry.ownerOf(tokenId) != address(0), "Agent not registered");
-        require(loss > 0, "Loss must be positive");
+    /// @param _tokenId Agent token ID
+    /// @param _loss Loss amount
+    function recordLoss(uint256 _tokenId, uint256 _loss) external onlyReporter {
+        require(_loss > 0, "Loss must be positive");
         
-        _trackAgent(tokenId);
-
-        Reputation storage rep = reputations[tokenId];
-        rep.profitLoss -= loss;
+        Reputation storage rep = reputations[_tokenId];
+        rep.profitLoss -= _loss;
         rep.lastUpdated = block.timestamp;
 
-        _updateAccuracyScore(tokenId);
-        _updateTrustScore(tokenId);
+        _updateAccuracyScore(_tokenId);
+        _updateTrustScore(_tokenId);
 
-        emit ReputationUpdated(tokenId, rep.accuracyScore, rep.trustScore);
+        emit ReputationUpdated(_tokenId, rep.accuracyScore, rep.trustScore);
     }
     
     /// @notice Track an agent for enumeration
-    function _trackAgent(uint256 tokenId) internal {
-        if (!_isTracked[tokenId]) {
-            _trackedAgents.push(tokenId);
-            _isTracked[tokenId] = true;
+    function _trackAgent(uint256 _tokenId) internal {
+        if (!_isTracked[_tokenId]) {
+            _trackedAgents.push(_tokenId);
+            _isTracked[_tokenId] = true;
         }
     }
 
     /// @notice Submit feedback for an agent
-    /// @param tokenId Agent token ID
-    /// @param rating Rating from -5 to +5
-    /// @param comment Feedback comment
-    function submitFeedback(uint256 tokenId, int8 rating, string calldata comment) external {
-        address agentOwner = identityRegistry.ownerOf(tokenId);
+    /// @param _tokenId Agent token ID
+    /// @param _rating Rating from -5 to +5
+    /// @param _comment Feedback comment
+    function submitFeedback(uint256 _tokenId, int8 _rating, string calldata _comment) external {
+        address agentOwner = identityRegistry.ownerOf(_tokenId);
         require(agentOwner != address(0), "Agent not registered");
         require(agentOwner != msg.sender, "Cannot review self");
-        require(!hasFeedback[tokenId][msg.sender], "Already submitted feedback");
-        require(rating >= -5 && rating <= 5, "Invalid rating");
+        require(!hasFeedback[_tokenId][msg.sender], "Already submitted feedback");
+        require(_rating >= -5 && _rating <= 5, "Invalid rating");
 
-        feedback[tokenId].push(FeedbackEntry({
+        feedback[_tokenId].push(FeedbackEntry({
             from: msg.sender,
-            agentTokenId: tokenId,
-            rating: rating,
-            comment: comment,
+            agentTokenId: _tokenId,
+            rating: _rating,
+            comment: _comment,
             timestamp: block.timestamp
         }));
 
-        hasFeedback[tokenId][msg.sender] = true;
+        hasFeedback[_tokenId][msg.sender] = true;
 
-        _updateTrustScore(tokenId);
+        _updateTrustScore(_tokenId);
 
-        emit FeedbackSubmitted(tokenId, msg.sender, rating);
+        emit FeedbackSubmitted(_tokenId, msg.sender, _rating);
     }
 
     /// @notice Get reputation for agent
-    function getReputation(uint256 tokenId) external view returns (
+    function getReputation(uint256 _tokenId) external view returns (
         uint256 totalBets,
         uint256 winningBets,
         uint256 totalVolume,
@@ -177,7 +171,7 @@ contract ERC8004ReputationSystem is Ownable {
         uint256 trustScore,
         bool isBanned
     ) {
-        Reputation storage rep = reputations[tokenId];
+        Reputation storage rep = reputations[_tokenId];
         return (
             rep.totalBets,
             rep.winningBets,
@@ -190,31 +184,31 @@ contract ERC8004ReputationSystem is Ownable {
     }
 
     /// @notice Get feedback count for agent
-    function getFeedbackCount(uint256 tokenId) external view returns (uint256) {
-        return feedback[tokenId].length;
+    function getFeedbackCount(uint256 _tokenId) external view returns (uint256) {
+        return feedback[_tokenId].length;
     }
 
     /// @notice Get feedback entry
-    function getFeedback(uint256 tokenId, uint256 index) external view returns (
+    function getFeedback(uint256 _tokenId, uint256 _index) external view returns (
         address from,
         int8 rating,
         string memory comment,
         uint256 timestamp
     ) {
-        FeedbackEntry storage entry = feedback[tokenId][index];
+        FeedbackEntry storage entry = feedback[_tokenId][_index];
         return (entry.from, entry.rating, entry.comment, entry.timestamp);
     }
 
     /// @notice Ban an agent (owner only)
-    function banAgent(uint256 tokenId) external onlyOwner {
-        reputations[tokenId].isBanned = true;
-        emit AgentBanned(tokenId);
+    function banAgent(uint256 _tokenId) external onlyOwner {
+        reputations[_tokenId].isBanned = true;
+        emit AgentBanned(_tokenId);
     }
 
     /// @notice Unban an agent (owner only)
-    function unbanAgent(uint256 tokenId) external onlyOwner {
-        reputations[tokenId].isBanned = false;
-        emit AgentUnbanned(tokenId);
+    function unbanAgent(uint256 _tokenId) external onlyOwner {
+        reputations[_tokenId].isBanned = false;
+        emit AgentUnbanned(_tokenId);
     }
 
     /// @notice Get agents with minimum trust score
@@ -256,8 +250,8 @@ contract ERC8004ReputationSystem is Ownable {
     }
 
     // Internal functions
-    function _updateAccuracyScore(uint256 tokenId) internal {
-        Reputation storage rep = reputations[tokenId];
+    function _updateAccuracyScore(uint256 _tokenId) internal {
+        Reputation storage rep = reputations[_tokenId];
 
         if (rep.totalBets < MIN_BETS_FOR_SCORE) {
             rep.accuracyScore = 5000; // Default 50%
@@ -268,22 +262,22 @@ contract ERC8004ReputationSystem is Ownable {
         rep.accuracyScore = (rep.winningBets * 10000) / rep.totalBets;
     }
 
-    // slither-disable-start timestamp
-    function _updateTrustScore(uint256 tokenId) internal {
-        Reputation storage rep = reputations[tokenId];
+    function _updateTrustScore(uint256 _tokenId) internal {
+        Reputation storage rep = reputations[_tokenId];
 
         // Base score from accuracy
         uint256 baseScore = rep.accuracyScore;
 
         // Adjust for feedback
-        int256 feedbackScore = _calculateFeedbackScore(tokenId);
+        int256 feedbackScore = _calculateFeedbackScore(_tokenId);
         int256 adjustedScore = int256(baseScore) + (feedbackScore * 100);
 
         // Apply decay for inactive agents
         uint256 timeSinceUpdate = block.timestamp - rep.lastUpdated;
-        if (adjustedScore > 0 && timeSinceUpdate > DECAY_PERIOD) {
-            uint256 decayAmount = (uint256(adjustedScore) * timeSinceUpdate) / DECAY_PERIOD / 100;
-            adjustedScore -= int256(decayAmount);
+        if (timeSinceUpdate > DECAY_PERIOD) {
+            // Multiply first to avoid precision loss (1% per period)
+            uint256 decayFactor = (timeSinceUpdate * 100) / DECAY_PERIOD;
+            adjustedScore -= int256((uint256(adjustedScore) * decayFactor) / 10000);
         }
 
         // Clamp between 0 and 10000
@@ -292,11 +286,9 @@ contract ERC8004ReputationSystem is Ownable {
 
         rep.trustScore = uint256(adjustedScore);
     }
-    // slither-disable-end timestamp
 
-    // slither-disable-start timestamp
-    function _calculateFeedbackScore(uint256 tokenId) internal view returns (int256) {
-        FeedbackEntry[] storage entries = feedback[tokenId];
+    function _calculateFeedbackScore(uint256 _tokenId) internal view returns (int256) {
+        FeedbackEntry[] storage entries = feedback[_tokenId];
         if (entries.length == 0) return 0;
 
         int256 total = 0;
@@ -315,5 +307,4 @@ contract ERC8004ReputationSystem is Ownable {
         // Average rating * 20 (to scale to percentage points)
         return (total * 20) / int256(recentCount);
     }
-    // slither-disable-end timestamp
 }

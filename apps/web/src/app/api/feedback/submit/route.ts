@@ -64,7 +64,6 @@
  * ```
  */
 
-import { submitFeedbackToAgent0 } from '@babylon/agents';
 import {
   authenticate,
   BusinessLogicError,
@@ -137,15 +136,6 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   await updateFeedbackMetrics(toUser.id, score, {
     category: body.category ?? 'general',
     interactionType: 'user_to_agent',
-  });
-
-  // Submit to Agent0 network if recipient is an agent (fire-and-forget with error handling)
-  // Only submit if recipient has Agent0 token ID (checked inside submitFeedbackToAgent0)
-  submitFeedbackToAgent0(feedback.id).catch((error) => {
-    logger.error('Failed to submit feedback to Agent0', {
-      feedbackId: feedback.id,
-      error,
-    });
   });
 
   return NextResponse.json(

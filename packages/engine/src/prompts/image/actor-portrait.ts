@@ -15,9 +15,25 @@ export const actorPortrait = definePrompt({
   category: 'image',
   description: 'Generates actor profile pictures based on pfpDescription',
   template: `
-Create a profile picture portrait for "{{actorName}}" (satirical parody of {{realName}}).
+Create a profile picture portrait for {{realName}}.
+This is a satirical parody character named "{{actorName}}", but the physical identity must be unmistakably {{realName}}.
 
-VISUAL DESCRIPTION: {{pfpDescription}}
+CRITICAL IDENTITY ANCHOR (MUST MATCH REAL LIFE):
+- Keep age range, skin tone, hairline/hair style, face shape, eye shape, nose/mouth structure consistent with {{realName}}
+- Keep signature accessories/clothing consistent with {{realName}} (glasses, facial hair, typical outfit, etc.)
+- Add cyborg/AI augmentations ON TOP of the real face/body - do not change the underlying identity
+
+VISUAL DESCRIPTION (follow closely): {{pfpDescription}}
+
+PHYSICAL ACCURACY — NON-NEGOTIABLE:
+You MUST depict the race/ethnicity, skin tone, hair (including baldness), and body type exactly as written in the VISUAL DESCRIPTION above.
+- If the description says "Black", "dark brown skin", or "African American" → the character MUST be visibly Black.
+- If the description says "bald", "shaved head", or "polished head" → absolutely no hair, period.
+- If the description says "East Asian", "Taiwanese", "Chinese", or "Japanese" → depict East Asian facial features.
+- If the description says "South Asian", "Indian", or "Indian-American" → depict South Asian features and skin tone.
+- If the description says "pale", "fair skin", or "translucent" → use that exact skin tone.
+- Female subjects MUST look female.
+Do NOT default to white, light-skinned, or conventionally-haired if the description says otherwise.
 
 EXAGGERATE THE JOKE IN THE NAME "{{actorName}}":
 - If the name contains "Bot", "AI", or tech references → add robotic/cyborg elements, glowing circuits, mechanical parts
@@ -28,6 +44,8 @@ EXAGGERATE THE JOKE IN THE NAME "{{actorName}}":
 - Take ANY wordplay in "{{actorName}}" and make it a VISUAL PUN in the portrait
 
 SATIRICAL CONTEXT: {{descriptionParts}}
+
+COMPOSITION: Single subject only. ONE person in the frame, centered, head-and-shoulders portrait crop. No duplicates, clones, mini-figures, or multiple copies of the person anywhere in the image.
 
 STYLE: Editorial cartoon meets cyborg portrait. Exaggerated features. Bold, recognizable. Make them a cyborg/AI-augmented version. No text on image.
 `.trim(),
@@ -48,7 +66,8 @@ export const actorBanner = definePrompt({
   category: 'image',
   description: 'Generates actor profile banners',
   template: `
-Create a profile banner (landscape/wide format) for "{{actorName}}" (satirical parody of {{realName}}).
+Create a profile banner (landscape/wide format) for {{realName}}.
+This is a satirical parody character named "{{actorName}}", but the person depicted must be unmistakably {{realName}}.
 
 BANNER SCENE: {{profileBanner}}
 

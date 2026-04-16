@@ -75,6 +75,7 @@ import {
   gatherPendingChatMessages,
   gatherPendingCommentReplies,
   getAgentGroupChats,
+  getAgentMemory,
   getAgentOwnPosts,
   getAgentPositions,
   getAgentSocialGraph,
@@ -835,6 +836,8 @@ export class MultiStepExecutor {
       recentNpcTradesResult,
       // Social graph for user-controlled agents
       socialGraphResult,
+      // Agent memory for user-controlled agents
+      agentMemoryResult,
     ] = await Promise.all([
       canTrade
         ? this.timedOperation('predictionMarkets', () => getPredictionMarkets())
@@ -925,6 +928,12 @@ export class MultiStepExecutor {
             getAgentSocialGraph(agentUserId)
           )
         : Promise.resolve({ data: [], duration: 0 }),
+      // Memory for user-controlled agents (NPCs have NpcMemoryService)
+      !isNpc
+        ? this.timedOperation('agentMemory', () =>
+            getAgentMemory(agentUserId, ['trade'])
+          )
+        : Promise.resolve({ data: [], duration: 0 }),
     ]);
     timings.parallelTotal = Date.now() - parallelStart;
 
@@ -946,6 +955,7 @@ export class MultiStepExecutor {
     const resolvedQsRows = resolvedQuestionsResult.data;
     const recentNpcTradesRows = recentNpcTradesResult.data;
     const socialGraph = socialGraphResult.data;
+    const agentMemory = agentMemoryResult.data;
 
     // Collect individual operation timings
     timings.predictionMarkets = predictionMarketsResult.duration;
@@ -965,6 +975,7 @@ export class MultiStepExecutor {
     timings.resolvedQuestions = resolvedQuestionsResult.duration;
     timings.recentNpcTrades = recentNpcTradesResult.duration;
     timings.socialGraph = socialGraphResult.duration;
+    timings.agentMemory = agentMemoryResult.duration;
 
     // Filter chat messages based on DMs vs group chats feature
     const pendingChatMessages = pendingChatMessagesRaw.filter((m) =>
@@ -1069,6 +1080,7 @@ export class MultiStepExecutor {
       agentTradeHistory:
         agentTradeHistory.length > 0 ? agentTradeHistory : undefined,
       socialGraph: socialGraph.length > 0 ? socialGraph : undefined,
+      recentMemory: agentMemory.length > 0 ? agentMemory : undefined,
       // Engine-grade context (Phase 1: unified NPC pipeline)
       marketTrends: marketTrends.length > 0 ? marketTrends : undefined,
       relationships: relationships.length > 0 ? relationships : undefined,

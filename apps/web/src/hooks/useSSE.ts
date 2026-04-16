@@ -18,8 +18,8 @@
  */
 
 import { logger } from '@babylon/shared';
-import { usePrivy } from '@privy-io/react-auth';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useAuth } from '@/hooks/useAuth';
 import {
   type Channel,
   type ConnectionState,
@@ -36,6 +36,8 @@ export type {
   SSEMessage,
   StaticChannel,
 } from '@/lib/sse';
+
+import { apiUrl } from '@/utils/api-url';
 
 /**
  * Options for configuring the SSE hook.
@@ -118,7 +120,7 @@ const fetchRealtimeToken = async (
   const accessToken = await tokenFn();
   if (!accessToken) return null;
 
-  const res = await fetch('/api/realtime/token', {
+  const res = await fetch(apiUrl('/api/realtime/token'), {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -316,7 +318,7 @@ async function ensureConnection(forceReconnect = false) {
       ? `&cursor=${encodeURIComponent(JSON.stringify(cursorPayload))}`
       : '';
 
-  const url = `${window.location.origin}/api/sse/events?channels=${encodeURIComponent(
+  const url = `${apiUrl('/api/sse/events')}?channels=${encodeURIComponent(
     channelsList.join(',')
   )}&token=${encodeURIComponent(token)}${cursorParam}`;
 
@@ -503,7 +505,7 @@ export function useSSE(options: SSEHookOptions = {}): SSEHookReturn {
     maxReconnectAttempts = 5,
   } = options;
 
-  const { getAccessToken, authenticated } = usePrivy();
+  const { getAccessToken, authenticated } = useAuth();
 
   // Connection state - initialized to match SSR
   const [connectionState, setConnectionState] =

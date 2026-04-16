@@ -4,13 +4,9 @@
  * This package provides the core agent infrastructure for Babylon:
  * - Agent services (creation, management, points)
  * - Autonomous behaviors (trading, posting, commenting, messaging)
- * - Agent identity and wallet management
  * - Plugin system for extending agent capabilities
- * - Agent0 integration for on-chain reputation
  */
 
-// Agent0 integration (feedback/reputation)
-export * from './agent0';
 // Autonomous services
 export * from './autonomous';
 // Communication
@@ -28,10 +24,6 @@ export {
   getExternalAgentAdapter,
   type Protocol,
 } from './external/ExternalAgentAdapter';
-// Identity and wallet management
-export * from './identity/AgentIdentityService';
-export * from './identity/AgentWalletService';
-export * from './identity/agent-wallet-state';
 // LLM integrations
 export * from './llm';
 // Plugins - Babylon plugin is the main export

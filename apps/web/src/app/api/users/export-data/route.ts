@@ -17,7 +17,7 @@
  *     summary: Export user data
  *     description: Exports all user data for GDPR compliance (right to data portability)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     responses:
  *       200:
  *         description: User data exported successfully
@@ -125,10 +125,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         totalDeposited: users.totalDeposited,
         totalWithdrawn: users.totalWithdrawn,
         lifetimePnL: users.lifetimePnL,
-        onChainRegistered: users.onChainRegistered,
         nftTokenId: users.nftTokenId,
-        registrationTxHash: users.registrationTxHash,
-        registrationBlockNumber: users.registrationBlockNumber,
         registrationTimestamp: users.registrationTimestamp,
         reputationPoints: users.reputationPoints,
         invitePoints: users.invitePoints,

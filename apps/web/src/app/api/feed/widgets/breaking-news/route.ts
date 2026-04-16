@@ -17,7 +17,7 @@
  *     summary: Get breaking news items
  *     description: Returns breaking news including world events, price updates, and actor posts (optional auth for RLS)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: query
  *         name: limit

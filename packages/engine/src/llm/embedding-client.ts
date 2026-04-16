@@ -20,17 +20,37 @@ let openaiClient: OpenAI | null = null;
 let initialized = false;
 
 /**
- * Lazily initialize the OpenAI client for embeddings.
- * Returns null if OPENAI_API_KEY is not set.
+ * Lazily initialize the OpenAI-compatible client for embeddings.
+ * Prefers ELIZACLOUD_API_KEY, falls back to OPENAI_API_KEY.
+ * Returns null if neither key is set.
  */
 function getClient(): OpenAI | null {
   if (initialized) return openaiClient;
   initialized = true;
 
+  const elizacloudKey = process.env.ELIZACLOUD_API_KEY;
+  if (elizacloudKey) {
+    const base =
+      process.env.ELIZACLOUD_API_URL?.replace(/\/$/, '') ||
+      'https://api.elizacloud.com';
+    logger.debug(
+      'EmbeddingClient using ElizaCloud',
+      { baseURL: `${base}/openai/v1` },
+      'EmbeddingClient'
+    );
+    openaiClient = new OpenAI({
+      apiKey: elizacloudKey,
+      baseURL: `${base}/openai/v1`,
+      timeout: 30_000,
+      maxRetries: 2,
+    });
+    return openaiClient;
+  }
+
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     logger.warn(
-      'OPENAI_API_KEY not set — embedding-based quality checks will be skipped',
+      'Neither ELIZACLOUD_API_KEY nor OPENAI_API_KEY set — embedding-based quality checks will be skipped',
       undefined,
       'EmbeddingClient'
     );

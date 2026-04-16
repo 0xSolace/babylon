@@ -72,8 +72,7 @@ export async function getAgentSidebarSummary({
       lastTickAt: toISOOrNull(config?.lastTickAt),
       lastChatAt: toISOOrNull(config?.lastChatAt),
       walletAddress: agent.walletAddress,
-      agent0TokenId: agent.agent0TokenId,
-      onChainRegistered: agent.onChainRegistered,
+      agent0TokenId: null, // TODO: source from AgentRegistry table
       createdAt: toISO(agent.createdAt),
       updatedAt: toISO(agent.updatedAt),
     },

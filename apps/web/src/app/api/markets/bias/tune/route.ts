@@ -17,7 +17,7 @@
  *     summary: Tune market bias
  *     description: Adjusts strength of existing market bias (0 deactivates)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     requestBody:
  *       required: true
  *       content:

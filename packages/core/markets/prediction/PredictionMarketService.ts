@@ -19,6 +19,23 @@ const DEFAULT_LIQUIDITY = 10_000;
 const MIN_SHARES = 0.01;
 const MIN_TRADE_AMOUNT = 1;
 
+/**
+ * Maximum absolute odds shift (in probability units, 0–1) allowed in a single
+ * buy trade. A value of 0.20 means one trade cannot move YES odds by more than
+ * 20 percentage points (e.g. 50% → 70% is the maximum). Callers can override
+ * per-trade via PredictionBuyInput.maxOddsMove for larger NPC/agent positions.
+ */
+const MAX_ODDS_MOVE_PER_TRADE = 0.2;
+
+/**
+ * Hard floor/ceiling for YES odds after any trade. Even with a relaxed
+ * maxOddsMove, a trade that would push odds below 2% or above 98% is rejected
+ * because such extreme values signal thin liquidity and make resolution payouts
+ * almost meaningless for the minority side.
+ */
+const ODDS_HARD_FLOOR = 0.02;
+const ODDS_HARD_CEILING = 0.98;
+
 function grossUpBuyAmount(netAmount: number, feeRate: number): number {
   if (!Number.isFinite(netAmount)) return 0;
   if (!Number.isFinite(feeRate) || feeRate <= 0) return netAmount;
@@ -134,6 +151,29 @@ export class PredictionMarketService {
 
     if (calc.netAmount <= 0) {
       throw new BadRequestError('Trade amount too low after fees');
+    }
+
+    // Price impact guard: prevent single trades from swinging odds too far.
+    const currentTotal = market.yesShares + market.noShares;
+    const currentYesOdds =
+      currentTotal > 0 ? market.noShares / currentTotal : 0.5;
+    const oddsShift = Math.abs(calc.newYesPrice - currentYesOdds);
+    const maxAllowed = input.maxOddsMove ?? MAX_ODDS_MOVE_PER_TRADE;
+
+    if (oddsShift > maxAllowed) {
+      throw new BadRequestError(
+        `Trade would move odds by ${(oddsShift * 100).toFixed(1)}ppt (max ${(maxAllowed * 100).toFixed(0)}ppt). Reduce trade size or split into smaller orders.`
+      );
+    }
+
+    // Hard floor/ceiling: reject any trade that pushes odds to extreme values.
+    if (
+      calc.newYesPrice < ODDS_HARD_FLOOR ||
+      calc.newYesPrice > ODDS_HARD_CEILING
+    ) {
+      throw new BadRequestError(
+        `Trade would push YES odds to ${(calc.newYesPrice * 100).toFixed(1)}% — market is too thin for this trade size.`
+      );
     }
 
     await this.deps.wallet.debit({

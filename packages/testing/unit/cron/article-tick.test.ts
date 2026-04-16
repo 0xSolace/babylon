@@ -316,9 +316,9 @@ const registerMocks = () => {
       }
     },
     getActiveEventsForPosting: async () => ({ activeEvents: [] }),
-    hasEventBeenCovered: (eventId: string) =>
+    hasEventBeenCovered: async (eventId: string) =>
       cronMockState.articleCoveredEventIds.has(eventId),
-    markEventAsCovered: (eventId: string) => {
+    markEventAsCovered: async (eventId: string) => {
       cronMockState.articleCoveredEventIds.add(eventId);
     },
     persistArticle: async (input: { id: string }) => ({

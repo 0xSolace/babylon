@@ -1,7 +1,6 @@
 import { logger } from '@babylon/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { mintNftAction } from '@/app/_actions/nft';
 import { useAuth } from '@/hooks/useAuth';
 import type {
   EligibilityApiResponse,
@@ -9,6 +8,7 @@ import type {
   MintConfirmResponse,
   MintFlowState,
 } from '@/types/nft';
+import { apiUrl } from '@/utils/api-url';
 
 const MINTING_STATES = new Set<MintFlowState>([
   'preparing',
@@ -67,7 +67,7 @@ export function useNftMint(): UseNftMintResult {
         // Check if aborted before continuing
         if (signal?.aborted) return;
 
-        const response = await fetch('/api/nft/eligibility', {
+        const response = await fetch(apiUrl('/api/nft/eligibility'), {
           headers: token ? { Authorization: `Bearer ${token}` } : undefined,
           credentials: 'include',
           signal, // Pass abort signal to fetch
@@ -169,7 +169,16 @@ export function useNftMint(): UseNftMintResult {
         return;
       }
 
-      const result = await mintNftAction({ userJwt });
+      const mintResponse = await fetch(apiUrl('/api/nft/mint/execute'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${userJwt}`,
+        },
+        credentials: 'include',
+      });
+
+      const result = await mintResponse.json();
 
       if (result.status === 'error') {
         logger.error(

@@ -18,7 +18,7 @@
  *     summary: Get trading feed
  *     description: Returns recent trades across all markets (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: query
  *         name: limit
@@ -64,7 +64,7 @@
  *     summary: Create test trade
  *     description: Creates/forces a trade for testing (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     requestBody:
  *       content:
  *         application/json:

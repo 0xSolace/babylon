@@ -2,7 +2,6 @@ import { definePrompt } from '../define-prompt';
 import {
   CONTENT_REQUIREMENTS_MARKET,
   FINAL_REMINDERS,
-  IMPORTANT_RULES,
   WORLD_CONTEXT_HEADER_WITH_TRADES,
 } from '../shared-sections';
 
@@ -18,7 +17,7 @@ import {
  */
 export const stockTicker = definePrompt({
   id: 'stock-ticker',
-  version: '3.0.0',
+  version: '4.0.0',
   category: 'feed',
   description: 'Stock ticker posts with narrative connection',
   temperature: 0.6,
@@ -51,8 +50,6 @@ Requirements:
 - Include key numbers
 - Max 150 characters
 - Professional but can be subtly satirical
-
-${IMPORTANT_RULES}
 
 ${CONTENT_REQUIREMENTS_MARKET}
 

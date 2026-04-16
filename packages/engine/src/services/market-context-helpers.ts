@@ -1,5 +1,6 @@
 import type { PerpMarketRecord } from '@babylon/core/markets/perps';
 import {
+  maxSafeBuy,
   type PredictionMarketRecord,
   PredictionPricing,
 } from '@babylon/core/markets/prediction/client';
@@ -85,5 +86,7 @@ export function buildPredictionMarketSnapshot(
     liquidityTier: getPredictionMarketLiquidityTier(market.liquidity),
     urgencyLevel: profile.urgencyLevel,
     eventSensitivity: profile.eventSensitivity,
+    // Max safe single-trade size given current pool depth and 20ppt slippage cap.
+    maxSafeBet: maxSafeBuy(market.yesShares, market.noShares),
   };
 }

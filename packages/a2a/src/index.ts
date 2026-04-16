@@ -23,7 +23,6 @@
  */
 
 export { babylonAgentCard } from './babylon-agent-card';
-export * from './blockchain';
 export { BabylonAgentExecutor } from './executors/babylon-executor';
 export type { ListTasksParams, ListTasksResult } from './extended-task-store';
 export { ExtendedTaskStore } from './extended-task-store';

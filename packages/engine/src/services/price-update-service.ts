@@ -5,6 +5,7 @@ import {
   getDbInstance,
   organizationState,
   organizations,
+  perpMarketSnapshots,
 } from '@babylon/db';
 import type { JsonValue } from '@babylon/shared';
 import { logger } from '@babylon/shared';
@@ -40,6 +41,21 @@ export interface AppliedPriceUpdate {
 }
 
 export class PriceUpdateService {
+  private static getFirstPositivePrice(
+    ...candidates: Array<number | null | undefined>
+  ): number | null {
+    for (const candidate of candidates) {
+      if (
+        typeof candidate === 'number' &&
+        Number.isFinite(candidate) &&
+        candidate > 0
+      ) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
   /**
    * Apply a batch of price updates with persistence, engine sync, and SSE broadcast
    */
@@ -120,9 +136,11 @@ export class PriceUpdateService {
 
       // Resolve basePrice for bounds enforcement
       // Priority: organizationState.basePrice > organization.initialPrice
-      const resolvedBasePrice = Number(
-        state?.basePrice ?? organization?.initialPrice ?? 0
-      );
+      const resolvedBasePrice =
+        this.getFirstPositivePrice(
+          state?.basePrice,
+          organization?.initialPrice
+        ) ?? 100;
 
       // Price sanity check — must be positive and finite (AMM handles bounds)
       const clampedNewPrice = update.newPrice;
@@ -163,7 +181,11 @@ export class PriceUpdateService {
         })
         .onConflictDoUpdate({
           target: organizationState.id,
-          set: { currentPrice: clampedNewPrice, updatedAt: now },
+          set: {
+            currentPrice: clampedNewPrice,
+            basePrice: resolvedBasePrice,
+            updatedAt: now,
+          },
         });
 
       await getDbInstance().recordPriceUpdate(
@@ -190,6 +212,65 @@ export class PriceUpdateService {
 
     if (priceMap.size > 0) {
       await perpService.applyPriceUpdates(priceMap);
+
+      // Sync indexPrice: keep it within 5% of currentPrice so mark price
+      // premium stays honest and microstructure spreads don't widen spuriously.
+      // indexPrice is only set at bootstrap and never updated otherwise.
+      const INDEX_DRIFT_THRESHOLD = 0.05;
+      try {
+        const snapshots = await db
+          .select({
+            ticker: perpMarketSnapshots.ticker,
+            organizationId: perpMarketSnapshots.organizationId,
+            currentPrice: perpMarketSnapshots.currentPrice,
+            indexPrice: perpMarketSnapshots.indexPrice,
+          })
+          .from(perpMarketSnapshots);
+
+        const indexUpdates: Array<{ ticker: string; indexPrice: number }> = [];
+        for (const snap of snapshots) {
+          const newCurrentPrice =
+            priceMap.get(snap.organizationId) ?? snap.currentPrice;
+          const idx = snap.indexPrice;
+          if (idx == null || idx <= 0 || !Number.isFinite(idx)) {
+            indexUpdates.push({
+              ticker: snap.ticker,
+              indexPrice: newCurrentPrice,
+            });
+            continue;
+          }
+          const drift = Math.abs(newCurrentPrice - idx) / idx;
+          if (drift > INDEX_DRIFT_THRESHOLD) {
+            indexUpdates.push({
+              ticker: snap.ticker,
+              indexPrice: newCurrentPrice,
+            });
+          }
+        }
+
+        await Promise.all(
+          indexUpdates.map((update) =>
+            db
+              .update(perpMarketSnapshots)
+              .set({ indexPrice: update.indexPrice, updatedAt: now })
+              .where(eq(perpMarketSnapshots.ticker, update.ticker))
+          )
+        );
+
+        if (indexUpdates.length > 0) {
+          logger.debug(
+            `Synced indexPrice for ${indexUpdates.length} perp market(s)`,
+            { tickers: indexUpdates.map((u) => u.ticker) },
+            'PriceUpdateService'
+          );
+        }
+      } catch (err) {
+        logger.warn(
+          'Failed to sync perp indexPrice',
+          { err },
+          'PriceUpdateService'
+        );
+      }
 
       // Broadcast price updates (handled by API layer if available)
       try {

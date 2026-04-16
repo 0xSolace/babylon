@@ -7,6 +7,7 @@ import { Award, Medal, Target, Trophy } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { PageContainer } from '@/components/shared/PageContainer';
 import { useAuth } from '@/hooks/useAuth';
+import { apiUrl } from '@/utils/api-url';
 
 interface ReputationStats {
   currentReputation: number;
@@ -44,7 +45,7 @@ export default function ReputationPage() {
     const fetchReputation = async () => {
       setLoading(true);
       const response = await fetch(
-        `/api/reputation/${encodeURIComponent(user.id)}`
+        apiUrl(`/api/reputation/${encodeURIComponent(user.id)}`)
       );
       if (!response.ok) {
         setStats(emptyStats);
@@ -77,9 +78,7 @@ export default function ReputationPage() {
     return () => clearInterval(interval);
   }, [authenticated, user]);
 
-  const hasNft = Boolean(
-    user?.agent0TokenId || user?.nftTokenId || user?.onChainRegistered
-  );
+  const hasNft = false;
 
   if (!authenticated) {
     return (
@@ -199,9 +198,7 @@ export default function ReputationPage() {
               <label className="mb-1 block text-muted-foreground text-sm">
                 Token ID
               </label>
-              <p className="font-mono text-foreground">
-                #{user?.agent0TokenId ?? user?.nftTokenId ?? 'N/A'}
-              </p>
+              <p className="font-mono text-foreground">#N/A</p>
             </div>
             <div>
               <label className="mb-1 block text-muted-foreground text-sm">
