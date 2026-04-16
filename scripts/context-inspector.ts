@@ -172,6 +172,9 @@ async function inspectTradingContext(npcId: string): Promise<{
   const marketSignalAnalysis: string = enginePrivate[
     'formatMarketSignals'
   ].call(engine, [ctx]);
+  // Fetch momentum alerts exactly as the real engine does — same method, same cache key
+  const momentumAlerts: string =
+    await enginePrivate['getCachedMomentumAlerts'].call(engine);
 
   // Assemble the exact same variables the real engine passes to renderPrompt
   const vars: Record<string, string> = {
@@ -189,6 +192,7 @@ async function inspectTradingContext(npcId: string): Promise<{
     resolvedQuestionsContext,
     previousTrades,
     marketSignalAnalysis,
+    momentumAlerts,
   };
 
   // Render and measure

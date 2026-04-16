@@ -92,30 +92,56 @@ ${realityGroundingContent}
 }
 
 /**
- * Simple validation function for reality grounding
- * Checks for common outdated references
+ * Validate generated text for reality-grounding violations.
+ *
+ * Checks for the most egregious issues: real-world names leaking through
+ * instead of parody names, and prices that are wildly off from current
+ * reality. Does NOT hard-code specific years or political figures because
+ * those become stale — instead enforces structural rules.
  */
 export function checkRealityGrounding(text: string): string[] {
   const warnings: string[] = [];
 
-  // Check for outdated years (hardcoded check - could be improved)
-  if (text.includes('2023') || text.includes('2024')) {
+  // Check for real-world names that should always be replaced with parody names.
+  // Keep this list minimal — only the highest-signal leaks.
+  const realNameLeaks: Array<{ pattern: RegExp; message: string }> = [
+    {
+      pattern: /\bElon Musk\b/i,
+      message: 'Real name "Elon Musk" — should be "AIlon Musk"',
+    },
+    {
+      pattern: /\bSam Altman\b/i,
+      message: 'Real name "Sam Altman" — should be "Sam AIltman"',
+    },
+    {
+      pattern: /\bMark Zuckerberg\b/i,
+      message: 'Real name "Mark Zuckerberg" — should be "Mark Zuckerborg"',
+    },
+    {
+      pattern: /\bOpenAI\b(?!\s*(?:->|→|parody))/,
+      message: 'Real org "OpenAI" — should be "OpenAGI"',
+    },
+    {
+      pattern: /\bAnthropic\b(?!\s*(?:->|→|parody))/,
+      message: 'Real org "Anthropic" — should be "AInthropic"',
+    },
+    {
+      pattern: /\bDeepSeek\b(?!\s*(?:->|→|parody))/,
+      message: 'Real org "DeepSeek" — should be "DeepSAIek"',
+    },
+  ];
+
+  for (const { pattern, message } of realNameLeaks) {
+    if (pattern.test(text)) {
+      warnings.push(message);
+    }
+  }
+
+  // Check for wildly outdated crypto prices (orders of magnitude off)
+  if (/Bitcoin|BTC/i.test(text) && /\$[1-4]\d{0,3}(?:\s|,|$)/i.test(text)) {
     warnings.push(
-      'Content references outdated year - should reference current year'
+      'Content may reference outdated Bitcoin price (current ~$78k)'
     );
-  }
-
-  // Check for outdated prices
-  if (
-    text.includes('Bitcoin') &&
-    (text.includes('$30K') || text.includes('$50K'))
-  ) {
-    warnings.push('Content references outdated Bitcoin prices');
-  }
-
-  // Check for wrong president
-  if (text.includes('Biden') && text.includes('president')) {
-    warnings.push('Content references wrong president');
   }
 
   return warnings;

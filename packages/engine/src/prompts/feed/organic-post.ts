@@ -1,4 +1,5 @@
 import { definePrompt } from '../define-prompt';
+import { NPC_POST_QUALITY_RULES, PARODY_NAME_RULES } from '../shared-sections';
 
 /**
  * Prompt for generating organic, personality-driven posts with NO market context.
@@ -8,10 +9,11 @@ import { definePrompt } from '../define-prompt';
  * The goal is authentic character expression, not market commentary.
  *
  * Called PER CHARACTER with character context but minimal world context.
+ * Includes NPC_POST_QUALITY_RULES to enforce anti-slop standards and voice realism.
  */
 export const organicPost = definePrompt({
   id: 'organic-post',
-  version: '1.0.0',
+  version: '2.0.0',
   category: 'feed',
   description:
     'Generates personality-driven post — no market data, pure character voice',
@@ -42,8 +44,11 @@ Just be you. What's on your mind right now?
 A thought, observation, joke, rant, hot take, or moment from YOUR world.
 Match your voice and personality EXACTLY. A reader should know it's you without seeing your name.
 
-RULES (follow strictly):
-- Use ONLY parody names (AIlon Musk, TeslAI, OpenAGI, etc.) — NEVER real names
+${PARODY_NAME_RULES}
+
+${NPC_POST_QUALITY_RULES}
+
+ADDITIONAL RULES:
 - No hashtags, no emojis
 - Max 200 characters
 - Do NOT mention prediction markets, trading, positions, benchmarks, or market prices

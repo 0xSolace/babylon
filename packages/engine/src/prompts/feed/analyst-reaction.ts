@@ -3,7 +3,6 @@ import {
   ANTI_REPETITION_RULES,
   CONTENT_REQUIREMENTS_MARKET,
   FINAL_REMINDERS,
-  IMPORTANT_RULES,
   WORLD_CONTEXT_HEADER_WITH_TRADES,
 } from '../shared-sections';
 
@@ -19,7 +18,7 @@ import {
  */
 export const analystReaction = definePrompt({
   id: 'analyst-reaction',
-  version: '3.0.0',
+  version: '4.0.0',
   category: 'feed',
   description: 'Analyst commentary with full narrative context',
   temperature: 0.8,
@@ -60,8 +59,6 @@ Requirements:
 - Max 250 characters
 - Your mood affects optimism level
 - Satirical but credible sounding
-
-${IMPORTANT_RULES}
 
 ${CONTENT_REQUIREMENTS_MARKET}
 

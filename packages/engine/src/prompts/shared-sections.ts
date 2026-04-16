@@ -96,8 +96,20 @@ export const WORLD_CONTEXT_HEADER_WITH_TRADES = `WORLD CONTEXT:
  */
 export const VALUE_RANGES = `VALUE RANGES:
 - sentiment: -1 (very negative) to 1 (very positive)
-- clueStrength: 0 (no info) to 1 (smoking gun)
-- pointsToward: true (suggests positive outcome) | false (suggests negative) | null (unclear)`;
+
+- clueStrength: 0.0–1.0 — how strongly this post signals information about a question's outcome
+    0.0 = completely irrelevant to any question
+    0.1 = loosely related topic, no directional info
+    0.3 = tangentially hints at outcome, very ambiguous
+    0.5 = clear indirect signal (e.g., "our pipeline is healthy")
+    0.7 = strong insider hint without naming the question directly
+    0.9 = near-direct leak (e.g., "the deal is done")
+    1.0 = smoking gun / direct factual statement of outcome (rare)
+  USE 0.0 for most organic/ambient posts. Reserve 0.7+ for NPC posts that are clearly leaking insider info.
+
+- pointsToward: true (suggests positive outcome) | false (suggests negative) | null (unclear)
+  This is METADATA for the game engine, not something NPCs consciously choose.
+  Set null for general commentary not tied to a specific question's outcome.`;
 
 /**
  * Combined rules section for standard feed posts.

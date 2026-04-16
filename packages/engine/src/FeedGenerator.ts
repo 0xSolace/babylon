@@ -81,6 +81,7 @@ import {
   formatActorToneGuardrails,
   formatActorVoiceContext,
   formatCharacterInfoWithEntropy,
+  getPhaseForDay,
   rateLimitedParallel,
 } from './utils/shared-utils';
 
@@ -2864,16 +2865,7 @@ ${voiceContext}
       : `PERSONALITY: ${actor.personality || 'unknown'}\nDOMAINS: ${actor.domain?.join(', ') || 'general'}`;
 
     // Build phase and atmosphere context
-    const phase =
-      day <= 10
-        ? 'WILD'
-        : day <= 20
-          ? 'CONNECTION'
-          : day <= 25
-            ? 'CONVERGENCE'
-            : day <= 29
-              ? 'CLIMAX'
-              : 'RESOLUTION';
+    const phase = getPhaseForDay(day);
     const progressContext = `Phase: ${phase} (Day ${day}/30)`;
     const atmosphereContext =
       'Increasing activity and developments in various areas. Individual perspectives vary.';
@@ -4432,7 +4424,7 @@ ${voiceContext}
 
     const baseTime = `2025-10-${String(day).padStart(2, '0')}T06:00:00Z`; // Early morning transition
     const phaseContext = buildPhaseContext(day);
-    const phaseName = this.getPhaseName(day);
+    const phaseName = getPhaseForDay(day);
 
     // Format yesterday's key events
     const eventsContext = previousDayEvents
@@ -4665,16 +4657,5 @@ ${voiceContext}
       sentiment: response.sentiment,
       energy: response.energy,
     };
-  }
-
-  /**
-   * Get phase name for a given day
-   */
-  private getPhaseName(day: number): string {
-    if (day <= 10) return 'WILD';
-    if (day <= 20) return 'CONNECTION';
-    if (day <= 25) return 'CONVERGENCE';
-    if (day <= 29) return 'CLIMAX';
-    return 'RESOLUTION';
   }
 }

@@ -14,10 +14,19 @@ import {
  * Includes full narrative context for connected private conversations.
  *
  * Returns XML with multiple group messages.
+ *
+ * Variable inventory:
+ *   Required: richGameContext, groupCount, groupsList, day
+ *   Optional: realityGrounding, characterRoster, detailedCharacterProfiles,
+ *             relationshipContext, organizationRoster, eventTimeline,
+ *             resolvedQuestionsContext, activeQuestionsContext,
+ *             previousGroupMessages, fullContext, scenarioContext,
+ *             questionContext, eventsList, recentEventContext,
+ *             actorVoiceReference (built from group member postStyle + postExample)
  */
 export const groupMessages = definePrompt({
   id: 'group-messages',
-  version: '4.0.0',
+  version: '5.0.0',
   category: 'game',
   description: 'Generates private group chats with full character context',
   temperature: 1,
@@ -64,7 +73,9 @@ Today's events:
 
 ${PARODY_NAME_RULES}
 
-${characterVoiceGuidance('groupsList')}
+{{actorVoiceReference}}
+
+${characterVoiceGuidance('actorVoiceReference')}
 
 ${ANTI_REPETITION_RULES}
 
