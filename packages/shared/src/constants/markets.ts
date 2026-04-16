@@ -38,7 +38,14 @@ export const PERP_MARKET_CONFIG = {
   LIQUIDITY_FACTOR: 50,
   MAX_CHANGE_PER_TRADE: 0.3,
   PRICE_FLOOR_RATIO: 0.05,
-  PRICE_CEILING_RATIO: 10.0,
+  /**
+   * Maximum price as a multiple of initialPrice. Reduced from 10.0 to 4.0 to
+   * align with the volatility simulation ceiling (SIMULATED_PRICE_CEILING_RATIO
+   * = 4.0 in game-tick.ts). Prices above 4× initialPrice are unreachable via
+   * the volatility simulation anyway, so this prevents the position-imbalance
+   * AMM from creating a wider band than the sim can generate.
+   */
+  PRICE_CEILING_RATIO: 4.0,
 } as const;
 
 /**
