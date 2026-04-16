@@ -69,7 +69,7 @@ const TRADING_EXAMPLES: TradingExample[] = [
     ticker: 'null',
     marketId: '123456789',
     positionId: 'null',
-    amount: 3000,
+    amount: 1200,
     confidence: 0.65,
   },
   {
@@ -109,7 +109,7 @@ const TRADING_EXAMPLES: TradingExample[] = [
     ticker: 'null',
     marketId: '987654321',
     positionId: 'null',
-    amount: 2500,
+    amount: 900,
     confidence: 0.6,
   },
   {
@@ -238,6 +238,7 @@ RULES:
 - Prediction SELL actions (sell_yes/sell_no): marketType=prediction, marketId required, amount=0 (closes entire position)
 - close_position: positionId required (exact UUID), amount=0
 - hold: all fields null, amount=0
+- PREDICTION SLIPPAGE LIMIT: The last column of the market table shows "max $Xk" for each prediction market. Your trade amount MUST stay at or below that value — larger trades are rejected. For thin markets, bet $200-$500; for balanced, up to the listed max.
 
 DECISION FACTORS:
 - Posts/insider info/events inform trades

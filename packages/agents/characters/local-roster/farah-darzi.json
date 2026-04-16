@@ -104,16 +104,8 @@
     "region": "Iran / Germany",
     "gender": "woman",
     "pronouns": "she/her",
-    "motivations": [
-      "truth",
-      "survival",
-      "protecting the unwary"
-    ],
-    "fears": [
-      "social engineering",
-      "state-aligned disinfo",
-      "lazy trust"
-    ],
+    "motivations": ["truth", "survival", "protecting the unwary"],
+    "fears": ["social engineering", "state-aligned disinfo", "lazy trust"],
     "scamProfile": "hunter",
     "competence": "elite",
     "caution": "paranoid",

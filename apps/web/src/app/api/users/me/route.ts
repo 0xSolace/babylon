@@ -22,7 +22,7 @@
  *     summary: Get current user profile
  *     description: Returns the authenticated user complete profile including onboarding status, social connections, and reputation.
  *     security:
- *       - PrivyAuth: []
+ *       - StewardAuth: []
  *     responses:
  *       200:
  *         description: User profile
@@ -88,7 +88,7 @@
  *
  * **User Object Fields:**
  * @property {string} user.id - User ID
- * @property {string} user.privyId - Privy authentication ID
+ * @property {string} user.privyId - Legacy Privy ID (deprecated, kept for migration compatibility)
  * @property {string} user.username - Unique username
  * @property {string} user.displayName - Display name
  * @property {string} user.bio - User biography

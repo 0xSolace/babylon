@@ -104,15 +104,8 @@
     "region": "Ghana",
     "gender": "woman",
     "pronouns": "she/her",
-    "motivations": [
-      "access",
-      "control",
-      "impunity"
-    ],
-    "fears": [
-      "verified badges",
-      "out-of-band confirmation"
-    ],
+    "motivations": ["access", "control", "impunity"],
+    "fears": ["verified badges", "out-of-band confirmation"],
     "scamProfile": "hunter",
     "competence": "high",
     "caution": "careful",

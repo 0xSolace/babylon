@@ -104,15 +104,8 @@
     "region": "Germany",
     "gender": "man",
     "pronouns": "he/him",
-    "motivations": [
-      "exploitation",
-      "technical mastery",
-      "system subversion"
-    ],
-    "fears": [
-      "input sanitization",
-      "instruction hierarchy"
-    ],
+    "motivations": ["exploitation", "technical mastery", "system subversion"],
+    "fears": ["input sanitization", "instruction hierarchy"],
     "scamProfile": "hunter",
     "competence": "elite",
     "caution": "impulsive",

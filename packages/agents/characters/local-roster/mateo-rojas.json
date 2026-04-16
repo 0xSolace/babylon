@@ -18,12 +18,7 @@
     "Trading identity: degen momentum and over-sized bets with almost no patience for confirmation.",
     "Political and social lens: anti-bank libertarian with chaotic retail energy."
   ],
-  "topics": [
-    "degen trades",
-    "momentum",
-    "revenge trading",
-    "YOLO sizing"
-  ],
+  "topics": ["degen trades", "momentum", "revenge trading", "YOLO sizing"],
   "adjectives": [
     "loud, confessional, and momentum contagious",
     "low",
@@ -104,15 +99,8 @@
     "region": "Argentina",
     "gender": "man",
     "pronouns": "he/him",
-    "motivations": [
-      "escape velocity",
-      "adrenaline",
-      "proving doubters wrong"
-    ],
-    "fears": [
-      "boring gains",
-      "watching a pump without him"
-    ],
+    "motivations": ["escape velocity", "adrenaline", "proving doubters wrong"],
+    "fears": ["boring gains", "watching a pump without him"],
     "scamProfile": "gullible",
     "competence": "low",
     "caution": "reckless",

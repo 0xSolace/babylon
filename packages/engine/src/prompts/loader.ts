@@ -178,6 +178,24 @@ export function renderPrompt(
 
       // Phase context (optional - may not be set in all code paths)
       'currentPhase',
+
+      // Group chat vars (optional - singular group-message prompt may be called with minimal context)
+      'conversationHistory',
+      'mood',
+      'groupMembers',
+      'currentPositions',
+      'marketConditions',
+      'informationHint',
+
+      // Group messages batch (optional - voice reference built at call site)
+      'actorVoiceReference',
+
+      // Organic/ambient post context vars (optional - may not always have running bits)
+      'runningBitContext',
+      'domainContext',
+      'domainHints',
+      'timeEnergy',
+      'targetRecentActivity',
     ],
   } = options;
 

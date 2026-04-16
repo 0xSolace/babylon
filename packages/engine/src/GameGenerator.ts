@@ -36,6 +36,7 @@ import { BabylonLLMClient } from './llm/openai-client';
 import {
   baselineEvent,
   dayEvents,
+  getRealityGrounding,
   groupChatName,
   groupMessage,
   groupMessages,
@@ -2891,7 +2892,37 @@ ${req.members
       includeNarrativeThreads: true,
     });
 
+    // Build actor voice reference for all group members so characterVoiceGuidance works correctly.
+    // We collect each unique member actor across all groups, then emit their postStyle and
+    // up to 2 postExample entries so the LLM can match their voice precisely.
+    const seenActorIds = new Set<string>();
+    const voiceLines: string[] = [];
+    for (const req of groupRequests) {
+      for (const member of req.members) {
+        if (seenActorIds.has(member.actorId)) continue;
+        seenActorIds.add(member.actorId);
+        const actor = allActors.find((a) => a.id === member.actorId);
+        if (!actor) continue;
+        const examples = (actor.postExample ?? []).slice(0, 2);
+        const examplesText =
+          examples.length > 0
+            ? `\n  Examples: ${examples.map((ex) => `"${ex}"`).join(' | ')}`
+            : '';
+        const styleText = actor.postStyle
+          ? `\n  Style: ${actor.postStyle}`
+          : '';
+        voiceLines.push(
+          `• ${actor.name} [${actor.id}]${styleText}${examplesText}`
+        );
+      }
+    }
+    const actorVoiceReference =
+      voiceLines.length > 0
+        ? `=== VOICE REFERENCE FOR GROUP MEMBERS ===\n${voiceLines.join('\n')}`
+        : '';
+
     const prompt = renderPrompt(groupMessages, {
+      realityGrounding: getRealityGrounding(),
       fullContext: fullContext || `Day ${day} of 30`,
       richGameContext: richGameContextText,
       scenarioContext,
@@ -2903,6 +2934,7 @@ ${req.members
         : '',
       groupCount: groupRequests.length,
       groupsList,
+      actorVoiceReference,
     });
 
     const maxRetries = 5;

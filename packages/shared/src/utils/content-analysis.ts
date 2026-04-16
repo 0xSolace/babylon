@@ -8,6 +8,44 @@
  */
 
 /**
+ * Compute Jaccard similarity between two text strings.
+ *
+ * Tokenizes each string into lowercase words longer than 3 characters,
+ * then returns |intersection| / |union|.  Returns 0 when either input
+ * produces an empty token set (very short strings).
+ *
+ * @param text1 - First text to compare
+ * @param text2 - Second text to compare
+ * @returns Similarity score in [0, 1]
+ *
+ * @example
+ * ```typescript
+ * jaccardSimilarity("hello world today", "hello world tomorrow"); // 0.5
+ * jaccardSimilarity("completely different", "nothing alike"); // 0
+ * ```
+ */
+export function jaccardSimilarity(text1: string, text2: string): number {
+  const tokenize = (t: string): Set<string> =>
+    new Set(
+      t
+        .toLowerCase()
+        .replace(/[^\w\s]/g, '')
+        .split(/\s+/)
+        .filter((w) => w.length > 3)
+    );
+
+  const words1 = tokenize(text1);
+  const words2 = tokenize(text2);
+
+  if (words1.size === 0 || words2.size === 0) return 0;
+
+  const intersection = new Set([...words1].filter((w) => words2.has(w)));
+  const union = new Set([...words1, ...words2]);
+
+  return intersection.size / union.size;
+}
+
+/**
  * Analyze certainty level in content
  *
  * Detects certainty markers (definitely, confirmed) and hedging words

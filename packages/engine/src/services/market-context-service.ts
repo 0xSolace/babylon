@@ -8,6 +8,7 @@
  */
 
 import { PerpDbAdapter } from '@babylon/core/markets/perps';
+import { maxSafeBuy } from '@babylon/core/markets/prediction/client';
 import {
   actorRelationships,
   actorState,
@@ -149,6 +150,10 @@ export class MarketContextService {
             question: m.text,
             endDate: new Date(Date.now() + m.resolveDays * 86400000),
           });
+          // Derive approximate pool shares from totalVolume and yesPrice
+          // (mirrors initializeMarket logic for simulation mode estimates).
+          const simNoShares = m.totalVolume * (m.yesPrice / 100);
+          const simYesShares = m.totalVolume - simNoShares;
           return {
             id: m.id,
             text: m.text,
@@ -163,6 +168,7 @@ export class MarketContextService {
             liquidityTier: getPredictionMarketLiquidityTier(m.totalVolume),
             urgencyLevel: profile.urgencyLevel,
             eventSensitivity: profile.eventSensitivity,
+            maxSafeBet: maxSafeBuy(simYesShares, simNoShares),
           };
         });
 

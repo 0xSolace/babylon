@@ -74,27 +74,61 @@ export function EmbedModeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!isEmbedded) return;
 
+    async function authenticateWithCredentials(
+      agentIdValue: string,
+      agentSecretValue: string
+    ): Promise<string | null> {
+      try {
+        const res = await fetch('/api/agents/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: agentIdValue,
+            agentSecret: agentSecretValue,
+          }),
+        });
+        if (!res.ok) return null;
+        const json = (await res.json()) as {
+          token?: string;
+          sessionToken?: string;
+        };
+        return json.token ?? json.sessionToken ?? null;
+      } catch {
+        return null;
+      }
+    }
+
     function handleMessage(event: MessageEvent) {
       const data = event.data;
       if (!data || typeof data !== 'object') return;
       if (data.type !== 'BABYLON_AUTH') return;
 
-      const token =
+      const secret =
         typeof data.authToken === 'string' ? data.authToken.trim() : null;
       const id = typeof data.agentId === 'string' ? data.agentId.trim() : null;
 
-      if (token) {
-        setAgentSessionToken(token);
-        // Make token available globally for API calls
-        (window as unknown as Record<string, unknown>).__babylonEmbedToken =
-          token;
-      }
       if (id) {
         setAgentId(id);
         (window as unknown as Record<string, unknown>).__babylonEmbedAgentId =
           id;
       }
       setParentOrigin(event.origin);
+
+      // If we received agent credentials, authenticate to get a session token
+      if (id && secret) {
+        void authenticateWithCredentials(id, secret).then((sessionToken) => {
+          if (sessionToken) {
+            setAgentSessionToken(sessionToken);
+            (window as unknown as Record<string, unknown>).__babylonEmbedToken =
+              sessionToken;
+          }
+        });
+      } else if (secret) {
+        // Fallback: use the token directly (pre-authenticated session token)
+        setAgentSessionToken(secret);
+        (window as unknown as Record<string, unknown>).__babylonEmbedToken =
+          secret;
+      }
     }
 
     window.addEventListener('message', handleMessage);

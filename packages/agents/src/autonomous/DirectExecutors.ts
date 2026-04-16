@@ -32,12 +32,14 @@ import {
   chats,
   comments,
   db,
+  desc,
   dmAcceptances,
   eq,
   follows,
   groupMembers,
   groups,
   gte,
+  inArray,
   isNull,
   messages,
   perpPositions,
@@ -1212,7 +1214,7 @@ export async function executeDirectPost(
 
   const cleanContent = content.trim();
 
-  // DIVERSITY CHECK: Validate content before creating post
+  // DIVERSITY CHECK: Validate content before creating post (per-agent, in-process)
   const diversityIssues = topicDiversityService.validateContent(
     agentUserId,
     cleanContent
@@ -1233,6 +1235,54 @@ export async function executeDirectPost(
       success: false,
       error: `Content rejected: ${diversityIssues[0]}`,
     };
+  }
+
+  // CROSS-NPC DEDUP CHECK (NPC actors only):
+  // Query the last 20 NPC posts in the past 10 minutes and reject if any other
+  // NPC posted sufficiently similar content. This closes the gap left by the
+  // per-agent in-process TopicDiversityService singleton.
+  // Only applies to NPC actors — user autonomous agents are NOT subject to this
+  // cross-agent check to avoid blocking them based on unrelated user posts.
+  const isNpcForDedup = !!StaticDataRegistry.getActor(agentUserId);
+  if (isNpcForDedup) {
+    const allNpcIds = StaticDataRegistry.getAllActors()
+      .map((a) => a.id)
+      .filter((id) => id !== agentUserId);
+
+    if (allNpcIds.length > 0) {
+      const crossNpcWindow = new Date(Date.now() - 10 * 60 * 1000);
+      const recentNpcPosts = await db
+        .select({ content: posts.content })
+        .from(posts)
+        .where(
+          and(
+            gte(posts.timestamp, crossNpcWindow),
+            isNull(posts.deletedAt),
+            isNull(posts.commentOnPostId),
+            inArray(posts.authorId, allNpcIds)
+          )
+        )
+        .orderBy(desc(posts.timestamp))
+        .limit(20);
+
+      for (const recent of recentNpcPosts) {
+        const sim = topicDiversityService.calculateSimilarity(
+          cleanContent,
+          recent.content
+        );
+        if (sim >= 0.5) {
+          logger.warn(
+            `[DirectExecutor] Post rejected — cross-NPC similarity ${(sim * 100).toFixed(0)}%`,
+            { agentUserId, contentPreview: cleanContent.substring(0, 80) },
+            'DirectExecutors'
+          );
+          return {
+            success: false,
+            error: 'Content too similar to a recent post by another NPC',
+          };
+        }
+      }
+    }
   }
 
   // Check if this is an NPC (system-defined actor from static data files).

@@ -168,19 +168,21 @@ export function formatMarketDataTable(ctx: NPCMarketContext): string {
   }
 
   let table =
-    '| Ticker/ID | Type | Price | 24h Change | 24h Range | Context | Volume |\n|---|---|---|---|---|---|---|\n';
+    '| Ticker/ID | Type | Price | 24h Change | 24h Range | Context | Vol / MaxBet |\n|---|---|---|---|---|---|---|\n';
 
   for (const p of perps) {
     const sign = p.changePercent24h >= 0 ? '+' : '';
     const range = `$${p.low24h.toFixed(2)}-$${p.high24h.toFixed(2)}`;
-    table += `| ${p.ticker} | PERP | $${p.currentPrice.toFixed(2)} | ${sign}${p.changePercent24h.toFixed(2)}% | ${range} | spot | $${(p.volume24h / 1000).toFixed(1)}k |\n`;
+    table += `| ${p.ticker} | PERP | $${p.currentPrice.toFixed(2)} | ${sign}${p.changePercent24h.toFixed(2)}% | ${range} | spot | $${(p.volume24h / 1000).toFixed(1)}k / — |\n`;
   }
 
   for (const p of predictions) {
     const daysLeft = p.daysUntilResolution;
     const safeText = p.text.replace(/\|/g, '/');
     const contextLabel = `${p.horizonBucket} / ${p.liquidityTier} / ${p.urgencyLevel} / ${p.eventSensitivity}`;
-    table += `| ${p.id} | PRED | Yes: ${p.yesPrice.toFixed(0)}¢ / No: ${p.noPrice.toFixed(0)}¢ | ${daysLeft}d left | "${safeText}" | ${contextLabel} | $${(p.totalVolume / 1000).toFixed(1)}k |\n`;
+    const maxBetLabel =
+      p.maxSafeBet > 0 ? `$${(p.maxSafeBet / 1000).toFixed(1)}k` : 'thin';
+    table += `| ${p.id} | PRED | Yes: ${p.yesPrice.toFixed(0)}¢ / No: ${p.noPrice.toFixed(0)}¢ | ${daysLeft}d left | "${safeText}" | ${contextLabel} | $${(p.totalVolume / 1000).toFixed(1)}k / max ${maxBetLabel} |\n`;
   }
 
   return table;

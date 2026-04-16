@@ -13,7 +13,7 @@ const PRODUCTION_ORIGINS = [
   'https://babylon.market',
   'https://www.babylon.market',
   'https://app.babylon.market',
-  'https://privy.babylon.market',
+  // 'https://privy.babylon.market', // DEPRECATED — Privy removed in Phase 2
   'https://staging.babylon.market',
   'https://app.staging.babylon.market',
   'https://play.staging.babylon.market',
@@ -227,7 +227,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.next({ request: { headers: requestHeaders } });
   }
 
-  // User signup onboarding: full-bleed page without sidebar/nav (Privy still enabled).
+  // User signup onboarding: full-bleed page without sidebar/nav.
   if (pathname === '/onboarding' || pathname.startsWith('/onboarding/')) {
     const requestHeaders = new Headers(request.headers);
     requestHeaders.set('x-hide-app-chrome', '1');

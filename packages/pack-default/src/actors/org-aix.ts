@@ -96,7 +96,7 @@ const actor = {
   profileDescription:
     'Light-skinned white cyborg executive with tired gray eyes, sharp cheekbones, and a narrow nose with a black chrome bridge; a chrome X implant slashes across the left cheek, messy black hair, and stubble with an always-on HUD glare. Wears a black leather jacket over a tech hoodie, a neural-link collar, and a wrist console that hovers a timeline storm. Background: a skyline of broken bird statues, blue-check vending machines, and an endless bot swarm.',
   pfpDescription:
-    'Portrait of a light-skinned cyborg chaos executive with tired gray eyes, messy black hair, and a chrome X implant slashed across one cheek. Wears a black leather jacket over a tech hoodie, with a neural-link collar glowing electric white.',
+    'Portrait of a white male cyborg chaos executive with pale skin and tired gray eyes, messy black hair, and a chrome X implant slashed across one cheek. Wears a black leather jacket over a tech hoodie, with a neural-link collar glowing electric white.',
   profileBanner:
     'A dead blue bird under an enormous glowing X, with blue checks sold like indulgences. Bot silhouettes flood the timeline like a swarm, while a neon banner screams "FREE SPEECH" and a paywall spins like a slot machine. Community Notes float above the chaos, fact-checking the building itself.',
   babylon: {

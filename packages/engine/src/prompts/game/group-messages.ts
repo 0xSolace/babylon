@@ -14,12 +14,22 @@ import {
  * Includes full narrative context for connected private conversations.
  *
  * Returns XML with multiple group messages.
+ *
+ * Variable inventory:
+ *   Required: richGameContext, groupCount, groupsList, day
+ *   Optional: realityGrounding, characterRoster, detailedCharacterProfiles,
+ *             relationshipContext, organizationRoster, eventTimeline,
+ *             resolvedQuestionsContext, activeQuestionsContext,
+ *             previousGroupMessages, fullContext, scenarioContext,
+ *             questionContext, eventsList, recentEventContext,
+ *             actorVoiceReference (built from group member postStyle + postExample)
  */
 export const groupMessages = definePrompt({
   id: 'group-messages',
-  version: '4.0.0',
+  version: '6.0.0',
   category: 'game',
-  description: 'Generates private group chats with full character context',
+  description:
+    'Generates private group chats — unfiltered, unhinged, DM energy',
   temperature: 1,
   maxTokens: 20000,
   template: `{{realityGrounding}}
@@ -64,9 +74,25 @@ Today's events:
 
 ${PARODY_NAME_RULES}
 
-${characterVoiceGuidance('groupsList')}
+{{actorVoiceReference}}
+
+${characterVoiceGuidance('actorVoiceReference')}
 
 ${ANTI_REPETITION_RULES}
+
+=== PRIVATE CHAT MODE ===
+These are PRIVATE group DMs, not public posts. Characters are OFF the record.
+They should be MORE unfiltered than on the public feed. Drop the polish entirely.
+They can:
+- Shit-talk people outside the group by name (parody names only)
+- Flex on each other ("I told you this was going to happen")
+- Make in-jokes only this group would understand
+- Complain about things they'd never say publicly
+- Be petty, sarcastic, and direct with no PR filter
+- Gossip, speculate, and talk behind backs freely
+- Be funny in ways their public persona wouldn't allow
+Think: Twitter DM group between frenemies, not a press release.
+One-word reactions ("lol" / "no" / "wtf") are valid messages. Not everything needs to be profound.
 
 === PRIVATE GROUP CHAT REQUIREMENTS ===
 

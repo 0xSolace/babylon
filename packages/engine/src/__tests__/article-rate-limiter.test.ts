@@ -13,10 +13,11 @@ import {
 } from '../services/article-rate-limiter';
 
 // Mock the database module
+let mockDbCount = 0;
 const mockDb = {
   select: mock(() => mockDb),
   from: mock(() => mockDb),
-  where: mock(() => Promise.resolve([{ count: 0 }])),
+  where: mock(() => Promise.resolve([{ count: mockDbCount }])),
 };
 
 mock.module('@babylon/db', () => ({
@@ -32,11 +33,12 @@ mock.module('@babylon/db', () => ({
 describe('ArticleRateLimiterService', () => {
   beforeEach(() => {
     // Reset mock call counts
+    mockDbCount = 0;
     mockDb.select.mockClear();
     mockDb.from.mockClear();
     mockDb.where.mockClear();
     // Default to 0 articles
-    mockDb.where.mockImplementation(() => Promise.resolve([{ count: 0 }]));
+    mockDb.where.mockImplementation(() => Promise.resolve([{ count: mockDbCount }]));
   });
 
   describe('constructor', () => {
@@ -261,8 +263,8 @@ describe('BreakingArticleRateLimiterService', () => {
       const limiter = new BreakingArticleRateLimiterService();
       const config = limiter.getConfig();
 
-      // Default is 1 per hour for breaking articles
-      expect(config.maxArticlesPerHour).toBe(1);
+      // Default is DEFAULT_MAX_ARTICLES_PER_HOUR + 1 = 3 (regular budget + breaking budget)
+      expect(config.maxArticlesPerHour).toBe(3);
       expect(config.windowMs).toBe(60 * 60 * 1000);
     });
 
@@ -279,30 +281,29 @@ describe('BreakingArticleRateLimiterService', () => {
   });
 
   describe('getRecentArticleCount', () => {
-    test('returns 0 when no articles recorded', () => {
+    test('returns 0 when no articles recorded', async () => {
+      mockDbCount = 0;
       const limiter = new BreakingArticleRateLimiterService();
-      expect(limiter.getRecentArticleCount()).toBe(0);
+      expect(await limiter.getRecentArticleCount()).toBe(0);
     });
 
-    test('returns correct count after recording articles', () => {
+    test('returns correct count from DB', async () => {
+      mockDbCount = 2;
       const limiter = new BreakingArticleRateLimiterService();
-      limiter.recordBreakingArticle();
-      limiter.recordBreakingArticle();
 
-      expect(limiter.getRecentArticleCount()).toBe(2);
+      expect(await limiter.getRecentArticleCount()).toBe(2);
     });
 
-    test('cleans up expired timestamps', () => {
+    test('includes in-flight reservations in count', async () => {
+      mockDbCount = 0;
       const limiter = new BreakingArticleRateLimiterService({
-        windowMs: 1000, // 1 second window
+        maxArticlesPerHour: 5,
       });
 
-      // Record an article with a timestamp outside the window
-      const oldTimestamp = Date.now() - 2000; // 2 seconds ago
-      limiter.recordBreakingArticle(oldTimestamp);
+      await limiter.tryReserveSlot();
+      await limiter.tryReserveSlot();
 
-      // The old timestamp should be cleaned up
-      expect(limiter.getRecentArticleCount()).toBe(0);
+      expect(await limiter.getRecentArticleCount()).toBe(2);
     });
   });
 
@@ -321,10 +322,10 @@ describe('BreakingArticleRateLimiterService', () => {
     });
 
     test('blocks generation when at limit', async () => {
+      mockDbCount = 1;
       const limiter = new BreakingArticleRateLimiterService({
         maxArticlesPerHour: 1,
       });
-      limiter.recordBreakingArticle();
 
       const result = await limiter.canGenerateArticle();
 
@@ -333,68 +334,69 @@ describe('BreakingArticleRateLimiterService', () => {
       expect(result.remaining).toBe(0);
     });
 
-    test('cleans up expired timestamps before checking', async () => {
-      const limiter = new BreakingArticleRateLimiterService({
-        maxArticlesPerHour: 1,
-        windowMs: 1000,
-      });
-
-      // Record with old timestamp
-      limiter.recordBreakingArticle(Date.now() - 2000);
-
-      // Should allow since old timestamp is expired
-      const result = await limiter.canGenerateArticle();
-      expect(result.allowed).toBe(true);
-      expect(result.currentCount).toBe(0);
-    });
-  });
-
-  describe('tryReserveSlot', () => {
-    test('reserves slot when under limit and returns reservationId', () => {
+    test('counts DB articles plus reservations', async () => {
+      mockDbCount = 0;
       const limiter = new BreakingArticleRateLimiterService({
         maxArticlesPerHour: 2,
       });
 
-      const reservationId = limiter.tryReserveSlot();
+      await limiter.tryReserveSlot();
+
+      const result = await limiter.canGenerateArticle();
+      expect(result.allowed).toBe(true);
+      expect(result.currentCount).toBe(1);
+    });
+  });
+
+  describe('tryReserveSlot', () => {
+    test('reserves slot when under limit and returns reservationId', async () => {
+      mockDbCount = 0;
+      const limiter = new BreakingArticleRateLimiterService({
+        maxArticlesPerHour: 2,
+      });
+
+      const reservationId = await limiter.tryReserveSlot();
 
       expect(reservationId).not.toBeNull();
       expect(typeof reservationId).toBe('string');
-      expect(limiter.getRecentArticleCount()).toBe(1);
+      expect(await limiter.getRecentArticleCount()).toBe(1);
     });
 
-    test('fails to reserve when at limit and returns null', () => {
+    test('fails to reserve when at limit and returns null', async () => {
+      mockDbCount = 1;
       const limiter = new BreakingArticleRateLimiterService({
         maxArticlesPerHour: 1,
       });
-      limiter.recordBreakingArticle();
 
-      const reservationId = limiter.tryReserveSlot();
+      const reservationId = await limiter.tryReserveSlot();
 
       expect(reservationId).toBeNull();
-      expect(limiter.getRecentArticleCount()).toBe(1); // Still just 1
+      expect(await limiter.getRecentArticleCount()).toBe(1); // Still just DB count
     });
 
-    test('multiple reservations consume slots', () => {
+    test('multiple reservations consume slots', async () => {
+      mockDbCount = 0;
       const limiter = new BreakingArticleRateLimiterService({
         maxArticlesPerHour: 3,
       });
 
-      expect(limiter.tryReserveSlot()).not.toBeNull();
-      expect(limiter.tryReserveSlot()).not.toBeNull();
-      expect(limiter.tryReserveSlot()).not.toBeNull();
-      expect(limiter.tryReserveSlot()).toBeNull(); // 4th should fail
+      expect(await limiter.tryReserveSlot()).not.toBeNull();
+      expect(await limiter.tryReserveSlot()).not.toBeNull();
+      expect(await limiter.tryReserveSlot()).not.toBeNull();
+      expect(await limiter.tryReserveSlot()).toBeNull(); // 4th should fail
 
-      expect(limiter.getRecentArticleCount()).toBe(3);
+      expect(await limiter.getRecentArticleCount()).toBe(3);
     });
 
-    test('returns unique reservation IDs', () => {
+    test('returns unique reservation IDs', async () => {
+      mockDbCount = 0;
       const limiter = new BreakingArticleRateLimiterService({
         maxArticlesPerHour: 3,
       });
 
-      const id1 = limiter.tryReserveSlot();
-      const id2 = limiter.tryReserveSlot();
-      const id3 = limiter.tryReserveSlot();
+      const id1 = await limiter.tryReserveSlot();
+      const id2 = await limiter.tryReserveSlot();
+      const id3 = await limiter.tryReserveSlot();
 
       expect(id1).not.toBeNull();
       expect(id2).not.toBeNull();
@@ -406,19 +408,20 @@ describe('BreakingArticleRateLimiterService', () => {
   });
 
   describe('releaseSlot', () => {
-    test('releases a reserved slot by reservationId', () => {
+    test('releases a reserved slot by reservationId', async () => {
+      mockDbCount = 0;
       const limiter = new BreakingArticleRateLimiterService({
         maxArticlesPerHour: 1,
       });
-      const reservationId = limiter.tryReserveSlot();
+      const reservationId = await limiter.tryReserveSlot();
 
-      expect(limiter.getRecentArticleCount()).toBe(1);
+      expect(await limiter.getRecentArticleCount()).toBe(1);
       expect(reservationId).not.toBeNull();
 
       const released = limiter.releaseSlot(reservationId!);
 
       expect(released).toBe(true);
-      expect(limiter.getRecentArticleCount()).toBe(0);
+      expect(await limiter.getRecentArticleCount()).toBe(0);
     });
 
     test('returns false when reservationId not found', () => {
@@ -429,72 +432,74 @@ describe('BreakingArticleRateLimiterService', () => {
       expect(released).toBe(false);
     });
 
-    test('allows new reservation after release', () => {
+    test('allows new reservation after release', async () => {
+      mockDbCount = 0;
       const limiter = new BreakingArticleRateLimiterService({
         maxArticlesPerHour: 1,
       });
 
-      const reservationId = limiter.tryReserveSlot();
+      const reservationId = await limiter.tryReserveSlot();
       expect(reservationId).not.toBeNull();
-      expect(limiter.tryReserveSlot()).toBeNull(); // At limit
+      expect(await limiter.tryReserveSlot()).toBeNull(); // At limit
 
       limiter.releaseSlot(reservationId!);
-      expect(limiter.tryReserveSlot()).not.toBeNull(); // Can reserve again
+      expect(await limiter.tryReserveSlot()).not.toBeNull(); // Can reserve again
     });
 
-    test('releases only the specified reservation', () => {
+    test('releases only the specified reservation', async () => {
+      mockDbCount = 0;
       const limiter = new BreakingArticleRateLimiterService({
         maxArticlesPerHour: 3,
       });
 
-      const id1 = limiter.tryReserveSlot();
-      const id2 = limiter.tryReserveSlot();
-      const id3 = limiter.tryReserveSlot();
+      const id1 = await limiter.tryReserveSlot();
+      const id2 = await limiter.tryReserveSlot();
+      const id3 = await limiter.tryReserveSlot();
 
-      expect(limiter.getRecentArticleCount()).toBe(3);
+      expect(await limiter.getRecentArticleCount()).toBe(3);
 
       // Release the middle one
       const released = limiter.releaseSlot(id2!);
       expect(released).toBe(true);
-      expect(limiter.getRecentArticleCount()).toBe(2);
+      expect(await limiter.getRecentArticleCount()).toBe(2);
 
       // Releasing the same ID again should fail
       const releasedAgain = limiter.releaseSlot(id2!);
       expect(releasedAgain).toBe(false);
-      expect(limiter.getRecentArticleCount()).toBe(2);
+      expect(await limiter.getRecentArticleCount()).toBe(2);
 
       // Other reservations still exist
       expect(limiter.releaseSlot(id1!)).toBe(true);
       expect(limiter.releaseSlot(id3!)).toBe(true);
-      expect(limiter.getRecentArticleCount()).toBe(0);
+      expect(await limiter.getRecentArticleCount()).toBe(0);
     });
   });
 
   describe('recordBreakingArticle', () => {
-    test('records article with current timestamp by default', () => {
+    test('is a no-op (DB-backed counting)', async () => {
+      mockDbCount = 0;
       const limiter = new BreakingArticleRateLimiterService();
       limiter.recordBreakingArticle();
 
-      expect(limiter.getRecentArticleCount()).toBe(1);
+      // recordBreakingArticle is a no-op, count comes from DB
+      expect(await limiter.getRecentArticleCount()).toBe(0);
     });
 
-    test('records article with custom timestamp', () => {
-      const limiter = new BreakingArticleRateLimiterService({
-        windowMs: 60000,
-      });
-      const customTimestamp = Date.now() - 30000; // 30 seconds ago (within window)
-      limiter.recordBreakingArticle(customTimestamp);
+    test('count reflects DB state, not recordBreakingArticle calls', async () => {
+      mockDbCount = 3;
+      const limiter = new BreakingArticleRateLimiterService();
+      limiter.recordBreakingArticle();
 
-      expect(limiter.getRecentArticleCount()).toBe(1);
+      expect(await limiter.getRecentArticleCount()).toBe(3);
     });
   });
 
   describe('getRemainingSlots', () => {
     test('returns correct remaining slots', async () => {
+      mockDbCount = 1;
       const limiter = new BreakingArticleRateLimiterService({
         maxArticlesPerHour: 3,
       });
-      limiter.recordBreakingArticle();
 
       const remaining = await limiter.getRemainingSlots();
 
@@ -503,42 +508,42 @@ describe('BreakingArticleRateLimiterService', () => {
   });
 
   describe('reset', () => {
-    test('clears all recorded articles', () => {
-      const limiter = new BreakingArticleRateLimiterService();
-      limiter.recordBreakingArticle();
-      limiter.recordBreakingArticle();
+    test('clears all in-flight reservations', async () => {
+      mockDbCount = 0;
+      const limiter = new BreakingArticleRateLimiterService({
+        maxArticlesPerHour: 5,
+      });
+      await limiter.tryReserveSlot();
+      await limiter.tryReserveSlot();
 
-      expect(limiter.getRecentArticleCount()).toBe(2);
+      expect(await limiter.getRecentArticleCount()).toBe(2);
 
       limiter.reset();
 
-      expect(limiter.getRecentArticleCount()).toBe(0);
+      expect(await limiter.getRecentArticleCount()).toBe(0);
     });
   });
 
   describe('window boundary behavior', () => {
-    test('articles just inside window are counted', () => {
+    test('DB articles within window are counted', async () => {
+      mockDbCount = 1;
       const limiter = new BreakingArticleRateLimiterService({
         windowMs: 60000, // 1 minute
         maxArticlesPerHour: 2,
       });
 
-      // Record article 30 seconds ago (inside window)
-      limiter.recordBreakingArticle(Date.now() - 30000);
-
-      expect(limiter.getRecentArticleCount()).toBe(1);
+      expect(await limiter.getRecentArticleCount()).toBe(1);
     });
 
-    test('articles just outside window are not counted', () => {
+    test('DB articles outside window are not counted (handled by DB query)', async () => {
+      // The DB query uses windowMs to filter, so if DB returns 0, count is 0
+      mockDbCount = 0;
       const limiter = new BreakingArticleRateLimiterService({
         windowMs: 60000, // 1 minute
         maxArticlesPerHour: 2,
       });
 
-      // Record article 61 seconds ago (outside window)
-      limiter.recordBreakingArticle(Date.now() - 61000);
-
-      expect(limiter.getRecentArticleCount()).toBe(0);
+      expect(await limiter.getRecentArticleCount()).toBe(0);
     });
   });
 });

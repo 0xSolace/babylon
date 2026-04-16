@@ -31,6 +31,13 @@ export interface PredictionMarketSnapshot {
   liquidityTier: 'thin' | 'balanced' | 'deep';
   urgencyLevel: 'imminent' | 'near-term' | 'dated';
   eventSensitivity: 'low' | 'medium' | 'high';
+  /**
+   * Maximum safe single-trade gross amount (inclusive of fees) for this
+   * market given current pool depth and the 20ppt odds-move cap. Trades
+   * above this limit will be rejected by the slippage guard. Zero means
+   * the market is too illiquid to accept any trade.
+   */
+  maxSafeBet: number;
 }
 
 export interface NPCPosition {

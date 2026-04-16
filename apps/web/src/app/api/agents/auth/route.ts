@@ -95,12 +95,14 @@ import { z } from 'zod';
 const isProduction = process.env.NODE_ENV === 'production';
 
 /**
- * Relaxed auth schema for dev mode — accepts any non-empty string as agentId
- * (e.g. "babylon-agent-alice") instead of requiring Snowflake ID format.
+ * In development, accept any non-empty string as agentId (not just Snowflake IDs).
+ * This allows dev-mode agent IDs like "babylon-agent-alice" or "dev-admin-local".
  */
 const DevAgentAuthSchema = z.object({
-  agentId: z.string().min(1, { message: 'agentId is required' }),
-  agentSecret: z.string().min(1, { message: 'agentSecret is required' }),
+  agentId: z.string().min(1, { message: 'Agent ID is required' }),
+  agentSecret: z
+    .string()
+    .min(32, { message: 'Agent secret must be at least 32 characters' }),
 });
 
 /**

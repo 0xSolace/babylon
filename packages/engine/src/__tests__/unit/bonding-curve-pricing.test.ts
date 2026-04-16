@@ -166,7 +166,7 @@ describe('Bonding Curve Pricing', () => {
       expect(PERP_MARKET_CONFIG.LIQUIDITY_FACTOR).toBe(50);
       expect(PERP_MARKET_CONFIG.MAX_CHANGE_PER_TRADE).toBe(0.3);
       expect(PERP_MARKET_CONFIG.PRICE_FLOOR_RATIO).toBe(0.05);
-      expect(PERP_MARKET_CONFIG.PRICE_CEILING_RATIO).toBe(10.0);
+      expect(PERP_MARKET_CONFIG.PRICE_CEILING_RATIO).toBe(4.0);
     });
 
     it('should have reasonable synthetic supply', () => {

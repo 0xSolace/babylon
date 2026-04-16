@@ -25,6 +25,16 @@ CRITICAL IDENTITY ANCHOR (MUST MATCH REAL LIFE):
 
 VISUAL DESCRIPTION (follow closely): {{pfpDescription}}
 
+PHYSICAL ACCURACY — NON-NEGOTIABLE:
+You MUST depict the race/ethnicity, skin tone, hair (including baldness), and body type exactly as written in the VISUAL DESCRIPTION above.
+- If the description says "Black", "dark brown skin", or "African American" → the character MUST be visibly Black.
+- If the description says "bald", "shaved head", or "polished head" → absolutely no hair, period.
+- If the description says "East Asian", "Taiwanese", "Chinese", or "Japanese" → depict East Asian facial features.
+- If the description says "South Asian", "Indian", or "Indian-American" → depict South Asian features and skin tone.
+- If the description says "pale", "fair skin", or "translucent" → use that exact skin tone.
+- Female subjects MUST look female.
+Do NOT default to white, light-skinned, or conventionally-haired if the description says otherwise.
+
 EXAGGERATE THE JOKE IN THE NAME "{{actorName}}":
 - If the name contains "Bot", "AI", or tech references → add robotic/cyborg elements, glowing circuits, mechanical parts
 - If the name contains "Husk", "Shell", "Empty" → show hollow/translucent elements, emptiness

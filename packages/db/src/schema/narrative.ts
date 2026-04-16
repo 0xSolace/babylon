@@ -6,9 +6,11 @@ import {
   jsonb,
   type PgColumn,
   pgTable,
+  serial,
   text,
   timestamp,
   unique,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { questions } from './markets';
 
@@ -443,3 +445,32 @@ export const subMarketSpawnLogsRelations = relations(
 
 export type SubMarketSpawnLog = typeof subMarketSpawnLogs.$inferSelect;
 export type NewSubMarketSpawnLog = typeof subMarketSpawnLogs.$inferInsert;
+
+/**
+ * ArcEventCoverage - DB-backed tracking of which orgs have covered which arc
+ * events at which status. Replaces the in-memory NewsArticlePacingEngine
+ * arcEventCoverage map so tracking survives restarts and serverless cold starts.
+ */
+export const arcEventCoverage = pgTable(
+  'arc_event_coverage',
+  {
+    id: serial('id').primaryKey(),
+    eventId: text('event_id').notNull(),
+    orgId: text('org_id').notNull(),
+    status: text('status').notNull(),
+    articleId: text('article_id'),
+    coveredAt: timestamp('covered_at', { mode: 'date' }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('arc_coverage_event_org_status').on(
+      t.eventId,
+      t.orgId,
+      t.status
+    ),
+    index('arc_coverage_event_status_idx').on(t.eventId, t.status),
+    index('arc_coverage_covered_at_idx').on(t.coveredAt),
+  ]
+);
+
+export type ArcEventCoverage = typeof arcEventCoverage.$inferSelect;
+export type NewArcEventCoverage = typeof arcEventCoverage.$inferInsert;

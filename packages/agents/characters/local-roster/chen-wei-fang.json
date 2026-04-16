@@ -104,15 +104,8 @@
     "region": "China",
     "gender": "man",
     "pronouns": "he/him",
-    "motivations": [
-      "money",
-      "scale",
-      "reputation in fraud circles"
-    ],
-    "fears": [
-      "chargebacks",
-      "pattern recognition"
-    ],
+    "motivations": ["money", "scale", "reputation in fraud circles"],
+    "fears": ["chargebacks", "pattern recognition"],
     "scamProfile": "hunter",
     "competence": "high",
     "caution": "careful",
