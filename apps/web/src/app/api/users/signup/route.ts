@@ -17,7 +17,7 @@
  *     summary: Complete user signup
  *     description: Completes off-chain onboarding with profile creation and points awards
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -678,7 +678,6 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     hasTwitter: result.user.hasTwitter,
     hasProfileImage: result.user.hasProfileImage,
     hasBio: result.user.hasBio,
-    onChainRegistered: result.user.onChainRegistered,
     reputationAwarded: totalReputationAwarded,
     reputationBreakdown,
     importedFrom: parsedProfile.importedFrom || null,
@@ -775,7 +774,6 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       hasUsername: result.user.hasUsername,
       hasBio: result.user.hasBio,
       hasProfileImage: result.user.hasProfileImage,
-      onChainRegistered: result.user.onChainRegistered,
       nftTokenId: result.user.nftTokenId,
       referralCode: result.user.referralCode,
       referredBy: result.user.referredBy,

@@ -18,7 +18,7 @@
  *     summary: Get goal details
  *     description: Returns goal details with actions (manager only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: agentId
@@ -47,7 +47,7 @@
  *     summary: Update goal
  *     description: Updates goal details (manager only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: agentId
@@ -88,7 +88,7 @@
  *     summary: Delete goal
  *     description: Deletes a goal (manager only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: agentId

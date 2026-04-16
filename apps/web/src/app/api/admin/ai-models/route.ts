@@ -15,7 +15,7 @@
  *     summary: Get AI model configuration
  *     description: Returns current AI configuration and available providers (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     responses:
  *       200:
  *         description: Configuration retrieved successfully

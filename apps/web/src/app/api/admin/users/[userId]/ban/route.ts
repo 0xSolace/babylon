@@ -17,7 +17,7 @@
  *     summary: Ban or unban user
  *     description: Bans or unbans a user with moderation flags and reputation sync (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: userId

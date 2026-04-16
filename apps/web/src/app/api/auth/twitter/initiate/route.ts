@@ -16,7 +16,7 @@
  *     summary: Initiate Twitter OAuth
  *     description: Starts Twitter OAuth 2.0 flow with PKCE (redirects to Twitter)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     responses:
  *       302:
  *         description: Redirect to Twitter authorization page

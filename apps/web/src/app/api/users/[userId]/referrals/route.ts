@@ -16,7 +16,7 @@
  *     summary: Get referral stats
  *     description: Returns referral statistics and referred users list (own profile only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: userId
@@ -150,7 +150,6 @@ export const GET = withErrorHandling(
         farcasterUsername: users.farcasterUsername,
         twitterUsername: users.twitterUsername,
         walletAddress: users.walletAddress,
-        onChainRegistered: users.onChainRegistered,
       })
       .from(users)
       .where(eq(users.id, canonicalUserId))
@@ -370,7 +369,6 @@ export const GET = withErrorHandling(
         farcasterUsername: user.farcasterUsername,
         twitterUsername: user.twitterUsername,
         walletAddress: user.walletAddress,
-        onChainRegistered: user.onChainRegistered,
       },
       stats: {
         totalReferrals: completedReferralsData.length, // Only completed count

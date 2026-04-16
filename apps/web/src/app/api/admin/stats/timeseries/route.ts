@@ -22,7 +22,7 @@
  *     summary: Get time-series metrics
  *     description: Returns historical platform metrics from hourly snapshots
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - name: startDate
  *         in: query

@@ -198,7 +198,6 @@ export default function LeaderboardPage() {
       rank: player.rank,
       isAgent: player.isAgent,
       managedBy: player.managedBy,
-      onChainRegistered: player.onChainRegistered,
       nftTokenId: player.nftTokenId,
       teamReputationPoints: player.teamReputationPoints,
       userReputationPoints: player.userReputationPoints,
@@ -368,7 +367,7 @@ export default function LeaderboardPage() {
               </span>
             ) : (
               <OnChainBadge
-                isRegistered={player.onChainRegistered ?? false}
+                isRegistered={Boolean(player.nftTokenId)}
                 nftTokenId={player.nftTokenId ?? null}
                 size="sm"
               />

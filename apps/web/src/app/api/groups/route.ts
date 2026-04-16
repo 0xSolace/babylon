@@ -31,7 +31,7 @@
  *     summary: List user's groups
  *     description: Returns all groups where user is a member
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     responses:
  *       200:
  *         description: User's groups
@@ -70,7 +70,7 @@
  *     summary: Create new group
  *     description: Creates a new group with optional initial members and automatic chat
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     requestBody:
  *       required: true
  *       content:

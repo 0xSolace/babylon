@@ -17,7 +17,7 @@
  *     summary: Update user profile
  *     description: Updates user profile with rate limiting and on-chain support
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: userId
@@ -289,7 +289,6 @@ export const POST = withErrorHandling(
         referralCount: users.referralCount,
         referralCode: users.referralCode,
         usernameChangedAt: users.usernameChangedAt,
-        profileChainSyncNeeded: users.profileChainSyncNeeded,
         privyId: users.privyId,
       });
 

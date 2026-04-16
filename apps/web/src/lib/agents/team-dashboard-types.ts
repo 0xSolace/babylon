@@ -26,7 +26,6 @@ export interface TeamDashboardAgent {
   lastTickAt: string | null;
   lastChatAt: string | null;
   walletAddress: string | null;
-  onChainRegistered: boolean;
   agent0TokenId: number | null;
   createdAt: string;
   updatedAt: string;

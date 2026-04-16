@@ -16,7 +16,7 @@
  *     summary: Verify escrow payment
  *     description: Verifies on-chain payment completion (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     requestBody:
  *       required: true
  *       content:

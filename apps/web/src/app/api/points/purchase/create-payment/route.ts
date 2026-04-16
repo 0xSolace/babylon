@@ -16,7 +16,7 @@
  *     summary: Create payment request for trading balance funding
  *     description: Creates x402 payment request for trading balance funding
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     requestBody:
  *       required: true
  *       content:

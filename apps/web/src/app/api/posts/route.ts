@@ -97,7 +97,7 @@
  *     summary: Create new post
  *     description: Creates a new post with automatic mention notifications, rate limiting, and real-time SSE broadcasting.
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     requestBody:
  *       required: true
  *       content:

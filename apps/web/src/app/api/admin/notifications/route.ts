@@ -16,7 +16,7 @@
  *     summary: Create notification
  *     description: Sends notification to user or all users (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     requestBody:
  *       required: true
  *       content:

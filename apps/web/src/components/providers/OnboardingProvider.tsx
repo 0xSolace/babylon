@@ -253,7 +253,6 @@ export function OnboardingProvider({
             twitterUsername?: string;
             nftTokenId?: number;
             createdAt?: string;
-            onChainRegistered?: boolean;
             gameGuideCompletedAt?: string | null;
           };
           setUser({

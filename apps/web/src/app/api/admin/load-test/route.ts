@@ -17,7 +17,7 @@
  *     summary: Run load test
  *     description: Runs load test with specified scenario (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -48,7 +48,7 @@
  *     summary: Get load test status/results
  *     description: Returns load test status or results (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: query
  *         name: type

@@ -17,7 +17,7 @@
  *     summary: Process user appeal
  *     description: Approves or denies user appeal (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: userId

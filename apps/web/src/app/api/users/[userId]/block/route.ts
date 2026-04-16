@@ -17,7 +17,7 @@
  *     summary: Block or unblock user
  *     description: Blocks or unblocks a user and removes follow relationships
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: userId
@@ -67,7 +67,7 @@
  *     summary: Check if user is blocked
  *     description: Returns whether the current user has blocked the target user
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: userId

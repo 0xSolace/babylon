@@ -17,7 +17,7 @@
  *     summary: Delete user account
  *     description: Permanently deletes user account and data (GDPR compliance)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -123,7 +123,6 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       id: users.id,
       username: users.username,
       walletAddress: users.walletAddress,
-      onChainRegistered: users.onChainRegistered,
       nftTokenId: users.nftTokenId,
     })
     .from(users)
@@ -135,7 +134,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   }
 
   // Important notice about blockchain data
-  const blockchainNotice = user.onChainRegistered
+  const blockchainNotice = user.nftTokenId
     ? {
         blockchain_data_notice:
           'Your on-chain data (wallet address, NFT token ID, transaction history) is permanently recorded on the blockchain and cannot be deleted. It will remain publicly visible.',

@@ -16,7 +16,7 @@
  *     summary: Post tweet
  *     description: Posts a tweet to Twitter/X using OAuth 2.0
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     requestBody:
  *       required: true
  *       content:

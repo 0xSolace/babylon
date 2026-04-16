@@ -16,7 +16,7 @@
  *     summary: Get blocked users
  *     description: Returns list of users blocked by current user
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: query
  *         name: limit

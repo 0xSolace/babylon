@@ -16,7 +16,7 @@
  *     summary: Get referral fee earnings
  *     description: Returns referral fee earnings and statistics (own profile only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: userId

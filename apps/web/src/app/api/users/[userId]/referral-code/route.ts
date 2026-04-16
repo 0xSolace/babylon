@@ -16,7 +16,7 @@
  *     summary: Get referral code
  *     description: Gets or generates user's referral code (own profile only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: userId

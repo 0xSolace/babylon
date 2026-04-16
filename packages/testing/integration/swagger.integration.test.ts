@@ -72,7 +72,6 @@ describe('Swagger/OpenAPI Documentation', () => {
 
     expect(spec).toHaveProperty('components');
     expect(spec.components).toHaveProperty('securitySchemes');
-    expect(spec.components.securitySchemes).toHaveProperty('PrivyAuth');
     expect(spec.components.securitySchemes).toHaveProperty('BearerAuth');
     expect(spec.components.securitySchemes).toHaveProperty('CronSecret');
   }, 30000);

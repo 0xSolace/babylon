@@ -44,7 +44,7 @@
  *     summary: Delete post
  *     description: Soft deletes a post (author only). Post is marked as deleted but data is retained.
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id

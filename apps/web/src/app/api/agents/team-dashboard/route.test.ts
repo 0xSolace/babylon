@@ -55,7 +55,6 @@ describe('GET /api/agents/team-dashboard', () => {
           lastTickAt: null,
           lastChatAt: null,
           walletAddress: null,
-          onChainRegistered: false,
           agent0TokenId: null,
           createdAt: '2026-03-01T00:00:00.000Z',
           updatedAt: '2026-03-02T00:00:00.000Z',

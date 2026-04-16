@@ -91,7 +91,9 @@ export function useAuth(): UseAuthReturn {
     return stewardAuth.getToken() ?? null;
   }, [devAuthSession, stewardAuth]);
 
-  // Keep window.__privyAccessToken in sync for apiFetch legacy compatibility
+  // TODO: Phase 3 — rename window.__privyAccessToken / __privyGetAccessToken
+  // to window.__accessToken / __getAccessToken once all consumers have migrated.
+  // Keep window-level token in sync for apiFetch legacy compatibility
   useEffect(() => {
     const token = stewardAuth.getToken();
     if (typeof window !== 'undefined') {

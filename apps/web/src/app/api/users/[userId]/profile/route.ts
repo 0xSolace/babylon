@@ -73,9 +73,6 @@
  *                     profileComplete:
  *                       type: boolean
  *                       description: Whether profile setup is complete
- *                     onChainRegistered:
- *                       type: boolean
- *                       description: Whether registered on blockchain
  *                     hasFarcaster:
  *                       type: boolean
  *                       description: Whether Farcaster is linked
@@ -221,7 +218,6 @@ export const GET = withErrorHandling(
           hasUsername: dbUser.hasUsername,
           hasBio: dbUser.hasBio,
           hasProfileImage: dbUser.hasProfileImage,
-          onChainRegistered: dbUser.onChainRegistered,
           nftTokenId: dbUser.nftTokenId,
           virtualBalance: Number(dbUser.virtualBalance ?? 0),
           lifetimePnL: Number(dbUser.lifetimePnL ?? 0),

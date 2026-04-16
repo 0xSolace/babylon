@@ -64,7 +64,6 @@ async function createTestUser(
     isActor: false,
     isTest: true,
     isBanned: false,
-    onChainRegistered: false,
     updatedAt: new Date(),
   });
 

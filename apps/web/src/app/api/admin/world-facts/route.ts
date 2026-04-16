@@ -19,7 +19,7 @@
  *     summary: Get world facts
  *     description: Returns all world facts, RSS feeds, parodies, and mappings (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     responses:
  *       200:
  *         description: Facts retrieved successfully
@@ -46,7 +46,7 @@
  *     summary: Create/update world facts
  *     description: Creates or updates world facts (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     requestBody:
  *       content:
  *         application/json:
@@ -65,7 +65,7 @@
  *     summary: Delete world fact
  *     description: Deletes a world fact (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     requestBody:
  *       content:
  *         application/json:

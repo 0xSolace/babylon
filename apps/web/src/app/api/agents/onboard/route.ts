@@ -17,7 +17,7 @@
  *     summary: Register agent on-chain
  *     description: Registers agent to Agent0 network on Ethereum mainnet
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     requestBody:
  *       required: true
  *       content:

@@ -31,7 +31,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       isActor: users.isActor,
       isAdmin: users.isAdmin,
       isBanned: users.isBanned,
-      onChainRegistered: users.onChainRegistered,
       hasFarcaster: users.hasFarcaster,
       hasTwitter: users.hasTwitter,
       farcasterUsername: users.farcasterUsername,

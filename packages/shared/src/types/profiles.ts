@@ -17,7 +17,6 @@ export interface UserProfile {
   walletAddress?: string;
   email?: string;
   nftTokenId?: number;
-  onChainRegistered?: boolean;
   virtualBalance?: number;
   createdAt?: Date | string;
   updatedAt?: Date | string;
@@ -60,7 +59,6 @@ export type ProfileInfo = (UserProfile | ActorProfile) & {
   managedBy?: string | null;
   profileImageUrl?: string;
   coverImageUrl?: string;
-  onChainRegistered?: boolean;
   nftTokenId?: number | null;
   stats?: {
     posts?: number;

@@ -137,7 +137,13 @@ export {
   ValidationError,
 } from './errors';
 // Fetch utilities
-export { type ApiFetchOptions, apiFetch, getPrivyAccessToken } from './fetch';
+export {
+  type ApiFetchOptions,
+  apiFetch,
+  getAccessToken,
+  /** @deprecated Use `getAccessToken` instead. */
+  getPrivyAccessToken,
+} from './fetch';
 // Linear Integration
 export {
   type CreateIssueInput,

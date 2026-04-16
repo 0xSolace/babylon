@@ -35,17 +35,11 @@ export const swaggerDefinition = {
   ],
   components: {
     securitySchemes: {
-      PrivyAuth: {
-        type: 'http',
-        scheme: 'bearer',
-        bearerFormat: 'JWT',
-        description: 'Privy authentication token',
-      },
       BearerAuth: {
         type: 'http',
         scheme: 'bearer',
         bearerFormat: 'JWT',
-        description: 'Bearer authentication token (alias for PrivyAuth)',
+        description: 'Steward JWT authentication token',
       },
       CronSecret: {
         type: 'http',

@@ -16,7 +16,7 @@
  *     summary: Verify share action
  *     description: Verifies share was posted and awards points (authenticated user only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: userId

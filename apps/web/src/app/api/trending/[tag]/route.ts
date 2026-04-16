@@ -16,7 +16,7 @@
  *     summary: Get posts by tag
  *     description: Returns posts with specific tag (optional auth for RLS)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: tag

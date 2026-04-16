@@ -25,7 +25,6 @@ export interface AgentConfig {
 
   // Wallet
   walletAddress?: string;
-  privyWalletId?: string;
 
   // Performance
   lifetimePnL: number;

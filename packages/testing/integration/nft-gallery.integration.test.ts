@@ -67,7 +67,6 @@ async function createTestUser(options?: {
     displayName: `Test NFT User ${userId.slice(0, 8)}`,
     isActor: false,
     isBanned: false,
-    onChainRegistered: false,
     reputationPoints: options?.reputationPoints ?? 0,
     invitePoints: 0,
     earnedPoints: 0,

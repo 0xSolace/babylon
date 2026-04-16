@@ -28,7 +28,6 @@ interface AdminUser {
   isAdmin: boolean;
   createdAt: string;
   updatedAt: string;
-  onChainRegistered: boolean;
   hasFarcaster: boolean;
   hasTwitter: boolean;
 }
@@ -190,11 +189,6 @@ export function AdminManagementTab() {
                 <Shield className="h-3 w-3" />
                 Admin
               </span>
-              {admin.onChainRegistered && (
-                <span className="rounded bg-green-500/20 px-2 py-0.5 text-green-500 text-xs">
-                  On-chain
-                </span>
-              )}
             </div>
 
             {/* Stats */}

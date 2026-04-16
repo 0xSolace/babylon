@@ -18,7 +18,7 @@
  *     summary: Clear agent cache
  *     description: Clears all cached agent runtimes (admin/debug only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     responses:
  *       200:
  *         description: Cache cleared successfully

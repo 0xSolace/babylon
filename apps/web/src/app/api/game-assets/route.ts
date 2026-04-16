@@ -17,7 +17,7 @@
  *     summary: Get game assets
  *     description: Returns game assets for client initialization (optional auth for RLS)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     responses:
  *       200:
  *         description: Assets retrieved successfully

@@ -1,7 +1,6 @@
 import type { GameOnboardingStep } from '@babylon/shared';
 import { relations } from 'drizzle-orm';
 import {
-  bigint,
   boolean,
   decimal,
   doublePrecision,
@@ -93,21 +92,7 @@ export const users = pgTable(
   'User',
   {
     id: text('id').primaryKey(),
-    // TODO: Remove these columns in a future migration once all references are cleaned up.
-    // They were part of the Privy embedded wallet / Solana / EVM chain integration
-    // which has been removed. Columns are kept nullable to avoid data loss during Phase 1.
-    privyWalletId: text('privyWalletId'),
-    privySolanaWalletId: text('privySolanaWalletId'),
-    offlineWalletReady: boolean('offlineWalletReady').notNull().default(false),
-    offlineWalletReadyAt: timestamp('offlineWalletReadyAt', { mode: 'date' }),
-    solanaOfflineWalletReady: boolean('solanaOfflineWalletReady')
-      .notNull()
-      .default(false),
-    solanaOfflineWalletReadyAt: timestamp('solanaOfflineWalletReadyAt', {
-      mode: 'date',
-    }),
     walletAddress: text('walletAddress').unique(),
-    solanaWalletAddress: text('solanaWalletAddress').unique(),
     username: text('username').unique(),
     displayName: text('displayName'),
     bio: text('bio'),
@@ -142,10 +127,7 @@ export const users = pgTable(
     hasTwitter: boolean('hasTwitter').notNull().default(false),
     hasDiscord: boolean('hasDiscord').notNull().default(false),
     hasTelegram: boolean('hasTelegram').notNull().default(false),
-    // TODO: Remove nftTokenId in a future migration (NFT minting is disabled; see Phase 1 cleanup).
     nftTokenId: integer('nftTokenId').unique(),
-    // TODO: Remove onChainRegistered in a future migration (ERC-8004 removed in Phase 1).
-    onChainRegistered: boolean('onChainRegistered').notNull().default(false),
     pointsAwardedForFarcaster: boolean('pointsAwardedForFarcaster')
       .notNull()
       .default(false),
@@ -196,7 +178,6 @@ export const users = pgTable(
     referredBy: text('referredBy'),
     registrationIpHash: text('registrationIpHash'),
     lastReferralIpHash: text('lastReferralIpHash'),
-    registrationTxHash: text('registrationTxHash'),
     reputationPoints: integer('reputationPoints').notNull().default(1000),
     twitterUsername: text('twitterUsername'),
     bannerDismissCount: integer('bannerDismissCount').notNull().default(0),
@@ -206,17 +187,6 @@ export const users = pgTable(
     showTwitterPublic: boolean('showTwitterPublic').notNull().default(true),
     showWalletPublic: boolean('showWalletPublic').notNull().default(true),
     usernameChangedAt: timestamp('usernameChangedAt', { mode: 'date' }),
-    // TODO: Remove all agent0* and solana* columns in a future migration (Agent0/Solana removed in Phase 1).
-    agent0FeedbackCount: integer('agent0FeedbackCount'),
-    agent0MetadataCID: text('agent0MetadataCID'),
-    agent0RegisteredAt: timestamp('agent0RegisteredAt', { mode: 'date' }),
-    agent0TokenId: integer('agent0TokenId'),
-    agent0TrustScore: doublePrecision('agent0TrustScore'),
-    solanaRegistered: boolean('solanaRegistered').notNull().default(false),
-    solanaRegistryAssetId: text('solanaRegistryAssetId'),
-    solanaMetadataUri: text('solanaMetadataUri'),
-    solanaRegistrationTxHash: text('solanaRegistrationTxHash'),
-    solanaRegisteredAt: timestamp('solanaRegisteredAt', { mode: 'date' }),
     bannedAt: timestamp('bannedAt', { mode: 'date' }),
     bannedBy: text('bannedBy'),
     bannedReason: text('bannedReason'),
@@ -243,10 +213,6 @@ export const users = pgTable(
     // Steward auth user ID (UUID). Set at first Steward login.
     // Coexists with privyId during migration; privyId will be dropped in Phase 3.
     stewardId: text('stewardId').unique(),
-    registrationBlockNumber: bigint('registrationBlockNumber', {
-      mode: 'bigint',
-    }),
-    registrationGasUsed: bigint('registrationGasUsed', { mode: 'bigint' }),
     registrationTimestamp: timestamp('registrationTimestamp', { mode: 'date' }),
     role: text('role'),
     totalFeesEarned: decimal('totalFeesEarned', { precision: 18, scale: 2 })
@@ -334,12 +300,6 @@ export const users = pgTable(
     managedBy: text('managedBy'),
     // Game guide completion tracking
     gameGuideCompletedAt: timestamp('gameGuideCompletedAt', { mode: 'date' }),
-    // Profile chain sync tracking (database-first architecture)
-    profileChainSyncNeeded: boolean('profileChainSyncNeeded')
-      .notNull()
-      .default(false),
-    profileChainSyncAt: timestamp('profileChainSyncAt', { mode: 'date' }),
-    profileChainSyncError: text('profileChainSyncError'),
     // Daily login streak tracking (BAB-88)
     dailyLoginStreak: integer('dailyLoginStreak').notNull().default(0),
     lastDailyLogin: timestamp('lastDailyLogin', { mode: 'date' }),
@@ -386,11 +346,6 @@ export const users = pgTable(
     index('User_walletAddress_idx').on(table.walletAddress),
     index('User_registrationIpHash_idx').on(table.registrationIpHash),
     index('User_lastReferralIpHash_idx').on(table.lastReferralIpHash),
-    // Index for efficient profile chain sync queries
-    index('User_profileChainSyncNeeded_onChainRegistered_idx').on(
-      table.profileChainSyncNeeded,
-      table.onChainRegistered
-    ),
     // Indexes for daily login streak (BAB-88)
     index('User_dailyLoginStreak_idx').on(table.dailyLoginStreak),
     index('User_longestStreak_idx').on(table.longestStreak),

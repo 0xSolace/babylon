@@ -819,7 +819,7 @@ export default function SettingsPage() {
                         <div className="space-y-2">
                           <p>
                             No email linked yet. Enabling email notifications
-                            requires a verified email in Privy.
+                            requires a verified email.
                           </p>
                           <button
                             type="button"
@@ -827,7 +827,7 @@ export default function SettingsPage() {
                             className="inline-flex min-h-[36px] items-center gap-1 rounded-md border border-border px-2.5 py-1.5 font-medium text-xs transition-colors hover:bg-muted/30"
                           >
                             <LinkIcon className="h-3.5 w-3.5" />
-                            <span>Link my email to Privy</span>
+                            <span>Link my email</span>
                           </button>
                         </div>
                       )}

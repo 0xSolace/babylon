@@ -30,7 +30,6 @@ function mapWalletEntry(
     rank,
     isAgent: row.isAgent,
     managedBy: row.managedBy,
-    onChainRegistered: row.onChainRegistered,
     nftTokenId: row.nftTokenId,
   };
 }
@@ -59,7 +58,6 @@ function mapTeamEntry(
     createdAt: new Date(row.createdAt),
     rank,
     isAgent: false,
-    onChainRegistered: row.onChainRegistered,
     nftTokenId: row.nftTokenId,
     agentCount: row.agentCount ?? 0,
   };

@@ -16,7 +16,7 @@
  *     summary: Link social account
  *     description: Links social account and awards points if first time (authenticated user only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: userId

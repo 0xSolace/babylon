@@ -16,7 +16,7 @@
  *     summary: Refund escrow payment
  *     description: Refunds payment back to recipient (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     requestBody:
  *       required: true
  *       content:

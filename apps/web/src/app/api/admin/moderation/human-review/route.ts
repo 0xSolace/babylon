@@ -16,7 +16,7 @@
  *     summary: Get appeals for human review
  *     description: Returns appeals needing human review (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     responses:
  *       200:
  *         description: Appeals retrieved successfully

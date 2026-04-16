@@ -203,7 +203,7 @@ describe('Settings Page Integration Tests', () => {
       const userResponse = await apiRequest.get(`${API_URL}/users/me`);
       const userData = await userResponse.json();
 
-      if (!userData.user.onChainRegistered) {
+      if (!userData.user.nftTokenId) {
         // If not registered, profile updates should fail
         const updateResponse = await apiRequest.put(
           `${API_URL}/users/${testUserId}/update-profile`,

@@ -17,7 +17,7 @@
  *     summary: Mark user as waitlisted
  *     description: Marks authenticated user as waitlisted and processes referral code
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     requestBody:
  *       content:
  *         application/json:

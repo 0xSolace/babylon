@@ -16,7 +16,7 @@
  *     summary: Check Twitter connection status
  *     description: Returns whether user has connected Twitter account
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     responses:
  *       200:
  *         description: Status retrieved successfully

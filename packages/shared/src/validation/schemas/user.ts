@@ -117,7 +117,6 @@ export const UserQuerySchema = z.object({
   hasWallet: z.boolean().optional(),
   minReputation: z.number().optional(),
   maxReputation: z.number().optional(),
-  onChainRegistered: z.boolean().optional(),
   search: z.string().optional(),
 });
 
@@ -216,14 +215,12 @@ export const UserResponseSchema = z.object({
   reputationPoints: z.number(),
   virtualBalance: z.string(), // Decimal as string
   lifetimePnL: z.string(), // Decimal as string
-  onChainRegistered: z.boolean(),
   nftTokenId: z.number().nullable(),
   profileComplete: z.boolean(),
   hasFarcaster: z.boolean(),
   hasTwitter: z.boolean(),
   referralCode: z.string().nullable(),
   referralCount: z.number(),
-  agent0TrustScore: z.number(),
   createdAt: z.string(), // DateTime as string
   updatedAt: z.string(), // DateTime as string
 });

@@ -94,7 +94,6 @@ const SystemStatsSchema = z.object({
     UserStatsSchema.extend({
       walletAddress: z.string().nullable(),
       createdAt: z.string(),
-      onChainRegistered: z.boolean(),
       hasFarcaster: z.boolean(),
       hasTwitter: z.boolean(),
     })
@@ -778,11 +777,6 @@ export function StatsTab() {
                   </div>
                 </div>
                 <div className="flex gap-1">
-                  {user.onChainRegistered && (
-                    <span className="rounded bg-green-500/20 px-2 py-0.5 text-green-500 text-xs">
-                      On-chain
-                    </span>
-                  )}
                   {user.hasFarcaster && (
                     <span className="rounded bg-purple-500/20 px-2 py-0.5 text-purple-500 text-xs">
                       FC

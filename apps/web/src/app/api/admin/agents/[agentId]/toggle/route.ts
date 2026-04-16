@@ -17,7 +17,7 @@
  *     summary: Toggle agent autonomous mode
  *     description: Enables or disables all autonomous features for an agent (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: agentId

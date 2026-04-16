@@ -20,7 +20,7 @@
  *     summary: Get all registry entities
  *     description: Returns all entities from ERC8004 registry and database (optional auth for RLS)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     responses:
  *       200:
  *         description: Entities retrieved successfully
@@ -176,7 +176,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           isBanned: user.isBanned,
           isScammer: user.isScammer,
           isCSAM: user.isCSAM,
-          registrationTxHash: user.registrationTxHash,
           registrationTimestamp: user.registrationTimestamp,
           createdAt: user.createdAt,
           balance: user.virtualBalance.toString(),

@@ -16,7 +16,7 @@
  *     summary: Get all agents
  *     description: Returns list of all autonomous agents with stats (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     responses:
  *       200:
  *         description: Agents retrieved successfully

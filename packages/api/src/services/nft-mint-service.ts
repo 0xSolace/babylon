@@ -19,7 +19,6 @@ import {
   nftCollection,
   nftOwnership,
   nftSnapshot,
-  users,
 } from '@babylon/db';
 import {
   hardhat,
@@ -260,60 +259,17 @@ function validateConfig(): {
   return { contractAddress, chainId, signerPrivateKey };
 }
 
-async function getDbUserForMint(dbUserId: string): Promise<{
-  privyId: string;
-  privyWalletId: string | null;
-}> {
-  const [user] = await db
-    .select({
-      privyId: users.privyId,
-      privyWalletId: users.privyWalletId,
-    })
-    .from(users)
-    .where(eq(users.id, dbUserId))
-    .limit(1);
-
-  if (!user?.privyId) {
-    throw new ValidationError(
-      'User profile not found',
-      ['userId'],
-      [{ field: 'userId', message: 'User not found in database' }]
-    );
-  }
-
-  return {
-    privyId: user.privyId,
-    privyWalletId: user.privyWalletId,
-  };
-}
-
 async function resolveUserEmbeddedWalletAddress(
-  userId: string
+  _userId: string
 ): Promise<Address> {
-  const { privyWalletId } = await getDbUserForMint(userId);
-
-  if (!privyWalletId) {
-    throw new ValidationError(
-      'Embedded wallet not ready',
-      ['privyWalletId'],
-      [
-        {
-          field: 'privyWalletId',
-          message:
-            'Embedded wallet ID not available. Please re-login and try again.',
-        },
-      ]
-    );
-  }
-
   // Phase 2: Privy embedded wallets removed. NFT minting is currently disabled.
   // This path should not be reached (NFT feature flag prevents it).
   throw new ValidationError(
     'NFT minting unavailable',
-    ['privyWalletId'],
+    ['wallet'],
     [
       {
-        field: 'privyWalletId',
+        field: 'wallet',
         message: 'NFT minting is not available in this version.',
       },
     ]
@@ -614,13 +570,10 @@ export async function checkEligibility(
   try {
     const { contractAddress, chainId } = getConfig();
     if (contractAddress && isAddress(contractAddress)) {
-      const [dbUser] = await db
-        .select({ privyWalletId: users.privyWalletId })
-        .from(users)
-        .where(eq(users.id, userId))
-        .limit(1);
+      // Phase 2: Privy embedded wallets removed. On-chain verification disabled.
+      const hasEmbeddedWallet = false;
 
-      if (dbUser?.privyWalletId) {
+      if (hasEmbeddedWallet) {
         const embeddedWallet = await resolveUserEmbeddedWalletAddress(userId);
         const hasMintedOnChain = await checkHasMintedOnChain(
           embeddedWallet,

@@ -17,7 +17,7 @@
  *     summary: Get user list
  *     description: Returns paginated user list with metrics and filtering (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: query
  *         name: limit
@@ -221,7 +221,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       lifetimePnL: users.lifetimePnL,
       reputationPoints: users.reputationPoints,
       referralCount: users.referralCount,
-      onChainRegistered: users.onChainRegistered,
       nftTokenId: users.nftTokenId,
       hasFarcaster: users.hasFarcaster,
       hasTwitter: users.hasTwitter,

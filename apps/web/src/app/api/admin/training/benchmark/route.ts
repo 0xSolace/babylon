@@ -16,7 +16,7 @@
  *     summary: Benchmark trained model
  *     description: Benchmarks model and compares with previous best (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     requestBody:
  *       required: true
  *       content:

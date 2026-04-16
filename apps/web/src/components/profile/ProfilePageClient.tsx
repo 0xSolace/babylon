@@ -246,7 +246,6 @@ export function ProfilePageClient({
               isAgent: boolean;
               managedBy: string | null;
               stats: unknown;
-              onChainRegistered?: boolean | null;
               nftTokenId?: number | null;
             } | null;
           };
@@ -265,7 +264,6 @@ export function ProfilePageClient({
               profileImageUrl: foundUser.profileImageUrl ?? undefined,
               coverImageUrl: foundUser.coverImageUrl ?? undefined,
               stats: foundUser.stats as ProfileInfo['stats'],
-              onChainRegistered: foundUser.onChainRegistered ?? undefined,
               nftTokenId: foundUser.nftTokenId ?? undefined,
             });
             setLoading(false);
@@ -300,7 +298,6 @@ export function ProfilePageClient({
             isAgent: boolean;
             managedBy: string | null;
             stats: unknown;
-            onChainRegistered?: boolean | null;
             nftTokenId?: number | null;
           } | null;
         };
@@ -328,7 +325,6 @@ export function ProfilePageClient({
             profileImageUrl: foundUser.profileImageUrl ?? undefined,
             coverImageUrl: foundUser.coverImageUrl ?? undefined,
             stats: foundUser.stats as ProfileInfo['stats'],
-            onChainRegistered: foundUser.onChainRegistered ?? undefined,
             nftTokenId: foundUser.nftTokenId ?? undefined,
           });
 
@@ -381,7 +377,6 @@ export function ProfilePageClient({
                 isAgent: boolean;
                 managedBy: string | null;
                 stats: unknown;
-                onChainRegistered?: boolean | null;
                 nftTokenId?: number | null;
               } | null;
             };
@@ -401,7 +396,6 @@ export function ProfilePageClient({
                 profileImageUrl: foundUser.profileImageUrl ?? undefined,
                 coverImageUrl: foundUser.coverImageUrl ?? undefined,
                 stats: foundUser.stats as ProfileInfo['stats'],
-                onChainRegistered: foundUser.onChainRegistered ?? undefined,
                 nftTokenId: foundUser.nftTokenId ?? undefined,
               });
 
@@ -1004,7 +998,7 @@ export function ProfilePageClient({
                     )}
                     {actorInfo.type === 'user' && (
                       <OnChainBadge
-                        isRegistered={actorInfo.onChainRegistered ?? false}
+                        isRegistered={Boolean(actorInfo.nftTokenId)}
                         nftTokenId={actorInfo.nftTokenId ?? null}
                         size="md"
                       />

@@ -16,7 +16,7 @@
  *     summary: Verify payment and fund trading balance
  *     description: Verifies on-chain payment and funds trading balance
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     requestBody:
  *       required: true
  *       content:

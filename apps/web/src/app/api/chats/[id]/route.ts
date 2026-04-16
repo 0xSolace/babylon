@@ -10,7 +10,7 @@
  *     summary: Get chat details and messages
  *     description: Returns chat details with paginated messages. Supports cursor-based pagination.
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id

@@ -17,7 +17,7 @@
  *     summary: Like a comment
  *     description: Adds a like reaction to a comment. Creates notification for comment author.
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -58,7 +58,7 @@
  *     summary: Unlike a comment
  *     description: Removes a like reaction from a comment
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id

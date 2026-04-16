@@ -225,9 +225,7 @@ describe('signup route referral code handling', () => {
       walletAddress: null,
     });
     mockEnsureOfflineWalletReady.mockResolvedValue({
-      privyWalletId: null,
       walletAddress: null,
-      offlineWalletReady: true,
     });
     mockGetHashedClientIp.mockReturnValue(null);
     mockIsReferralCodeAvailableForUser.mockResolvedValue(true);
@@ -268,7 +266,6 @@ describe('signup route referral code handling', () => {
         hasUsername: true,
         hasBio: false,
         hasProfileImage: false,
-        onChainRegistered: false,
         nftTokenId: null,
         referralCode: 'alice',
         referredBy: null,

@@ -16,7 +16,7 @@
  *     summary: Disconnect Twitter account
  *     description: Removes Twitter OAuth 2.0 credentials from user profile
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     responses:
  *       200:
  *         description: Twitter account disconnected successfully

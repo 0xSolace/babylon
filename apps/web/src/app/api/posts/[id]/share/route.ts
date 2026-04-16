@@ -18,7 +18,7 @@
  *     summary: Share/repost a post
  *     description: Creates a share/repost of a post. Optionally includes quote commentary. Creates repost post in user's feed.
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -66,7 +66,7 @@
  *     summary: Unshare a post
  *     description: Removes share and deletes associated repost post
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id

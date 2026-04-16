@@ -42,7 +42,6 @@ const UserSchema = z.object({
   lifetimePnL: z.string(),
   reputationPoints: z.number(),
   referralCount: z.number(),
-  onChainRegistered: z.boolean(),
   nftTokenId: z.number().nullable(),
   hasFarcaster: z.boolean(),
   hasTwitter: z.boolean(),
@@ -268,11 +267,6 @@ export function UserManagementTab() {
                 <span className="flex items-center gap-1 rounded bg-red-500/20 px-2 py-0.5 text-red-500 text-xs">
                   <Ban className="h-3 w-3" />
                   Banned
-                </span>
-              )}
-              {user.onChainRegistered && (
-                <span className="rounded bg-green-500/20 px-2 py-0.5 text-green-500 text-xs">
-                  On-chain
                 </span>
               )}
               {user.isWhitelisted && (

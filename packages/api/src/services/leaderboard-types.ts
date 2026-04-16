@@ -19,7 +19,6 @@ export interface LeaderboardEntry {
   rank: number;
   isAgent: boolean;
   managedBy?: string | null;
-  onChainRegistered: boolean;
   nftTokenId: number | null;
   teamReputationPoints?: number;
   userReputationPoints?: number;

@@ -1068,7 +1068,6 @@ export class ReputationService {
       virtualBalance: users.virtualBalance,
       lifetimePnL: users.lifetimePnL,
       createdAt: users.createdAt,
-      onChainRegistered: users.onChainRegistered,
       nftTokenId: users.nftTokenId,
     };
 
@@ -1126,7 +1125,6 @@ export class ReputationService {
         createdAt: user.createdAt,
         isActor: false,
         tier: null as string | null,
-        onChainRegistered: user.onChainRegistered,
         nftTokenId: user.nftTokenId,
       })),
     ];
@@ -1164,7 +1162,6 @@ export class ReputationService {
               createdAt: state.createdAt,
               isActor: true,
               tier: staticActor.tier,
-              onChainRegistered: false,
               nftTokenId: null as number | null,
             };
           })
@@ -1280,7 +1277,6 @@ export class ReputationService {
       virtualBalance: users.virtualBalance,
       lifetimePnL: users.lifetimePnL,
       createdAt: users.createdAt,
-      onChainRegistered: users.onChainRegistered,
       nftTokenId: users.nftTokenId,
       isAgent: users.isAgent,
       managedBy: users.managedBy,
@@ -1314,7 +1310,6 @@ export class ReputationService {
       createdAt: new Date(user.createdAt),
       isAgent: user.isAgent,
       managedBy: user.managedBy,
-      onChainRegistered: user.onChainRegistered,
       nftTokenId: user.nftTokenId,
       rank: skip + index + 1,
     }));
@@ -1354,7 +1349,6 @@ export class ReputationService {
         u."reputationPoints"::numeric AS "userReputationPoints",
         u."virtualBalance"::numeric AS "balance",
         u."lifetimePnL"::numeric AS "lifetimePnL",
-        u."onChainRegistered",
         u."nftTokenId",
         u."createdAt",
         COALESCE(agents."agentReputationPoints", 0)::numeric AS "agentReputationPoints",
@@ -1382,7 +1376,6 @@ export class ReputationService {
       userReputationPoints: string;
       balance: string;
       lifetimePnL: string;
-      onChainRegistered: boolean;
       nftTokenId: number | null;
       createdAt: Date;
       agentReputationPoints: string;
@@ -1404,7 +1397,6 @@ export class ReputationService {
       lifetimePnL: Number(team.lifetimePnL ?? 0),
       createdAt: new Date(team.createdAt),
       isAgent: false,
-      onChainRegistered: team.onChainRegistered,
       nftTokenId: team.nftTokenId,
       rank: skip + index + 1,
     }));
@@ -1439,7 +1431,6 @@ export class ReputationService {
       virtualBalance: users.virtualBalance,
       lifetimePnL: users.lifetimePnL,
       createdAt: users.createdAt,
-      onChainRegistered: users.onChainRegistered,
       nftTokenId: users.nftTokenId,
       isAgent: users.isAgent,
       managedBy: users.managedBy,
@@ -1509,7 +1500,6 @@ export class ReputationService {
           createdAt: new Date(effectiveUser.createdAt),
           isAgent: effectiveUser.isAgent,
           managedBy: effectiveUser.managedBy,
-          onChainRegistered: effectiveUser.onChainRegistered,
           nftTokenId: effectiveUser.nftTokenId,
           rank,
         },
@@ -1589,7 +1579,6 @@ export class ReputationService {
         lifetimePnL: Number(effectiveUser.lifetimePnL ?? 0),
         createdAt: new Date(effectiveUser.createdAt),
         isAgent: false,
-        onChainRegistered: effectiveUser.onChainRegistered,
         nftTokenId: effectiveUser.nftTokenId,
         rank,
       },

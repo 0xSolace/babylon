@@ -17,7 +17,7 @@
  *     summary: Create escrow payment
  *     description: Creates escrow payment request via X402 (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     requestBody:
  *       required: true
  *       content:

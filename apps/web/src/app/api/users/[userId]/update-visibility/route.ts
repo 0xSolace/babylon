@@ -16,7 +16,7 @@
  *     summary: Update visibility preferences
  *     description: Updates social media visibility settings (own profile only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: userId

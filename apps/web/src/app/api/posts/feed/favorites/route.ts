@@ -16,7 +16,7 @@
  *     summary: Get favorites feed
  *     description: Returns posts from favorited profiles with interaction counts
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: query
  *         name: limit

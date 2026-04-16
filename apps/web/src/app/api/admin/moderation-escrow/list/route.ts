@@ -16,7 +16,7 @@
  *     summary: List moderation escrow payments
  *     description: Returns escrow payments with filtering and pagination (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: query
  *         name: recipientId

@@ -17,7 +17,7 @@
  *     summary: Pause all agents
  *     description: Emergency pause for all autonomous agents (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     responses:
  *       200:
  *         description: All agents paused successfully

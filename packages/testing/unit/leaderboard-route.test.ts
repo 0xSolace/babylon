@@ -66,7 +66,6 @@ const mockGetTradingWalletLeaderboard = mock(async () => ({
       rank: 1,
       isAgent: false,
       managedBy: null,
-      onChainRegistered: false,
       nftTokenId: null,
     },
   ],

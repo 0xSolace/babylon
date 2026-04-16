@@ -16,7 +16,7 @@
  *     summary: Get trending markets
  *     description: Returns trending prediction markets for widget (optional auth for RLS)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     responses:
  *       200:
  *         description: Markets retrieved successfully

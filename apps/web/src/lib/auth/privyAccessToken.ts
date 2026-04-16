@@ -1,6 +1,12 @@
+/**
+ * Access token retry utilities.
+ *
+ * Originally written for Privy; now used with Steward tokens via the compat shim.
+ * TODO: Phase 3 — rename this file to `accessToken.ts` and remove Privy naming.
+ */
 import { extractErrorMessage, sleep } from '@babylon/shared';
 
-const RETRYABLE_PRIVY_ERROR_MESSAGES = [
+const RETRYABLE_ACCESS_TOKEN_ERROR_MESSAGES = [
   'failed to fetch',
   'fetch failed',
   'load failed',
@@ -11,7 +17,7 @@ const RETRYABLE_PRIVY_ERROR_MESSAGES = [
   'session',
 ] as const;
 
-export interface PrivyAccessTokenRetryOptions {
+export interface AccessTokenRetryOptions {
   maxAttempts?: number;
   initialDelayMs?: number;
   maxDelayMs?: number;
@@ -19,16 +25,15 @@ export interface PrivyAccessTokenRetryOptions {
   onRetry?: (attempt: number, error: Error, delayMs: number) => void;
 }
 
-export interface SafePrivyAccessTokenOptions
-  extends PrivyAccessTokenRetryOptions {
+export interface SafeAccessTokenOptions extends AccessTokenRetryOptions {
   onError?: (error: Error) => void;
 }
 
-function normalizePrivyAccessTokenError(error: unknown): Error {
+function normalizeAccessTokenError(error: unknown): Error {
   return error instanceof Error ? error : new Error(extractErrorMessage(error));
 }
 
-export function isRetryablePrivyAccessTokenError(error: unknown): boolean {
+export function isRetryableAccessTokenError(error: unknown): boolean {
   if (error instanceof TypeError) {
     return error.message.toLowerCase().includes('fetch');
   }
@@ -40,16 +45,16 @@ export function isRetryablePrivyAccessTokenError(error: unknown): boolean {
     }
   }
 
-  const message = normalizePrivyAccessTokenError(error).message.toLowerCase();
+  const message = normalizeAccessTokenError(error).message.toLowerCase();
 
-  return RETRYABLE_PRIVY_ERROR_MESSAGES.some((pattern) =>
+  return RETRYABLE_ACCESS_TOKEN_ERROR_MESSAGES.some((pattern) =>
     message.includes(pattern)
   );
 }
 
-export async function getPrivyAccessTokenWithRetry(
+export async function getAccessTokenWithRetry(
   getAccessToken: () => Promise<string | null>,
-  options: PrivyAccessTokenRetryOptions = {}
+  options: AccessTokenRetryOptions = {}
 ): Promise<string | null> {
   const {
     maxAttempts = 3,
@@ -65,12 +70,9 @@ export async function getPrivyAccessTokenWithRetry(
     try {
       return await getAccessToken();
     } catch (error) {
-      lastError = normalizePrivyAccessTokenError(error);
+      lastError = normalizeAccessTokenError(error);
 
-      if (
-        !isRetryablePrivyAccessTokenError(error) ||
-        attempt === maxAttempts - 1
-      ) {
+      if (!isRetryableAccessTokenError(error) || attempt === maxAttempts - 1) {
         throw lastError;
       }
 
@@ -83,19 +85,32 @@ export async function getPrivyAccessTokenWithRetry(
     }
   }
 
-  throw lastError ?? new Error('Failed to fetch Privy access token');
+  throw lastError ?? new Error('Failed to fetch access token');
 }
 
-export async function getPrivyAccessTokenSafely(
+export async function getAccessTokenSafely(
   getAccessToken: () => Promise<string | null>,
-  options: SafePrivyAccessTokenOptions = {}
+  options: SafeAccessTokenOptions = {}
 ): Promise<string | null> {
   const { onError, ...retryOptions } = options;
 
   try {
-    return await getPrivyAccessTokenWithRetry(getAccessToken, retryOptions);
+    return await getAccessTokenWithRetry(getAccessToken, retryOptions);
   } catch (error) {
-    onError?.(normalizePrivyAccessTokenError(error));
+    onError?.(normalizeAccessTokenError(error));
     return null;
   }
 }
+
+// ── Deprecated aliases (backward compatibility) ──────────────────────────────
+
+/** @deprecated Use `AccessTokenRetryOptions` */
+export type PrivyAccessTokenRetryOptions = AccessTokenRetryOptions;
+/** @deprecated Use `SafeAccessTokenOptions` */
+export type SafePrivyAccessTokenOptions = SafeAccessTokenOptions;
+/** @deprecated Use `isRetryableAccessTokenError` */
+export const isRetryablePrivyAccessTokenError = isRetryableAccessTokenError;
+/** @deprecated Use `getAccessTokenWithRetry` */
+export const getPrivyAccessTokenWithRetry = getAccessTokenWithRetry;
+/** @deprecated Use `getAccessTokenSafely` */
+export const getPrivyAccessTokenSafely = getAccessTokenSafely;

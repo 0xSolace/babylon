@@ -484,6 +484,13 @@
       "when": 1744262400000,
       "tag": "0068_add_arc_event_coverage",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1744761600000,
+      "tag": "0069_drop_phase1_legacy_columns",
+      "breakpoints": true
     }
   ]
 }

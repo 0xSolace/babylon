@@ -18,7 +18,7 @@
  *     summary: Mute or unmute user
  *     description: Mutes or unmutes a user (hides their posts from feed)
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: userId
@@ -68,7 +68,7 @@
  *     summary: Check if user is muted
  *     description: Returns whether the current user has muted the target user
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: userId

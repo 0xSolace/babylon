@@ -54,9 +54,7 @@ export class MarketReputationService {
     const usersData = await db
       .select({
         id: users.id,
-        agent0TokenId: users.agent0TokenId,
         nftTokenId: users.nftTokenId,
-        onChainRegistered: users.onChainRegistered,
         reputationPoints: users.reputationPoints,
       })
       .from(users)
@@ -82,7 +80,7 @@ export class MarketReputationService {
         continue;
       }
 
-      const tokenId = user.agent0TokenId ?? user.nftTokenId ?? 0;
+      const tokenId = user.nftTokenId ?? 0;
       const isWinner = position.side === resolution.outcome;
       const change = isWinner ? 10 : -5;
 
@@ -115,7 +113,6 @@ export class MarketReputationService {
     const [user] = await db
       .select({
         reputationPoints: users.reputationPoints,
-        onChainRegistered: users.onChainRegistered,
       })
       .from(users)
       .where(eq(users.id, userId))

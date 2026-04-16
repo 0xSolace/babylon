@@ -74,7 +74,6 @@ const RegistryEntitySchema = z.object({
     })
     .optional(),
   createdAt: z.string().optional(),
-  registrationTxHash: z.string().optional(),
   registrationTimestamp: z.string().optional(),
 });
 type RegistryEntity = z.infer<typeof RegistryEntitySchema>;

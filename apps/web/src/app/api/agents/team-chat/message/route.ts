@@ -21,7 +21,7 @@
  *       Sends a message to Agents.
  *       Agent responses are triggered separately via /api/agents/[agentId]/chat.
  *     security:
- *       - PrivyAuth: []
+ *       - BearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
