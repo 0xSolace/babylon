@@ -881,6 +881,10 @@ WORLD RULES:
         return 'claude-sonnet-4-5';
       case 'openai':
         return 'gpt-5-nano';
+      case 'elizacloud':
+        // ElizaCloud uses provider-prefixed model IDs (openai/*, anthropic/*, etc.)
+        // Allow override via env; default to fast reliable model.
+        return process.env.ELIZACLOUD_DEFAULT_MODEL || 'openai/gpt-4o-mini';
       default:
         return 'gpt-5-nano';
     }
