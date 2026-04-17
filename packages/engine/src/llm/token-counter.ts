@@ -23,9 +23,23 @@ const MODEL_TOKEN_LIMITS: Record<string, number> = {
   // OpenAI (input context)
   'gpt-5.1': 128000,
   'gpt-5-nano': 128000,
+  'gpt-5-mini': 128000,
+  'gpt-5': 128000,
   'gpt-5.1-turbo': 128000,
   'gpt-3.5-turbo': 16385,
   'gpt-3.5-turbo-16k': 16385,
+
+  // ElizaCloud provider-prefixed OpenAI models
+  'openai/gpt-5-nano': 128000,
+  'openai/gpt-5-mini': 128000,
+  'openai/gpt-5': 128000,
+  'openai/gpt-5.1': 128000,
+  'openai/gpt-5.1-instant': 128000,
+  'openai/gpt-4o': 128000,
+  'openai/gpt-4o-mini': 128000,
+  'openai/gpt-4.1': 128000,
+  'openai/gpt-4.1-mini': 128000,
+  'openai/gpt-4.1-nano': 128000,
 
   // Groq / Strategy models
   'unsloth/Qwen3-4B-128K': 131072,
