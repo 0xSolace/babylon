@@ -304,7 +304,7 @@ export class BabylonLLMClient {
     const {
       model = defaultModel,
       temperature = 0.7,
-      maxTokens = 16000,
+      maxTokens = 32000,
       format = 'xml',
       promptType = 'unknown',
       promptTemplate,
@@ -360,9 +360,12 @@ WORLD RULES:
 
     while (true) {
       try {
-        // For qwen3 models, disable reasoning to prevent token consumption on thinking
-        // See: https://console.groq.com/docs/reasoning
+        // Disable reasoning for models that support it to prevent thinking
+        // tokens from consuming output budget. Applies to:
+        // - qwen3 models (Groq): supports 'none'
+        // - GPT-5 series (OpenAI/ElizaCloud): supports 'minimal'
         const isQwen3Model = model.includes('qwen3');
+        const isGpt5Model = model.includes('gpt-5');
 
         callStartTime = Date.now();
         const response = await this.client!.chat.completions.create({
@@ -371,8 +374,8 @@ WORLD RULES:
           ...(useJsonFormat ? { response_format: useJsonFormat } : {}),
           temperature,
           max_tokens: maxTokens,
-          // Disable reasoning for qwen3 models to prevent thinking tokens from consuming output budget
           ...(isQwen3Model ? { reasoning_effort: 'none' as const } : {}),
+          ...(isGpt5Model ? { reasoning_effort: 'minimal' as const } : {}),
         });
         const callDurationMs = Date.now() - callStartTime;
 
@@ -883,8 +886,8 @@ WORLD RULES:
         return 'gpt-5-nano';
       case 'elizacloud':
         // ElizaCloud uses provider-prefixed model IDs (openai/*, anthropic/*, etc.)
-        // Allow override via env; default to fast reliable model.
-        return process.env.ELIZACLOUD_DEFAULT_MODEL || 'openai/gpt-4o-mini';
+        // Allow override via env; default to gpt-5-nano with reasoning_effort=minimal.
+        return process.env.ELIZACLOUD_DEFAULT_MODEL || 'openai/gpt-5-nano';
       default:
         return 'gpt-5-nano';
     }
